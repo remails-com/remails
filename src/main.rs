@@ -1,5 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddrV4};
 use message::Message;
+use sqlx::postgres::PgPoolOptions;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 use tokio::sync::mpsc;
@@ -16,6 +17,14 @@ async fn main() {
         )
         .try_init()
         .unwrap();
+
+    let _ = dotenvy::dotenv();
+
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url).await.unwrap();
 
     let (queue_sender, _qeueue_receiver) = mpsc::channel::<Message>(100);
 

@@ -1,3 +1,4 @@
+use mail_send::smtp::message::IntoMessage;
 use uuid::Uuid;
 
 
@@ -26,6 +27,7 @@ impl Message {
         self.id
     }
 
+    #[cfg(test)]
     pub fn get_from(&self) -> &str {
         &self.from
     }
@@ -36,5 +38,15 @@ impl Message {
 
     pub fn set_raw_message(&mut self, raw_message: Vec<u8>) {
         self.raw_message = raw_message;
+    }
+}
+
+impl<'x> IntoMessage<'x> for Message {
+    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'x>> {
+        Ok(mail_send::smtp::message::Message {
+            mail_from: self.from.into(),
+            rcpt_to: self.recipients.into_iter().map(|m| m.into()).collect(),
+            body: self.raw_message.into(),
+        })
     }
 }

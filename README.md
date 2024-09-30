@@ -6,3 +6,13 @@
 - Exposes an API with axum
 
 Run `cargo test` to run the tests.
+
+
+## Development
+
+Install pgtemp:
+
+```bash
+cargo install pgtemp --features cli
+pgtemp postgresql://remails@localhost:5432/remails
+```
