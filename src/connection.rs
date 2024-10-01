@@ -36,6 +36,7 @@ impl Connection {
     const SERVER_NAME: &str = "localhost";
     const DATA_END: &[u8] = b"\r\n.\r\n";
 
+    const RESPONSE_OK: &str = "2.0.0 Ok";
     const RESPONSE_FROM_OK: &str = "2.1.0 Originator <[email]> ok";
     const RESPONSE_TO_OK: &str = "2.1.5 Recipient <[email]> ok";
     const RESPONSE_SYNTAX_ERROR: &str = "5.5.2 Syntax error";
@@ -47,6 +48,8 @@ impl Connection {
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
+    const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
+    const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
 
     pub(crate) fn new(acceptor: TlsAcceptor, stream: TcpStream, peer_addr: SocketAddr) -> Self {
         Self {
@@ -204,14 +207,12 @@ impl Connection {
                         Connection::reply(235, Self::RESPONSE_AUTH_SUCCCESS, &mut sink).await?;
                     }
                 }
-                Request::Noop { value: _ } => todo!(),
-                Request::Vrfy { value: _ } => todo!(),
-                Request::Expn { value: _ } => todo!(),
-                Request::Help { value: _ } => todo!(),
-                Request::Etrn { name: _ } => todo!(),
-                Request::Atrn { domains: _ } => todo!(),
-                Request::Burl { uri: _, is_last: _ } => todo!(),
-                Request::StartTls => todo!(),
+                Request::Noop { value: _ } => {
+                    Connection::reply(250, Self::RESPONSE_OK, &mut sink).await?;
+                }
+                Request::StartTls => {
+                    Connection::reply(504, Self::RESPONSE_ALREADY_TLS, &mut sink).await?;
+                }
                 Request::Data => {
                     if self.connectio_state != ConnectionState::RecipientsReceived {
                         Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
@@ -272,6 +273,12 @@ impl Connection {
                 Request::Quit => {
                     Connection::reply(221, Self::RESPONSE_BYE, &mut sink).await?;
                     break;
+                }
+                Request::Vrfy { value: _ } => todo!(),
+                Request::Expn { value: _ } => todo!(),
+                Request::Help { value: _ } => todo!(),
+                Request::Etrn { .. } | Request::Atrn { .. } | Request::Burl { .. } => {
+                    Connection::reply(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED, &mut sink).await?;
                 }
             }
         }
