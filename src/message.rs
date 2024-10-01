@@ -1,7 +1,6 @@
 use mail_send::smtp::message::IntoMessage;
 use uuid::Uuid;
 
-
 pub(crate) type EmailAddress = String;
 
 pub(crate) struct Message {

@@ -1,6 +1,7 @@
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+#[allow(dead_code)]
 #[derive(Debug, sqlx::FromRow)]
 pub(crate) struct User {
     id: Uuid,
@@ -11,6 +12,7 @@ pub(crate) struct User {
 }
 
 impl User {
+    #[cfg(test)]
     pub(crate) fn new(username: String, password: String) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -38,6 +40,7 @@ impl UserRepository {
         Self { pool }
     }
 
+    #[cfg(test)]
     pub(crate) async fn insert(&self, user: User) -> anyhow::Result<()> {
         sqlx::query!(
             r#"
@@ -73,8 +76,8 @@ impl UserRepository {
 
 #[cfg(test)]
 mod test {
-    use sqlx::PgPool;
     use super::*;
+    use sqlx::PgPool;
 
     #[sqlx::test]
     async fn user_repository(pool: PgPool) {
@@ -86,7 +89,7 @@ mod test {
         repository.insert(user).await.unwrap();
 
         let fetched_user = repository.find_by_username("test").await.unwrap().unwrap();
-        
+
         assert_eq!(fetched_user.username, "test");
         assert!(fetched_user.verify_password("password"));
     }

@@ -4,12 +4,22 @@ use smtp_proto::*;
 use std::net::SocketAddr;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    net::TcpStream, sync::mpsc::Sender,
+    net::TcpStream,
+    sync::mpsc::Sender,
 };
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 use tracing::{debug, trace};
 
 use crate::{message::Message, users::UserRepository};
+
+#[derive(Debug, PartialEq)]
+enum ConnectionState {
+    Accepting,
+    Ready,
+    Authenticated,
+    FromReceived,
+    RecipientsReceived,
+}
 
 pub(crate) struct Connection {
     acceptor: TlsAcceptor,
@@ -17,6 +27,7 @@ pub(crate) struct Connection {
     peer_addr: SocketAddr,
     buffer: Vec<u8>,
     current_message: Option<Message>,
+    connectio_state: ConnectionState,
 }
 
 impl Connection {
@@ -31,8 +42,7 @@ impl Connection {
     const RESPONSE_AUTH_SUCCCESS: &str = "2.7.0 Authentication succeeded.";
     const RESPONSE_START_DATA: &str = "3.5.4 Start mail input; end with <CRLF>.<CRLF>";
     const RESPONSE_BYE: &str = "2.0.0 Goodbye";
-    const RESPONSE_MESSAGE_ACCEPTED: &str =
-        "2.6.0 Message accepted for delivery, queued as [id]";
+    const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message accepted for delivery, queued as [id]";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
@@ -46,10 +56,15 @@ impl Connection {
             buffer: Vec::with_capacity(Self::BUFFER_SIZE),
             // message
             current_message: None,
+            connectio_state: ConnectionState::Accepting,
         }
     }
 
-    pub(crate) async fn handle(mut self, queue: Sender<Message>, user_repository: UserRepository) -> anyhow::Result<()> {
+    pub(crate) async fn handle(
+        mut self,
+        queue: Sender<Message>,
+        user_repository: UserRepository,
+    ) -> anyhow::Result<()> {
         let tls_stream: TlsStream<TcpStream> = self.acceptor.accept(self.stream).await?;
 
         trace!("secure connection with {}", &self.peer_addr);
@@ -58,8 +73,6 @@ impl Connection {
         let mut reader = BufReader::new(stream);
 
         Connection::reply(220, Self::SERVER_NAME, &mut sink).await?;
-
-        let mut authenticated = false;
 
         loop {
             Connection::read_line(&mut reader, &mut self.buffer).await?;
@@ -74,6 +87,11 @@ impl Connection {
 
             match request {
                 Request::Ehlo { host } => {
+                    if self.connectio_state != ConnectionState::Accepting {
+                        Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
+                        continue;
+                    }
+
                     let mut response = EhloResponse::new(host);
                     response.capabilities = EXT_ENHANCED_STATUS_CODES
                         | EXT_8BIT_MIME
@@ -87,6 +105,8 @@ impl Connection {
                     response.write(&mut buf).ok();
                     let n = sink.write(&buf).await?;
 
+                    self.connectio_state = ConnectionState::Ready;
+
                     trace!("sent {} bytes", n);
                 }
                 Request::Lhlo { host: _ } => todo!(),
@@ -94,7 +114,15 @@ impl Connection {
                 Request::Mail { from } => {
                     debug!("received MAIL FROM: {}", from.address);
 
+                    if self.connectio_state != ConnectionState::Authenticated {
+                        Connection::reply(530, Self::RESPONSE_AUTHENTICATION_REQUIRED, &mut sink)
+                            .await?;
+                        continue;
+                    }
+
                     self.current_message = Some(Message::new(from.address.clone()));
+
+                    self.connectio_state = ConnectionState::FromReceived;
 
                     let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
                     Connection::reply(250, &response_message, &mut sink).await?;
@@ -102,12 +130,21 @@ impl Connection {
                 Request::Rcpt { to } => {
                     debug!("received RCPT TO: {}", to.address);
 
+                    if self.connectio_state != ConnectionState::FromReceived
+                        && self.connectio_state != ConnectionState::RecipientsReceived
+                    {
+                        Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
+                        continue;
+                    }
+
                     let Some(message) = self.current_message.as_mut() else {
                         Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
                         continue;
                     };
 
                     message.add_recipient(to.address.clone());
+
+                    self.connectio_state = ConnectionState::RecipientsReceived;
 
                     let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
                     Connection::reply(250, &response_message, &mut sink).await?
@@ -120,6 +157,11 @@ impl Connection {
                     mechanism,
                     initial_response,
                 } => {
+                    if self.connectio_state != ConnectionState::Ready {
+                        Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
+                        continue;
+                    }
+
                     if mechanism == AUTH_PLAIN {
                         debug!("Received AUTH PLAIN");
 
@@ -141,9 +183,13 @@ impl Connection {
                         let username = String::from_utf8_lossy(parts[1]);
                         let password = String::from_utf8_lossy(parts[2]);
 
-                        trace!("decoded credentials, username: {username} password ({} characters)", password.len());
+                        trace!(
+                            "decoded credentials, username: {username} password ({} characters)",
+                            password.len()
+                        );
 
-                        let Ok(Some(user)) = user_repository.find_by_username(&username).await else {
+                        let Ok(Some(user)) = user_repository.find_by_username(&username).await
+                        else {
                             Connection::reply(535, Self::RESPONSE_AUTH_ERROR, &mut sink).await?;
                             continue;
                         };
@@ -153,7 +199,7 @@ impl Connection {
                             continue;
                         }
 
-                        authenticated = true;
+                        self.connectio_state = ConnectionState::Authenticated;
 
                         Connection::reply(235, Self::RESPONSE_AUTH_SUCCCESS, &mut sink).await?;
                     }
@@ -167,8 +213,8 @@ impl Connection {
                 Request::Burl { uri: _, is_last: _ } => todo!(),
                 Request::StartTls => todo!(),
                 Request::Data => {
-                    if !authenticated {
-                        Connection::reply(530, Self::RESPONSE_AUTHENTICATION_REQUIRED, &mut sink).await?;
+                    if self.connectio_state != ConnectionState::RecipientsReceived {
+                        Connection::reply(503, Self::RESPONSE_BAD_SEQUENCE, &mut sink).await?;
                         continue;
                     }
 
@@ -199,20 +245,26 @@ impl Connection {
                         }
                     }
 
-                    if raw_message.len() == 0 {
+                    if raw_message.is_empty() {
                         Connection::reply(554, Self::RESPONSE_MESSAGE_REJECTED, &mut sink).await?;
                         debug!("failed to read message: empty message");
 
                         return Err(anyhow::anyhow!("empty message"));
                     }
 
-                    trace!("received message {:?} ({} bytes)", message.get_id(), raw_message.len());
-                    let response_message =
-                        Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.get_id().to_string());
+                    trace!(
+                        "received message {:?} ({} bytes)",
+                        message.get_id(),
+                        raw_message.len()
+                    );
+                    let response_message = Self::RESPONSE_MESSAGE_ACCEPTED
+                        .replace("[id]", &message.get_id().to_string());
 
                     message.set_raw_message(raw_message);
 
                     queue.send(message).await?;
+
+                    self.connectio_state = ConnectionState::Authenticated;
 
                     Connection::reply(250, &response_message, &mut sink).await?;
                 }

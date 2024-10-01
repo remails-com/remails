@@ -1,15 +1,15 @@
-use std::net::{Ipv4Addr, SocketAddrV4};
 use message::Message;
 use sqlx::postgres::PgPoolOptions;
+use std::net::{Ipv4Addr, SocketAddrV4};
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
-use tokio::sync::mpsc;
 
-mod message;
 mod connection;
+mod message;
+mod messages;
 mod server;
 mod users;
-mod messages;
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +26,9 @@ async fn main() {
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_url).await.unwrap();
+        .connect(&database_url)
+        .await
+        .unwrap();
 
     let user_repository = users::UserRepository::new(pool);
 
@@ -34,8 +36,14 @@ async fn main() {
 
     let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 1025);
     let shutdown = CancellationToken::new();
-    let server =
-        server::SmtServer::new(socket.into(), "cert.pem".into(), "key.pem".into(), user_repository, queue_sender, shutdown);
+    let server = server::SmtServer::new(
+        socket.into(),
+        "cert.pem".into(),
+        "key.pem".into(),
+        user_repository,
+        queue_sender,
+        shutdown,
+    );
 
     server.serve().await.unwrap();
 }
@@ -43,14 +51,20 @@ async fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
-    use mail_send::mail_builder::MessageBuilder;
-    use mail_send::SmtpClientBuilder;
+    use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
     use rand::Rng;
     use sqlx::PgPool;
     use tokio::task::JoinHandle;
     use tracing_test::traced_test;
 
-    async fn setup_server(pool: PgPool) -> (CancellationToken, JoinHandle<()>, mpsc::Receiver<Message>, u16) {
+    async fn setup_server(
+        pool: PgPool,
+    ) -> (
+        CancellationToken,
+        JoinHandle<()>,
+        mpsc::Receiver<Message>,
+        u16,
+    ) {
         let mut rng = rand::thread_rng();
         let random_port = rng.gen_range(10_000..30_000);
         let user_repository = users::UserRepository::new(pool);
@@ -58,7 +72,7 @@ mod test {
         let user = users::User::new("john".into(), "p4ssw0rd".into());
         user_repository.insert(user).await.unwrap();
 
-        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), random_port); 
+        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), random_port);
         let shutdown = CancellationToken::new();
         let (queue_sender, receiver) = mpsc::channel::<Message>(100);
         let server = server::SmtServer::new(
