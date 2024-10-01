@@ -9,7 +9,7 @@ use tokio::{
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 use tracing::{debug, trace};
 
-use crate::message::Message;
+use crate::{message::Message, users::UserRepository};
 
 pub(crate) struct Connection {
     acceptor: TlsAcceptor,
@@ -35,6 +35,8 @@ impl Connection {
         "2.6.0 Message accepted for delivery, queued as [id]";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
+    const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
+    const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
 
     pub(crate) fn new(acceptor: TlsAcceptor, stream: TcpStream, peer_addr: SocketAddr) -> Self {
         Self {
@@ -47,7 +49,7 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn handle(mut self, queue: Sender<Message>) -> anyhow::Result<()> {
+    pub(crate) async fn handle(mut self, queue: Sender<Message>, user_repository: UserRepository) -> anyhow::Result<()> {
         let tls_stream: TlsStream<TcpStream> = self.acceptor.accept(self.stream).await?;
 
         trace!("secure connection with {}", &self.peer_addr);
@@ -56,6 +58,8 @@ impl Connection {
         let mut reader = BufReader::new(stream);
 
         Connection::reply(220, Self::SERVER_NAME, &mut sink).await?;
+
+        let mut authenticated = false;
 
         loop {
             Connection::read_line(&mut reader, &mut self.buffer).await?;
@@ -129,13 +133,27 @@ impl Connection {
 
                         let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
 
-                        trace!(
-                            "Decoded: {} {}",
-                            String::from_utf8_lossy(parts[1]),
-                            String::from_utf8_lossy(parts[2])
-                        );
+                        if parts.len() != 3 {
+                            Connection::reply(501, Self::RESPONSE_SYNTAX_ERROR, &mut sink).await?;
+                            continue;
+                        }
 
-                        // TODO authenticate
+                        let username = String::from_utf8_lossy(parts[1]);
+                        let password = String::from_utf8_lossy(parts[2]);
+
+                        trace!("decoded credentials, username: {username} password ({} characters)", password.len());
+
+                        let Ok(Some(user)) = user_repository.find_by_username(&username).await else {
+                            Connection::reply(535, Self::RESPONSE_AUTH_ERROR, &mut sink).await?;
+                            continue;
+                        };
+
+                        if !user.verify_password(&password) {
+                            Connection::reply(535, Self::RESPONSE_AUTH_ERROR, &mut sink).await?;
+                            continue;
+                        }
+
+                        authenticated = true;
 
                         Connection::reply(235, Self::RESPONSE_AUTH_SUCCCESS, &mut sink).await?;
                     }
@@ -149,6 +167,11 @@ impl Connection {
                 Request::Burl { uri: _, is_last: _ } => todo!(),
                 Request::StartTls => todo!(),
                 Request::Data => {
+                    if !authenticated {
+                        Connection::reply(530, Self::RESPONSE_AUTHENTICATION_REQUIRED, &mut sink).await?;
+                        continue;
+                    }
+
                     Connection::reply(354, Self::RESPONSE_START_DATA, &mut sink).await?;
 
                     let Some(mut message) = self.current_message.take() else {

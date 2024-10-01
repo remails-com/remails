@@ -10,9 +10,9 @@ Run `cargo test` to run the tests.
 
 ## Development
 
-Install pgtemp:
+Run postgres using docker-compose:
 
 ```bash
-cargo install pgtemp --features cli
-pgtemp postgresql://remails@localhost:5432/remails
-```
+docker compose up -d
+cargo sqlx migrate run
+````

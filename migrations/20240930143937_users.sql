@@ -8,25 +8,27 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TABLE IF EXISTS users CASCADE;
 CREATE TABLE users (
     id uuid PRIMARY KEY NOT NULL,
-    username varchar NOT NULL CHECK (username ~ '^[a-zA-Z0-9_-]{2,128}$'),
+    username varchar NOT NULL UNIQUE CHECK (username ~ '^[a-zA-Z0-9_-]{2,128}$'),
     password_hash varchar NOT NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE TRIGGER update_users_updated_at
 BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+DROP TABLE IF EXISTS messages CASCADE;
 CREATE TABLE messages (
     id uuid PRIMARY KEY NOT NULL,
     from_email varchar NOT NULL,
     recipients varchar NOT NULL,
     raw_data bytea NOT NULL,
     message_data jsonb,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE TRIGGER update_messages_updated_at

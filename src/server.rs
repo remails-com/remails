@@ -10,10 +10,11 @@ use tokio_rustls::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{connection::Connection, message::Message};
+use crate::{connection::Connection, message::Message, users::UserRepository};
 
 pub(crate) struct SmtServer {
     address: SocketAddr,
+    user_repository: UserRepository,
     queue: Sender<Message>,
     shutdown: CancellationToken,
     cert: PathBuf,
@@ -25,11 +26,13 @@ impl SmtServer {
         address: SocketAddr,
         cert: PathBuf,
         key: PathBuf,
+        user_repository: UserRepository,
         queue: Sender<Message>,
         shutdown: CancellationToken,
     ) -> Self {
         Self {
             address,
+            user_repository,
             queue,
             shutdown,
             cert,
@@ -61,7 +64,7 @@ impl SmtServer {
         let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = TcpListener::bind(&self.address).await?;
 
-        tracing::info!("Listening on {}", self.address);
+        tracing::info!("Listening on {}:{}", self.address, self.address.port());
 
         loop {
             select! {
@@ -75,7 +78,7 @@ impl SmtServer {
                         Ok((stream, peer_addr)) => {
                             tracing::info!("Accepted connection from {}", peer_addr);
 
-                            tokio::spawn(Connection::new(acceptor.clone(), stream, peer_addr).handle(self.queue.clone()));
+                            tokio::spawn(Connection::new(acceptor.clone(), stream, peer_addr).handle(self.queue.clone(), self.user_repository.clone()));
 
                             tracing::info!("Connection handled");
                         }

@@ -8,9 +8,10 @@ anyhow = "1.0.89"
 dotenvy = "0.15.7"
 mail-parser = { version = "0.9.4", features = ["serde_support"] }
 mail-send = { version = "0.4.9", default-features = false, features = ["builder", "aws-lc-rs"] }
+password-auth = "1.0.0"
 rustls-pemfile = "2.1.3"
 smtp-proto = "0.1.5"
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "chrono", "uuid"] }
 tokio = {version="1.39.2",features=["full"]}
 tokio-rustls = "0.26.0"
 tokio-tls-upgrade = "0.1.0"
@@ -22,3 +23,6 @@ uuid = { version = "1.10.0", features = ["v4"] }
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
+
+[dev-dependencies]
+rand = "0.8.5"
