@@ -226,18 +226,18 @@ impl Connection {
                         continue;
                     };
 
-                    let mut raw_message = Vec::new();
+                    let mut raw_data = Vec::new();
 
                     loop {
                         Connection::read_buf(&mut reader, &mut self.buffer).await?;
 
-                        raw_message.extend_from_slice(&self.buffer);
+                        raw_data.extend_from_slice(&self.buffer);
 
-                        if raw_message.ends_with(Self::DATA_END) {
+                        if raw_data.ends_with(Self::DATA_END) {
                             break;
                         }
 
-                        if raw_message.len() > Connection::MAX_BODY_SIZE as usize {
+                        if raw_data.len() > Connection::MAX_BODY_SIZE as usize {
                             Connection::reply(554, Self::RESPONSE_MESSAGE_REJECTED, &mut sink)
                                 .await?;
                             debug!("failed to read message: message too big");
@@ -246,7 +246,7 @@ impl Connection {
                         }
                     }
 
-                    if raw_message.is_empty() {
+                    if raw_data.is_empty() {
                         Connection::reply(554, Self::RESPONSE_MESSAGE_REJECTED, &mut sink).await?;
                         debug!("failed to read message: empty message");
 
@@ -256,12 +256,12 @@ impl Connection {
                     trace!(
                         "received message {:?} ({} bytes)",
                         message.get_id(),
-                        raw_message.len()
+                        raw_data.len()
                     );
                     let response_message = Self::RESPONSE_MESSAGE_ACCEPTED
                         .replace("[id]", &message.get_id().to_string());
 
-                    message.set_raw_message(raw_message);
+                    message.set_raw_data(raw_data);
 
                     queue.send(message).await?;
 
@@ -278,7 +278,8 @@ impl Connection {
                 Request::Expn { value: _ } => todo!(),
                 Request::Help { value: _ } => todo!(),
                 Request::Etrn { .. } | Request::Atrn { .. } | Request::Burl { .. } => {
-                    Connection::reply(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED, &mut sink).await?;
+                    Connection::reply(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED, &mut sink)
+                        .await?;
                 }
             }
         }

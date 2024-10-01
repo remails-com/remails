@@ -24,7 +24,7 @@ DROP TABLE IF EXISTS messages CASCADE;
 CREATE TABLE messages (
     id uuid PRIMARY KEY NOT NULL,
     from_email varchar NOT NULL,
-    recipients varchar NOT NULL,
+    recipients varchar[] NOT NULL,
     raw_data bytea NOT NULL,
     message_data jsonb,
     created_at timestamp with time zone NOT NULL DEFAULT now(),

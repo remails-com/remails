@@ -3,9 +3,11 @@ use sqlx::postgres::PgPoolOptions;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tracing::error;
 use tracing_subscriber::EnvFilter;
 
 mod connection;
+mod handler;
 mod message;
 mod messages;
 mod server;
@@ -30,9 +32,9 @@ async fn main() {
         .await
         .unwrap();
 
-    let user_repository = users::UserRepository::new(pool);
+    let user_repository = users::UserRepository::new(pool.clone());
 
-    let (queue_sender, _qeueue_receiver) = mpsc::channel::<Message>(100);
+    let (queue_sender, mut queue_receiver) = mpsc::channel::<Message>(100);
 
     let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 1025);
     let shutdown = CancellationToken::new();
@@ -45,7 +47,25 @@ async fn main() {
         shutdown,
     );
 
+    let handler_handle = tokio::spawn(async move {
+        // receive messages from the queue and handle them
+        while let Some(message) = queue_receiver.recv().await {
+            let parsed_message = match handler::handle_message(message, pool.clone()).await {
+                Ok(message) => message,
+                Err(e) => {
+                    error!("failed to handle message: {e:?}");
+                    return;
+                }
+            };
+
+            if let Err(e) = handler::send_message(parsed_message).await {
+                error!("failed to send message: {e:?}");
+            }
+        }
+    });
+
     server.serve().await.unwrap();
+    handler_handle.await.unwrap();
 }
 
 #[cfg(test)]
