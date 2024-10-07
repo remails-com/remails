@@ -9,6 +9,7 @@ use tokio_rustls::{
     TlsAcceptor,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info};
 
 use crate::{connection::Connection, message::Message, users::UserRepository};
 
@@ -72,7 +73,7 @@ impl SmtServer {
         Ok((certs, key))
     }
 
-    pub async fn serve(&self) -> Result<(), SmtpServerError> {
+    pub async fn serve(self) -> Result<(), SmtpServerError> {
         let (certs, key) = self.load_tls_config().await?;
 
         let config = rustls::ServerConfig::builder()
@@ -85,30 +86,36 @@ impl SmtServer {
             .await
             .map_err(SmtpServerError::Listen)?;
 
-        tracing::info!("Listening on {}:{}", self.address, self.address.port());
+        info!("smtp server on {}:{}", self.address, self.address.port());
 
         loop {
             select! {
                 _ = self.shutdown.cancelled() => {
-                    tracing::info!("Shutting down server");
+                    info!("shutting down smtp server");
 
                     return Ok(());
                 }
                 result = listener.accept() => {
                     match result {
                         Ok((stream, peer_addr)) => {
-                            tracing::info!("Accepted connection from {}", peer_addr);
-
+                            info!("accepted connection from {}", peer_addr);
                             tokio::spawn(Connection::new(acceptor.clone(), stream, peer_addr).handle(self.queue.clone(), self.user_repository.clone()));
-
-                            tracing::info!("Connection handled");
+                            info!("connection handled");
                         }
                         Err(err) => {
-                            tracing::error!("Failed to accept connection: {}", err);
+                            error!("failed to accept connection: {}", err);
                         }
                     }
                 }
             }
         }
+    }
+
+    pub fn spawn(self) {
+        tokio::spawn(async {
+            if let Err(e) = self.serve().await {
+                error!("smtp server error: {:?}", e);
+            }
+        });
     }
 }

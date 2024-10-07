@@ -1,10 +1,12 @@
 use axum::{extract::State, routing::get, Json, Router};
 use serde::Serialize;
 use sqlx::PgPool;
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 use thiserror::Error;
-use tokio::{net::TcpListener, signal};
+use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tracing::{error, info};
 
 mod auth;
 mod users;
@@ -19,10 +21,12 @@ pub enum ApiServerError {
 
 pub struct ApiServer {
     router: Router,
+    socket: SocketAddr,
+    shutdown: CancellationToken,
 }
 
 impl ApiServer {
-    pub async fn new(pool: PgPool) -> ApiServer {
+    pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
         let router = Router::new()
             .route("/healthy", get(healthy))
             .layer((
@@ -31,27 +35,40 @@ impl ApiServer {
             ))
             .with_state(pool);
 
-        ApiServer { router }
+        ApiServer {
+            socket,
+            router,
+            shutdown,
+        }
     }
 
     pub async fn serve(self) -> Result<(), ApiServerError> {
-        let listener = TcpListener::bind("0.0.0.0:3000")
+        let listener = TcpListener::bind(self.socket)
             .await
             .map_err(ApiServerError::Bind)?;
 
+        info!("API server listening on {}", self.socket);
+
         axum::serve(listener, self.router)
-            .with_graceful_shutdown(shutdown_signal())
+            .with_graceful_shutdown(wait_for_shutdown(self.shutdown))
             .await
             .map_err(ApiServerError::Serve)
     }
 
-    pub async fn spawn(self) {
+    pub fn spawn(self) {
         tokio::spawn(async {
+            let token = self.shutdown.clone();
             if let Err(e) = self.serve().await {
-                tracing::error!("server error: {:?}", e);
+                error!("server error: {:?}", e);
+                token.cancel();
+                error!("shutting down API server")
             }
         });
     }
+}
+
+async fn wait_for_shutdown(token: CancellationToken) {
+    token.cancelled().await;
 }
 
 #[derive(Debug, Serialize)]
@@ -67,32 +84,12 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
             status: "OK",
         }),
         Err(e) => {
-            tracing::error!("database error: {:?}", e);
+            error!("database error: {:?}", e);
 
             Json(HealthyResponse {
                 healthy: false,
                 status: "database error",
             })
         }
-    }
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
     }
 }

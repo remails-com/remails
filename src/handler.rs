@@ -2,7 +2,8 @@ use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
 use thiserror::Error;
-use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tokio::sync::mpsc::Receiver;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 
 use crate::message::{Message, MessageRepository, MessageStatus};
@@ -23,12 +24,14 @@ pub(crate) enum HandlerError {
 
 pub(crate) struct Handler {
     message_repository: MessageRepository,
+    shutdown: CancellationToken,
 }
 
 impl Handler {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: PgPool, shutdown: CancellationToken) -> Self {
         Self {
             message_repository: MessageRepository::new(pool),
+            shutdown,
         }
     }
 
@@ -109,23 +112,36 @@ impl Handler {
         Ok(())
     }
 
-    pub async fn run(self, mut queue_receiver: Receiver<Message>) -> JoinHandle<()> {
+    pub fn spawn(self, mut queue_receiver: Receiver<Message>) {
         tokio::spawn(async move {
-            // receive messages from the queue and handle them
-            while let Some(message) = queue_receiver.recv().await {
-                let parsed_message = match self.handle_message(message).await {
-                    Ok(message) => message,
-                    Err(e) => {
-                        error!("failed to handle message: {e:?}");
+            loop {
+                tokio::select! {
+                    _ = self.shutdown.cancelled() => {
+                        info!("shutting down message handler");
                         return;
                     }
-                };
+                    queue_result = queue_receiver.recv() => {
+                        let Some(message) = queue_result else {
+                            error!("queue error, shutting down");
+                            self.shutdown.cancel();
+                            return
+                        };
 
-                if let Err(e) = self.send_message(parsed_message).await {
-                    error!("failed to send message: {e:?}");
+                        let parsed_message = match self.handle_message(message).await {
+                            Ok(message) => message,
+                            Err(e) => {
+                                error!("failed to handle message: {e:?}");
+                                continue
+                            }
+                        };
+
+                        if let Err(e) = self.send_message(parsed_message).await {
+                            error!("failed to send message: {e:?}");
+                        }
+                    }
                 }
             }
-        })
+        });
     }
 }
 
@@ -158,9 +174,9 @@ mod test {
             .insert(&user)
             .await
             .unwrap();
-        let message = Message::from_builder_message(message, user.get_id());
 
-        let handler = Handler::new(pool);
+        let message = Message::from_builder_message(message, user.get_id());
+        let handler = Handler::new(pool, CancellationToken::new());
 
         let message = handler.handle_message(message).await.unwrap();
         handler.send_message(message).await.unwrap();

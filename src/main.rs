@@ -3,9 +3,13 @@ use api::ApiServer;
 use handler::Handler;
 use message::Message;
 use sqlx::postgres::PgPoolOptions;
-use std::net::{Ipv4Addr, SocketAddrV4};
-use tokio::sync::mpsc;
+use std::{
+    net::{Ipv4Addr, SocketAddrV4},
+    time::Duration,
+};
+use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 mod api;
@@ -40,25 +44,52 @@ async fn main() -> anyhow::Result<()> {
 
     let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
     let shutdown = CancellationToken::new();
-    let server = server::SmtServer::new(
+    let smtp_server = server::SmtServer::new(
         socket.into(),
         "cert.pem".into(),
         "key.pem".into(),
         user_repository,
         queue_sender,
-        shutdown,
+        shutdown.clone(),
     );
 
-    let message_handler = Handler::new(pool.clone());
-    let handler_handle = message_handler.run(queue_receiver);
+    let message_handler = Handler::new(pool.clone(), shutdown.clone());
 
-    let api_server = ApiServer::new(pool.clone()).await;
-    api_server.spawn().await;
+    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 1080);
+    let api_server = ApiServer::new(socket.into(), pool.clone(), shutdown.clone()).await;
 
-    server.serve().await.context("failed to start server")?;
-    handler_handle.await;
+    api_server.spawn();
+    smtp_server.spawn();
+    message_handler.spawn(queue_receiver);
+
+    shutdown_signal(shutdown.clone()).await;
+    info!("received shutdown signal, stopping services");
+    shutdown.cancel();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     Ok(())
+}
+
+async fn shutdown_signal(token: CancellationToken) {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = token.cancelled() => {},
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }
 
 #[cfg(test)]
