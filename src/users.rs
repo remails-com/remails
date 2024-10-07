@@ -41,7 +41,7 @@ impl UserRepository {
     }
 
     #[cfg(test)]
-    pub(crate) async fn insert(&self, user: User) -> anyhow::Result<()> {
+    pub(crate) async fn insert(&self, user: User) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO users (id, username, password_hash, created_at, updated_at)
@@ -59,7 +59,10 @@ impl UserRepository {
         Ok(())
     }
 
-    pub(crate) async fn find_by_username(&self, username: &str) -> anyhow::Result<Option<User>> {
+    pub(crate) async fn find_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<User>, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
             r#"

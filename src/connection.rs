@@ -1,7 +1,7 @@
-use anyhow::Context;
 use mail_parser::decoders::base64::base64_decode;
 use smtp_proto::*;
 use std::net::SocketAddr;
+use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
@@ -11,6 +11,24 @@ use tokio_rustls::{server::TlsStream, TlsAcceptor};
 use tracing::{debug, trace};
 
 use crate::{message::Message, users::UserRepository};
+
+#[derive(Debug, Error)]
+pub(crate) enum ConnectionError {
+    #[error("failed to accept connection: {0}")]
+    Accept(std::io::Error),
+    #[error("failed to write tcp stream: {0}")]
+    Write(std::io::Error),
+    #[error("failed to read tcp stream: {0}")]
+    Read(std::io::Error),
+    #[error("failed to base 64 decode user credentials")]
+    DecodeCredentials,
+    #[error("message body too large")]
+    MessageTooBig,
+    #[error("received message is empty")]
+    EmptyMessage,
+    #[error("failed to send message to queue: {0}")]
+    WriteQueue(tokio::sync::mpsc::error::SendError<Message>),
+}
 
 #[derive(Debug, PartialEq)]
 enum ConnectionState {
@@ -67,8 +85,12 @@ impl Connection {
         mut self,
         queue: Sender<Message>,
         user_repository: UserRepository,
-    ) -> anyhow::Result<()> {
-        let tls_stream: TlsStream<TcpStream> = self.acceptor.accept(self.stream).await?;
+    ) -> Result<(), ConnectionError> {
+        let tls_stream: TlsStream<TcpStream> = self
+            .acceptor
+            .accept(self.stream)
+            .await
+            .map_err(ConnectionError::Accept)?;
 
         trace!("secure connection with {}", &self.peer_addr);
 
@@ -106,7 +128,7 @@ impl Connection {
 
                     let mut buf = Vec::with_capacity(64);
                     response.write(&mut buf).ok();
-                    let n = sink.write(&buf).await?;
+                    let n = sink.write(&buf).await.map_err(ConnectionError::Write)?;
 
                     self.connectio_state = ConnectionState::Ready;
 
@@ -173,8 +195,8 @@ impl Connection {
                             continue;
                         }
 
-                        let decoded =
-                            base64_decode(initial_response.as_bytes()).context("Invalid base64")?;
+                        let decoded = base64_decode(initial_response.as_bytes())
+                            .ok_or(ConnectionError::DecodeCredentials)?;
 
                         let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
 
@@ -242,7 +264,7 @@ impl Connection {
                                 .await?;
                             debug!("failed to read message: message too big");
 
-                            return Err(anyhow::anyhow!("message too big"));
+                            return Err(ConnectionError::MessageTooBig);
                         }
                     }
 
@@ -250,7 +272,7 @@ impl Connection {
                         Connection::reply(554, Self::RESPONSE_MESSAGE_REJECTED, &mut sink).await?;
                         debug!("failed to read message: empty message");
 
-                        return Err(anyhow::anyhow!("empty message"));
+                        return Err(ConnectionError::EmptyMessage);
                     }
 
                     trace!(
@@ -263,7 +285,10 @@ impl Connection {
 
                     message.set_raw_data(raw_data);
 
-                    queue.send(message).await?;
+                    queue
+                        .send(message)
+                        .await
+                        .map_err(ConnectionError::WriteQueue)?;
 
                     self.connectio_state = ConnectionState::Authenticated;
 
@@ -285,7 +310,7 @@ impl Connection {
         }
 
         // send tls close notify
-        sink.shutdown().await?;
+        sink.shutdown().await.map_err(ConnectionError::Write)?;
 
         Ok(())
     }
@@ -293,39 +318,38 @@ impl Connection {
     async fn read_buf(
         reader: impl AsyncBufReadExt + Unpin,
         buffer: &mut Vec<u8>,
-    ) -> anyhow::Result<usize> {
+    ) -> Result<usize, ConnectionError> {
         buffer.clear();
 
         reader
             .take(Connection::BUFFER_SIZE as u64)
             .read_buf(buffer)
             .await
-            .context("failed to read message")
+            .map_err(ConnectionError::Read)
     }
 
     async fn read_line(
         reader: impl AsyncBufReadExt + Unpin,
         buffer: &mut Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<usize, ConnectionError> {
         buffer.clear();
 
         reader
             .take(Connection::BUFFER_SIZE as u64)
             .read_until(b'\n', buffer)
             .await
-            .context("failed to read command")?;
-
-        Ok(())
+            .map_err(ConnectionError::Read)
     }
 
     async fn reply(
         code: u16,
         message: &str,
         mut sink: impl AsyncWriteExt + Unpin,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), ConnectionError> {
         let n = sink
             .write(format!("{code} {message}\r\n").as_bytes())
-            .await?;
+            .await
+            .map_err(ConnectionError::Write)?;
 
         if n < 256 {
             debug!("sent: {} {}", code, message);

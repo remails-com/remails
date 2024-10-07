@@ -1590,6 +1590,7 @@ dependencies = [
  "serde_json",
  "smtp-proto",
  "sqlx",
+ "thiserror",
  "tokio",
  "tokio-rustls 0.26.0",
  "tokio-tls-upgrade",

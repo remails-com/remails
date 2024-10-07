@@ -89,7 +89,7 @@ impl MessageRepository {
         Self { pool }
     }
 
-    pub(crate) async fn insert(&self, message: &Message) -> anyhow::Result<()> {
+    pub(crate) async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO messages (id, from_email, recipients, raw_data, message_data, created_at, updated_at)
@@ -109,7 +109,7 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub(crate) async fn update_message_data(&self, message: &Message) -> anyhow::Result<()> {
+    pub(crate) async fn update_message_data(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             UPDATE messages
@@ -126,7 +126,7 @@ impl MessageRepository {
     }
 
     #[cfg(test)]
-    pub(crate) async fn find_by_id(&self, id: Uuid) -> anyhow::Result<Option<Message>> {
+    pub(crate) async fn find_by_id(&self, id: Uuid) -> Result<Option<Message>, sqlx::Error> {
         let message = sqlx::query_as!(
             Message,
             r#"

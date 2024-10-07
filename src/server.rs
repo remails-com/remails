@@ -1,5 +1,5 @@
-use anyhow::Context;
 use std::{fs::File, io, net::SocketAddr, path::PathBuf, sync::Arc};
+use thiserror::Error;
 use tokio::{net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
     rustls::{
@@ -11,6 +11,20 @@ use tokio_rustls::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{connection::Connection, message::Message, users::UserRepository};
+
+#[derive(Debug, Error)]
+pub(crate) enum SmtpServerError {
+    #[error("failed to load private key: {0}")]
+    PrivateKey(io::Error),
+    #[error("no private key found in the key file")]
+    PrivateKeyNotFound,
+    #[error("failed to load certificate: {0}")]
+    Certificate(io::Error),
+    #[error("failed to listen on address: {0}")]
+    Listen(io::Error),
+    #[error("failed to configure TLS: {0}")]
+    Tls(rustls::Error),
+}
 
 pub(crate) struct SmtServer {
     address: SocketAddr,
@@ -42,27 +56,34 @@ impl SmtServer {
 
     async fn load_tls_config(
         &self,
-    ) -> anyhow::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
-        let mut cert_reader = io::BufReader::new(File::open(&self.cert)?);
-        let mut key_reader = io::BufReader::new(File::open(&self.key)?);
+    ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), SmtpServerError> {
+        let mut cert_reader =
+            io::BufReader::new(File::open(&self.cert).map_err(SmtpServerError::Certificate)?);
+        let mut key_reader =
+            io::BufReader::new(File::open(&self.key).map_err(SmtpServerError::PrivateKey)?);
 
-        let certs =
-            rustls_pemfile::certs(&mut cert_reader).collect::<Result<Vec<_>, io::Error>>()?;
-        let key = rustls_pemfile::private_key(&mut key_reader)?.context("No key found")?;
+        let certs = rustls_pemfile::certs(&mut cert_reader)
+            .collect::<Result<Vec<_>, io::Error>>()
+            .map_err(SmtpServerError::Certificate)?;
+        let key = rustls_pemfile::private_key(&mut key_reader)
+            .map_err(SmtpServerError::PrivateKey)?
+            .ok_or(SmtpServerError::PrivateKeyNotFound)?;
 
         Ok((certs, key))
     }
 
-    pub async fn serve(&self) -> anyhow::Result<()> {
+    pub async fn serve(&self) -> Result<(), SmtpServerError> {
         let (certs, key) = self.load_tls_config().await?;
 
         let config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(certs, key)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+            .map_err(SmtpServerError::Tls)?;
 
         let acceptor = TlsAcceptor::from(Arc::new(config));
-        let listener = TcpListener::bind(&self.address).await?;
+        let listener = TcpListener::bind(&self.address)
+            .await
+            .map_err(SmtpServerError::Listen)?;
 
         tracing::info!("Listening on {}:{}", self.address, self.address.port());
 

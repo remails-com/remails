@@ -1,3 +1,5 @@
+use anyhow::Context;
+use handler::Handler;
 use message::Message;
 use sqlx::postgres::PgPoolOptions;
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -9,28 +11,27 @@ use tracing_subscriber::EnvFilter;
 mod connection;
 mod handler;
 mod message;
-mod messages;
 mod server;
 mod users;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::from_default_env().add_directive("remails=trace".parse().unwrap()),
         )
         .try_init()
-        .unwrap();
+        .expect("failed registering tracing subscriber");
 
     let _ = dotenvy::dotenv();
 
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await
-        .unwrap();
+        .context("failed to connect to database")?;
 
     let user_repository = users::UserRepository::new(pool.clone());
 
@@ -47,10 +48,12 @@ async fn main() {
         shutdown,
     );
 
+    let message_handler = Handler::new(pool.clone());
+
     let handler_handle = tokio::spawn(async move {
         // receive messages from the queue and handle them
         while let Some(message) = queue_receiver.recv().await {
-            let parsed_message = match handler::handle_message(message, pool.clone()).await {
+            let parsed_message = match message_handler.handle_message(message).await {
                 Ok(message) => message,
                 Err(e) => {
                     error!("failed to handle message: {e:?}");
@@ -58,14 +61,16 @@ async fn main() {
                 }
             };
 
-            if let Err(e) = handler::send_message(parsed_message).await {
+            if let Err(e) = message_handler.send_message(parsed_message).await {
                 error!("failed to send message: {e:?}");
             }
         }
     });
 
-    server.serve().await.unwrap();
-    handler_handle.await.unwrap();
+    server.serve().await.context("failed to start server")?;
+    handler_handle.await.context("handler failed")?;
+
+    Ok(())
 }
 
 #[cfg(test)]
