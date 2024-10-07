@@ -1,11 +1,11 @@
 use anyhow::Context;
+use api::ApiServer;
 use handler::Handler;
 use message::Message;
 use sqlx::postgres::PgPoolOptions;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
 use tracing_subscriber::EnvFilter;
 
 mod api;
@@ -36,9 +36,9 @@ async fn main() -> anyhow::Result<()> {
 
     let user_repository = users::UserRepository::new(pool.clone());
 
-    let (queue_sender, mut queue_receiver) = mpsc::channel::<Message>(100);
+    let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
 
-    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 1025);
+    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
     let shutdown = CancellationToken::new();
     let server = server::SmtServer::new(
         socket.into(),
@@ -50,26 +50,13 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let message_handler = Handler::new(pool.clone());
+    let handler_handle = message_handler.run(queue_receiver);
 
-    let handler_handle = tokio::spawn(async move {
-        // receive messages from the queue and handle them
-        while let Some(message) = queue_receiver.recv().await {
-            let parsed_message = match message_handler.handle_message(message).await {
-                Ok(message) => message,
-                Err(e) => {
-                    error!("failed to handle message: {e:?}");
-                    return;
-                }
-            };
-
-            if let Err(e) = message_handler.send_message(parsed_message).await {
-                error!("failed to send message: {e:?}");
-            }
-        }
-    });
+    let api_server = ApiServer::new(pool.clone()).await;
+    api_server.spawn().await;
 
     server.serve().await.context("failed to start server")?;
-    handler_handle.await.context("handler failed")?;
+    handler_handle.await;
 
     Ok(())
 }

@@ -2,6 +2,7 @@ use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
 use thiserror::Error;
+use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{debug, error, info, trace};
 
 use crate::message::{Message, MessageRepository, MessageStatus};
@@ -106,6 +107,25 @@ impl Handler {
             .map_err(HandlerError::MessageRepositoryError)?;
 
         Ok(())
+    }
+
+    pub async fn run(self, mut queue_receiver: Receiver<Message>) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            // receive messages from the queue and handle them
+            while let Some(message) = queue_receiver.recv().await {
+                let parsed_message = match self.handle_message(message).await {
+                    Ok(message) => message,
+                    Err(e) => {
+                        error!("failed to handle message: {e:?}");
+                        return;
+                    }
+                };
+
+                if let Err(e) = self.send_message(parsed_message).await {
+                    error!("failed to send message: {e:?}");
+                }
+            }
+        })
     }
 }
 
