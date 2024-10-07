@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 
+mod api;
 mod connection;
 mod handler;
 mod message;
