@@ -1,11 +1,10 @@
-use anyhow::Context;
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, error, info, trace};
 
-use crate::message::{Message, MessageRepository};
+use crate::message::{Message, MessageRepository, MessageStatus};
 
 #[derive(Debug, Error)]
 pub(crate) enum HandlerError {
@@ -15,6 +14,10 @@ pub(crate) enum HandlerError {
     FailedParsingMessage,
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
+    #[error("failed to connect to upstream server: {0}")]
+    ConnectToUpstream(mail_send::Error),
+    #[error("failed to deliver message: {0}")]
+    DeliverMessage(mail_send::Error),
 }
 
 pub(crate) struct Handler {
@@ -59,21 +62,48 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        // TODO: update message status
-
         Ok(message)
     }
 
-    pub(crate) async fn send_message(&self, message: Message) -> anyhow::Result<()> {
+    pub(crate) async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.get_id());
 
-        SmtpClientBuilder::new("localhost", 1025)
+        let mut client = match SmtpClientBuilder::new("localhost", 1025)
             .connect_plain()
             .await
-            .context("failed connecting to SMTP server")?
-            .send(message)
+        {
+            Ok(client) => {
+                trace!("connected to upstream server");
+
+                client
+            }
+            Err(e) => {
+                error!("failed to connect to upstream server: {e}");
+
+                self.message_repository
+                    .update_message_status(&mut message, MessageStatus::Failed)
+                    .await
+                    .map_err(HandlerError::MessageRepositoryError)?;
+
+                return Err(HandlerError::ConnectToUpstream(e));
+            }
+        };
+
+        if let Err(e) = client.send(message.clone()).await {
+            error!("failed to send message: {e}");
+
+            self.message_repository
+                .update_message_status(&mut message, MessageStatus::Failed)
+                .await
+                .map_err(HandlerError::MessageRepositoryError)?;
+
+            return Err(HandlerError::DeliverMessage(e));
+        }
+
+        self.message_repository
+            .update_message_status(&mut message, MessageStatus::Delivered)
             .await
-            .context("failed sending message")?;
+            .map_err(HandlerError::MessageRepositoryError)?;
 
         Ok(())
     }
@@ -81,6 +111,8 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
+    use crate::users::{User, UserRepository};
+
     use super::*;
 
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
@@ -101,9 +133,16 @@ mod test {
             .into_message()
             .unwrap();
 
+        let user = User::new("user".to_string(), "pass".to_string());
+        UserRepository::new(pool.clone())
+            .insert(&user)
+            .await
+            .unwrap();
+        let message = Message::from_builder_message(message, user.get_id());
+
         let handler = Handler::new(pool);
 
-        let message = handler.handle_message(message.into()).await.unwrap();
+        let message = handler.handle_message(message).await.unwrap();
         handler.send_message(message).await.unwrap();
     }
 }

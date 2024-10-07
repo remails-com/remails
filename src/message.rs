@@ -1,13 +1,27 @@
+use chrono::{DateTime, Utc};
 use mail_send::smtp::message::IntoMessage;
-use sqlx::types::chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub(crate) type EmailAddress = String;
 
+#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
+#[sqlx(type_name = "message_status", rename_all = "lowercase")]
+pub(crate) enum MessageStatus {
+    Processing,
+    Held,
+    Accepted,
+    Rejected,
+    Delivered,
+    Failed,
+}
+
 #[allow(dead_code)]
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Deserialize, Serialize)]
 pub(crate) struct Message {
     id: Uuid,
+    user_id: Uuid,
+    status: MessageStatus,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
     raw_data: Vec<u8>,
@@ -17,11 +31,13 @@ pub(crate) struct Message {
 }
 
 impl Message {
-    pub fn new(from_email: EmailAddress) -> Self {
+    pub fn new(user_id: Uuid, from_email: EmailAddress) -> Self {
         let id = Uuid::new_v4();
 
         Self {
             id,
+            user_id,
+            status: MessageStatus::Processing,
             from_email,
             recipients: Vec::new(),
             raw_data: Vec::new(),
@@ -55,6 +71,20 @@ impl Message {
     pub fn set_message_data(&mut self, message_data: serde_json::Value) {
         self.message_data = message_data;
     }
+
+    #[cfg(test)]
+    pub fn from_builder_message(
+        value: mail_send::smtp::message::Message<'_>,
+        user_id: Uuid,
+    ) -> Self {
+        let mut message = Message::new(user_id, value.mail_from.email.clone().into());
+        for recipient in value.rcpt_to.iter() {
+            message.add_recipient(recipient.email.clone().into());
+        }
+        message.raw_data = value.into_message().unwrap().body.to_vec();
+
+        message
+    }
 }
 
 impl<'x> IntoMessage<'x> for Message {
@@ -64,18 +94,6 @@ impl<'x> IntoMessage<'x> for Message {
             rcpt_to: self.recipients.into_iter().map(|m| m.into()).collect(),
             body: self.raw_data.into(),
         })
-    }
-}
-
-impl From<mail_send::smtp::message::Message<'_>> for Message {
-    fn from(value: mail_send::smtp::message::Message<'_>) -> Self {
-        let mut message = Message::new(value.mail_from.email.clone().into());
-        for recipient in value.rcpt_to.iter() {
-            message.add_recipient(recipient.email.clone().into());
-        }
-        message.raw_data = value.into_message().unwrap().body.to_vec();
-
-        message
     }
 }
 
@@ -92,16 +110,40 @@ impl MessageRepository {
     pub(crate) async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
-            INSERT INTO messages (id, from_email, recipients, raw_data, message_data, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO messages (id, user_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
             message.id,
+            message.user_id,
+            message.status as _,
             message.from_email,
             &message.recipients,
             message.raw_data,
             message.message_data,
             message.created_at,
             message.updated_at
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn update_message_status(
+        &self,
+        message: &mut Message,
+        status: MessageStatus,
+    ) -> Result<(), sqlx::Error> {
+        message.status = status;
+
+        sqlx::query!(
+            r#"
+            UPDATE messages
+            SET status = $2
+            WHERE id = $1
+            "#,
+            message.id,
+            message.status as _
         )
         .execute(&self.pool)
         .await?;
@@ -130,7 +172,17 @@ impl MessageRepository {
         let message = sqlx::query_as!(
             Message,
             r#"
-            SELECT * FROM messages WHERE id = $1 LIMIT 1
+            SELECT
+                id,
+                user_id,
+                status as "status: _",
+                from_email,
+                recipients,
+                raw_data,
+                message_data,
+                created_at,
+                updated_at
+            FROM messages WHERE id = $1 LIMIT 1
             "#,
             id
         )
@@ -143,15 +195,17 @@ impl MessageRepository {
 
 #[cfg(test)]
 mod test {
+    use crate::users::{User, UserRepository};
+
     use super::*;
     use mail_send::mail_builder::MessageBuilder;
     use sqlx::PgPool;
 
     #[sqlx::test]
     async fn message_repository(pool: PgPool) {
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let message: Message = MessageBuilder::new()
+        let message = MessageBuilder::new()
             .from(("John Doe", "john@example.com"))
             .to(vec![
                 ("Jane Doe", "jane@example.com"),
@@ -161,8 +215,11 @@ mod test {
             .html_body("<h1>Hello, world!</h1>")
             .text_body("Hello world!")
             .into_message()
-            .unwrap()
-            .into();
+            .unwrap();
+
+        let user = User::new("user".to_string(), "pass".to_string());
+        UserRepository::new(pool).insert(&user).await.unwrap();
+        let message = Message::from_builder_message(message, user.get_id());
 
         let id = message.id;
 

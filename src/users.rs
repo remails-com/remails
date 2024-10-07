@@ -28,6 +28,10 @@ impl User {
     pub(crate) fn verify_password(&self, password: &str) -> bool {
         password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
     }
+
+    pub(crate) fn get_id(&self) -> Uuid {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +45,7 @@ impl UserRepository {
     }
 
     #[cfg(test)]
-    pub(crate) async fn insert(&self, user: User) -> Result<(), sqlx::Error> {
+    pub(crate) async fn insert(&self, user: &User) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO users (id, username, password_hash, created_at, updated_at)
@@ -89,7 +93,7 @@ mod test {
         let user = User::new("test".into(), "password".into());
         assert!(user.verify_password("password"));
 
-        repository.insert(user).await.unwrap();
+        repository.insert(&user).await.unwrap();
 
         let fetched_user = repository.find_by_username("test").await.unwrap().unwrap();
 

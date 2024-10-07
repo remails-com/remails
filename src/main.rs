@@ -95,7 +95,7 @@ mod test {
         let user_repository = users::UserRepository::new(pool);
 
         let user = users::User::new("john".into(), "p4ssw0rd".into());
-        user_repository.insert(user).await.unwrap();
+        user_repository.insert(&user).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), random_port);
         let shutdown = CancellationToken::new();

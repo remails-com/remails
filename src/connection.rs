@@ -10,7 +10,10 @@ use tokio::{
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 use tracing::{debug, trace};
 
-use crate::{message::Message, users::UserRepository};
+use crate::{
+    message::Message,
+    users::{User, UserRepository},
+};
 
 #[derive(Debug, Error)]
 pub(crate) enum ConnectionError {
@@ -43,6 +46,7 @@ pub(crate) struct Connection {
     acceptor: TlsAcceptor,
     stream: TcpStream,
     peer_addr: SocketAddr,
+    authenticated_user: Option<User>,
     buffer: Vec<u8>,
     current_message: Option<Message>,
     connectio_state: ConnectionState,
@@ -77,6 +81,7 @@ impl Connection {
             buffer: Vec::with_capacity(Self::BUFFER_SIZE),
             // message
             current_message: None,
+            authenticated_user: None,
             connectio_state: ConnectionState::Accepting,
         }
     }
@@ -145,8 +150,13 @@ impl Connection {
                         continue;
                     }
 
-                    self.current_message = Some(Message::new(from.address.clone()));
+                    let Some(user) = self.authenticated_user.as_ref() else {
+                        Connection::reply(530, Self::RESPONSE_AUTHENTICATION_REQUIRED, &mut sink)
+                            .await?;
+                        continue;
+                    };
 
+                    self.current_message = Some(Message::new(user.get_id(), from.address.clone()));
                     self.connectio_state = ConnectionState::FromReceived;
 
                     let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
@@ -224,6 +234,7 @@ impl Connection {
                             continue;
                         }
 
+                        self.authenticated_user = Some(user);
                         self.connectio_state = ConnectionState::Authenticated;
 
                         Connection::reply(235, Self::RESPONSE_AUTH_SUCCCESS, &mut sink).await?;

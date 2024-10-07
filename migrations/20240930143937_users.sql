@@ -20,9 +20,20 @@ CREATE TABLE users (
 CREATE TRIGGER update_users_updated_at
 BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+CREATE TYPE message_status AS ENUM (
+    'processing',
+    'held',
+    'accepted',
+    'rejected',
+    'delivered',
+    'failed'
+);
+
 DROP TABLE IF EXISTS messages CASCADE;
 CREATE TABLE messages (
     id uuid PRIMARY KEY NOT NULL,
+    user_id uuid NOT NULL REFERENCES users(id),
+    status message_status NOT NULL,
     from_email varchar NOT NULL,
     recipients varchar[] NOT NULL,
     raw_data bytea NOT NULL,
