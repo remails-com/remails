@@ -95,14 +95,12 @@ impl SmtpConnection {
                         let reply = self.session.handle_data(&self.buffer).await;
 
                         match reply {
-                            SessionReply::ContinueIngest => {}
+                            SessionReply::ContinueIngest => continue,
                             SessionReply::ReplyAndContinue(code, message) => {
                                 SmtpConnection::reply(code, &message, &mut sink).await?;
                                 break;
                             }
-                            _ => {
-                                break;
-                            }
+                            _ => break,
                         }
                     }
                 }
