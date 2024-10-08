@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
-use crate::{message::MessageRepository, users::UserRepository};
+use crate::{message::MessageRepository, user::UserRepository};
 
 mod auth;
 mod error;

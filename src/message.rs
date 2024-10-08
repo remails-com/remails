@@ -247,11 +247,11 @@ impl MessageRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::users::{User, UserRepository};
-
-    use super::*;
     use mail_send::mail_builder::MessageBuilder;
     use sqlx::PgPool;
+
+    use super::*;
+    use crate::user::{User, UserRepository};
 
     #[sqlx::test]
     async fn message_repository(pool: PgPool) {

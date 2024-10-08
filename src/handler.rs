@@ -147,7 +147,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::users::{User, UserRepository};
+    use crate::user::{User, UserRepository};
 
     use super::*;
 

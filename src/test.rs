@@ -6,7 +6,7 @@ use reqwest::header::AUTHORIZATION;
 use serde_json::json;
 use sqlx::PgPool;
 
-use crate::{message::Message, run, users::User};
+use crate::{message::Message, run, user::User};
 
 pub fn random_port() -> u16 {
     let mut rng = rand::thread_rng();

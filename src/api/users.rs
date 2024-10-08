@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::Deserialize;
 
-use crate::users::{User, UserRepository};
+use crate::user::{User, UserRepository};
 
 use super::{
     auth::ApiUser,

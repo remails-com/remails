@@ -11,7 +11,7 @@ use tokio_rustls::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use crate::{connection::Connection, message::Message, users::UserRepository};
+use crate::{message::Message, smtp::smtp_connection::SmtpConnection, user::UserRepository};
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -27,7 +27,7 @@ pub enum SmtpServerError {
     Tls(rustls::Error),
 }
 
-pub struct SmtServer {
+pub struct SmtpServer {
     address: SocketAddrV4,
     user_repository: UserRepository,
     queue: Sender<Message>,
@@ -36,7 +36,7 @@ pub struct SmtServer {
     key: PathBuf,
 }
 
-impl SmtServer {
+impl SmtpServer {
     pub fn new(
         address: SocketAddrV4,
         cert: PathBuf,
@@ -99,7 +99,7 @@ impl SmtServer {
                     match result {
                         Ok((stream, peer_addr)) => {
                             info!("accepted connection from {}", peer_addr);
-                            tokio::spawn(Connection::new(acceptor.clone(), stream, peer_addr).handle(self.queue.clone(), self.user_repository.clone()));
+                            tokio::spawn(SmtpConnection::new(acceptor.clone(), stream, peer_addr, self.queue.clone(), self.user_repository.clone()).handle());
                             info!("connection handled");
                         }
                         Err(err) => {

@@ -2,6 +2,7 @@ use anyhow::Context;
 use api::ApiServer;
 use handler::Handler;
 use message::Message;
+use smtp::smtp_server::SmtpServer;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -11,13 +12,13 @@ use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use user::UserRepository;
 
 mod api;
-mod connection;
 mod handler;
 mod message;
-mod server;
-mod users;
+mod smtp;
+mod user;
 
 #[cfg(test)]
 mod test;
@@ -27,12 +28,12 @@ async fn run(
     smtp_socket: SocketAddrV4,
     http_socket: SocketAddrV4,
 ) -> CancellationToken {
-    let user_repository = users::UserRepository::new(pool.clone());
+    let user_repository = UserRepository::new(pool.clone());
 
     let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
 
     let shutdown = CancellationToken::new();
-    let smtp_server = server::SmtServer::new(
+    let smtp_server = SmtpServer::new(
         smtp_socket,
         "cert.pem".into(),
         "key.pem".into(),
@@ -121,6 +122,7 @@ mod smtp_test {
     use test::random_port;
     use tokio::task::JoinHandle;
     use tracing_test::traced_test;
+    use user::User;
 
     async fn setup_server(
         pool: PgPool,
@@ -131,15 +133,15 @@ mod smtp_test {
         u16,
     ) {
         let smtp_port = random_port();
-        let user_repository = users::UserRepository::new(pool);
+        let user_repository = UserRepository::new(pool);
 
-        let user = users::User::new("john".into(), "p4ssw0rd".into());
+        let user = User::new("john".into(), "p4ssw0rd".into());
         user_repository.insert(&user).await.unwrap();
 
-        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), smtp_port);
+        let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let shutdown = CancellationToken::new();
         let (queue_sender, receiver) = mpsc::channel::<Message>(100);
-        let server = server::SmtServer::new(
+        let server = SmtpServer::new(
             socket,
             "cert.pem".into(),
             "key.pem".into(),
