@@ -5,16 +5,14 @@ use axum::{
     RequestPartsExt,
 };
 use std::net::{IpAddr, SocketAddr};
+use tracing::{debug, error, trace};
 use uuid::Uuid;
-
-const TEST_ADMIN_TOKEN: &str = "admin";
-const TEST_COMPANY_TOKEN: &str = "user";
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
 enum Role {
     Admin,
-    Company(Uuid),
+    User(Uuid),
 }
 
 #[allow(unused)]
@@ -22,6 +20,23 @@ enum Role {
 pub struct ApiUser {
     ip: IpAddr,
     role: Role,
+}
+
+impl ApiUser {
+    pub fn is_admin(&self) -> bool {
+        matches!(self.role, Role::Admin)
+    }
+
+    pub fn is_user(&self) -> bool {
+        matches!(self.role, Role::User(_))
+    }
+
+    pub fn get_user_id(&self) -> Option<Uuid> {
+        match self.role {
+            Role::User(id) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 #[async_trait]
@@ -32,7 +47,11 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        trace!("extracting `Authorization` header");
+
         if let Some(authorization) = parts.headers.get(AUTHORIZATION).cloned() {
+            trace!("authorization header: {authorization:?}");
+
             let (prefix, key) = authorization
                 .to_str()
                 .unwrap_or_default()
@@ -40,6 +59,8 @@ where
                 .unwrap_or(("", ""));
 
             if prefix != "Bearer" {
+                error!("invalid `Authorization` header prefix");
+
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "invalid `Authorization` header prefix",
@@ -47,6 +68,8 @@ where
             }
 
             let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
+                error!("could not determine client IP address");
+
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "could not determine client IP address",
@@ -55,24 +78,25 @@ where
 
             let ip = connection.ip();
 
+            debug!("authentication attempt from {ip} with key '{key}'");
+
+            #[cfg(test)]
             match key {
-                TEST_ADMIN_TOKEN => {
-                    return Ok(ApiUser {
-                        ip,
-                        role: Role::Admin,
-                    });
-                }
-                TEST_COMPANY_TOKEN => {
-                    return Ok(ApiUser {
-                        ip,
-                        role: Role::Company(Uuid::new_v4()),
-                    });
-                }
-                _ => {
-                    return Err((StatusCode::UNAUTHORIZED, "invalid token"));
-                }
+                "admin" => Ok(ApiUser {
+                    ip,
+                    role: Role::Admin,
+                }),
+                token => Ok(ApiUser {
+                    ip,
+                    role: Role::User(token.parse().unwrap_or_default()),
+                }),
             }
+
+            #[cfg(not(test))]
+            Err((StatusCode::UNAUTHORIZED, "invalid token"))
         } else {
+            error!("`Authorization` header is missing");
+
             Err((StatusCode::BAD_REQUEST, "`User-Agent` header is missing"))
         }
     }

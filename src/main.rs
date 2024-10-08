@@ -2,7 +2,7 @@ use anyhow::Context;
 use api::ApiServer;
 use handler::Handler;
 use message::Message;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
@@ -10,7 +10,7 @@ use std::{
 use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
 mod connection;
@@ -19,14 +19,53 @@ mod message;
 mod server;
 mod users;
 
+#[cfg(test)]
+mod test;
+
+async fn run(
+    pool: PgPool,
+    smtp_socket: SocketAddrV4,
+    http_socket: SocketAddrV4,
+) -> CancellationToken {
+    let user_repository = users::UserRepository::new(pool.clone());
+
+    let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
+
+    let shutdown = CancellationToken::new();
+    let smtp_server = server::SmtServer::new(
+        smtp_socket,
+        "cert.pem".into(),
+        "key.pem".into(),
+        user_repository,
+        queue_sender,
+        shutdown.clone(),
+    );
+
+    let message_handler = Handler::new(pool.clone(), shutdown.clone());
+
+    let api_server = ApiServer::new(http_socket.into(), pool.clone(), shutdown.clone()).await;
+
+    api_server.spawn();
+    smtp_server.spawn();
+    message_handler.spawn(queue_receiver);
+
+    shutdown
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::from_default_env().add_directive("remails=trace".parse().unwrap()),
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!(
+                    "{}=trace,tower_http=debug,axum=trace",
+                    env!("CARGO_CRATE_NAME")
+                )
+                .into()
+            }),
         )
-        .try_init()
-        .expect("failed registering tracing subscriber");
+        .with(tracing_subscriber::fmt::layer().without_time())
+        .init();
 
     let _ = dotenvy::dotenv();
 
@@ -38,35 +77,17 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    let user_repository = users::UserRepository::new(pool.clone());
+    let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
+    let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
 
-    let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
-
-    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
-    let shutdown = CancellationToken::new();
-    let smtp_server = server::SmtServer::new(
-        socket.into(),
-        "cert.pem".into(),
-        "key.pem".into(),
-        user_repository,
-        queue_sender,
-        shutdown.clone(),
-    );
-
-    let message_handler = Handler::new(pool.clone(), shutdown.clone());
-
-    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 1080);
-    let api_server = ApiServer::new(socket.into(), pool.clone(), shutdown.clone()).await;
-
-    api_server.spawn();
-    smtp_server.spawn();
-    message_handler.spawn(queue_receiver);
+    let shutdown = run(pool, smtp_socket, http_socket).await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
     shutdown.cancel();
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // give services the opportunity to shut down
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     Ok(())
 }
@@ -93,11 +114,11 @@ async fn shutdown_signal(token: CancellationToken) {
 }
 
 #[cfg(test)]
-mod test {
+mod smtp_test {
     use super::*;
     use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
-    use rand::Rng;
     use sqlx::PgPool;
+    use test::random_port;
     use tokio::task::JoinHandle;
     use tracing_test::traced_test;
 
@@ -109,18 +130,17 @@ mod test {
         mpsc::Receiver<Message>,
         u16,
     ) {
-        let mut rng = rand::thread_rng();
-        let random_port = rng.gen_range(10_000..30_000);
+        let smtp_port = random_port();
         let user_repository = users::UserRepository::new(pool);
 
         let user = users::User::new("john".into(), "p4ssw0rd".into());
         user_repository.insert(&user).await.unwrap();
 
-        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), random_port);
+        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), smtp_port);
         let shutdown = CancellationToken::new();
         let (queue_sender, receiver) = mpsc::channel::<Message>(100);
         let server = server::SmtServer::new(
-            socket.into(),
+            socket,
             "cert.pem".into(),
             "key.pem".into(),
             user_repository,
@@ -134,7 +154,7 @@ mod test {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        (shutdown, server_handle, receiver, random_port)
+        (shutdown, server_handle, receiver, smtp_port)
     }
 
     #[sqlx::test]

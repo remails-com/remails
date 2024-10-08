@@ -3,11 +3,11 @@ use mail_send::smtp::message::IntoMessage;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub(crate) type EmailAddress = String;
+pub type EmailAddress = String;
 
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
-pub(crate) enum MessageStatus {
+pub enum MessageStatus {
     Processing,
     Held,
     Accepted,
@@ -18,13 +18,13 @@ pub(crate) enum MessageStatus {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow, Deserialize, Serialize)]
-pub(crate) struct Message {
+pub struct Message {
     id: Uuid,
     user_id: Uuid,
     status: MessageStatus,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
-    raw_data: Vec<u8>,
+    raw_data: Option<Vec<u8>>,
     message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -40,7 +40,7 @@ impl Message {
             status: MessageStatus::Processing,
             from_email,
             recipients: Vec::new(),
-            raw_data: Vec::new(),
+            raw_data: None,
             message_data: serde_json::Value::Null,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -56,8 +56,8 @@ impl Message {
         &self.from_email
     }
 
-    pub fn get_raw_data(&self) -> &[u8] {
-        &self.raw_data
+    pub fn get_raw_data(&self) -> Option<&[u8]> {
+        self.raw_data.as_deref()
     }
 
     pub fn add_recipient(&mut self, recipient: EmailAddress) {
@@ -65,7 +65,7 @@ impl Message {
     }
 
     pub fn set_raw_data(&mut self, raw_data: Vec<u8>) {
-        self.raw_data = raw_data;
+        self.raw_data = Some(raw_data);
     }
 
     pub fn set_message_data(&mut self, message_data: serde_json::Value) {
@@ -81,7 +81,7 @@ impl Message {
         for recipient in value.rcpt_to.iter() {
             message.add_recipient(recipient.email.clone().into());
         }
-        message.raw_data = value.into_message().unwrap().body.to_vec();
+        message.raw_data = Some(value.into_message().unwrap().body.to_vec());
 
         message
     }
@@ -92,22 +92,42 @@ impl<'x> IntoMessage<'x> for Message {
         Ok(mail_send::smtp::message::Message {
             mail_from: self.from_email.into(),
             rcpt_to: self.recipients.into_iter().map(|m| m.into()).collect(),
-            body: self.raw_data.into(),
+            body: self.raw_data.unwrap_or_default().into(),
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MessageRepository {
+pub struct MessageRepository {
     pool: sqlx::PgPool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct MessageFilter {
+    pub user_id: Option<Uuid>,
+    offset: i64,
+    limit: i64,
+    status: Option<MessageStatus>,
+}
+
+impl Default for MessageFilter {
+    fn default() -> Self {
+        Self {
+            user_id: None,
+            offset: 0,
+            limit: 100,
+            status: None,
+        }
+    }
+}
+
 impl MessageRepository {
-    pub(crate) fn new(pool: sqlx::PgPool) -> Self {
+    pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 
-    pub(crate) async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
+    pub async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO messages (id, user_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)
@@ -129,7 +149,7 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub(crate) async fn update_message_status(
+    pub async fn update_message_status(
         &self,
         message: &mut Message,
         status: MessageStatus,
@@ -151,7 +171,7 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub(crate) async fn update_message_data(&self, message: &Message) -> Result<(), sqlx::Error> {
+    pub async fn update_message_data(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             UPDATE messages
@@ -167,8 +187,40 @@ impl MessageRepository {
         Ok(())
     }
 
-    #[cfg(test)]
-    pub(crate) async fn find_by_id(&self, id: Uuid) -> Result<Option<Message>, sqlx::Error> {
+    pub async fn list_message_metadata(
+        &self,
+        filter: MessageFilter,
+    ) -> Result<Vec<Message>, sqlx::Error> {
+        sqlx::query_as!(
+            Message,
+            r#"
+            SELECT
+                id,
+                user_id,
+                status as "status: _",
+                from_email,
+                recipients,
+                NULL::bytea AS "raw_data",
+                NULL::jsonb AS "message_data",
+                created_at,
+                updated_at
+            FROM messages
+            WHERE ($3::message_status IS NULL OR status = $3)
+            AND ($4::uuid IS NULL OR user_id = $4)
+            ORDER BY created_at DESC
+            OFFSET $1
+            LIMIT $2
+            "#,
+            filter.offset,
+            filter.limit,
+            filter.status as _,
+            filter.user_id
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Message>, sqlx::Error> {
         let message = sqlx::query_as!(
             Message,
             r#"
@@ -208,8 +260,8 @@ mod test {
         let message = MessageBuilder::new()
             .from(("John Doe", "john@example.com"))
             .to(vec![
-                ("Jane Doe", "jane@example.com"),
                 ("James Smith", "james@test.com"),
+                ("Jane Doe", "jane@example.com"),
             ])
             .subject("Hi!")
             .html_body("<h1>Hello, world!</h1>")
@@ -225,12 +277,13 @@ mod test {
 
         repository.insert(&message).await.unwrap();
 
-        let fetched_message = repository.find_by_id(id).await.unwrap().unwrap();
+        let mut fetched_message = repository.find_by_id(id).await.unwrap().unwrap();
 
         assert_eq!(fetched_message.from_email, "john@example.com");
-        assert_eq!(
-            fetched_message.recipients,
-            vec!["jane@example.com", "james@test.com"]
-        );
+
+        fetched_message.recipients.sort();
+        let expected = vec!["james@test.com", "jane@example.com"];
+
+        assert_eq!(fetched_message.recipients, expected);
     }
 }

@@ -9,7 +9,7 @@ use tracing::{debug, error, info, trace};
 use crate::message::{Message, MessageRepository, MessageStatus};
 
 #[derive(Debug, Error)]
-pub(crate) enum HandlerError {
+pub enum HandlerError {
     #[error("failed to persist message: {0}")]
     MessageRepositoryError(sqlx::Error),
     #[error("failed to parse message")]
@@ -22,7 +22,7 @@ pub(crate) enum HandlerError {
     DeliverMessage(mail_send::Error),
 }
 
-pub(crate) struct Handler {
+pub struct Handler {
     message_repository: MessageRepository,
     shutdown: CancellationToken,
 }
@@ -35,7 +35,7 @@ impl Handler {
         }
     }
 
-    pub(crate) async fn handle_message(&self, message: Message) -> Result<Message, HandlerError> {
+    pub async fn handle_message(&self, message: Message) -> Result<Message, HandlerError> {
         debug!("storing message {}", message.get_id());
 
         self.message_repository
@@ -50,7 +50,7 @@ impl Handler {
         let json_message_data = {
             // parse and save message contents
             let message_data = MessageParser::default()
-                .parse(message.get_raw_data())
+                .parse(message.get_raw_data().unwrap_or_default())
                 .ok_or(HandlerError::FailedParsingMessage)?;
 
             serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
@@ -69,7 +69,7 @@ impl Handler {
         Ok(message)
     }
 
-    pub(crate) async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
+    pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.get_id());
 
         let mut client = match SmtpClientBuilder::new("localhost", 1025)

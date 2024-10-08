@@ -1,4 +1,4 @@
-use std::{fs::File, io, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{fs::File, io, net::SocketAddrV4, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
@@ -14,7 +14,7 @@ use tracing::{error, info};
 use crate::{connection::Connection, message::Message, users::UserRepository};
 
 #[derive(Debug, Error)]
-pub(crate) enum SmtpServerError {
+pub enum SmtpServerError {
     #[error("failed to load private key: {0}")]
     PrivateKey(io::Error),
     #[error("no private key found in the key file")]
@@ -27,8 +27,8 @@ pub(crate) enum SmtpServerError {
     Tls(rustls::Error),
 }
 
-pub(crate) struct SmtServer {
-    address: SocketAddr,
+pub struct SmtServer {
+    address: SocketAddrV4,
     user_repository: UserRepository,
     queue: Sender<Message>,
     shutdown: CancellationToken,
@@ -38,7 +38,7 @@ pub(crate) struct SmtServer {
 
 impl SmtServer {
     pub fn new(
-        address: SocketAddr,
+        address: SocketAddrV4,
         cert: PathBuf,
         key: PathBuf,
         user_repository: UserRepository,

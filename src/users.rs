@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-#[allow(dead_code)]
-#[derive(Debug, sqlx::FromRow)]
-pub(crate) struct User {
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct User {
     id: Uuid,
     username: String,
     password_hash: String,
@@ -12,8 +12,7 @@ pub(crate) struct User {
 }
 
 impl User {
-    #[cfg(test)]
-    pub(crate) fn new(username: String, password: String) -> Self {
+    pub fn new(username: String, password: String) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
         Self {
@@ -25,48 +24,46 @@ impl User {
         }
     }
 
-    pub(crate) fn verify_password(&self, password: &str) -> bool {
+    pub fn verify_password(&self, password: &str) -> bool {
         password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
     }
 
-    pub(crate) fn get_id(&self) -> Uuid {
+    pub fn get_id(&self) -> Uuid {
         self.id
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct UserRepository {
+pub struct UserRepository {
     pool: sqlx::PgPool,
 }
 
 impl UserRepository {
-    pub(crate) fn new(pool: sqlx::PgPool) -> Self {
+    pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 
-    #[cfg(test)]
-    pub(crate) async fn insert(&self, user: &User) -> Result<(), sqlx::Error> {
-        sqlx::query!(
+    pub async fn insert(&self, new_user: &User) -> Result<User, sqlx::Error> {
+        let user: User = sqlx::query_as!(
+            User,
             r#"
             INSERT INTO users (id, username, password_hash, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5)
+            RETURNING *
             "#,
-            user.id,
-            user.username,
-            user.password_hash,
-            user.created_at,
-            user.updated_at
+            new_user.id,
+            new_user.username,
+            new_user.password_hash,
+            new_user.created_at,
+            new_user.updated_at
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(user)
     }
 
-    pub(crate) async fn find_by_username(
-        &self,
-        username: &str,
-    ) -> Result<Option<User>, sqlx::Error> {
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<User>, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
             r#"
@@ -78,6 +75,19 @@ impl UserRepository {
         .await?;
 
         Ok(user)
+    }
+
+    pub async fn list(&self) -> Result<Vec<User>, sqlx::Error> {
+        let users = sqlx::query_as!(
+            User,
+            r#"
+            SELECT * FROM users ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(users)
     }
 }
 

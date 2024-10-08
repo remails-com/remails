@@ -1,4 +1,8 @@
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{
+    extract::{FromRef, State},
+    routing::get,
+    Json, Router,
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{net::SocketAddr, time::Duration};
@@ -8,7 +12,11 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
+use crate::{message::MessageRepository, users::UserRepository};
+
 mod auth;
+mod error;
+mod messages;
 mod users;
 
 #[derive(Debug, Error)]
@@ -19,6 +27,29 @@ pub enum ApiServerError {
     Serve(std::io::Error),
 }
 
+#[derive(Clone)]
+pub struct ApiState {
+    pool: PgPool,
+}
+
+impl FromRef<ApiState> for PgPool {
+    fn from_ref(state: &ApiState) -> Self {
+        state.pool.clone()
+    }
+}
+
+impl FromRef<ApiState> for MessageRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        MessageRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for UserRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        UserRepository::new(state.pool.clone())
+    }
+}
+
 pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
@@ -27,13 +58,18 @@ pub struct ApiServer {
 
 impl ApiServer {
     pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
+        let state = ApiState { pool };
+
         let router = Router::new()
             .route("/healthy", get(healthy))
+            .route("/messages", get(messages::list_messages))
+            .route("/messages/:id", get(messages::get_message))
+            .route("/users", get(users::list_users).post(users::create_user))
             .layer((
                 TraceLayer::new_for_http(),
                 TimeoutLayer::new(Duration::from_secs(10)),
             ))
-            .with_state(pool);
+            .with_state(state);
 
         ApiServer {
             socket,
@@ -49,10 +85,14 @@ impl ApiServer {
 
         info!("API server listening on {}", self.socket);
 
-        axum::serve(listener, self.router)
-            .with_graceful_shutdown(wait_for_shutdown(self.shutdown))
-            .await
-            .map_err(ApiServerError::Serve)
+        axum::serve(
+            listener,
+            self.router
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(wait_for_shutdown(self.shutdown))
+        .await
+        .map_err(ApiServerError::Serve)
     }
 
     pub fn spawn(self) {

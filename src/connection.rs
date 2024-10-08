@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
-pub(crate) enum ConnectionError {
+pub enum ConnectionError {
     #[error("failed to accept connection: {0}")]
     Accept(std::io::Error),
     #[error("failed to write tcp stream: {0}")]
@@ -42,7 +42,7 @@ enum ConnectionState {
     RecipientsReceived,
 }
 
-pub(crate) struct Connection {
+pub struct Connection {
     acceptor: TlsAcceptor,
     stream: TcpStream,
     peer_addr: SocketAddr,
@@ -73,7 +73,7 @@ impl Connection {
     const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
     const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
 
-    pub(crate) fn new(acceptor: TlsAcceptor, stream: TcpStream, peer_addr: SocketAddr) -> Self {
+    pub fn new(acceptor: TlsAcceptor, stream: TcpStream, peer_addr: SocketAddr) -> Self {
         Self {
             acceptor,
             stream,
@@ -86,7 +86,7 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn handle(
+    pub async fn handle(
         mut self,
         queue: Sender<Message>,
         user_repository: UserRepository,

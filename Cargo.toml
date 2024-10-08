@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.89"
-axum = "0.7.7"
+axum = { version = "0.7.7", features = ["macros"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.9.4", features = ["serde_support"] }
@@ -32,3 +32,4 @@ opt-level = 3
 
 [dev-dependencies]
 rand = "0.8.5"
+reqwest = { version = "0.12.8", features = ["json"] }
