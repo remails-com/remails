@@ -1,7 +1,7 @@
 use axum::{
+    Json, Router,
     extract::{FromRef, State},
     routing::get,
-    Json, Router,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -63,7 +63,7 @@ impl ApiServer {
         let router = Router::new()
             .route("/healthy", get(healthy))
             .route("/messages", get(messages::list_messages))
-            .route("/messages/:id", get(messages::get_message))
+            .route("/messages/{id}", get(messages::get_message))
             .route("/users", get(users::list_users).post(users::create_user))
             .layer((
                 TraceLayer::new_for_http(),

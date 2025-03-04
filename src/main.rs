@@ -3,7 +3,7 @@ use api::ApiServer;
 use handler::Handler;
 use message::Message;
 use smtp::smtp_server::SmtpServer;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
@@ -117,7 +117,7 @@ async fn shutdown_signal(token: CancellationToken) {
 #[cfg(test)]
 mod smtp_test {
     use super::*;
-    use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
+    use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use test::random_port;
     use tokio::task::JoinHandle;

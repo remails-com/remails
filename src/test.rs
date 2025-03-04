@@ -1,17 +1,17 @@
-use std::net::{Ipv4Addr, SocketAddrV4};
-
-use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
+use crate::{message::Message, run, user::User};
+use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use rand::Rng;
 use reqwest::header::AUTHORIZATION;
 use serde_json::json;
 use sqlx::PgPool;
-
-use crate::{message::Message, run, user::User};
+use std::net::{Ipv4Addr, SocketAddrV4};
+use std::time::Duration;
+use tokio::time::sleep;
 
 pub fn random_port() -> u16 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    rng.gen_range(10_000..30_000)
+    rng.random_range(10_000..30_000)
 }
 
 #[sqlx::test]
@@ -105,6 +105,9 @@ async fn integration_test(pool: PgPool) {
         .send(message)
         .await
         .unwrap();
+
+    // TODO make test more robust, without sleep
+    sleep(Duration::from_secs(1)).await;
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/messages", http_port))

@@ -1,8 +1,7 @@
 use axum::{
-    async_trait,
-    extract::{ConnectInfo, FromRequestParts},
-    http::{header::AUTHORIZATION, request::Parts, StatusCode},
     RequestPartsExt,
+    extract::{ConnectInfo, FromRequestParts},
+    http::{StatusCode, header::AUTHORIZATION, request::Parts},
 };
 use std::net::{IpAddr, SocketAddr};
 use tracing::{debug, error, trace};
@@ -39,7 +38,6 @@ impl ApiUser {
     }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ApiUser
 where
     S: Send + Sync,

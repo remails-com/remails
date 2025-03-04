@@ -2,11 +2,11 @@ use std::{fs::File, io, net::SocketAddrV4, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
+    TlsAcceptor,
     rustls::{
         self,
         pki_types::{CertificateDer, PrivateKeyDer},
     },
-    TlsAcceptor,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
