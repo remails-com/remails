@@ -1,3 +1,4 @@
+use crate::api::oauth;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use thiserror::Error;
@@ -13,6 +14,8 @@ pub enum ApiError {
     NotFound,
     #[error("forbidden")]
     Forbidden,
+    #[error("OAuth error: {0}")]
+    OAuth(#[from] oauth::Error),
 }
 
 impl IntoResponse for ApiError {
@@ -20,9 +23,13 @@ impl IntoResponse for ApiError {
         error!("API server error: {self} {self:?}");
 
         let (status, message) = match self {
-            ApiError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
-            ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found"),
-            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
+            ApiError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Database error".to_string(),
+            ),
+            ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
+            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
+            ApiError::OAuth(err) => (err.status_code(), err.user_message()),
         };
 
         (status, Json(json!({ "error": message }))).into_response()

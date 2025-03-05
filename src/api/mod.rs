@@ -12,11 +12,13 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
+use crate::api::oauth::GithubOauthService;
 use crate::{message::MessageRepository, user::UserRepository};
 
 mod auth;
 mod error;
 mod messages;
+mod oauth;
 mod users;
 
 #[derive(Debug, Error)]
@@ -30,6 +32,7 @@ pub enum ApiServerError {
 #[derive(Clone)]
 pub struct ApiState {
     pool: PgPool,
+    oauth_service: GithubOauthService,
 }
 
 impl FromRef<ApiState> for PgPool {
@@ -50,6 +53,12 @@ impl FromRef<ApiState> for UserRepository {
     }
 }
 
+impl FromRef<ApiState> for GithubOauthService {
+    fn from_ref(state: &ApiState) -> Self {
+        state.oauth_service.clone()
+    }
+}
+
 pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
@@ -58,13 +67,19 @@ pub struct ApiServer {
 
 impl ApiServer {
     pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
-        let state = ApiState { pool };
+        let github_oauth = GithubOauthService::new(None).unwrap();
+        let oauth_router = github_oauth.router();
+        let state = ApiState {
+            pool,
+            oauth_service: github_oauth,
+        };
 
         let router = Router::new()
             .route("/healthy", get(healthy))
             .route("/messages", get(messages::list_messages))
             .route("/messages/{id}", get(messages::get_message))
             .route("/users", get(users::list_users).post(users::create_user))
+            .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
                 TimeoutLayer::new(Duration::from_secs(10)),
