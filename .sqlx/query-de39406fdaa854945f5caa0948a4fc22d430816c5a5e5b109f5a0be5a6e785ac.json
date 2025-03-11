@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id,\n                user_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                NULL::bytea AS \"raw_data\",\n                NULL::jsonb AS \"message_data\",\n                created_at,\n                updated_at\n            FROM messages\n            WHERE ($3::message_status IS NULL OR status = $3)\n            AND ($4::uuid IS NULL OR user_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "status: _",
+        "type_info": {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "from_email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "recipients",
+        "type_info": "VarcharArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "raw_data",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "message_data",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "de39406fdaa854945f5caa0948a4fc22d430816c5a5e5b109f5a0be5a6e785ac"
+}

@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO messages (id, user_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5bfbadba30f7c78e0cef6bd816b7b2868721e1553ed4ab084e81a647b0e7d3a5"
+}
