@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
-use tracing::{debug, trace};
+use tracing::{debug, info, trace, warn};
 
 use crate::{message::Message, smtp::smtp_session::SessionReply, user::UserRepository};
 
@@ -110,6 +110,7 @@ impl SmtpConnection {
 
         // send tls close notify
         sink.shutdown().await.map_err(ConnectionError::Write)?;
+        info!("connection handled");
 
         Ok(())
     }

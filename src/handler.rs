@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
@@ -5,7 +6,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::message::{Message, MessageRepository, MessageStatus};
 
@@ -77,36 +78,47 @@ impl Handler {
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.get_id());
 
-        let mut client = match SmtpClientBuilder::new("localhost", 1025)
-            .connect_plain()
-            .await
-        {
-            Ok(client) => {
-                trace!("connected to upstream server");
+        for recipient in message.get_recipients() {
+            let domain = match email_address::EmailAddress::from_str(recipient) {
+                Ok(address) => address,
+                Err(err) => {
+                    warn!("Invalid email address {recipient}: {err}");
+                    continue;
+                }
+            };
 
-                client
-            }
-            Err(e) => {
-                error!("failed to connect to upstream server: {e}");
+            let client = SmtpClientBuilder::new(domain, 587);
+            #[cfg(test)]
+            let client = SmtpClientBuilder::new("localhost", 1025).allow_invalid_certs();
+
+            let mut client = match client.connect().await {
+                Ok(client) => {
+                    trace!("connected to upstream server");
+
+                    client
+                }
+                Err(e) => {
+                    error!("failed to connect to upstream server: {e}");
+
+                    self.message_repository
+                        .update_message_status(&mut message, MessageStatus::Failed)
+                        .await
+                        .map_err(HandlerError::MessageRepositoryError)?;
+
+                    return Err(HandlerError::ConnectToUpstream(e));
+                }
+            };
+
+            if let Err(e) = client.send(message.clone()).await {
+                error!("failed to send message: {e}");
 
                 self.message_repository
                     .update_message_status(&mut message, MessageStatus::Failed)
                     .await
                     .map_err(HandlerError::MessageRepositoryError)?;
 
-                return Err(HandlerError::ConnectToUpstream(e));
+                return Err(HandlerError::DeliverMessage(e));
             }
-        };
-
-        if let Err(e) = client.send(message.clone()).await {
-            error!("failed to send message: {e}");
-
-            self.message_repository
-                .update_message_status(&mut message, MessageStatus::Failed)
-                .await
-                .map_err(HandlerError::MessageRepositoryError)?;
-
-            return Err(HandlerError::DeliverMessage(e));
         }
 
         self.message_repository

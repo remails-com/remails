@@ -1,6 +1,6 @@
 use crate::{message::Message, run, user::User};
 use http::{HeaderMap, header, header::CONTENT_TYPE};
-use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
+use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
 use rand::Rng;
 use serde_json::json;
 use sqlx::PgPool;
@@ -8,7 +8,14 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
+use tokio::select;
+use tokio::sync::mpsc;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
+use tracing::{span, Instrument, Level};
+use tracing_test::traced_test;
+use crate::smtp::smtp_server::SmtpServer;
+use crate::user::UserRepository;
 
 pub fn random_port() -> u16 {
     let mut rng = rand::rng();
@@ -16,7 +23,31 @@ pub fn random_port() -> u16 {
     rng.random_range(10_000..30_000)
 }
 
+async fn setup_smtp_recv(pool: PgPool, shutdown: CancellationToken) -> mpsc::Receiver<Message> {
+    // let smtp_port = random_port();
+    let smtp_port = 1025;
+    let user_repository = UserRepository::new(pool);
+
+    let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
+    let (queue_sender, receiver) = mpsc::channel::<Message>(100);
+    let server = SmtpServer::new(
+        socket,
+        "cert.pem".into(),
+        "key.pem".into(),
+        user_repository,
+        queue_sender,
+        shutdown,
+    );
+    let span = span!(Level::TRACE, "SMTP receiver");
+    let server_handle = tokio::spawn(async move {
+        server.serve().await.unwrap();
+    }.instrument(span));
+
+    receiver
+}
+
 #[sqlx::test]
+#[traced_test]
 async fn integration_test(pool: PgPool) {
     let client = reqwest::ClientBuilder::new()
         .default_headers(HeaderMap::from_iter([(

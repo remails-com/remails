@@ -16,8 +16,7 @@ pub enum MessageStatus {
     Failed,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, sqlx::FromRow, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     id: Uuid,
     user_id: Uuid,
@@ -53,7 +52,7 @@ impl Message {
 
     #[cfg(test)]
     pub fn get_from(&self) -> &str {
-        &self.from_email
+        &self.from_email.as_str()
     }
 
     pub fn get_raw_data(&self) -> Option<&[u8]> {
@@ -62,6 +61,10 @@ impl Message {
 
     pub fn add_recipient(&mut self, recipient: EmailAddress) {
         self.recipients.push(recipient);
+    }
+
+    pub fn get_recipients(&self) -> &[EmailAddress] {
+        self.recipients.as_ref()
     }
 
     pub fn set_raw_data(&mut self, raw_data: Vec<u8>) {
@@ -77,9 +80,9 @@ impl Message {
         value: mail_send::smtp::message::Message<'_>,
         user_id: Uuid,
     ) -> Self {
-        let mut message = Message::new(user_id, value.mail_from.email.clone().into());
+        let mut message = Message::new(user_id, value.mail_from.email.parse().unwrap());
         for recipient in value.rcpt_to.iter() {
-            message.add_recipient(recipient.email.clone().into());
+            message.add_recipient(recipient.email.parse().unwrap());
         }
         message.raw_data = Some(value.into_message().unwrap().body.to_vec());
 
