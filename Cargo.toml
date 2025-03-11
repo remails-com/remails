@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.89"
 axum = { version = "0.8.1", features = ["macros"] }
-chrono = { version = "0.4.38", features = ["serde"] }
+chrono = { version = "0.4.40", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.10.2", features = ["serde_support"] }
 mail-send = { version = "0.5.0", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
