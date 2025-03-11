@@ -4,8 +4,10 @@ use rand::Rng;
 use reqwest::header::AUTHORIZATION;
 use serde_json::json;
 use sqlx::PgPool;
-use std::net::{Ipv4Addr, SocketAddrV4};
-use std::time::Duration;
+use std::{
+    net::{Ipv4Addr, SocketAddrV4},
+    time::Duration,
+};
 use tokio::time::sleep;
 
 pub fn random_port() -> u16 {
