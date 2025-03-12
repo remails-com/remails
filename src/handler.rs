@@ -3,8 +3,7 @@ use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use tokio_rustls::rustls::crypto;
-use tokio_rustls::rustls::crypto::CryptoProvider;
+use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 

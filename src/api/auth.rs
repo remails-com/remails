@@ -1,15 +1,19 @@
-use crate::api::oauth::{GithubOauthService, User};
-use axum::extract::FromRef;
+use crate::api::oauth::GithubOauthService;
+#[cfg(not(test))]
+use crate::api::oauth::User;
 use axum::{
     RequestPartsExt,
-    extract::{ConnectInfo, FromRequestParts},
+    extract::{ConnectInfo, FromRef, FromRequestParts},
     http::{StatusCode, request::Parts},
 };
-use std::net::{IpAddr, SocketAddr};
-use tracing::{debug, error, trace};
+use std::net::SocketAddr;
+#[cfg(not(test))]
+use tracing::debug;
+use tracing::{error, trace};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 enum Role {
     Admin,
     User(Uuid),
@@ -17,7 +21,6 @@ enum Role {
 
 #[derive(Debug, Clone)]
 pub struct ApiUser {
-    ip: IpAddr,
     role: Role,
 }
 
@@ -36,14 +39,6 @@ impl ApiUser {
             _ => None,
         }
     }
-
-    #[cfg(test)]
-    fn new_admin(ip: IpAddr) -> Self {
-        Self {
-            ip,
-            role: Role::Admin,
-        }
-    }
 }
 
 impl<S> FromRequestParts<S> for ApiUser
@@ -53,6 +48,7 @@ where
 {
     type Rejection = (StatusCode, &'static str);
 
+    #[cfg_attr(test, allow(unused))]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
             error!("could not determine client IP address");
@@ -68,16 +64,12 @@ where
 
         #[cfg(test)]
         if let Some(header) = parts.headers.get("X-Test-Login") {
-            return match header.to_str().unwrap() {
-                "admin" => Ok(ApiUser {
-                    ip,
-                    role: Role::Admin,
-                }),
+            match header.to_str().unwrap() {
+                "admin" => Ok(ApiUser { role: Role::Admin }),
                 token => Ok(ApiUser {
-                    ip,
                     role: Role::User(token.parse().unwrap_or_default()),
                 }),
-            };
+            }
         } else {
             Err((StatusCode::UNAUTHORIZED, "No valid X-Test-Login header"))
         }
@@ -88,10 +80,7 @@ where
                 "authenticated request from user {} from ip {ip}",
                 user.email
             );
-            Ok(ApiUser {
-                ip,
-                role: Role::Admin,
-            })
+            Ok(ApiUser { role: Role::Admin })
         } else {
             debug!("No valid session cookie");
 

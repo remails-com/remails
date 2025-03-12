@@ -12,8 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
-use crate::api::oauth::GithubOauthService;
-use crate::{message::MessageRepository, user::UserRepository};
+use crate::{api::oauth::GithubOauthService, message::MessageRepository, user::UserRepository};
 
 mod auth;
 mod error;

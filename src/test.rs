@@ -1,6 +1,5 @@
 use crate::{message::Message, run, user::User};
-use http::header::CONTENT_TYPE;
-use http::{HeaderMap, header};
+use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use rand::Rng;
 use serde_json::json;

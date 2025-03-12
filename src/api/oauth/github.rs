@@ -1,22 +1,24 @@
 use super::handlers::{authorize, login, logout};
-use crate::api::error::ApiError;
-use crate::api::oauth::{COOKIE_NAME, Error};
-use axum::routing::get;
+use crate::api::{
+    error::ApiError,
+    oauth::{COOKIE_NAME, Error},
+};
 use axum::{
     RequestPartsExt, Router,
     extract::{FromRef, FromRequestParts},
     response::{IntoResponse, Redirect, Response},
+    routing::get,
 };
 use axum_extra::extract::{PrivateCookieJar, cookie};
 use base64::prelude::*;
 use http::{HeaderMap, request::Parts};
-use oauth2::basic::{
-    BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse,
-    BasicTokenResponse,
-};
 use oauth2::{
     AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
-    StandardRevocableToken, TokenUrl, basic::BasicClient,
+    StandardRevocableToken, TokenUrl,
+    basic::{
+        BasicClient, BasicErrorResponse, BasicRevocationErrorResponse,
+        BasicTokenIntrospectionResponse, BasicTokenResponse,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, env, fmt::Debug};

@@ -1,7 +1,10 @@
-use crate::api::oauth::github::{
-    CookieStorage, GITHUB_ACCEPT_TYPE, GITHUB_EMAILS_URL, GITHUB_USER_URL, GithubOauthService, User,
+use crate::api::oauth::{
+    COOKIE_NAME, CSRF_COOKIE_NAME, Error, USER_AGENT_VALUE,
+    github::{
+        CookieStorage, GITHUB_ACCEPT_TYPE, GITHUB_EMAILS_URL, GITHUB_USER_URL, GithubOauthService,
+        User,
+    },
 };
-use crate::api::oauth::{COOKIE_NAME, CSRF_COOKIE_NAME, Error, USER_AGENT_VALUE};
 /// This module contains the request handlers for the GitHub OAuth flow.
 /// It includes functions for login, logout, and authorization.
 /// These handlers are used by the Axum framework to handle incoming HTTP requests.

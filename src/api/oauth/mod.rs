@@ -3,6 +3,7 @@ mod github;
 mod handlers;
 
 pub use error::Error;
+#[cfg_attr(test, allow(unused))]
 pub use github::{GithubOauthService, User};
 
 static COOKIE_NAME: &str = "SESSION";
