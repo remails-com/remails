@@ -18,7 +18,7 @@ serde_json = { version = "1.0.140", features = ["alloc"] }
 smtp-proto = "0.1.6"
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "chrono", "uuid", "macros", "migrate", "json"] }
 thiserror = "2.0.12"
-tokio = {version="1.44.0",features=["full"]}
+tokio = { version = "1.44.0", features = ["full"] }
 tokio-rustls = "0.26.2"
 tokio-util = { version = "0.7.13", features = ["io"] }
 tower-http = { version = "0.6.2", features = ["trace", "timeout"] }
@@ -27,10 +27,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-test = "0.2.5"
 uuid = { version = "1.15.1", features = ["v4", "serde"] }
 url = "2.5.2"
-oauth2 = { version = "5.0.0"}
+oauth2 = { version = "5.0.0" }
 http = "1.1.0"
 base64 = "0.22.1"
-reqwest = { version = "0.12.12" , features = ["json", "rustls-tls", "cookies"]}
+reqwest = { version = "0.12.12", features = ["json", "rustls-tls", "cookies"] }
 cookie = "0.18.1"
 email_address = "0.2.9"
 
@@ -41,3 +41,4 @@ opt-level = 3
 rand = "0.9.0"
 reqwest = { version = "0.12.13", features = ["json"] }
 mailcrab = "1.6.0"
+serial_test = "3.2.0"

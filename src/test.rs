@@ -4,6 +4,7 @@ use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
 use rand::Rng;
 use serde_json::json;
+use serial_test::serial;
 use sqlx::PgPool;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -20,6 +21,7 @@ pub fn random_port() -> u16 {
 
 #[sqlx::test]
 #[traced_test]
+#[serial]
 async fn integration_test(pool: PgPool) {
     let client = reqwest::ClientBuilder::new()
         .default_headers(HeaderMap::from_iter([(

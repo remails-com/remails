@@ -169,12 +169,14 @@ mod test {
 
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
+    use serial_test::serial;
     use tracing_test::traced_test;
 
     #[sqlx::test]
     #[traced_test]
+    #[serial]
     async fn test_handle_message(pool: PgPool) {
-        let TestMailServerHandle { token, .. } =
+        let TestMailServerHandle { token, rx: _rx } =
             mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
         let _drop_guard = token.drop_guard();
 
