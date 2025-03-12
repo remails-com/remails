@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM users ORDER BY created_at DESC\n            ",
+  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, created_at, updated_at)\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -30,7 +30,13 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Timestamptz",
+        "Timestamptz"
+      ]
     },
     "nullable": [
       false,
@@ -40,5 +46,5 @@
       false
     ]
   },
-  "hash": "31d03484a498bf7ce1a808f9184f0aa262e08a87dce6571b3c6ade94549e2a61"
+  "hash": "e9af689acf113b72827a6c22b16e16ce563c191ba269074f852b99ae80aca28a"
 }

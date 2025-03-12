@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                user_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                NULL::bytea AS \"raw_data\",\n                NULL::jsonb AS \"message_data\",\n                created_at,\n                updated_at\n            FROM messages\n            WHERE ($3::message_status IS NULL OR status = $3)\n            AND ($4::uuid IS NULL OR user_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            SELECT\n                id,\n                smtp_credential_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                NULL::bytea AS \"raw_data\",\n                NULL::jsonb AS \"message_data\",\n                created_at,\n                updated_at\n            FROM messages\n            WHERE ($3::message_status IS NULL OR status = $3)\n            AND ($4::uuid IS NULL OR smtp_credential_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "user_id",
+        "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
@@ -97,5 +97,5 @@
       false
     ]
   },
-  "hash": "de39406fdaa854945f5caa0948a4fc22d430816c5a5e5b109f5a0be5a6e785ac"
+  "hash": "544985e11129397cba9eced296b9de1545bd29b206e788012b51f79e858450e4"
 }

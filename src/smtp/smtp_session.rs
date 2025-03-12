@@ -6,7 +6,7 @@ use tracing::{debug, trace};
 
 use crate::{
     message::Message,
-    user::{User, UserRepository},
+    smtp_credential::{SmtmCredential, SmtpCredentialRepository},
 };
 
 #[derive(Debug, PartialEq)]
@@ -21,11 +21,11 @@ enum SessionState {
 
 pub struct SmtpSession {
     queue: Sender<Message>,
-    user_repository: UserRepository,
+    smtp_credentials: SmtpCredentialRepository,
 
     peer_addr: SocketAddr,
     state: SessionState,
-    authenticated_user: Option<User>,
+    authenticated_credential: Option<SmtmCredential>,
     current_message: Option<Message>,
     buffer: Vec<u8>,
 }
@@ -60,15 +60,15 @@ impl SmtpSession {
     pub fn new(
         peer_addr: SocketAddr,
         queue: Sender<Message>,
-        user_repository: UserRepository,
+        user_repository: SmtpCredentialRepository,
     ) -> Self {
         Self {
             queue,
-            user_repository,
+            smtp_credentials: user_repository,
             peer_addr,
             state: SessionState::Accepting,
             current_message: None,
-            authenticated_user: None,
+            authenticated_credential: None,
             buffer: Vec::new(),
         }
     }
@@ -126,14 +126,15 @@ impl SmtpSession {
                     );
                 }
 
-                let Some(user) = self.authenticated_user.as_ref() else {
+                let Some(credential) = self.authenticated_credential.as_ref() else {
                     return SessionReply::ReplyAndContinue(
                         530,
                         Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
                     );
                 };
 
-                self.current_message = Some(Message::new(user.get_id(), from.address.clone()));
+                self.current_message =
+                    Some(Message::new(credential.get_id(), from.address.clone()));
                 self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
@@ -202,7 +203,8 @@ impl SmtpSession {
                         password.len()
                     );
 
-                    let Ok(Some(user)) = self.user_repository.find_by_username(&username).await
+                    let Ok(Some(credential)) =
+                        self.smtp_credentials.find_by_username(&username).await
                     else {
                         return SessionReply::ReplyAndContinue(
                             535,
@@ -210,14 +212,14 @@ impl SmtpSession {
                         );
                     };
 
-                    if !user.verify_password(&password) {
+                    if !credential.verify_password(&password) {
                         return SessionReply::ReplyAndContinue(
                             535,
                             Self::RESPONSE_AUTH_ERROR.into(),
                         );
                     }
 
-                    self.authenticated_user = Some(user);
+                    self.authenticated_credential = Some(credential);
                     self.state = SessionState::Authenticated;
 
                     SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())

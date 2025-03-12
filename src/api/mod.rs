@@ -13,13 +13,16 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
-use crate::{api::oauth::GithubOauthService, message::MessageRepository, user::UserRepository};
+use crate::{
+    api::oauth::GithubOauthService, message::MessageRepository,
+    smtp_credential::SmtpCredentialRepository,
+};
 
 mod auth;
 mod error;
 mod messages;
 mod oauth;
-mod users;
+mod smtp_credentials;
 
 #[derive(Debug, Error)]
 pub enum ApiServerError {
@@ -47,9 +50,9 @@ impl FromRef<ApiState> for MessageRepository {
     }
 }
 
-impl FromRef<ApiState> for UserRepository {
+impl FromRef<ApiState> for SmtpCredentialRepository {
     fn from_ref(state: &ApiState) -> Self {
-        UserRepository::new(state.pool.clone())
+        SmtpCredentialRepository::new(state.pool.clone())
     }
 }
 
@@ -78,7 +81,11 @@ impl ApiServer {
             .route("/healthy", get(healthy))
             .route("/messages", get(messages::list_messages))
             .route("/messages/{id}", get(messages::get_message))
-            .route("/users", get(users::list_users).post(users::create_user))
+            .route(
+                "/users",
+                get(smtp_credentials::list_smtp_credential)
+                    .post(smtp_credentials::create_smtp_credential),
+            )
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),

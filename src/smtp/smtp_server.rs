@@ -11,7 +11,10 @@ use tokio_rustls::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use crate::{message::Message, smtp::smtp_connection::SmtpConnection, user::UserRepository};
+use crate::{
+    message::Message, smtp::smtp_connection::SmtpConnection,
+    smtp_credential::SmtpCredentialRepository,
+};
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -29,7 +32,7 @@ pub enum SmtpServerError {
 
 pub struct SmtpServer {
     address: SocketAddrV4,
-    user_repository: UserRepository,
+    user_repository: SmtpCredentialRepository,
     queue: Sender<Message>,
     shutdown: CancellationToken,
     cert: PathBuf,
@@ -41,7 +44,7 @@ impl SmtpServer {
         address: SocketAddrV4,
         cert: PathBuf,
         key: PathBuf,
-        user_repository: UserRepository,
+        user_repository: SmtpCredentialRepository,
         queue: Sender<Message>,
         shutdown: CancellationToken,
     ) -> Self {

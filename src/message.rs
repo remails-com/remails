@@ -19,7 +19,7 @@ pub enum MessageStatus {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     id: Uuid,
-    user_id: Uuid,
+    smtp_credential_id: Uuid,
     status: MessageStatus,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
@@ -30,12 +30,12 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(user_id: Uuid, from_email: EmailAddress) -> Self {
+    pub fn new(smtp_credential_id: Uuid, from_email: EmailAddress) -> Self {
         let id = Uuid::new_v4();
 
         Self {
             id,
-            user_id,
+            smtp_credential_id,
             status: MessageStatus::Processing,
             from_email,
             recipients: Vec::new(),
@@ -133,11 +133,11 @@ impl MessageRepository {
     pub async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
-            INSERT INTO messages (id, user_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)
+            INSERT INTO messages (id, smtp_credential_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
             message.id,
-            message.user_id,
+            message.smtp_credential_id,
             message.status as _,
             message.from_email,
             &message.recipients,
@@ -199,7 +199,7 @@ impl MessageRepository {
             r#"
             SELECT
                 id,
-                user_id,
+                smtp_credential_id,
                 status as "status: _",
                 from_email,
                 recipients,
@@ -209,7 +209,7 @@ impl MessageRepository {
                 updated_at
             FROM messages
             WHERE ($3::message_status IS NULL OR status = $3)
-            AND ($4::uuid IS NULL OR user_id = $4)
+            AND ($4::uuid IS NULL OR smtp_credential_id = $4)
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
@@ -229,7 +229,7 @@ impl MessageRepository {
             r#"
             SELECT
                 id,
-                user_id,
+                smtp_credential_id,
                 status as "status: _",
                 from_email,
                 recipients,
@@ -254,7 +254,7 @@ mod test {
     use sqlx::PgPool;
 
     use super::*;
-    use crate::user::{User, UserRepository};
+    use crate::smtp_credential::{SmtmCredential, SmtpCredentialRepository};
 
     #[sqlx::test]
     async fn message_repository(pool: PgPool) {
@@ -272,9 +272,12 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = User::new("user".to_string(), "pass".to_string());
-        UserRepository::new(pool).insert(&user).await.unwrap();
-        let message = Message::from_builder_message(message, user.get_id());
+        let credential = SmtmCredential::new("user".to_string(), "pass".to_string());
+        SmtpCredentialRepository::new(pool)
+            .insert(&credential)
+            .await
+            .unwrap();
+        let message = Message::from_builder_message(message, credential.get_id());
 
         let id = message.id;
 

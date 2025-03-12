@@ -1,4 +1,4 @@
-use crate::{message::Message, run_api_server, run_mta, user::User};
+use crate::{message::Message, run_api_server, run_mta, smtp_credential::SmtmCredential};
 use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
@@ -48,7 +48,7 @@ async fn integration_test(pool: PgPool) {
 
     let _drop_guard = token.drop_guard();
 
-    let user1: User = client
+    let user1: SmtmCredential = client
         .post(format!("http://localhost:{}/users", http_port))
         .header("X-Test-Login", "admin")
         .json(&json!({
@@ -62,7 +62,7 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let user2: User = client
+    let user2: SmtmCredential = client
         .post(format!("http://localhost:{}/users", http_port))
         .header("X-Test-Login", "admin")
         .json(&json!({
@@ -76,7 +76,7 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let users: Vec<User> = client
+    let users: Vec<SmtmCredential> = client
         .get(format!("http://localhost:{}/users", http_port))
         .header("X-Test-Login", "admin")
         .send()
