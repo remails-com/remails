@@ -55,6 +55,7 @@ async fn run(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let _ = dotenvy::dotenv();
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -67,8 +68,6 @@ async fn main() -> anyhow::Result<()> {
         )
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
-
-    let _ = dotenvy::dotenv();
 
     let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
 

@@ -60,6 +60,7 @@ jobs:
 
 
   format:
+    name: Cargo fmt
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
@@ -78,6 +79,7 @@ jobs:
           cargo fmt --all -- --check
 
   clippy:
+    name: Clippy
     needs: format
     runs-on: ubuntu-latest
     env:

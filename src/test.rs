@@ -1,7 +1,7 @@
 use crate::{message::Message, run, user::User};
+use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use rand::Rng;
-use reqwest::header::AUTHORIZATION;
 use serde_json::json;
 use sqlx::PgPool;
 use std::{
@@ -18,7 +18,14 @@ pub fn random_port() -> u16 {
 
 #[sqlx::test]
 async fn integration_test(pool: PgPool) {
-    let client = reqwest::Client::new();
+    let client = reqwest::ClientBuilder::new()
+        .default_headers(HeaderMap::from_iter([(
+            CONTENT_TYPE,
+            header::HeaderValue::from_static("application/json"),
+        )]))
+        .cookie_store(true)
+        .build()
+        .unwrap();
 
     let smtp_port = random_port();
     let http_port = random_port();
@@ -30,7 +37,7 @@ async fn integration_test(pool: PgPool) {
 
     let user1: User = client
         .post(format!("http://localhost:{}/users", http_port))
-        .header(AUTHORIZATION, "Bearer admin")
+        .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "john",
             "password": "p4ssw0rd",
@@ -44,7 +51,7 @@ async fn integration_test(pool: PgPool) {
 
     let user2: User = client
         .post(format!("http://localhost:{}/users", http_port))
-        .header(AUTHORIZATION, "Bearer admin")
+        .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "eddy",
             "password": "pass123",
@@ -58,7 +65,7 @@ async fn integration_test(pool: PgPool) {
 
     let users: Vec<User> = client
         .get(format!("http://localhost:{}/users", http_port))
-        .header(AUTHORIZATION, "Bearer admin")
+        .header("X-Test-Login", "admin")
         .send()
         .await
         .unwrap()
@@ -113,7 +120,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/messages", http_port))
-        .header(AUTHORIZATION, format!("Bearer {}", user1.get_id()))
+        .header("X-Test-Login", user1.get_id().to_string())
         .send()
         .await
         .unwrap()
@@ -125,7 +132,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/messages", http_port))
-        .header(AUTHORIZATION, format!("Bearer {}", user2.get_id()))
+        .header("X-Test-Login", user2.get_id().to_string())
         .send()
         .await
         .unwrap()
@@ -137,7 +144,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/messages", http_port))
-        .header(AUTHORIZATION, "Bearer admin")
+        .header("X-Test-Login", "admin")
         .send()
         .await
         .unwrap()

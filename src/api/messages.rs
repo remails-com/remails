@@ -20,7 +20,7 @@ pub async fn list_messages(
         filter.user_id = api_user.get_user_id();
     }
 
-    let messages = repo.list_message_metadata(filter).await.unwrap();
+    let messages = repo.list_message_metadata(filter).await?;
 
     Ok(Json(messages))
 }
