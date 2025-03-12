@@ -60,10 +60,10 @@ where
         };
         let ip = connection.ip();
         trace!("authentication attempt from {ip}");
-        trace!("extracting user from session cookie");
 
         #[cfg(test)]
         if let Some(header) = parts.headers.get("X-Test-Login") {
+            trace!("Test log in based on `X-Test-Login` header");
             match header.to_str().unwrap() {
                 "admin" => Ok(ApiUser { role: Role::Admin }),
                 token => Ok(ApiUser {
@@ -76,6 +76,7 @@ where
 
         #[cfg(not(test))]
         if let Ok(user) = User::from_request_parts(parts, state).await {
+            trace!("extracted user from session cookie");
             trace!(
                 "authenticated request from user {} from ip {ip}",
                 user.email

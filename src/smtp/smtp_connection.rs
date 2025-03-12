@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info, trace};
 
 use crate::{message::Message, smtp::smtp_session::SessionReply, user::UserRepository};
 

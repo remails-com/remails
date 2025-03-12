@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
+use std::str::FromStr;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -79,7 +79,7 @@ impl Handler {
         info!("sending message {}", message.get_id());
 
         for recipient in message.get_recipients() {
-            let domain = match email_address::EmailAddress::from_str(recipient) {
+            let _domain = match email_address::EmailAddress::from_str(recipient) {
                 Ok(address) => address,
                 Err(err) => {
                     warn!("Invalid email address {recipient}: {err}");
@@ -87,11 +87,9 @@ impl Handler {
                 }
             };
 
-            let client = SmtpClientBuilder::new(domain, 587);
-            #[cfg(test)]
-            let client = SmtpClientBuilder::new("localhost", 1025).allow_invalid_certs();
+            let client = SmtpClientBuilder::new("localhost", 1025);
 
-            let mut client = match client.connect().await {
+            let mut client = match client.connect_plain().await {
                 Ok(client) => {
                     trace!("connected to upstream server");
 
@@ -165,15 +163,21 @@ impl Handler {
 #[cfg(test)]
 mod test {
     use crate::user::{User, UserRepository};
+    use std::net::Ipv4Addr;
 
     use super::*;
 
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
+    use mailcrab::TestMailServerHandle;
     use tracing_test::traced_test;
 
     #[sqlx::test]
     #[traced_test]
     async fn test_handle_message(pool: PgPool) {
+        let TestMailServerHandle { token, .. } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
+        let _drop_guard = token.drop_guard();
+
         let message: mail_send::smtp::message::Message = MessageBuilder::new()
             .from(("John Doe", "john@example.com"))
             .to(vec![

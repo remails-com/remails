@@ -112,4 +112,3 @@ async fn shutdown_signal(token: CancellationToken) {
         _ = terminate => {},
     }
 }
-

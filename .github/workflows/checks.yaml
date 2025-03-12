@@ -33,7 +33,7 @@ jobs:
 
       - name: Setup Postgres DB
         run: |
-          docker compose up --wait && \
+          docker compose up psql --wait && \
           cargo install sqlx-cli --no-default-features --features rustls,postgres && \
           cargo sqlx migrate run --source migrations
 

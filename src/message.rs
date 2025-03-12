@@ -52,7 +52,7 @@ impl Message {
 
     #[cfg(test)]
     pub fn get_from(&self) -> &str {
-        &self.from_email.as_str()
+        self.from_email.as_str()
     }
 
     pub fn get_raw_data(&self) -> Option<&[u8]> {

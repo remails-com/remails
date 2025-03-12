@@ -4,15 +4,16 @@ mod smtp_session;
 
 #[cfg(test)]
 mod test {
-    use crate::message::Message;
-    use crate::smtp::smtp_server::SmtpServer;
-    use crate::test::random_port;
-    use crate::user::{User, UserRepository};
-    use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
+    use crate::{
+        message::Message,
+        smtp::smtp_server::SmtpServer,
+        test::random_port,
+        user::{User, UserRepository},
+    };
+    use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use std::net::{Ipv4Addr, SocketAddrV4};
-    use tokio::sync::mpsc;
-    use tokio::task::JoinHandle;
+    use tokio::{sync::mpsc, task::JoinHandle};
     use tokio_util::sync::CancellationToken;
     use tracing_test::traced_test;
 

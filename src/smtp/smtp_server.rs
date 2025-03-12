@@ -34,7 +34,6 @@ pub struct SmtpServer {
     shutdown: CancellationToken,
     cert: PathBuf,
     key: PathBuf,
-    allow_unauthenticated: bool,
 }
 
 impl SmtpServer {
@@ -53,7 +52,6 @@ impl SmtpServer {
             shutdown,
             cert,
             key,
-            allow_unauthenticated: false,
         }
     }
 
