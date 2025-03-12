@@ -100,7 +100,6 @@ impl SmtpServer {
                         Ok((stream, peer_addr)) => {
                             info!("accepted connection from {}", peer_addr);
                             tokio::spawn(SmtpConnection::new(acceptor.clone(), stream, peer_addr, self.queue.clone(), self.user_repository.clone()).handle());
-                            info!("connection handled");
                         }
                         Err(err) => {
                             error!("failed to accept connection: {}", err);

@@ -1,14 +1,17 @@
 use crate::{message::Message, run, user::User};
 use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
+use mailcrab::TestMailServerHandle;
 use rand::Rng;
 use serde_json::json;
+use serial_test::serial;
 use sqlx::PgPool;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
-use tokio::time::sleep;
+use tokio::select;
+use tracing_test::traced_test;
 
 pub fn random_port() -> u16 {
     let mut rng = rand::rng();
@@ -17,6 +20,8 @@ pub fn random_port() -> u16 {
 }
 
 #[sqlx::test]
+#[traced_test]
+#[serial]
 async fn integration_test(pool: PgPool) {
     let client = reqwest::ClientBuilder::new()
         .default_headers(HeaderMap::from_iter([(
@@ -33,7 +38,13 @@ async fn integration_test(pool: PgPool) {
     let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), http_port);
 
-    let shutdown = run(pool, smtp_socket, http_socket).await;
+    let TestMailServerHandle {
+        token,
+        rx: mut mailcrab_rx,
+    } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
+    let _drop_guard1 = token.drop_guard();
+
+    let _drop_guard2 = run(pool, smtp_socket, http_socket).await.drop_guard();
 
     let user1: User = client
         .post(format!("http://localhost:{}/users", http_port))
@@ -91,8 +102,16 @@ async fn integration_test(pool: PgPool) {
             .text_body(format!(
                 "Have you finished the TPS reports yet? This is the {i}th reminder!!!"
             ));
-
         john_smtp_client.send(message).await.unwrap();
+
+        select! {
+            Ok(recv) = mailcrab_rx.recv() => {
+                assert_eq!(recv.envelope_from.as_str(), "john@example.com");
+                assert_eq!(recv.envelope_recipients.len(), 1);
+                assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@example.com");
+            }
+            _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
+        }
     }
 
     let message = MessageBuilder::new()
@@ -115,8 +134,14 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    // TODO make test more robust, without sleep
-    sleep(Duration::from_secs(1)).await;
+    select! {
+        Ok(recv) = mailcrab_rx.recv() => {
+            assert_eq!(recv.envelope_from.as_str(), "eddy@example.com");
+            assert_eq!(recv.envelope_recipients.len(), 1);
+            assert_eq!(recv.envelope_recipients[0].as_str(), "john@example.com");
+        }
+        _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
+    }
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/messages", http_port))
@@ -153,6 +178,4 @@ async fn integration_test(pool: PgPool) {
         .unwrap();
 
     assert_eq!(messages.len(), 11);
-
-    shutdown.cancel();
 }
