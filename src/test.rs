@@ -1,4 +1,4 @@
-use crate::{message::Message, run, user::User};
+use crate::{message::Message, run_api_server, run_mta, user::User};
 use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
@@ -44,7 +44,8 @@ async fn integration_test(pool: PgPool) {
     } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
     let _drop_guard1 = token.drop_guard();
 
-    let _drop_guard2 = run(pool, smtp_socket, http_socket).await.drop_guard();
+    let _drop_guard2 = run_mta(pool.clone(), smtp_socket).await.drop_guard();
+    let _drop_guard3 = run_api_server(pool, http_socket).await.drop_guard();
 
     let user1: User = client
         .post(format!("http://localhost:{}/users", http_port))
