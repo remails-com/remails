@@ -11,7 +11,6 @@ use std::{
     time::Duration,
 };
 use tokio::select;
-use tokio_util::sync::CancellationToken;
 use tracing_test::traced_test;
 
 pub fn random_port() -> u16 {
