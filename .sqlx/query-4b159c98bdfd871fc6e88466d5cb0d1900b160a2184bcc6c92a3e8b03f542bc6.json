@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, created_at, updated_at)\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING *\n            ",
+  "query": "\n            SELECT DISTINCT o.* FROM organizations  o\n                JOIN api_users_organizations a ON o.id = a.organization_id\n            WHERE id = $1\n              AND ($2::uuid IS NULL OR a.api_user_id = $2)\n            ",
   "describe": {
     "columns": [
       {
@@ -10,21 +10,16 @@
       },
       {
         "ordinal": 1,
-        "name": "username",
+        "name": "name",
         "type_info": "Varchar"
       },
       {
         "ordinal": 2,
-        "name": "password_hash",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -32,19 +27,15 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Varchar",
-        "Varchar",
-        "Timestamptz",
-        "Timestamptz"
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "e9af689acf113b72827a6c22b16e16ce563c191ba269074f852b99ae80aca28a"
+  "hash": "4b159c98bdfd871fc6e88466d5cb0d1900b160a2184bcc6c92a3e8b03f542bc6"
 }
