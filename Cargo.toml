@@ -2,6 +2,19 @@
 name = "remails"
 version = "0.1.0"
 edition = "2024"
+default-run = "app"
+
+[[bin]]
+name = "app"
+path = "src/bin/app.rs"
+
+[[bin]]
+name = "management"
+path = "src/bin/management.rs"
+
+[[bin]]
+name = "mta"
+path = "src/bin/mta.rs"
 
 [dependencies]
 anyhow = "1.0.97"
@@ -33,6 +46,7 @@ base64 = "0.22.1"
 reqwest = { version = "0.12.12", features = ["json", "rustls-tls", "cookies"] }
 cookie = "0.18.1"
 email_address = "0.2.9"
+memory-serve = "1.0.1"
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3

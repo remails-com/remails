@@ -17,12 +17,11 @@ mod user;
 #[cfg(test)]
 mod test;
 
-pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4) -> CancellationToken {
+pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4, shutdown: CancellationToken) {
     let user_repository = UserRepository::new(pool.clone());
 
     let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
 
-    let shutdown = CancellationToken::new();
     let smtp_server = SmtpServer::new(
         smtp_socket,
         "cert.pem".into(),
@@ -32,18 +31,25 @@ pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4) -> CancellationTok
         shutdown.clone(),
     );
 
-    let message_handler = Handler::new(pool.clone(), shutdown.clone());
+    let message_handler = Handler::new(pool.clone(), shutdown);
 
     smtp_server.spawn();
     message_handler.spawn(queue_receiver);
-    shutdown
 }
 
-pub async fn run_api_server(pool: PgPool, http_socket: SocketAddrV4) -> CancellationToken {
-    let shutdown = CancellationToken::new();
-    let api_server = ApiServer::new(http_socket.into(), pool.clone(), shutdown.clone()).await;
+pub async fn run_api_server(
+    pool: PgPool,
+    http_socket: SocketAddrV4,
+    shutdown: CancellationToken,
+    with_frontend: bool,
+) {
+    let mut api_server = ApiServer::new(http_socket.into(), pool.clone(), shutdown).await;
+
+    if with_frontend {
+        api_server = api_server.serve_frontend().await;
+    }
+
     api_server.spawn();
-    shutdown
 }
 
 pub async fn shutdown_signal(token: CancellationToken) {

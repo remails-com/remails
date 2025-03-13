@@ -5,6 +5,7 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -35,7 +36,9 @@ async fn main() -> anyhow::Result<()> {
 
     let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
 
-    let shutdown = run_mta(pool, smtp_socket).await;
+    let shutdown = CancellationToken::new();
+
+    run_mta(pool, smtp_socket, shutdown.clone()).await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
