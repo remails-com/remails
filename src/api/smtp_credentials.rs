@@ -24,7 +24,6 @@ pub async fn create_smtp_credential(
         domain,
     }): Json<NewSmtpCredential>,
 ) -> ApiResult<SmtmCredential> {
-    dbg!(&api_user);
     if !api_user.is_admin() {
         return Err(ApiError::Forbidden);
     }
@@ -32,7 +31,7 @@ pub async fn create_smtp_credential(
     let new_credential = SmtmCredential::new(username, password, domain);
     let credential = repo.create(&new_credential).await?;
 
-    Ok(Json(dbg!(credential)))
+    Ok(Json(credential))
 }
 
 pub async fn list_smtp_credential(
