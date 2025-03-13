@@ -46,7 +46,7 @@ async fn integration_test(pool: PgPool) {
 
     run_mta(pool.clone(), smtp_socket, token.clone()).await;
     run_api_server(pool, http_socket, token.clone(), false).await;
-    
+
     let _drop_guard = token.drop_guard();
 
     let user1: User = client
