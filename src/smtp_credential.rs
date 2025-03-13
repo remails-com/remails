@@ -3,7 +3,7 @@ use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct User {
+pub struct SmtmCredential {
     id: Uuid,
     username: String,
     password_hash: String,
@@ -11,7 +11,7 @@ pub struct User {
     updated_at: DateTime<Utc>,
 }
 
-impl User {
+impl SmtmCredential {
     pub fn new(username: String, password: String) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -34,20 +34,20 @@ impl User {
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRepository {
+pub struct SmtpCredentialRepository {
     pool: sqlx::PgPool,
 }
 
-impl UserRepository {
+impl SmtpCredentialRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 
-    pub async fn insert(&self, new_user: &User) -> Result<User, sqlx::Error> {
-        let user: User = sqlx::query_as!(
-            User,
+    pub async fn insert(&self, new_user: &SmtmCredential) -> Result<SmtmCredential, sqlx::Error> {
+        let credential: SmtmCredential = sqlx::query_as!(
+            SmtmCredential,
             r#"
-            INSERT INTO users (id, username, password_hash, created_at, updated_at)
+            INSERT INTO smtp_credential (id, username, password_hash, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             "#,
@@ -60,34 +60,37 @@ impl UserRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(user)
+        Ok(credential)
     }
 
-    pub async fn find_by_username(&self, username: &str) -> Result<Option<User>, sqlx::Error> {
-        let user = sqlx::query_as!(
-            User,
+    pub async fn find_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<SmtmCredential>, sqlx::Error> {
+        let credential = sqlx::query_as!(
+            SmtmCredential,
             r#"
-            SELECT * FROM users WHERE username = $1 LIMIT 1
+            SELECT * FROM smtp_credential WHERE username = $1 LIMIT 1
             "#,
             username
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(user)
+        Ok(credential)
     }
 
-    pub async fn list(&self) -> Result<Vec<User>, sqlx::Error> {
-        let users = sqlx::query_as!(
-            User,
+    pub async fn list(&self) -> Result<Vec<SmtmCredential>, sqlx::Error> {
+        let credentials = sqlx::query_as!(
+            SmtmCredential,
             r#"
-            SELECT * FROM users ORDER BY created_at DESC
+            SELECT * FROM smtp_credential ORDER BY created_at DESC
             "#,
         )
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(users)
+        Ok(credentials)
     }
 }
 
@@ -97,13 +100,13 @@ mod test {
     use sqlx::PgPool;
 
     #[sqlx::test]
-    async fn user_repository(pool: PgPool) {
-        let repository = UserRepository::new(pool);
+    async fn smtp_credential_repository(pool: PgPool) {
+        let repository = SmtpCredentialRepository::new(pool);
 
-        let user = User::new("test".into(), "password".into());
-        assert!(user.verify_password("password"));
+        let credential = SmtmCredential::new("test".into(), "password".into());
+        assert!(credential.verify_password("password"));
 
-        repository.insert(&user).await.unwrap();
+        repository.insert(&credential).await.unwrap();
 
         let fetched_user = repository.find_by_username("test").await.unwrap().unwrap();
 

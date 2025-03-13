@@ -2,23 +2,23 @@ use api::ApiServer;
 use handler::Handler;
 use message::Message;
 use smtp::smtp_server::SmtpServer;
+use smtp_credential::SmtpCredentialRepository;
 use sqlx::PgPool;
 use std::net::SocketAddrV4;
 use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
-use user::UserRepository;
 
 mod api;
 mod handler;
 mod message;
 mod smtp;
-mod user;
+mod smtp_credential;
 
 #[cfg(test)]
 mod test;
 
 pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4, shutdown: CancellationToken) {
-    let user_repository = UserRepository::new(pool.clone());
+    let user_repository = SmtpCredentialRepository::new(pool.clone());
 
     let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
 

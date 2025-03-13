@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                user_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                raw_data,\n                message_data,\n                created_at,\n                updated_at\n            FROM messages WHERE id = $1 LIMIT 1\n            ",
+  "query": "\n            SELECT\n                id,\n                smtp_credential_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                raw_data,\n                message_data,\n                created_at,\n                updated_at\n            FROM messages WHERE id = $1 LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "user_id",
+        "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
@@ -80,5 +80,5 @@
       false
     ]
   },
-  "hash": "ccfa6a2f777de290f6b868acc7455519a5dc5c664e426b06f6b147c2973743ba"
+  "hash": "06afd0ab8e70adb13f695f993e1c537130cf74a39c9c01f539815147b8b27267"
 }

@@ -162,7 +162,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::user::{User, UserRepository};
+    use crate::smtp_credential::{SmtmCredential, SmtpCredentialRepository};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -192,8 +192,8 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = User::new("user".to_string(), "pass".to_string());
-        UserRepository::new(pool.clone())
+        let user = SmtmCredential::new("user".to_string(), "pass".to_string());
+        SmtpCredentialRepository::new(pool.clone())
             .insert(&user)
             .await
             .unwrap();

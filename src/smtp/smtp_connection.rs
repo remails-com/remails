@@ -9,7 +9,9 @@ use tokio::{
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
 use tracing::{debug, info, trace};
 
-use crate::{message::Message, smtp::smtp_session::SessionReply, user::UserRepository};
+use crate::{
+    message::Message, smtp::smtp_session::SessionReply, smtp_credential::SmtpCredentialRepository,
+};
 
 use super::smtp_session::SmtpSession;
 
@@ -40,7 +42,7 @@ impl SmtpConnection {
         stream: TcpStream,
         peer_addr: SocketAddr,
         queue: Sender<Message>,
-        user_repository: UserRepository,
+        user_repository: SmtpCredentialRepository,
     ) -> Self {
         Self {
             acceptor,

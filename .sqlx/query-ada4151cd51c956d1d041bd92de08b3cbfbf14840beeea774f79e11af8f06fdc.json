@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM users WHERE username = $1 LIMIT 1\n            ",
+  "query": "\n            SELECT * FROM smtp_credential ORDER BY created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -30,9 +30,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -42,5 +40,5 @@
       false
     ]
   },
-  "hash": "de128bb6b7d625d67ce4117ed56fab12e2e0f568056ccc7cf54fa46c6a25c4ad"
+  "hash": "ada4151cd51c956d1d041bd92de08b3cbfbf14840beeea774f79e11af8f06fdc"
 }

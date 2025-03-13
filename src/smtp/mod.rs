@@ -7,8 +7,8 @@ mod test {
     use crate::{
         message::Message,
         smtp::smtp_server::SmtpServer,
+        smtp_credential::{SmtmCredential, SmtpCredentialRepository},
         test::random_port,
-        user::{User, UserRepository},
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
@@ -26,10 +26,10 @@ mod test {
         u16,
     ) {
         let smtp_port = random_port();
-        let user_repository = UserRepository::new(pool);
+        let user_repository = SmtpCredentialRepository::new(pool);
 
-        let user = User::new("john".into(), "p4ssw0rd".into());
-        user_repository.insert(&user).await.unwrap();
+        let credential = SmtmCredential::new("john".into(), "p4ssw0rd".into());
+        user_repository.insert(&credential).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let shutdown = CancellationToken::new();
