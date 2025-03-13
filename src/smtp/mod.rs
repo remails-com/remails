@@ -13,7 +13,7 @@ mod test {
     use sqlx::PgPool;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use tokio::{sync::mpsc, task::JoinHandle};
-    use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
+    use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
     use tracing_test::traced_test;
 
@@ -59,8 +59,12 @@ mod test {
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     #[traced_test]
     async fn test_smtp(pool: PgPool) {
-        CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
-            .expect("Failed to install default crypto provider");
+        if crypto::CryptoProvider::get_default().is_none() {
+            crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .expect("Failed to install crypto provider")
+        }
+
         let (shutdown, server_handle, mut receiver, port) = setup_server(pool).await;
 
         let message = MessageBuilder::new()
