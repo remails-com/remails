@@ -43,16 +43,11 @@ async fn integration_test(pool: PgPool) {
         token,
         rx: mut mailcrab_rx,
     } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
-    let _drop_guard1 = token.drop_guard();
 
-    let token2 = CancellationToken::new();
-    let token3 = CancellationToken::new();
-
-    run_mta(pool.clone(), smtp_socket, token2.clone()).await;
-    run_api_server(pool, http_socket, token3.clone(), false).await;
-
-    let _drop_guard2 = token2.drop_guard();
-    let _drop_guard3 = token3.drop_guard();
+    run_mta(pool.clone(), smtp_socket, token.clone()).await;
+    run_api_server(pool, http_socket, token.clone(), false).await;
+    
+    let _drop_guard = token.drop_guard();
 
     let user1: User = client
         .post(format!("http://localhost:{}/users", http_port))
