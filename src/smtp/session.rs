@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::models::{Message, SmtpCredential, SmtpCredentialRepository};
+use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
 
 #[derive(Debug, PartialEq)]
 enum SessionState {
@@ -17,13 +17,13 @@ enum SessionState {
 }
 
 pub struct SmtpSession {
-    queue: Sender<Message>,
+    queue: Sender<NewMessage>,
     smtp_credentials: SmtpCredentialRepository,
 
     peer_addr: SocketAddr,
     state: SessionState,
     authenticated_credential: Option<SmtpCredential>,
-    current_message: Option<Message>,
+    current_message: Option<NewMessage>,
     buffer: Vec<u8>,
 }
 
@@ -50,7 +50,7 @@ impl SmtpSession {
     const RESPONSE_AUTH_SUCCCESS: &str = "2.7.0 Authentication succeeded.";
     const RESPONSE_START_DATA: &str = "3.5.4 Start mail input; end with <CRLF>.<CRLF>";
     const RESPONSE_BYE: &str = "2.0.0 Goodbye";
-    const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message accepted for delivery, queued as [id]";
+    const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message queued for delivery";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
@@ -60,7 +60,7 @@ impl SmtpSession {
 
     pub fn new(
         peer_addr: SocketAddr,
-        queue: Sender<Message>,
+        queue: Sender<NewMessage>,
         user_repository: SmtpCredentialRepository,
     ) -> Self {
         Self {
@@ -138,7 +138,11 @@ impl SmtpSession {
                     );
                 };
 
-                self.current_message = Some(Message::new(credential.id(), from.address.clone()));
+                self.current_message = Some(NewMessage {
+                    smtp_credential_id: credential.id(),
+                    from_email: from.address.clone(),
+                    ..Default::default()
+                });
                 self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
@@ -284,13 +288,7 @@ impl SmtpSession {
                 return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
             };
 
-            trace!(
-                "received message {:?} ({} bytes)",
-                message.id(),
-                self.buffer.len()
-            );
-            let response_message =
-                Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.id().to_string());
+            trace!("received message ({} bytes)", self.buffer.len());
 
             message.raw_data = Some(std::mem::take(&mut self.buffer));
 
@@ -302,7 +300,7 @@ impl SmtpSession {
 
             self.state = SessionState::Authenticated;
 
-            return DataReply::ReplyAndContinue(250, response_message);
+            return DataReply::ReplyAndContinue(250, Self::RESPONSE_MESSAGE_ACCEPTED.into());
         }
 
         DataReply::ContinueIngest

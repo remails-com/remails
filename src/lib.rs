@@ -1,6 +1,7 @@
+use crate::models::NewMessage;
 use api::ApiServer;
 use handler::Handler;
-use models::{Message, SmtpCredentialRepository};
+use models::SmtpCredentialRepository;
 use smtp::server::SmtpServer;
 use sqlx::PgPool;
 use std::net::SocketAddrV4;
@@ -18,7 +19,7 @@ mod test;
 pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4, shutdown: CancellationToken) {
     let user_repository = SmtpCredentialRepository::new(pool.clone());
 
-    let (queue_sender, queue_receiver) = mpsc::channel::<Message>(100);
+    let (queue_sender, queue_receiver) = mpsc::channel::<NewMessage>(100);
 
     let smtp_server = SmtpServer::new(
         smtp_socket,

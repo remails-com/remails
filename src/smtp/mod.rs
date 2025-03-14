@@ -5,7 +5,7 @@ mod session;
 #[cfg(test)]
 mod test {
     use crate::{
-        models::{Message, SmtpCredential, SmtpCredentialRepository},
+        models::{NewMessage, SmtpCredential, SmtpCredentialRepository},
         smtp::server::SmtpServer,
         test::random_port,
     };
@@ -22,7 +22,7 @@ mod test {
     ) -> (
         CancellationToken,
         JoinHandle<()>,
-        mpsc::Receiver<Message>,
+        mpsc::Receiver<NewMessage>,
         u16,
     ) {
         let smtp_port = random_port();
@@ -31,13 +31,13 @@ mod test {
         let credential = SmtpCredential::new(
             "john".into(),
             "p4ssw0rd".into(),
-            "test-org-1.com".to_string(),
+            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         );
         user_repository.create(&credential).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let shutdown = CancellationToken::new();
-        let (queue_sender, receiver) = mpsc::channel::<Message>(100);
+        let (queue_sender, receiver) = mpsc::channel::<NewMessage>(100);
         let server = SmtpServer::new(
             socket,
             "cert.pem".into(),
