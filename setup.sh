@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # install frontend deps and build
 pushd frontend
     npm ci

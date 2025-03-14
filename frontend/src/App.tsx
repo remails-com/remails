@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Login } from "./Login";
 import { WhoamiResponse } from "./types";
 import Dashboard from "./Dashboard";
-import { useColorScheme } from "@mantine/hooks";
 
 export default function App() {
   const [user, setUser] = useState<WhoamiResponse | null>(null);
