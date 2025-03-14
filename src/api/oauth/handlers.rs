@@ -120,6 +120,7 @@ struct GitHubUser {
 struct GitHubEmail {
     email: String,
     verified: bool,
+    primary: bool,
 }
 
 /// Handles the authorization request.
@@ -210,12 +211,9 @@ pub(super) async fn authorize(
     let mut email = None;
 
     // find the email address that is allowed
-    'outer: for allowed_email in service.config.email_allowlist {
-        for e in &emails {
-            if e.verified && e.email == allowed_email {
-                email = Some(e.email.clone());
-                break 'outer;
-            }
+    for e in &emails {
+        if e.verified && e.primary {
+            email = Some(e.email.clone());
         }
     }
 
@@ -240,7 +238,7 @@ pub(super) async fn authorize(
     session_cookie.set_http_only(true);
     session_cookie.set_secure(true);
     session_cookie.set_same_site(SameSite::Lax);
-    session_cookie.set_max_age(cookie::time::Duration::days(30));
+    session_cookie.set_max_age(cookie::time::Duration::days(7));
     session_cookie.set_path("/");
 
     // Remove the CSRF token cookie and add the session cookie to the cookie jar

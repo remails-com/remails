@@ -52,7 +52,10 @@ async fn integration_test(pool: PgPool) {
     let _drop_guard = token.drop_guard();
 
     let user1: SmtmCredential = client
-        .post(format!("http://localhost:{}/smtp_credentials", http_port))
+        .post(format!(
+            "http://localhost:{}/api/smtp_credentials",
+            http_port
+        ))
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "john",
@@ -67,7 +70,10 @@ async fn integration_test(pool: PgPool) {
         .unwrap();
 
     let user2: SmtmCredential = client
-        .post(format!("http://localhost:{}/smtp_credentials", http_port))
+        .post(format!(
+            "http://localhost:{}/api/smtp_credentials",
+            http_port
+        ))
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "eddy",
@@ -82,7 +88,10 @@ async fn integration_test(pool: PgPool) {
         .unwrap();
 
     let users: Vec<SmtmCredential> = client
-        .get(format!("http://localhost:{}/smtp_credentials", http_port))
+        .get(format!(
+            "http://localhost:{}/api/smtp_credentials",
+            http_port
+        ))
         .header("X-Test-Login", "admin")
         .send()
         .await
@@ -151,7 +160,7 @@ async fn integration_test(pool: PgPool) {
     }
 
     let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/messages", http_port))
+        .get(format!("http://localhost:{}/api/messages", http_port))
         .header("X-Test-Login", user1.get_id().to_string())
         .send()
         .await
@@ -163,7 +172,7 @@ async fn integration_test(pool: PgPool) {
     assert_eq!(messages.len(), 10);
 
     let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/messages", http_port))
+        .get(format!("http://localhost:{}/api/messages", http_port))
         .header("X-Test-Login", user2.get_id().to_string())
         .send()
         .await
@@ -175,7 +184,7 @@ async fn integration_test(pool: PgPool) {
     assert_eq!(messages.len(), 1);
 
     let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/messages", http_port))
+        .get(format!("http://localhost:{}/api/messages", http_port))
         .header("X-Test-Login", "admin")
         .send()
         .await
