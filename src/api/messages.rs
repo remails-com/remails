@@ -4,7 +4,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::message::{Message, MessageFilter, MessageRepository};
+use crate::models::{Message, MessageFilter, MessageRepository};
 
 use super::{
     auth::ApiUser,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM smtp_credential WHERE username = $1 LIMIT 1\n            ",
+  "query": "\n            INSERT INTO organizations (id, name)\n            VALUES (gen_random_uuid(), $1)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -10,43 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "domain",
+        "name": "name",
         "type_info": "Varchar"
       },
       {
         "ordinal": 2,
-        "name": "username",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
-        "name": "password_hash",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 3,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Varchar"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
-      false,
       false
     ]
   },
-  "hash": "2ecc3edeb0e188e8e1fe02df51c54dca0a4de205c7390e7f48949d7ed2617e82"
+  "hash": "5dfc6a8fc5e250dd3e0e584f456e3f76cfa8c546b24bf6dd6b513b6401c9fe9d"
 }

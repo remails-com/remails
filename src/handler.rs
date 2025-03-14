@@ -8,7 +8,7 @@ use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
-use crate::message::{Message, MessageRepository, MessageStatus};
+use crate::models::{Message, MessageRepository, MessageStatus};
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -162,7 +162,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::smtp_credential::{SmtmCredential, SmtpCredentialRepository};
+    use crate::models::{SmtmCredential, SmtpCredentialRepository};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -172,7 +172,7 @@ mod test {
     use serial_test::serial;
     use tracing_test::traced_test;
 
-    #[sqlx::test]
+    #[sqlx::test(fixtures("organizations", "domains"))]
     #[traced_test]
     #[serial]
     async fn test_handle_message(pool: PgPool) {
@@ -192,9 +192,13 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = SmtmCredential::new("user".to_string(), "pass".to_string());
+        let user = SmtmCredential::new(
+            "user".to_string(),
+            "pass".to_string(),
+            "test-org-1.com".to_string(),
+        );
         SmtpCredentialRepository::new(pool.clone())
-            .insert(&user)
+            .create(&user)
             .await
             .unwrap();
 

@@ -10,7 +10,8 @@ use tokio_rustls::{TlsAcceptor, server::TlsStream};
 use tracing::{debug, info, trace};
 
 use crate::{
-    message::Message, smtp::smtp_session::SessionReply, smtp_credential::SmtpCredentialRepository,
+    models::{Message, SmtpCredentialRepository},
+    smtp::smtp_session::SessionReply,
 };
 
 use super::smtp_session::SmtpSession;

@@ -4,10 +4,7 @@ use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::{
-    message::Message,
-    smtp_credential::{SmtmCredential, SmtpCredentialRepository},
-};
+use crate::models::{Message, SmtmCredential, SmtpCredentialRepository};
 
 #[derive(Debug, PartialEq)]
 enum SessionState {

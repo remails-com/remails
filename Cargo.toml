@@ -46,6 +46,7 @@ base64 = "0.22.1"
 reqwest = { version = "0.12.12", features = ["json", "rustls-tls", "cookies"] }
 cookie = "0.18.1"
 email_address = "0.2.9"
+sqlx-paginated = "0.2.30"
 memory-serve = "1.0.1"
 
 [profile.dev.package.sqlx-macros]

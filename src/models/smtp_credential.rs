@@ -7,18 +7,20 @@ pub struct SmtmCredential {
     id: Uuid,
     username: String,
     password_hash: String,
+    domain: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
 impl SmtmCredential {
-    pub fn new(username: String, password: String) -> Self {
+    pub fn new(username: String, password: String, domain: String) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
         Self {
             id: Uuid::new_v4(),
             username,
             password_hash,
+            domain,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -43,19 +45,21 @@ impl SmtpCredentialRepository {
         Self { pool }
     }
 
-    pub async fn insert(&self, new_user: &SmtmCredential) -> Result<SmtmCredential, sqlx::Error> {
+    pub async fn create(
+        &self,
+        new_credential: &SmtmCredential,
+    ) -> Result<SmtmCredential, sqlx::Error> {
         let credential: SmtmCredential = sqlx::query_as!(
             SmtmCredential,
             r#"
-            INSERT INTO smtp_credential (id, username, password_hash, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO smtp_credential (id, username, password_hash, domain)
+            VALUES ($1, $2, $3, $4)
             RETURNING *
             "#,
-            new_user.id,
-            new_user.username,
-            new_user.password_hash,
-            new_user.created_at,
-            new_user.updated_at
+            new_credential.id,
+            new_credential.username,
+            new_credential.password_hash,
+            new_credential.domain,
         )
         .fetch_one(&self.pool)
         .await?;
@@ -99,14 +103,18 @@ mod test {
     use super::*;
     use sqlx::PgPool;
 
-    #[sqlx::test]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     async fn smtp_credential_repository(pool: PgPool) {
         let repository = SmtpCredentialRepository::new(pool);
 
-        let credential = SmtmCredential::new("test".into(), "password".into());
+        let credential = SmtmCredential::new(
+            "test".into(),
+            "password".into(),
+            "test-org-1.com".to_string(),
+        );
         assert!(credential.verify_password("password"));
 
-        repository.insert(&credential).await.unwrap();
+        repository.create(&credential).await.unwrap();
 
         let fetched_user = repository.find_by_username("test").await.unwrap().unwrap();
 

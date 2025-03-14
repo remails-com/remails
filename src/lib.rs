@@ -1,8 +1,7 @@
 use api::ApiServer;
 use handler::Handler;
-use message::Message;
+use models::{Message, SmtpCredentialRepository};
 use smtp::smtp_server::SmtpServer;
-use smtp_credential::SmtpCredentialRepository;
 use sqlx::PgPool;
 use std::net::SocketAddrV4;
 use tokio::{signal, sync::mpsc};
@@ -10,10 +9,9 @@ use tokio_util::sync::CancellationToken;
 
 mod api;
 mod handler;
-mod message;
 mod smtp;
-mod smtp_credential;
 
+mod models;
 #[cfg(test)]
 mod test;
 
