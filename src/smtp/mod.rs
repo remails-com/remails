@@ -5,15 +5,15 @@ mod smtp_session;
 #[cfg(test)]
 mod test {
     use crate::{
-        message::Message,
+        models::{Message, SmtmCredential, SmtpCredentialRepository},
         smtp::smtp_server::SmtpServer,
-        smtp_credential::{SmtmCredential, SmtpCredentialRepository},
         test::random_port,
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use tokio::{sync::mpsc, task::JoinHandle};
+    use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
     use tracing_test::traced_test;
 
@@ -28,8 +28,12 @@ mod test {
         let smtp_port = random_port();
         let user_repository = SmtpCredentialRepository::new(pool);
 
-        let credential = SmtmCredential::new("john".into(), "p4ssw0rd".into());
-        user_repository.insert(&credential).await.unwrap();
+        let credential = SmtmCredential::new(
+            "john".into(),
+            "p4ssw0rd".into(),
+            "test-org-1.com".to_string(),
+        );
+        user_repository.create(&credential).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let shutdown = CancellationToken::new();
@@ -52,9 +56,15 @@ mod test {
         (shutdown, server_handle, receiver, smtp_port)
     }
 
-    #[sqlx::test]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     #[traced_test]
     async fn test_smtp(pool: PgPool) {
+        if crypto::CryptoProvider::get_default().is_none() {
+            crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .expect("Failed to install crypto provider")
+        }
+
         let (shutdown, server_handle, mut receiver, port) = setup_server(pool).await;
 
         let message = MessageBuilder::new()
@@ -85,7 +95,7 @@ mod test {
         assert_eq!(received_message.get_from(), "john@example.com");
     }
 
-    #[sqlx::test]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, _, port) = setup_server(pool).await;

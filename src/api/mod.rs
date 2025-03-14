@@ -14,14 +14,22 @@ use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info};
 
 use crate::{
-    api::oauth::GithubOauthService, message::MessageRepository,
-    smtp_credential::SmtpCredentialRepository,
+    api::{
+        messages::{get_message, list_messages},
+        oauth::GithubOauthService,
+        organizations::{
+            create_organization, get_organization, list_organizations, remove_organization,
+        },
+        smtp_credentials::{create_smtp_credential, list_smtp_credential},
+    },
+    models::{MessageRepository, OrganizationRepository, SmtpCredentialRepository},
 };
 
 mod auth;
 mod error;
 mod messages;
 mod oauth;
+mod organizations;
 mod smtp_credentials;
 mod whoami;
 
@@ -57,6 +65,12 @@ impl FromRef<ApiState> for SmtpCredentialRepository {
     }
 }
 
+impl FromRef<ApiState> for OrganizationRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        OrganizationRepository::new(state.pool.clone())
+    }
+}
+
 impl FromRef<ApiState> for GithubOauthService {
     fn from_ref(state: &ApiState) -> Self {
         state.oauth_service.clone()
@@ -81,12 +95,19 @@ impl ApiServer {
         let router = Router::new()
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
-            .route("/messages", get(messages::list_messages))
-            .route("/messages/{id}", get(messages::get_message))
+            .route("/messages", get(list_messages))
+            .route("/messages/{id}", get(get_message))
             .route(
-                "/users",
-                get(smtp_credentials::list_smtp_credential)
-                    .post(smtp_credentials::create_smtp_credential),
+                "/smtp_credentials",
+                get(list_smtp_credential).post(create_smtp_credential),
+            )
+            .route(
+                "/organizations",
+                get(list_organizations).post(create_organization),
+            )
+            .route(
+                "/organizations/{id}",
+                get(get_organization).delete(remove_organization),
             )
             .merge(oauth_router)
             .layer((

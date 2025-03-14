@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM organizations\n            USING organizations o\n                LEFT JOIN api_users_organizations a ON o.id = a.organization_id\n            WHERE o.id = organizations.id\n              AND o.id = $1\n              AND ($2::uuid IS NULL OR a.api_user_id = $2)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15ae95b4bded1d774667bdcd64b0aea609b1ad84ea4397a5323f6258bfcb472b"
+}

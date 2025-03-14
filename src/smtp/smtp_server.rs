@@ -12,8 +12,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
 use crate::{
-    message::Message, smtp::smtp_connection::SmtpConnection,
-    smtp_credential::SmtpCredentialRepository,
+    models::{Message, SmtpCredentialRepository},
+    smtp::smtp_connection::SmtpConnection,
 };
 
 #[derive(Debug, Error)]
