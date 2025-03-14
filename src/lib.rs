@@ -8,7 +8,7 @@ use std::net::SocketAddrV4;
 use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
-mod api;
+pub mod api;
 mod handler;
 mod message;
 mod smtp;

@@ -5,7 +5,7 @@ use crate::api::{
 };
 use axum::{
     RequestPartsExt, Router,
-    extract::{FromRef, FromRequestParts},
+    extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
     response::{IntoResponse, Redirect, Response},
     routing::get,
 };
@@ -99,13 +99,8 @@ pub struct Config {
     pub auth_url: Url,
     pub token_url: Url,
     // application specific settings / secrets
-    pub email_allowlist: Vec<String>,
     pub session_key: cookie::Key,
     pub redirect_url: Url,
-    // paths
-    pub login_path: String,
-    pub authorize_path: String,
-    pub logout_path: String,
 }
 
 impl Default for Config {
@@ -128,19 +123,11 @@ impl Default for Config {
             }
         };
 
-        let email_allowlist = env::var("ALLOWED_EMAILS")
-            .map(|d| d.split(',').map(|s| s.to_string()).collect())
-            .unwrap_or_default();
-
         Self {
             auth_url: Url::parse(GITHUB_AUTH_URL).unwrap(),
             token_url: Url::parse(GITHUB_TOKEN_URL).unwrap(),
-            email_allowlist,
             session_key,
             redirect_url,
-            login_path: "/login".to_string(),
-            authorize_path: "/authorize".to_string(),
-            logout_path: "/logout".to_string(),
         }
     }
 }
@@ -196,9 +183,9 @@ impl GithubOauthService {
         S: Clone + Send + Sync + 'static,
     {
         Router::<S>::new()
-            .route(&self.config.login_path, get(login))
-            .route(&self.config.authorize_path, get(authorize))
-            .route(&self.config.logout_path, get(logout))
+            .route("/login", get(login))
+            .route("/authorize", get(authorize))
+            .route("/logout", get(logout))
     }
 }
 
@@ -237,7 +224,7 @@ impl User {
         let jar = PrivateCookieJar::from_headers(headers, service.config.session_key.clone());
         let session_cookie = jar
             .get(COOKIE_NAME)
-            .ok_or(AuthAction::Redirect(service.config.login_path.clone()))?;
+            .ok_or(AuthAction::Redirect("/api/login".to_string()))?;
 
         let user: User = serde_json::from_str(session_cookie.value())
             .map_err(|e| AuthAction::Error(Error::DeserializeUser(e)))?;
@@ -260,5 +247,29 @@ where
             .map_err(|_| AuthAction::Error(Error::ServiceNotFound))?;
 
         User::from_headers_and_service(&parts.headers, &service)
+    }
+}
+
+impl<S> OptionalFromRequestParts<S> for User
+where
+    GithubOauthService: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = AuthAction;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        let service = parts
+            .extract_with_state(state)
+            .await
+            .map_err(|_| AuthAction::Error(Error::ServiceNotFound))?;
+
+        match User::from_headers_and_service(&parts.headers, &service) {
+            Ok(user) => Ok(Some(user)),
+            Err(AuthAction::Redirect(_)) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }

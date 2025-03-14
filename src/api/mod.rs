@@ -23,6 +23,7 @@ mod error;
 mod messages;
 mod oauth;
 mod smtp_credentials;
+mod whoami;
 
 #[derive(Debug, Error)]
 pub enum ApiServerError {
@@ -78,6 +79,7 @@ impl ApiServer {
         };
 
         let router = Router::new()
+            .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/messages", get(messages::list_messages))
             .route("/messages/{id}", get(messages::get_message))
@@ -95,7 +97,7 @@ impl ApiServer {
 
         ApiServer {
             socket,
-            router,
+            router: Router::new().nest("/api", router),
             shutdown,
         }
     }

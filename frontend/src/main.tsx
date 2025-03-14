@@ -8,7 +8,22 @@ const element = document.getElementById('root')!;
 const root = createRoot(element);
 
 const theme = createTheme({
-  /** Put your mantine theme override here */
+  primaryColor: 'bright-purple',
+  colors: {
+
+    'bright-purple': [
+      "#f6e9ff",
+      "#e6cfff",
+      "#ca9cff",
+      "#ac65fe",
+      "#9337fd",
+      "#831bfd",
+      "#7c0cfe",
+      "#6a00e3",
+      "#5d00cb",
+      "#5000b3"
+    ],
+  },
 });
 
 root.render(
