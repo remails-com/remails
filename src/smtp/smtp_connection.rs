@@ -3,10 +3,8 @@ use std::net::SocketAddr;
 use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    net::TcpStream,
     sync::mpsc::Sender,
 };
-use tokio_rustls::server::TlsStream;
 use tracing::{debug, info, trace};
 
 use crate::{
@@ -30,7 +28,7 @@ const BUFFER_SIZE: usize = 1024;
 const CODE_READY: u16 = 220;
 
 pub async fn handle(
-    stream: &mut TlsStream<TcpStream>,
+    stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
     server_name: &str,
     peer_addr: SocketAddr,
     queue: Sender<Message>,
