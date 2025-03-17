@@ -134,8 +134,7 @@ impl SmtpSession {
                     );
                 };
 
-                self.current_message =
-                    Some(Message::new(credential.id(), from.address.clone()));
+                self.current_message = Some(Message::new(credential.id(), from.address.clone()));
                 self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
