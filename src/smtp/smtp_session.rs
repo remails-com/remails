@@ -32,6 +32,10 @@ pub enum SessionReply {
     ReplyAndStop(u16, String),
     RawReply(Vec<u8>),
     IngestData(u16, String),
+}
+
+pub enum DataReply {
+    ReplyAndContinue(u16, String),
     ContinueIngest,
 }
 
@@ -262,9 +266,9 @@ impl SmtpSession {
         }
     }
 
-    pub async fn handle_data(&mut self, data: &[u8]) -> SessionReply {
+    pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
         if self.state != SessionState::IngestingData {
-            return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
         }
 
         self.buffer.extend_from_slice(data);
@@ -272,12 +276,12 @@ impl SmtpSession {
         if self.buffer.len() > Self::MAX_BODY_SIZE as usize {
             debug!("failed to read message: message too big");
 
-            return SessionReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+            return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
         }
 
         if self.buffer.ends_with(Self::DATA_END) {
             let Some(mut message) = self.current_message.take() else {
-                return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
             };
 
             trace!(
@@ -296,14 +300,14 @@ impl SmtpSession {
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
 
-                return SessionReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+                return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
             }
 
             self.state = SessionState::Authenticated;
 
-            return SessionReply::ReplyAndContinue(250, response_message);
+            return DataReply::ReplyAndContinue(250, response_message);
         }
 
-        SessionReply::ContinueIngest
+        DataReply::ContinueIngest
     }
 }

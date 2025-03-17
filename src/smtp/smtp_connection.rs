@@ -11,7 +11,7 @@ use tracing::{debug, info, trace};
 
 use crate::{
     models::{Message, SmtpCredentialRepository},
-    smtp::smtp_session::SessionReply,
+    smtp::smtp_session::{DataReply, SessionReply},
 };
 
 use super::smtp_session::SmtpSession;
@@ -47,7 +47,7 @@ pub async fn handle(
 
     write_reply(CODE_READY, server_name, &mut sink).await?;
 
-    loop {
+    'session: loop {
         read_line(&mut reader, &mut buffer).await?;
 
         let request = Request::parse(&mut buffer.iter());
@@ -70,21 +70,17 @@ pub async fn handle(
             SessionReply::IngestData(code, message) => {
                 write_reply(code, &message, &mut sink).await?;
 
-                loop {
+                'data: loop {
                     read_buf(&mut reader, &mut buffer).await?;
 
                     match session.handle_data(&buffer).await {
-                        SessionReply::ContinueIngest => continue,
-                        SessionReply::ReplyAndContinue(code, message) => {
+                        DataReply::ContinueIngest => continue 'data,
+                        DataReply::ReplyAndContinue(code, message) => {
                             write_reply(code, &message, &mut sink).await?;
-                            break;
+                            continue 'session;
                         }
-                        _ => break,
                     }
                 }
-            }
-            SessionReply::ContinueIngest => {
-                unreachable!("should not happen")
             }
         }
     }
