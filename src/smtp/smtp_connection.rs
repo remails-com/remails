@@ -27,10 +27,11 @@ pub enum ConnectionError {
 }
 
 const BUFFER_SIZE: usize = 1024;
-const SERVER_NAME: &str = "localhost";
+const CODE_READY: u16 = 220;
 
 pub async fn handle(
     stream: &mut TlsStream<TcpStream>,
+    server_name: &str,
     peer_addr: SocketAddr,
     queue: Sender<Message>,
     user_repository: SmtpCredentialRepository,
@@ -44,7 +45,7 @@ pub async fn handle(
 
     trace!("handling connection with {}", &session.peer());
 
-    write_reply(220, SERVER_NAME, &mut sink).await?;
+    write_reply(CODE_READY, server_name, &mut sink).await?;
 
     loop {
         read_line(&mut reader, &mut buffer).await?;
