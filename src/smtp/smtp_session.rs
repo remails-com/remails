@@ -70,6 +70,10 @@ impl SmtpSession {
         }
     }
 
+    pub fn peer(&self) -> &SocketAddr {
+        &self.peer_addr
+    }
+
     pub async fn handle(
         &mut self,
         request: Result<Request<String>, smtp_proto::Error>,

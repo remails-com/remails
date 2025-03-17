@@ -29,7 +29,6 @@ pub enum ConnectionError {
 pub struct SmtpConnection {
     acceptor: TlsAcceptor,
     stream: TcpStream,
-    peer_addr: SocketAddr,
     buffer: Vec<u8>,
     session: SmtpSession,
 }
@@ -48,7 +47,6 @@ impl SmtpConnection {
         Self {
             acceptor,
             stream,
-            peer_addr,
             buffer: Vec::with_capacity(Self::BUFFER_SIZE),
             session: SmtpSession::new(peer_addr, queue, user_repository),
         }
@@ -61,7 +59,7 @@ impl SmtpConnection {
             .await
             .map_err(ConnectionError::Accept)?;
 
-        trace!("secure connection with {}", &self.peer_addr);
+        trace!("secure connection with {}", &self.session.peer());
 
         let (stream, mut sink) = tokio::io::split(tls_stream);
         let mut reader = BufReader::new(stream);
