@@ -6,7 +6,7 @@ use tokio::{
     net::TcpStream,
     sync::mpsc::Sender,
 };
-use tokio_rustls::{TlsAcceptor, server::TlsStream};
+use tokio_rustls::server::TlsStream;
 use tracing::{debug, info, trace};
 
 use crate::{
@@ -26,62 +26,40 @@ pub enum ConnectionError {
     Read(std::io::Error),
 }
 
-pub struct SmtpConnection {
-    acceptor: TlsAcceptor,
-    stream: TcpStream,
-    buffer: Vec<u8>,
-    session: SmtpSession,
-}
-
-impl SmtpConnection {
     const BUFFER_SIZE: usize = 1024;
     const SERVER_NAME: &str = "localhost";
 
-    pub fn new(
-        acceptor: TlsAcceptor,
-        stream: TcpStream,
+    pub async fn handle(
+        stream: &mut TlsStream<TcpStream>,
         peer_addr: SocketAddr,
         queue: Sender<Message>,
         user_repository: SmtpCredentialRepository,
-    ) -> Self {
-        Self {
-            acceptor,
-            stream,
-            buffer: Vec::with_capacity(Self::BUFFER_SIZE),
-            session: SmtpSession::new(peer_addr, queue, user_repository),
-        }
-    }
+    ) -> Result<(), ConnectionError> {
+        let (source, mut sink) = tokio::io::split(stream);
 
-    pub async fn handle(mut self) -> Result<(), ConnectionError> {
-        let tls_stream: TlsStream<TcpStream> = self
-            .acceptor
-            .accept(self.stream)
-            .await
-            .map_err(ConnectionError::Accept)?;
+        let mut buffer = Vec::with_capacity(BUFFER_SIZE);
+        let mut session = SmtpSession::new(peer_addr, queue, user_repository);
 
-        trace!("secure connection with {}", &self.session.peer());
+        let mut reader = BufReader::new(source);
 
-        let (stream, mut sink) = tokio::io::split(tls_stream);
-        let mut reader = BufReader::new(stream);
+        trace!("handling connection with {}", &session.peer());
 
-        SmtpConnection::reply(220, Self::SERVER_NAME, &mut sink).await?;
+        write_reply(220, SERVER_NAME, &mut sink).await?;
 
         loop {
-            SmtpConnection::read_line(&mut reader, &mut self.buffer).await?;
+            read_line(&mut reader, &mut buffer).await?;
 
-            let request = Request::parse(&mut self.buffer.iter());
+            let request = Request::parse(&mut buffer.iter());
 
             trace!("received request: {:?}", request);
 
-            let reply = self.session.handle(request).await;
-
-            match reply {
+            match session.handle(request).await {
                 SessionReply::ReplyAndContinue(code, message) => {
-                    SmtpConnection::reply(code, &message, &mut sink).await?;
+                    write_reply(code, &message, &mut sink).await?;
                     continue;
                 }
                 SessionReply::ReplyAndStop(code, message) => {
-                    SmtpConnection::reply(code, &message, &mut sink).await?;
+                    write_reply(code, &message, &mut sink).await?;
                     break;
                 }
                 SessionReply::RawReply(buf) => {
@@ -89,28 +67,25 @@ impl SmtpConnection {
                     continue;
                 }
                 SessionReply::IngestData(code, message) => {
-                    SmtpConnection::reply(code, &message, &mut sink).await?;
+                    write_reply(code, &message, &mut sink).await?;
 
                     loop {
-                        SmtpConnection::read_buf(&mut reader, &mut self.buffer).await?;
-                        let reply = self.session.handle_data(&self.buffer).await;
+                        read_buf(&mut reader, &mut buffer).await?;
 
-                        match reply {
+                        match session.handle_data(&buffer).await {
                             SessionReply::ContinueIngest => continue,
                             SessionReply::ReplyAndContinue(code, message) => {
-                                SmtpConnection::reply(code, &message, &mut sink).await?;
+                                write_reply(code, &message, &mut sink).await?;
                                 break;
                             }
                             _ => break,
                         }
                     }
                 }
-                SessionReply::ContinueIngest => {}
+                SessionReply::ContinueIngest => { unreachable!("should not happen") }
             }
         }
 
-        // send tls close notify
-        sink.shutdown().await.map_err(ConnectionError::Write)?;
         info!("connection handled");
 
         Ok(())
@@ -123,7 +98,7 @@ impl SmtpConnection {
         buffer.clear();
 
         reader
-            .take(SmtpConnection::BUFFER_SIZE as u64)
+            .take(BUFFER_SIZE as u64)
             .read_buf(buffer)
             .await
             .map_err(ConnectionError::Read)
@@ -136,13 +111,13 @@ impl SmtpConnection {
         buffer.clear();
 
         reader
-            .take(SmtpConnection::BUFFER_SIZE as u64)
+            .take(BUFFER_SIZE as u64)
             .read_until(b'\n', buffer)
             .await
             .map_err(ConnectionError::Read)
     }
 
-    async fn reply(
+    async fn write_reply(
         code: u16,
         message: &str,
         mut sink: impl AsyncWriteExt + Unpin,
@@ -160,4 +135,3 @@ impl SmtpConnection {
 
         Ok(())
     }
-}

@@ -1,6 +1,6 @@
 use std::{fs::File, io, net::SocketAddrV4, path::PathBuf, sync::Arc};
 use thiserror::Error;
-use tokio::{net::TcpListener, select, sync::mpsc::Sender};
+use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
@@ -13,7 +13,7 @@ use tracing::{error, info};
 
 use crate::{
     models::{Message, SmtpCredentialRepository},
-    smtp::smtp_connection::SmtpConnection,
+    smtp::smtp_connection::{self, ConnectionError},
 };
 
 #[derive(Debug, Error)]
@@ -84,10 +84,11 @@ impl SmtpServer {
             .with_single_cert(certs, key)
             .map_err(SmtpServerError::Tls)?;
 
-        let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = TcpListener::bind(&self.address)
             .await
             .map_err(SmtpServerError::Listen)?;
+
+        let acceptor = TlsAcceptor::from(Arc::new(config));
 
         info!("smtp server on {}:{}", self.address, self.address.port());
 
@@ -101,8 +102,18 @@ impl SmtpServer {
                 result = listener.accept() => {
                     match result {
                         Ok((stream, peer_addr)) => {
-                            info!("accepted connection from {}", peer_addr);
-                            tokio::spawn(SmtpConnection::new(acceptor.clone(), stream, peer_addr, self.queue.clone(), self.user_repository.clone()).handle());
+                            info!("connection from {}", peer_addr);
+                            let acceptor = acceptor.clone();
+                            let user_repository = self.user_repository.clone();
+                            let queue = self.queue.clone();
+                            tokio::spawn(async move {
+                                let mut tls_stream = acceptor.accept(stream).await.map_err(ConnectionError::Accept)?;
+
+                                smtp_connection::handle(&mut tls_stream, peer_addr, queue, user_repository).await?;
+
+                                tls_stream.shutdown().await.map_err(ConnectionError::Write)?;
+                                Ok::<_,ConnectionError>(())
+                            });
                         }
                         Err(err) => {
                             error!("failed to accept connection: {}", err);
