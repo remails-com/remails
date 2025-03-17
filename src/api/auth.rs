@@ -33,7 +33,7 @@ impl ApiUser {
         matches!(self.role, Role::User(_))
     }
 
-    pub fn get_user_id(&self) -> Option<Uuid> {
+    pub fn user_id(&self) -> Option<Uuid> {
         match self.role {
             Role::User(id) => Some(id),
             _ => None,

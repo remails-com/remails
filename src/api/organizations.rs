@@ -17,7 +17,7 @@ impl TryFrom<&ApiUser> for OrganizationFilter {
     fn try_from(user: &ApiUser) -> Result<Self, Self::Error> {
         if user.is_admin() {
             Ok(OrganizationFilter::default())
-        } else if let Some(user_id) = user.get_user_id() {
+        } else if let Some(user_id) = user.user_id() {
             Ok(OrganizationFilter {
                 api_user_id: Some(user_id),
             })
@@ -55,7 +55,7 @@ pub async fn create_organization(
     Json(new): Json<NewOrganization>,
 ) -> ApiResult<Organization> {
     let org = repo.create(new).await?;
-    if let Some(user_id) = api_user.get_user_id() {
+    if let Some(user_id) = api_user.user_id() {
         repo.add_user(org.id, user_id).await?;
     }
     Ok(Json(org))
