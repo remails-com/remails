@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::models::{Message, SmtmCredential, SmtpCredentialRepository};
+use crate::models::{Message, SmtpCredential, SmtpCredentialRepository};
 
 #[derive(Debug, PartialEq)]
 enum SessionState {
@@ -22,7 +22,7 @@ pub struct SmtpSession {
 
     peer_addr: SocketAddr,
     state: SessionState,
-    authenticated_credential: Option<SmtmCredential>,
+    authenticated_credential: Option<SmtpCredential>,
     current_message: Option<Message>,
     buffer: Vec<u8>,
 }

@@ -5,7 +5,7 @@ mod smtp_session;
 #[cfg(test)]
 mod test {
     use crate::{
-        models::{Message, SmtmCredential, SmtpCredentialRepository},
+        models::{Message, SmtpCredential, SmtpCredentialRepository},
         smtp::smtp_server::SmtpServer,
         test::random_port,
     };
@@ -28,7 +28,7 @@ mod test {
         let smtp_port = random_port();
         let user_repository = SmtpCredentialRepository::new(pool);
 
-        let credential = SmtmCredential::new(
+        let credential = SmtpCredential::new(
             "john".into(),
             "p4ssw0rd".into(),
             "test-org-1.com".to_string(),

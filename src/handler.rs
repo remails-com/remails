@@ -162,7 +162,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtmCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredential, SmtpCredentialRepository};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -192,7 +192,7 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = SmtmCredential::new(
+        let user = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
             "test-org-1.com".to_string(),

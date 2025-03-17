@@ -3,7 +3,7 @@ use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct SmtmCredential {
+pub struct SmtpCredential {
     id: Uuid,
     username: String,
     password_hash: String,
@@ -12,7 +12,7 @@ pub struct SmtmCredential {
     updated_at: DateTime<Utc>,
 }
 
-impl SmtmCredential {
+impl SmtpCredential {
     pub fn new(username: String, password: String, domain: String) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -47,10 +47,10 @@ impl SmtpCredentialRepository {
 
     pub async fn create(
         &self,
-        new_credential: &SmtmCredential,
-    ) -> Result<SmtmCredential, sqlx::Error> {
-        let credential: SmtmCredential = sqlx::query_as!(
-            SmtmCredential,
+        new_credential: &SmtpCredential,
+    ) -> Result<SmtpCredential, sqlx::Error> {
+        let credential: SmtpCredential = sqlx::query_as!(
+            SmtpCredential,
             r#"
             INSERT INTO smtp_credential (id, username, password_hash, domain)
             VALUES ($1, $2, $3, $4)
@@ -70,9 +70,9 @@ impl SmtpCredentialRepository {
     pub async fn find_by_username(
         &self,
         username: &str,
-    ) -> Result<Option<SmtmCredential>, sqlx::Error> {
+    ) -> Result<Option<SmtpCredential>, sqlx::Error> {
         let credential = sqlx::query_as!(
-            SmtmCredential,
+            SmtpCredential,
             r#"
             SELECT * FROM smtp_credential WHERE username = $1 LIMIT 1
             "#,
@@ -84,9 +84,9 @@ impl SmtpCredentialRepository {
         Ok(credential)
     }
 
-    pub async fn list(&self) -> Result<Vec<SmtmCredential>, sqlx::Error> {
+    pub async fn list(&self) -> Result<Vec<SmtpCredential>, sqlx::Error> {
         let credentials = sqlx::query_as!(
-            SmtmCredential,
+            SmtpCredential,
             r#"
             SELECT * FROM smtp_credential ORDER BY created_at DESC
             "#,
@@ -107,7 +107,7 @@ mod test {
     async fn smtp_credential_repository(pool: PgPool) {
         let repository = SmtpCredentialRepository::new(pool);
 
-        let credential = SmtmCredential::new(
+        let credential = SmtpCredential::new(
             "test".into(),
             "password".into(),
             "test-org-1.com".to_string(),

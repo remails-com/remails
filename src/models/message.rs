@@ -254,7 +254,7 @@ mod test {
     use sqlx::PgPool;
 
     use super::*;
-    use crate::models::{SmtmCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredential, SmtpCredentialRepository};
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     async fn message_repository(pool: PgPool) {
@@ -272,7 +272,7 @@ mod test {
             .into_message()
             .unwrap();
 
-        let credential = SmtmCredential::new(
+        let credential = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
             "test-org-1.com".to_string(),
