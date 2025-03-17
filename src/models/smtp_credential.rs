@@ -30,7 +30,7 @@ impl SmtpCredential {
         password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
     }
 
-    pub fn get_id(&self) -> Uuid {
+    pub fn id(&self) -> Uuid {
         self.id
     }
 }

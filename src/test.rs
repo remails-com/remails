@@ -161,7 +161,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", user1.get_id().to_string())
+        .header("X-Test-Login", user1.id().to_string())
         .send()
         .await
         .unwrap()
@@ -173,7 +173,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", user2.get_id().to_string())
+        .header("X-Test-Login", user2.id().to_string())
         .send()
         .await
         .unwrap()

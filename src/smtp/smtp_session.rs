@@ -131,7 +131,7 @@ impl SmtpSession {
                 };
 
                 self.current_message =
-                    Some(Message::new(credential.get_id(), from.address.clone()));
+                    Some(Message::new(credential.id(), from.address.clone()));
                 self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
@@ -150,7 +150,7 @@ impl SmtpSession {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
                 };
 
-                message.add_recipient(to.address.clone());
+                message.recipients.push(to.address.clone());
 
                 self.state = SessionState::RecipientsReceived;
 
@@ -279,16 +279,16 @@ impl SmtpSession {
 
             trace!(
                 "received message {:?} ({} bytes)",
-                message.get_id(),
+                message.id(),
                 self.buffer.len()
             );
             let response_message =
-                Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.get_id().to_string());
+                Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.id().to_string());
 
             let mut new_buffer = Vec::new();
             std::mem::swap(&mut self.buffer, &mut new_buffer);
 
-            message.set_raw_data(new_buffer);
+            message.raw_data = Some(new_buffer);
 
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
