@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
 use crate::{
-    models::{Message, SmtpCredentialRepository},
+    models::{NewMessage, SmtpCredentialRepository},
     smtp::connection::{self, ConnectionError},
 };
 
@@ -33,7 +33,7 @@ pub enum SmtpServerError {
 pub struct SmtpServer {
     address: SocketAddrV4,
     user_repository: SmtpCredentialRepository,
-    queue: Sender<Message>,
+    queue: Sender<NewMessage>,
     shutdown: CancellationToken,
     cert: PathBuf,
     key: PathBuf,
@@ -47,7 +47,7 @@ impl SmtpServer {
         cert: PathBuf,
         key: PathBuf,
         user_repository: SmtpCredentialRepository,
-        queue: Sender<Message>,
+        queue: Sender<NewMessage>,
         shutdown: CancellationToken,
     ) -> Self {
         Self {

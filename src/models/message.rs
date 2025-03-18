@@ -5,9 +5,10 @@ use uuid::Uuid;
 
 pub type EmailAddress = String;
 
-#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
+#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type, Default)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
+    #[default]
     Processing,
     Held,
     Accepted,
@@ -16,10 +17,12 @@ pub enum MessageStatus {
     Failed,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     id: Uuid,
     smtp_credential_id: Uuid,
+    organization_id: Uuid,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -29,33 +32,33 @@ pub struct Message {
     updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct NewMessage {
+    pub smtp_credential_id: Uuid,
+    pub status: MessageStatus,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Option<Vec<u8>>,
+    pub message_data: serde_json::Value,
+}
+
 impl Message {
-    pub fn new(smtp_credential_id: Uuid, from_email: EmailAddress) -> Self {
-        let id = Uuid::new_v4();
-
-        Self {
-            id,
-            smtp_credential_id,
-            status: MessageStatus::Processing,
-            from_email,
-            recipients: Vec::new(),
-            raw_data: None,
-            message_data: serde_json::Value::Null,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
+    pub fn id(&self) -> Uuid {
+        self.id
     }
+}
 
-    pub fn id(&self) -> &Uuid {
-        &self.id
-    }
-
+impl NewMessage {
     #[cfg(test)]
     pub fn from_builder_message(
         value: mail_send::smtp::message::Message<'_>,
-        user_id: Uuid,
+        smtp_credential_id: Uuid,
     ) -> Self {
-        let mut message = Message::new(user_id, value.mail_from.email.parse().unwrap());
+        let mut message = Self {
+            smtp_credential_id,
+            from_email: value.mail_from.email.parse().unwrap(),
+            ..Default::default()
+        };
         for recipient in value.rcpt_to.iter() {
             message.recipients.push(recipient.email.parse().unwrap());
         }
@@ -83,7 +86,7 @@ pub struct MessageRepository {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct MessageFilter {
-    pub user_id: Option<Uuid>,
+    pub api_user_id: Option<Uuid>,
     offset: i64,
     limit: i64,
     status: Option<MessageStatus>,
@@ -92,7 +95,7 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            user_id: None,
+            api_user_id: None,
             offset: 0,
             limit: 100,
             status: None,
@@ -105,26 +108,36 @@ impl MessageRepository {
         Self { pool }
     }
 
-    pub async fn insert(&self, message: &Message) -> Result<(), sqlx::Error> {
-        sqlx::query!(
+    pub async fn create(&self, message: &NewMessage) -> Result<Message, sqlx::Error> {
+        sqlx::query_as!(
+            Message,
             r#"
-            INSERT INTO messages (id, smtp_credential_id, status, from_email, recipients, raw_data, message_data, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO messages AS m (id, smtp_credential_id, organization_id, status, from_email, recipients, raw_data, message_data)
+            SELECT gen_random_uuid(), $1, o.id, $2, $3, $4, $5, $6
+            FROM smtp_credential s
+                JOIN domains d ON d.id = s.domain_id
+                JOIN organizations o ON o.id = d.organization_id
+            WHERE s.id = $1
+            RETURNING m.id,
+                      m.smtp_credential_id,
+                      m.organization_id,
+                      m.status as "status: _",
+                      m.from_email,
+                      m.recipients,
+                      m.raw_data,
+                      m.message_data,
+                      m.created_at,
+                      m.updated_at
             "#,
-            message.id,
             message.smtp_credential_id,
             message.status as _,
             message.from_email,
             &message.recipients,
             message.raw_data,
-            message.message_data,
-            message.created_at,
-            message.updated_at
+            message.message_data
         )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        .fetch_one(&self.pool)
+        .await
     }
 
     pub async fn update_message_status(
@@ -173,18 +186,21 @@ impl MessageRepository {
             Message,
             r#"
             SELECT
-                id,
-                smtp_credential_id,
-                status as "status: _",
-                from_email,
-                recipients,
+                m.id,
+                m.smtp_credential_id,
+                m.organization_id,
+                m.status as "status: _",
+                m.from_email,
+                m.recipients,
                 NULL::bytea AS "raw_data",
                 NULL::jsonb AS "message_data",
-                created_at,
-                updated_at
-            FROM messages
+                m.created_at,
+                m.updated_at
+            FROM messages m
+                JOIN organizations o ON o.id = m.organization_id
+                LEFT JOIN api_users_organizations au ON au.organization_id = o.id
             WHERE ($3::message_status IS NULL OR status = $3)
-            AND ($4::uuid IS NULL OR smtp_credential_id = $4)
+              AND ($4::uuid IS NULL OR au.api_user_id = $4)
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
@@ -192,29 +208,41 @@ impl MessageRepository {
             filter.offset,
             filter.limit,
             filter.status as _,
-            filter.user_id
+            filter.api_user_id
         )
         .fetch_all(&self.pool)
         .await
     }
 
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Message>, sqlx::Error> {
+    pub async fn find_by_id(
+        &self,
+        id: Uuid,
+        api_user_id: Option<Uuid>,
+    ) -> Result<Option<Message>, sqlx::Error> {
         let message = sqlx::query_as!(
             Message,
             r#"
             SELECT
-                id,
-                smtp_credential_id,
-                status as "status: _",
-                from_email,
-                recipients,
-                raw_data,
-                message_data,
-                created_at,
-                updated_at
-            FROM messages WHERE id = $1 LIMIT 1
+                m.id,
+                m.smtp_credential_id,
+                m.organization_id,
+                m.status as "status: _",
+                m.from_email,
+                m.recipients,
+                m.raw_data,
+                m.message_data,
+                m.created_at,
+                m.updated_at
+            FROM messages  m
+                JOIN organizations o ON o.id = m.organization_id
+                LEFT JOIN api_users_organizations au ON au.organization_id = o.id
+                LEFT JOIN api_users u ON au.api_user_id = u.id
+            WHERE m.id = $1
+              AND ($2::uuid IS NULL OR u.id = $2)
+            LIMIT 1
             "#,
-            id
+            id,
+            api_user_id
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -250,19 +278,21 @@ mod test {
         let credential = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
-            "test-org-1.com".to_string(),
+            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         );
         SmtpCredentialRepository::new(pool)
             .create(&credential)
             .await
             .unwrap();
-        let message = Message::from_builder_message(message, credential.id());
+        let new_message = NewMessage::from_builder_message(message, credential.id());
 
-        let id = message.id;
+        let message = repository.create(&new_message).await.unwrap();
 
-        repository.insert(&message).await.unwrap();
-
-        let mut fetched_message = repository.find_by_id(id).await.unwrap().unwrap();
+        let mut fetched_message = repository
+            .find_by_id(message.id, None)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(fetched_message.from_email, "john@example.com");
 

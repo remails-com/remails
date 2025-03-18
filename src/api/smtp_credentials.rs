@@ -2,6 +2,7 @@ use axum::{Json, extract::State};
 use serde::Deserialize;
 
 use crate::models::{SmtpCredential, SmtpCredentialRepository};
+use uuid::Uuid;
 
 use super::{
     auth::ApiUser,
@@ -12,7 +13,7 @@ use super::{
 pub struct NewSmtpCredential {
     username: String,
     password: String,
-    domain: String,
+    domain_id: Uuid,
 }
 
 pub async fn create_smtp_credential(
@@ -21,14 +22,14 @@ pub async fn create_smtp_credential(
     Json(NewSmtpCredential {
         username,
         password,
-        domain,
+        domain_id,
     }): Json<NewSmtpCredential>,
 ) -> ApiResult<SmtpCredential> {
     if !api_user.is_admin() {
         return Err(ApiError::Forbidden);
     }
 
-    let new_credential = SmtpCredential::new(username, password, domain);
+    let new_credential = SmtpCredential::new(username, password, domain_id);
     let credential = repo.create(&new_credential).await?;
 
     Ok(Json(credential))

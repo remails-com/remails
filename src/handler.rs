@@ -8,7 +8,7 @@ use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
-use crate::models::{Message, MessageRepository, MessageStatus};
+use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -41,13 +41,14 @@ impl Handler {
         }
     }
 
-    pub async fn handle_message(&self, message: Message) -> Result<Message, HandlerError> {
-        debug!("storing message {}", message.id());
-
-        self.message_repository
-            .insert(&message)
+    pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
+        let mut message = self
+            .message_repository
+            .create(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
+
+        debug!("stored message {}", message.id());
 
         // TODO: check limits etc
 
@@ -64,7 +65,6 @@ impl Handler {
 
         debug!("updating message {}", message.id());
 
-        let mut message = message;
         message.message_data = json_message_data;
 
         self.message_repository
@@ -127,7 +127,7 @@ impl Handler {
         Ok(())
     }
 
-    pub fn spawn(self, mut queue_receiver: Receiver<Message>) {
+    pub fn spawn(self, mut queue_receiver: Receiver<NewMessage>) {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -195,14 +195,14 @@ mod test {
         let user = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
-            "test-org-1.com".to_string(),
+            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         );
         SmtpCredentialRepository::new(pool.clone())
             .create(&user)
             .await
             .unwrap();
 
-        let message = Message::from_builder_message(message, user.id());
+        let message = NewMessage::from_builder_message(message, user.id());
         let handler = Handler::new(pool, CancellationToken::new());
 
         let message = handler.handle_message(message).await.unwrap();

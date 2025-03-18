@@ -7,20 +7,20 @@ pub struct SmtpCredential {
     id: Uuid,
     username: String,
     password_hash: String,
-    domain: String,
+    domain_id: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
 impl SmtpCredential {
-    pub fn new(username: String, password: String, domain: String) -> Self {
+    pub fn new(username: String, password: String, domain_id: Uuid) -> Self {
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
         Self {
             id: Uuid::new_v4(),
             username,
             password_hash,
-            domain,
+            domain_id,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -52,14 +52,14 @@ impl SmtpCredentialRepository {
         let credential: SmtpCredential = sqlx::query_as!(
             SmtpCredential,
             r#"
-            INSERT INTO smtp_credential (id, username, password_hash, domain)
+            INSERT INTO smtp_credential (id, username, password_hash, domain_id)
             VALUES ($1, $2, $3, $4)
             RETURNING *
             "#,
             new_credential.id,
             new_credential.username,
             new_credential.password_hash,
-            new_credential.domain,
+            new_credential.domain_id,
         )
         .fetch_one(&self.pool)
         .await?;
@@ -110,7 +110,7 @@ mod test {
         let credential = SmtpCredential::new(
             "test".into(),
             "password".into(),
-            "test-org-1.com".to_string(),
+            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         );
         assert!(credential.verify_password("password"));
 

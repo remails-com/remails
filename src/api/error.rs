@@ -14,6 +14,8 @@ pub enum ApiError {
     NotFound,
     #[error("forbidden")]
     Forbidden,
+    #[error("unauthorized")]
+    Unauthorized,
     #[error("OAuth error: {0}")]
     OAuth(#[from] oauth::Error),
 }
@@ -30,6 +32,7 @@ impl IntoResponse for ApiError {
             ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
             ApiError::OAuth(err) => (err.status_code(), err.user_message()),
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
         };
 
         (status, Json(json!({ "error": message }))).into_response()

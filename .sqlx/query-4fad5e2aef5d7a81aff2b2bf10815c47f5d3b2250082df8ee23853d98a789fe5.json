@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, domain)\n            VALUES ($1, $2, $3, $4)\n            RETURNING *\n            ",
+  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, domain_id)\n            VALUES ($1, $2, $3, $4)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -10,8 +10,8 @@
       },
       {
         "ordinal": 1,
-        "name": "domain",
-        "type_info": "Varchar"
+        "name": "domain_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 2,
@@ -39,7 +39,7 @@
         "Uuid",
         "Varchar",
         "Varchar",
-        "Varchar"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -51,5 +51,5 @@
       false
     ]
   },
-  "hash": "fff300f8135370983a789474d8e06c4a9295ade6a5cad652c4f664387acefd1a"
+  "hash": "4fad5e2aef5d7a81aff2b2bf10815c47f5d3b2250082df8ee23853d98a789fe5"
 }

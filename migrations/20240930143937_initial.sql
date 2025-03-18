@@ -30,7 +30,8 @@ CREATE TYPE dkim_key_type AS ENUM (
 
 CREATE TABLE domains
 (
-    domain          varchar PRIMARY KEY,
+    id              uuid PRIMARY KEY,
+    domain          varchar                  NOT NULL,
     organization_id uuid REFERENCES organizations (id) ON DELETE CASCADE,
     dkim_key_type   dkim_key_type,
     dkim_pkcs8_der  bytea,
@@ -71,7 +72,7 @@ CREATE TABLE api_users_organizations
 CREATE TABLE smtp_credential
 (
     id            uuid PRIMARY KEY         NOT NULL,
-    domain        varchar                  NOT NULL REFERENCES domains (domain),
+    domain_id        uuid                  NOT NULL REFERENCES domains (id),
     username      varchar                  NOT NULL UNIQUE CHECK (username ~ '^[a-zA-Z0-9_-]{2,128}$'),
     password_hash varchar                  NOT NULL,
     created_at    timestamp with time zone NOT NULL DEFAULT now(),
@@ -97,6 +98,7 @@ CREATE TABLE messages
 (
     id                 uuid PRIMARY KEY         NOT NULL,
     smtp_credential_id uuid                     NOT NULL REFERENCES smtp_credential (id),
+    organization_id    uuid                     NOT NULL REFERENCES organizations (id),
     status             message_status           NOT NULL,
     from_email         varchar                  NOT NULL,
     recipients         varchar[]                NOT NULL,

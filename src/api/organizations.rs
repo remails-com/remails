@@ -22,7 +22,7 @@ impl TryFrom<&ApiUser> for OrganizationFilter {
                 api_user_id: Some(user_id),
             })
         } else {
-            Err(ApiError::Forbidden)
+            Err(ApiError::Unauthorized)
         }
     }
 }
