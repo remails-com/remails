@@ -10,8 +10,8 @@
       },
       {
         "ordinal": 1,
-        "name": "domain",
-        "type_info": "Varchar"
+        "name": "domain_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 2,

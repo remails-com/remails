@@ -22,7 +22,7 @@ pub fn random_port() -> u16 {
     rng.random_range(10_000..30_000)
 }
 
-#[sqlx::test(fixtures("organizations", "domains"))]
+#[sqlx::test(fixtures("organizations", "domains", "api_users"))]
 #[traced_test]
 #[serial]
 async fn integration_test(pool: PgPool) {
@@ -51,7 +51,7 @@ async fn integration_test(pool: PgPool) {
 
     let _drop_guard = token.drop_guard();
 
-    let credential1: SmtpCredential = client
+    client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -65,11 +65,11 @@ async fn integration_test(pool: PgPool) {
         .send()
         .await
         .unwrap()
-        .json()
+        .json::<SmtpCredential>()
         .await
         .unwrap();
 
-    let credential2: SmtpCredential = client
+    client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -78,12 +78,12 @@ async fn integration_test(pool: PgPool) {
         .json(&json!({
             "username": "eddy",
             "password": "pass123",
-            "domain_id": "ed28baa5-57f7-413f-8c77-7797ba6a8780"
+            "domain_id": "6a45a141-6628-4c0f-823b-3cf3eb64f0c7"
         }))
         .send()
         .await
         .unwrap()
-        .json()
+        .json::<SmtpCredential>()
         .await
         .unwrap();
 
@@ -161,7 +161,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", credential1.id().to_string())
+        .header("X-Test-Login", "9244a050-7d72-451a-9248-4b43d5108235")
         .send()
         .await
         .unwrap()
@@ -173,7 +173,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", credential2.id().to_string())
+        .header("X-Test-Login", "not-existent")
         .send()
         .await
         .unwrap()
@@ -181,7 +181,7 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    assert_eq!(messages.len(), 1);
+    assert_eq!(messages.len(), 0);
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))

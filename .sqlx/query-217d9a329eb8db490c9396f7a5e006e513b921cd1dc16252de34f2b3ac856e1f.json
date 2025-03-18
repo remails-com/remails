@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                smtp_credential_id,\n                status as \"status: _\",\n                from_email,\n                recipients,\n                NULL::bytea AS \"raw_data\",\n                NULL::jsonb AS \"message_data\",\n                created_at,\n                updated_at\n            FROM messages\n            WHERE ($3::message_status IS NULL OR status = $3)\n            AND ($4::uuid IS NULL OR smtp_credential_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            INSERT INTO messages AS m (id, smtp_credential_id, organization_id, status, from_email, recipients, raw_data, message_data)\n            SELECT gen_random_uuid(), $1, o.id, $2, $3, $4, $5, $6\n            FROM smtp_credential s\n                JOIN domains d ON d.id = s.domain_id\n                JOIN organizations o ON o.id = d.organization_id\n            WHERE s.id = $1\n            RETURNING m.id,\n                      m.smtp_credential_id,\n                      m.organization_id,\n                      m.status as \"status: _\",\n                      m.from_email,\n                      m.recipients,\n                      m.raw_data,\n                      m.message_data,\n                      m.created_at,\n                      m.updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,11 @@
       },
       {
         "ordinal": 2,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -33,40 +38,39 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Int8",
+        "Uuid",
         {
           "Custom": {
             "name": "message_status",
@@ -82,7 +86,10 @@
             }
           }
         },
-        "Uuid"
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Jsonb"
       ]
     },
     "nullable": [
@@ -91,11 +98,12 @@
       false,
       false,
       false,
-      null,
-      null,
+      false,
+      true,
+      true,
       false,
       false
     ]
   },
-  "hash": "544985e11129397cba9eced296b9de1545bd29b206e788012b51f79e858450e4"
+  "hash": "217d9a329eb8db490c9396f7a5e006e513b921cd1dc16252de34f2b3ac856e1f"
 }

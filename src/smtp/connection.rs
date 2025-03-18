@@ -8,7 +8,7 @@ use tokio::{
 use tracing::{debug, info, trace};
 
 use crate::{
-    models::{Message, SmtpCredentialRepository},
+    models::{NewMessage, SmtpCredentialRepository},
     smtp::session::{DataReply, SessionReply, SmtpSession},
 };
 
@@ -29,7 +29,7 @@ pub async fn handle(
     stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
     server_name: &str,
     peer_addr: SocketAddr,
-    queue: Sender<Message>,
+    queue: Sender<NewMessage>,
     user_repository: SmtpCredentialRepository,
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);

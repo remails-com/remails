@@ -1,4 +1,3 @@
-use crate::models::{SmtmCredential, SmtpCredentialRepository};
 use axum::{Json, extract::State};
 use serde::Deserialize;
 

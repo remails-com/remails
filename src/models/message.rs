@@ -46,34 +46,9 @@ impl Message {
     pub fn id(&self) -> Uuid {
         self.id
     }
-
-    pub fn raw_data(&self) -> Option<&[u8]> {
-        self.raw_data.as_deref()
-    }
-
-    pub fn set_message_data(&mut self, message_data: serde_json::Value) {
-        self.message_data = message_data;
-    }
-
-    pub fn recipients(&self) -> &[EmailAddress] {
-        self.recipients.as_ref()
-    }
 }
 
 impl NewMessage {
-    #[cfg(test)]
-    pub fn from(&self) -> &str {
-        self.from_email.as_str()
-    }
-
-    pub fn add_recipient(&mut self, recipient: EmailAddress) {
-        self.recipients.push(recipient);
-    }
-
-    pub fn set_raw_data(&mut self, raw_data: Vec<u8>) {
-        self.raw_data = Some(raw_data);
-    }
-
     #[cfg(test)]
     pub fn from_builder_message(
         value: mail_send::smtp::message::Message<'_>,
@@ -92,7 +67,6 @@ impl NewMessage {
         message
     }
 }
-
 
 impl<'x> IntoMessage<'x> for Message {
     fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'x>> {
@@ -225,9 +199,8 @@ impl MessageRepository {
             FROM messages m
                 JOIN organizations o ON o.id = m.organization_id
                 LEFT JOIN api_users_organizations au ON au.organization_id = o.id
-                LEFT JOIN api_users u ON au.api_user_id = u.id
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND ($4::uuid IS NULL OR u.id = $4)
+              AND ($4::uuid IS NULL OR au.api_user_id = $4)
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
