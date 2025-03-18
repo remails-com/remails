@@ -34,6 +34,7 @@ pub async fn handle(
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);
 
+    // NOTE: we re-use this Vec<u8> to avoid re-allocating buffer
     let mut buffer = Vec::with_capacity(BUFFER_SIZE);
     let mut session = SmtpSession::new(peer_addr, queue, user_repository);
 
