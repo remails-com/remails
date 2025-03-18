@@ -1,12 +1,12 @@
-mod smtp_connection;
-pub mod smtp_server;
-mod smtp_session;
+mod connection;
+pub mod server;
+mod session;
 
 #[cfg(test)]
 mod test {
     use crate::{
-        models::{Message, SmtmCredential, SmtpCredentialRepository},
-        smtp::smtp_server::SmtpServer,
+        models::{Message, SmtpCredential, SmtpCredentialRepository},
+        smtp::server::SmtpServer,
         test::random_port,
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
@@ -28,7 +28,7 @@ mod test {
         let smtp_port = random_port();
         let user_repository = SmtpCredentialRepository::new(pool);
 
-        let credential = SmtmCredential::new(
+        let credential = SmtpCredential::new(
             "john".into(),
             "p4ssw0rd".into(),
             "test-org-1.com".to_string(),
@@ -92,7 +92,7 @@ mod test {
         server_handle.await.unwrap();
 
         let received_message = receiver.recv().await.unwrap();
-        assert_eq!(received_message.get_from(), "john@example.com");
+        assert_eq!(received_message.from_email, "john@example.com");
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]

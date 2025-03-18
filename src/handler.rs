@@ -42,7 +42,7 @@ impl Handler {
     }
 
     pub async fn handle_message(&self, message: Message) -> Result<Message, HandlerError> {
-        debug!("storing message {}", message.get_id());
+        debug!("storing message {}", message.id());
 
         self.message_repository
             .insert(&message)
@@ -51,21 +51,21 @@ impl Handler {
 
         // TODO: check limits etc
 
-        debug!("parsing message {}", message.get_id());
+        debug!("parsing message {}", message.id());
 
         let json_message_data = {
             // parse and save message contents
             let message_data = MessageParser::default()
-                .parse(message.get_raw_data().unwrap_or_default())
+                .parse(message.raw_data.as_deref().unwrap_or_default())
                 .ok_or(HandlerError::FailedParsingMessage)?;
 
             serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
         };
 
-        debug!("updating message {}", message.get_id());
+        debug!("updating message {}", message.id());
 
         let mut message = message;
-        message.set_message_data(json_message_data);
+        message.message_data = json_message_data;
 
         self.message_repository
             .update_message_data(&message)
@@ -76,9 +76,9 @@ impl Handler {
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
-        info!("sending message {}", message.get_id());
+        info!("sending message {}", message.id());
 
-        for recipient in message.get_recipients() {
+        for recipient in &message.recipients {
             let _domain = match email_address::EmailAddress::from_str(recipient) {
                 Ok(address) => address,
                 Err(err) => {
@@ -162,7 +162,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtmCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredential, SmtpCredentialRepository};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -192,7 +192,7 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = SmtmCredential::new(
+        let user = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
             "test-org-1.com".to_string(),
@@ -202,7 +202,7 @@ mod test {
             .await
             .unwrap();
 
-        let message = Message::from_builder_message(message, user.get_id());
+        let message = Message::from_builder_message(message, user.id());
         let handler = Handler::new(pool, CancellationToken::new());
 
         let message = handler.handle_message(message).await.unwrap();

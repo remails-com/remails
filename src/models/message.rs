@@ -20,11 +20,11 @@ pub enum MessageStatus {
 pub struct Message {
     id: Uuid,
     smtp_credential_id: Uuid,
-    status: MessageStatus,
-    from_email: EmailAddress,
-    recipients: Vec<EmailAddress>,
-    raw_data: Option<Vec<u8>>,
-    message_data: serde_json::Value,
+    pub status: MessageStatus,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Option<Vec<u8>>,
+    pub message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -46,33 +46,8 @@ impl Message {
         }
     }
 
-    pub fn get_id(&self) -> &Uuid {
+    pub fn id(&self) -> &Uuid {
         &self.id
-    }
-
-    #[cfg(test)]
-    pub fn get_from(&self) -> &str {
-        self.from_email.as_str()
-    }
-
-    pub fn get_raw_data(&self) -> Option<&[u8]> {
-        self.raw_data.as_deref()
-    }
-
-    pub fn add_recipient(&mut self, recipient: EmailAddress) {
-        self.recipients.push(recipient);
-    }
-
-    pub fn get_recipients(&self) -> &[EmailAddress] {
-        self.recipients.as_ref()
-    }
-
-    pub fn set_raw_data(&mut self, raw_data: Vec<u8>) {
-        self.raw_data = Some(raw_data);
-    }
-
-    pub fn set_message_data(&mut self, message_data: serde_json::Value) {
-        self.message_data = message_data;
     }
 
     #[cfg(test)]
@@ -82,7 +57,7 @@ impl Message {
     ) -> Self {
         let mut message = Message::new(user_id, value.mail_from.email.parse().unwrap());
         for recipient in value.rcpt_to.iter() {
-            message.add_recipient(recipient.email.parse().unwrap());
+            message.recipients.push(recipient.email.parse().unwrap());
         }
         message.raw_data = Some(value.into_message().unwrap().body.to_vec());
 
@@ -254,7 +229,7 @@ mod test {
     use sqlx::PgPool;
 
     use super::*;
-    use crate::models::{SmtmCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredential, SmtpCredentialRepository};
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     async fn message_repository(pool: PgPool) {
@@ -272,7 +247,7 @@ mod test {
             .into_message()
             .unwrap();
 
-        let credential = SmtmCredential::new(
+        let credential = SmtpCredential::new(
             "user".to_string(),
             "pass".to_string(),
             "test-org-1.com".to_string(),
@@ -281,7 +256,7 @@ mod test {
             .create(&credential)
             .await
             .unwrap();
-        let message = Message::from_builder_message(message, credential.get_id());
+        let message = Message::from_builder_message(message, credential.id());
 
         let id = message.id;
 

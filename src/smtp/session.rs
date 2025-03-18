@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::models::{Message, SmtmCredential, SmtpCredentialRepository};
+use crate::models::{Message, SmtpCredential, SmtpCredentialRepository};
 
 #[derive(Debug, PartialEq)]
 enum SessionState {
@@ -22,7 +22,7 @@ pub struct SmtpSession {
 
     peer_addr: SocketAddr,
     state: SessionState,
-    authenticated_credential: Option<SmtmCredential>,
+    authenticated_credential: Option<SmtpCredential>,
     current_message: Option<Message>,
     buffer: Vec<u8>,
 }
@@ -32,6 +32,10 @@ pub enum SessionReply {
     ReplyAndStop(u16, String),
     RawReply(Vec<u8>),
     IngestData(u16, String),
+}
+
+pub enum DataReply {
+    ReplyAndContinue(u16, String),
     ContinueIngest,
 }
 
@@ -68,6 +72,10 @@ impl SmtpSession {
             authenticated_credential: None,
             buffer: Vec::new(),
         }
+    }
+
+    pub fn peer(&self) -> &SocketAddr {
+        &self.peer_addr
     }
 
     pub async fn handle(
@@ -130,8 +138,7 @@ impl SmtpSession {
                     );
                 };
 
-                self.current_message =
-                    Some(Message::new(credential.get_id(), from.address.clone()));
+                self.current_message = Some(Message::new(credential.id(), from.address.clone()));
                 self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
@@ -150,7 +157,7 @@ impl SmtpSession {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
                 };
 
-                message.add_recipient(to.address.clone());
+                message.recipients.push(to.address.clone());
 
                 self.state = SessionState::RecipientsReceived;
 
@@ -259,9 +266,9 @@ impl SmtpSession {
         }
     }
 
-    pub async fn handle_data(&mut self, data: &[u8]) -> SessionReply {
+    pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
         if self.state != SessionState::IngestingData {
-            return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
         }
 
         self.buffer.extend_from_slice(data);
@@ -269,38 +276,35 @@ impl SmtpSession {
         if self.buffer.len() > Self::MAX_BODY_SIZE as usize {
             debug!("failed to read message: message too big");
 
-            return SessionReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+            return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
         }
 
         if self.buffer.ends_with(Self::DATA_END) {
             let Some(mut message) = self.current_message.take() else {
-                return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
             };
 
             trace!(
                 "received message {:?} ({} bytes)",
-                message.get_id(),
+                message.id(),
                 self.buffer.len()
             );
             let response_message =
-                Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.get_id().to_string());
+                Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.id().to_string());
 
-            let mut new_buffer = Vec::new();
-            std::mem::swap(&mut self.buffer, &mut new_buffer);
-
-            message.set_raw_data(new_buffer);
+            message.raw_data = Some(std::mem::take(&mut self.buffer));
 
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
 
-                return SessionReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+                return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
             }
 
             self.state = SessionState::Authenticated;
 
-            return SessionReply::ReplyAndContinue(250, response_message);
+            return DataReply::ReplyAndContinue(250, response_message);
         }
 
-        SessionReply::ContinueIngest
+        DataReply::ContinueIngest
     }
 }

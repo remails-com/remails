@@ -1,5 +1,5 @@
 use crate::{
-    models::{Message, SmtmCredential},
+    models::{Message, SmtpCredential},
     run_api_server, run_mta,
 };
 use http::{HeaderMap, header, header::CONTENT_TYPE};
@@ -51,7 +51,7 @@ async fn integration_test(pool: PgPool) {
 
     let _drop_guard = token.drop_guard();
 
-    let user1: SmtmCredential = client
+    let user1: SmtpCredential = client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -69,7 +69,7 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let user2: SmtmCredential = client
+    let user2: SmtpCredential = client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -87,7 +87,7 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let users: Vec<SmtmCredential> = client
+    let users: Vec<SmtpCredential> = client
         .get(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -161,7 +161,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", user1.get_id().to_string())
+        .header("X-Test-Login", user1.id().to_string())
         .send()
         .await
         .unwrap()
@@ -173,7 +173,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", user2.get_id().to_string())
+        .header("X-Test-Login", user2.id().to_string())
         .send()
         .await
         .unwrap()
