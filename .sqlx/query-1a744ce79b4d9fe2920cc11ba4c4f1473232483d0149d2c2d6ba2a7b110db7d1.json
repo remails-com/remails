@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.smtp_credential_id,\n                m.organization_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                NULL::bytea AS \"raw_data\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n                JOIN organizations o ON o.id = m.organization_id\n                LEFT JOIN api_users_organizations au ON au.organization_id = o.id\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND ($4::uuid IS NULL OR au.api_user_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.smtp_credential_id,\n                m.organization_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n                JOIN organizations o ON o.id = m.organization_id\n                LEFT JOIN api_users_organizations au ON au.organization_id = o.id\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND ($4::uuid IS NULL OR au.api_user_id = $4)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 6,
-        "name": "raw_data",
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
@@ -103,5 +103,5 @@
       false
     ]
   },
-  "hash": "6ea4f6ef8af0693a9cbd8db4734708fe4fac70852608df7f52078e90127ab5e4"
+  "hash": "1a744ce79b4d9fe2920cc11ba4c4f1473232483d0149d2c2d6ba2a7b110db7d1"
 }

@@ -102,7 +102,7 @@ CREATE TABLE messages
     status             message_status           NOT NULL,
     from_email         varchar                  NOT NULL,
     recipients         varchar[]                NOT NULL,
-    raw_data           bytea,
+    raw_data           bytea                    NOT NULL,
     message_data       jsonb,
     created_at         timestamp with time zone NOT NULL DEFAULT now(),
     updated_at         timestamp with time zone NOT NULL DEFAULT now()
