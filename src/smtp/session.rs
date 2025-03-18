@@ -24,7 +24,6 @@ pub struct SmtpSession {
     state: SessionState,
     authenticated_credential: Option<SmtpCredential>,
     current_message: Option<Message>,
-    buffer: Vec<u8>,
 }
 
 pub enum SessionReply {
@@ -70,7 +69,6 @@ impl SmtpSession {
             state: SessionState::Accepting,
             current_message: None,
             authenticated_credential: None,
-            buffer: Vec::new(),
         }
     }
 
@@ -271,28 +269,35 @@ impl SmtpSession {
             return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
         }
 
-        self.buffer.extend_from_slice(data);
+        // NOTE: 'self.message' and 'self.state' are most likely "in sync"
+        let Some(Message {
+            raw_data: buffer, ..
+        }) = self.current_message.as_mut()
+        else {
+            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+        };
 
-        if self.buffer.len() > Self::MAX_BODY_SIZE as usize {
+        buffer.extend_from_slice(data);
+
+        if buffer.len() > Self::MAX_BODY_SIZE as usize {
             debug!("failed to read message: message too big");
 
             return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
         }
 
-        if self.buffer.ends_with(Self::DATA_END) {
-            let Some(mut message) = self.current_message.take() else {
+        if buffer.ends_with(Self::DATA_END) {
+            let Some(message) = self.current_message.take() else {
                 return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
             };
 
             trace!(
                 "received message {:?} ({} bytes)",
                 message.id(),
-                self.buffer.len()
+                message.raw_data.len()
             );
+
             let response_message =
                 Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.id().to_string());
-
-            message.raw_data = std::mem::take(&mut self.buffer);
 
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
