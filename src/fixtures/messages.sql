@@ -5,5 +5,5 @@ VALUES ('e165562a-fb6d-423b-b318-fd26f4610634',
         'processing',
         'email@test-org-1.com',
         '{"info@recipient1.com", "info@recipient1.com"}',
-        null,
-        null);
+        '',
+        'null'::jsonb);
