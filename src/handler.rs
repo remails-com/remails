@@ -57,7 +57,7 @@ impl Handler {
         let json_message_data = {
             // parse and save message contents
             let message_data = MessageParser::default()
-                .parse(message.raw_data.as_deref().unwrap_or_default())
+                .parse(&message.raw_data)
                 .ok_or(HandlerError::FailedParsingMessage)?;
 
             serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
