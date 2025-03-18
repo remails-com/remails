@@ -23,7 +23,7 @@ pub struct Message {
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
-    pub raw_data: Option<Vec<u8>>,
+    pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -39,7 +39,7 @@ impl Message {
             status: MessageStatus::Processing,
             from_email,
             recipients: Vec::new(),
-            raw_data: None,
+            raw_data: Vec::new(),
             message_data: serde_json::Value::Null,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -59,18 +59,18 @@ impl Message {
         for recipient in value.rcpt_to.iter() {
             message.recipients.push(recipient.email.parse().unwrap());
         }
-        message.raw_data = Some(value.into_message().unwrap().body.to_vec());
+        message.raw_data = value.into_message().unwrap().body.to_vec();
 
         message
     }
 }
 
-impl<'x> IntoMessage<'x> for Message {
-    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'x>> {
+impl<'a> IntoMessage<'a> for Message {
+    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'a>> {
         Ok(mail_send::smtp::message::Message {
             mail_from: self.from_email.into(),
             rcpt_to: self.recipients.into_iter().map(|m| m.into()).collect(),
-            body: self.raw_data.unwrap_or_default().into(),
+            body: self.raw_data.into(),
         })
     }
 }
@@ -178,7 +178,7 @@ impl MessageRepository {
                 status as "status: _",
                 from_email,
                 recipients,
-                NULL::bytea AS "raw_data",
+                raw_data,
                 NULL::jsonb AS "message_data",
                 created_at,
                 updated_at
