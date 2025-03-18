@@ -292,10 +292,7 @@ impl SmtpSession {
             let response_message =
                 Self::RESPONSE_MESSAGE_ACCEPTED.replace("[id]", &message.id().to_string());
 
-            let mut new_buffer = Vec::new();
-            std::mem::swap(&mut self.buffer, &mut new_buffer);
-
-            message.raw_data = Some(new_buffer);
+            message.raw_data = Some(std::mem::take(&mut self.buffer));
 
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
