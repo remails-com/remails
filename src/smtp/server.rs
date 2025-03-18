@@ -13,7 +13,7 @@ use tracing::{error, info};
 
 use crate::{
     models::{Message, SmtpCredentialRepository},
-    smtp::smtp_connection::{self, ConnectionError},
+    smtp::connection::{self, ConnectionError},
 };
 
 #[derive(Debug, Error)]
@@ -111,7 +111,7 @@ impl SmtpServer {
                             tokio::spawn(async move {
                                 let mut tls_stream = acceptor.accept(stream).await.map_err(ConnectionError::Accept)?;
 
-                                smtp_connection::handle(&mut tls_stream, SERVER_NAME, peer_addr, queue, user_repository).await?;
+                                connection::handle(&mut tls_stream, SERVER_NAME, peer_addr, queue, user_repository).await?;
 
                                 tls_stream.shutdown().await.map_err(ConnectionError::Write)?;
                                 Ok::<_,ConnectionError>(())

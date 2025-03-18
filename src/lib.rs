@@ -1,7 +1,7 @@
 use api::ApiServer;
 use handler::Handler;
 use models::{Message, SmtpCredentialRepository};
-use smtp::smtp_server::SmtpServer;
+use smtp::server::SmtpServer;
 use sqlx::PgPool;
 use std::net::SocketAddrV4;
 use tokio::{signal, sync::mpsc};

@@ -1,12 +1,12 @@
-mod smtp_connection;
-pub mod smtp_server;
-mod smtp_session;
+mod connection;
+pub mod server;
+mod session;
 
 #[cfg(test)]
 mod test {
     use crate::{
         models::{Message, SmtpCredential, SmtpCredentialRepository},
-        smtp::smtp_server::SmtpServer,
+        smtp::server::SmtpServer,
         test::random_port,
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};

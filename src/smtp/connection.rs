@@ -9,10 +9,8 @@ use tracing::{debug, info, trace};
 
 use crate::{
     models::{Message, SmtpCredentialRepository},
-    smtp::smtp_session::{DataReply, SessionReply},
+    smtp::session::{DataReply, SessionReply, SmtpSession},
 };
-
-use super::smtp_session::SmtpSession;
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
