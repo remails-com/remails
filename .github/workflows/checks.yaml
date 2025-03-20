@@ -1,5 +1,4 @@
 name: Checks
-run-name: "Check branch ${{ github.ref_name }}"
 
 on:
   pull_request:

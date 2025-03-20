@@ -20,21 +20,21 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Create version tag
         shell: bash
-        run: echo "tag=$(git show -s --format="%ct-%h" $GITHUB_SHA)" >> $GITHUB_ENV
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Login to Scaleway Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: rg.nl-ams.scw.cloud/remails-development
-          username: nologin
-          password: ${{ secrets.SCW_SECRET_KEY }}
-      - name: Pull from GitHub and Push to Scaleway
+        run: echo "TAG=$(git show -s --format="%ct-%h" $GITHUB_SHA)" >> $GITHUB_ENV
+      - name: Setup SSH to VPS
         run: |
-          docker pull ghcr.io/tweedegolf/remails/app:${{ env.tag }}
-          docker tag ghcr.io/tweedegolf/remails/app:${{ env.tag }} rg.nl-ams.scw.cloud/remails-development/app:${{ env.tag }}
-          docker push rg.nl-ams.scw.cloud/remails-development/app:${{ env.tag }}
+          mkdir ~/.ssh
+          touch ~/.ssh/known_hosts
+          touch ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ vars.KNOWN_HOSTS_ENTRY }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.PRIV_SSH_KEY }}" > ~/.ssh/id_ed25519
+      - name: Copy docker compose to Scaleway VPS
+        run: scp ./docker-compose.vps.yml root@${{ vars.VPS_IP }}:app/docker-compose.yml
+      - name: Docker login on VPS
+        run: ssh root@${{ vars.VPS_IP }} docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker compose up on VPS
+        run: ssh root@${{ vars.VPS_IP }} TAG=${{ env.TAG }} docker compose --project-directory app up --wait
+      - name: Docker logout on VPS
+        run: ssh root@${{ vars.VPS_IP }} docker logout ghcr.io
+        continue-on-error: true
