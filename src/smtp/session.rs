@@ -1,5 +1,8 @@
 use mail_parser::decoders::base64::base64_decode;
-use smtp_proto::*;
+use smtp_proto::{
+    AUTH_LOGIN, AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES,
+    EXT_SMTP_UTF8, EhloResponse, Request,
+};
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
@@ -117,6 +120,7 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Helo { host: _ } => {
+                //TODO
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Mail { from } => {
@@ -250,10 +254,12 @@ impl SmtpSession {
                 SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
             }
             Request::Rset => {
+                //TODO
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Quit => SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into()),
             Request::Vrfy { value: _ } => {
+                //TODO
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Expn { value: _ } => {
