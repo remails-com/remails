@@ -149,11 +149,14 @@ pub(super) async fn authorize(
     cookie_storage: CookieStorage,
 ) -> Result<Response, Error> {
     let jar = cookie_storage.jar;
+    
+    dbg!(query.code.clone());
+    dbg!(std::env::var("OAUTH_CLIENT_SECRET"));
 
     // Exchange the authorization code for an access token
-    let token = service
+    let token = dbg!(service
         .oauth_client
-        .exchange_code(AuthorizationCode::new(query.code.clone()))
+        .exchange_code(AuthorizationCode::new(query.code.clone())))
         .request_async(&reqwest::Client::new())
         .await
         .map_err(|e| Error::OauthToken(e.to_string()))?;

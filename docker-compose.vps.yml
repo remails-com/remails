@@ -5,21 +5,35 @@ services:
       POSTGRES_USER: remails
       POSTGRES_DB: remails
       POSTGRES_HOST_AUTH_METHOD: trust
-    ports: [ '5432:5432' ]
 
   mailcrab:
     image: marlonb/mailcrab:latest
-    ports: [ '1080:1080', '1025:1025' ]
+    ports: [ '1025:1025' ]
 
   remails:
     image: ghcr.io/tweedegolf/remails/app:${TAG}
-    ports: [ '3000:3000', '3025:3025' ]
+    ports: [ '3025:3025' ]
     volumes:
       - "./cert.pem:/home/nonroot/cert.pem"
       - "./key.pem:/home/nonroot/key.pem"
     environment:
       DATABASE_URL: "postgresql://remails:remails@psql:5432/remails"
-      REDIRECT_URL: "http://remails-dev:3000/api/authorize"
-      SESSION_KEY: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
-      OAUTH_CLIENT_ID: "Ov23livRESUJK4twobxj"
-      OAUTH_CLIENT_SECRET: "5ce7b559ede6e0744eee42bbcee5c838ab539cae"
+      REDIRECT_URL: "https://remails-dev.tweedegolf-test.nl/api/authorize"
+      SESSION_KEY: ${SESSION_KEY}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+
+  caddy:
+    image: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy:/etc/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
