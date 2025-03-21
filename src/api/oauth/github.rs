@@ -149,18 +149,7 @@ impl GithubOauthService {
         let client_secret = env::var("OAUTH_CLIENT_SECRET")
             .map_err(|_| Error::MissingEnvironmentVariable("OAUTH_CLIENT_SECRET"))?;
 
-        let oauth_client: Client<
-            BasicErrorResponse,
-            BasicTokenResponse,
-            BasicTokenIntrospectionResponse,
-            StandardRevocableToken,
-            BasicRevocationErrorResponse,
-            EndpointSet,
-            EndpointNotSet,
-            EndpointNotSet,
-            EndpointNotSet,
-            EndpointSet,
-        > = BasicClient::new(ClientId::new(client_id))
+        let oauth_client = BasicClient::new(ClientId::new(client_id))
             .set_client_secret(ClientSecret::new(client_secret))
             .set_auth_uri(AuthUrl::from_url(config.auth_url.clone()))
             .set_token_uri(TokenUrl::from_url(config.token_url.clone()))

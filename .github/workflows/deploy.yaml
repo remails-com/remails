@@ -1,0 +1,41 @@
+name: Deploy to Scaleway
+run-name: "Deploy ${{ github.ref_name }} to Scaleway"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: read
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Scaleway
+    runs-on: ubuntu-latest
+    environment: Scaleway
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Create version tag
+        shell: bash
+        run: echo "TAG=$(git show -s --format="%ct-%h" $GITHUB_SHA)" >> $GITHUB_ENV
+      - name: Setup SSH to VPS
+        run: |
+          mkdir ~/.ssh
+          touch ~/.ssh/known_hosts
+          touch ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ vars.KNOWN_HOSTS_ENTRY }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.PRIV_SSH_KEY }}" > ~/.ssh/id_ed25519
+      - name: Copy docker compose to VPS
+        run: scp ./docker-compose.vps.yml root@${{ vars.VPS_IP }}:app/docker-compose.yml
+      - name: Copy Caddyfile to VPS
+        run: scp ./Caddyfile root@${{ vars.VPS_IP }}:app/caddy
+      - name: Docker login on VPS
+        run: ssh root@${{ vars.VPS_IP }} docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker compose down on VPS
+        run: ssh root@${{ vars.VPS_IP }} docker compose --project-directory app down
+      - name: Docker compose up on VPS
+        run: ssh root@${{ vars.VPS_IP }} TAG="${{ env.TAG }}" DATABASE_URL="${{ secrets.DATABASE_URL }}" SESSION_KEY="${{ secrets.SESSION_KEY }}" OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" OAUTH_CLIENT_ID="${{ vars.OAUTH_CLIENT_ID }}" docker compose --project-directory app up --wait
+      - name: Docker logout on VPS
+        run: ssh root@${{ vars.VPS_IP }} docker logout ghcr.io
+        continue-on-error: true

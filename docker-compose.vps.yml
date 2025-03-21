@@ -1,0 +1,32 @@
+services:
+  mailcrab:
+    image: marlonb/mailcrab:latest
+    ports: [ '1025:1025' ]
+
+  remails:
+    image: ghcr.io/tweedegolf/remails/app:${TAG}
+    ports: [ '3025:3025' ]
+    volumes:
+      - "./cert.pem:/home/nonroot/cert.pem:ro"
+      - "./key.pem:/home/nonroot/key.pem:ro"
+    environment:
+      DATABASE_URL: "${DATABASE_URL}"
+      REDIRECT_URL: "https://remails-dev.tweedegolf-test.nl/api/authorize"
+      SESSION_KEY: "${SESSION_KEY}"
+      OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
+      OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
+
+  caddy:
+    image: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy:/etc/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

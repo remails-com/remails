@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions: 
+  contents: read
+
 jobs:
   frontend:
     name: Check and build frontend
@@ -132,7 +135,7 @@ jobs:
 
   clippy:
     name: Clippy
-    needs: [frontend, format]
+    needs: [ frontend, format ]
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
@@ -158,8 +161,8 @@ jobs:
         run: cargo clippy --no-deps --all-targets --all-features -- --deny warnings
 
   deny:
-      name: Check dependencies
-      runs-on: ubuntu-latest
-      steps:
+    name: Check dependencies
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1
