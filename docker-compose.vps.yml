@@ -1,11 +1,4 @@
 services:
-  psql:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: remails
-      POSTGRES_DB: remails
-      POSTGRES_HOST_AUTH_METHOD: trust
-
   mailcrab:
     image: marlonb/mailcrab:latest
     ports: [ '1025:1025' ]
@@ -17,7 +10,7 @@ services:
       - "./cert.pem:/home/nonroot/cert.pem:ro"
       - "./key.pem:/home/nonroot/key.pem:ro"
     environment:
-      DATABASE_URL: "postgresql://remails:remails@psql:5432/remails"
+      DATABASE_URL: "${DATABASE_URL}"
       REDIRECT_URL: "https://remails-dev.tweedegolf-test.nl/api/authorize"
       SESSION_KEY: "${SESSION_KEY}"
       OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"

@@ -38,7 +38,7 @@ jobs:
       - name: Docker compose down on VPS
         run: ssh root@${{ vars.VPS_IP }} docker compose --project-directory app down
       - name: Docker compose up on VPS
-        run: ssh root@${{ vars.VPS_IP }} TAG="${{ env.TAG }}" SESSION_KEY="${{ secrets.SESSION_KEY }}" OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" OAUTH_CLIENT_ID="${{ vars.OAUTH_CLIENT_ID }}" docker compose --project-directory app up --wait
+        run: ssh root@${{ vars.VPS_IP }} TAG="${{ env.TAG }}" DATABASE_URL="${{ secrets.DATABASE_URL }}" SESSION_KEY="${{ secrets.SESSION_KEY }}" OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" OAUTH_CLIENT_ID="${{ vars.OAUTH_CLIENT_ID }}" docker compose --project-directory app up --wait
       - name: Docker logout on VPS
         run: ssh root@${{ vars.VPS_IP }} docker logout ghcr.io
         continue-on-error: true
