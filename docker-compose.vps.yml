@@ -1,7 +1,6 @@
 services:
   mailcrab:
     image: marlonb/mailcrab:latest
-    ports: [ '1025:1025' ]
 
   remails:
     image: ghcr.io/tweedegolf/remails/app:${TAG}
@@ -10,6 +9,11 @@ services:
       - "./cert.pem:/home/nonroot/cert.pem:ro"
       - "./key.pem:/home/nonroot/key.pem:ro"
     environment:
+      TEST_SMTP_ADDR: "smtp://mailcrab:1025"
+      SMTP_LISTEN_ADDR: "0.0.0.0:3025"
+      SMTP_SERVER_NAME: "remails-dev.tweedegolf-test.nl"
+      SMTP_CERT_FILE: "/home/nonroot/cert.pem"
+      SMTP_KEY_FILE: "/home/nonroot/key.pem"
       DATABASE_URL: "${DATABASE_URL}"
       REDIRECT_URL: "https://remails-dev.tweedegolf-test.nl/api/authorize"
       SESSION_KEY: "${SESSION_KEY}"

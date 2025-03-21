@@ -1,5 +1,5 @@
 use anyhow::Context;
-use remails::{run_api_server, run_mta, shutdown_signal};
+use remails::{HandlerConfig, SmtpConfig, run_api_server, run_mta, shutdown_signal};
 use sqlx::postgres::PgPoolOptions;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -15,13 +15,8 @@ async fn main() -> anyhow::Result<()> {
 
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!(
-                    "{}=trace,tower_http=debug,axum=trace",
-                    env!("CARGO_CRATE_NAME")
-                )
-                .into()
-            }),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or("remails=trace,tower_http=debug,axum=trace".parse().unwrap()),
         )
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
@@ -34,12 +29,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3025);
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
-
+    let smtp_config = SmtpConfig::default();
+    let handler_config = HandlerConfig::default();
     let shutdown = CancellationToken::new();
 
-    run_mta(pool.clone(), smtp_socket, shutdown.clone()).await;
+    run_mta(pool.clone(), smtp_config, handler_config, shutdown.clone()).await;
     run_api_server(pool, http_socket, shutdown.clone(), true).await;
 
     shutdown_signal(shutdown.clone()).await;

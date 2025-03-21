@@ -1,6 +1,8 @@
 use crate::{
+    handler::HandlerConfig,
     models::{Message, SmtpCredential},
     run_api_server, run_mta,
+    smtp::SmtpConfig,
 };
 use http::{HeaderMap, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
@@ -36,6 +38,7 @@ async fn integration_test(pool: PgPool) {
         .unwrap();
 
     let smtp_port = random_port();
+    let mailcrab_random_port = random_port();
     let http_port = random_port();
 
     let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
@@ -44,9 +47,24 @@ async fn integration_test(pool: PgPool) {
     let TestMailServerHandle {
         token,
         rx: mut mailcrab_rx,
-    } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
+    } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_random_port).await;
 
-    run_mta(pool.clone(), smtp_socket, token.clone()).await;
+    let smtp_config = SmtpConfig {
+        listen_addr: smtp_socket.into(),
+        server_name: "localhost".to_string(),
+        cert_file: "cert.pem".into(),
+        key_file: "key.pem".into(),
+    };
+
+    let handler_config = HandlerConfig {
+        test_smtp_addr: Some(
+            format!("smtp://localhost:{mailcrab_random_port}")
+                .parse()
+                .unwrap(),
+        ),
+    };
+
+    run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;
     run_api_server(pool, http_socket, token.clone(), false).await;
 
     let _drop_guard = token.drop_guard();
@@ -131,7 +149,7 @@ async fn integration_test(pool: PgPool) {
     }
 
     let message = MessageBuilder::new()
-        .from(("Eddy", "eddy@example.com" ))
+        .from(("Eddy", "eddy@example.com"))
         .to(vec![
             ("John", "john@example.com"),
         ])

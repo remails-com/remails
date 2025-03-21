@@ -4,33 +4,35 @@ use handler::Handler;
 use models::SmtpCredentialRepository;
 use smtp::server::SmtpServer;
 use sqlx::PgPool;
-use std::net::SocketAddrV4;
+use std::{net::SocketAddrV4, sync::Arc};
 use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
 pub mod api;
 mod handler;
 mod smtp;
+pub use crate::handler::HandlerConfig;
+pub use smtp::SmtpConfig;
 
 mod models;
 #[cfg(test)]
 mod test;
 
-pub async fn run_mta(pool: PgPool, smtp_socket: SocketAddrV4, shutdown: CancellationToken) {
+pub async fn run_mta(
+    pool: PgPool,
+    smtp_config: SmtpConfig,
+    handler_config: HandlerConfig,
+    shutdown: CancellationToken,
+) {
+    let smtp_config = Arc::new(smtp_config);
+    let handler_config = Arc::new(handler_config);
     let user_repository = SmtpCredentialRepository::new(pool.clone());
 
     let (queue_sender, queue_receiver) = mpsc::channel::<NewMessage>(100);
 
-    let smtp_server = SmtpServer::new(
-        smtp_socket,
-        "cert.pem".into(),
-        "key.pem".into(),
-        user_repository,
-        queue_sender,
-        shutdown.clone(),
-    );
+    let smtp_server = SmtpServer::new(smtp_config, user_repository, queue_sender, shutdown.clone());
 
-    let message_handler = Handler::new(pool.clone(), shutdown);
+    let message_handler = Handler::new(pool.clone(), handler_config, shutdown);
 
     smtp_server.spawn();
     message_handler.spawn(queue_receiver);

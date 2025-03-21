@@ -1,17 +1,55 @@
+use std::path::PathBuf;
+
 mod connection;
 pub mod server;
 mod session;
+
+pub struct SmtpConfig {
+    pub listen_addr: core::net::SocketAddr,
+    pub server_name: String,
+    pub cert_file: PathBuf,
+    pub key_file: PathBuf,
+}
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        let listen_addr = std::env::var("SMTP_LISTEN_ADDR")
+            .expect("Missing SMTP_LISTEN_ADDR environment variable")
+            .parse()
+            .expect("Invalid SMTP_LISTEN_ADDR");
+        let server_name = std::env::var("SMTP_SERVER_NAME")
+            .expect("Missing SMTP_SERVER_NAME environment variable");
+        let cert_file = std::env::var("SMTP_CERT_FILE")
+            .expect("Missing SMTP_CERT_FILE environment variable")
+            .parse()
+            .expect("Invalid SMTP_CERT_FILE path");
+        let key_file = std::env::var("SMTP_KEY_FILE")
+            .expect("Missing SMTP_KEY_FILE environment variable")
+            .parse()
+            .expect("Invalid SMTP_KEY_FILE path");
+
+        Self {
+            listen_addr,
+            server_name,
+            cert_file,
+            key_file,
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {
     use crate::{
         models::{NewMessage, SmtpCredential, SmtpCredentialRepository},
-        smtp::server::SmtpServer,
+        smtp::{SmtpConfig, server::SmtpServer},
         test::random_port,
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
-    use std::net::{Ipv4Addr, SocketAddrV4};
+    use std::{
+        net::{Ipv4Addr, SocketAddrV4},
+        sync::Arc,
+    };
     use tokio::{sync::mpsc, task::JoinHandle};
     use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
@@ -36,16 +74,15 @@ mod test {
         user_repository.create(&credential).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
+        let config = Arc::new(SmtpConfig {
+            listen_addr: socket.into(),
+            server_name: "localhost".to_string(),
+            cert_file: "cert.pem".into(),
+            key_file: "key.pem".into(),
+        });
         let shutdown = CancellationToken::new();
         let (queue_sender, receiver) = mpsc::channel::<NewMessage>(100);
-        let server = SmtpServer::new(
-            socket,
-            "cert.pem".into(),
-            "key.pem".into(),
-            user_repository,
-            queue_sender,
-            shutdown.clone(),
-        );
+        let server = SmtpServer::new(config, user_repository, queue_sender, shutdown.clone());
 
         let server_handle = tokio::spawn(async move {
             server.serve().await.unwrap();
