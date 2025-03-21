@@ -14,14 +14,14 @@ services:
     image: ghcr.io/tweedegolf/remails/app:${TAG}
     ports: [ '3025:3025' ]
     volumes:
-      - "./cert.pem:/home/nonroot/cert.pem"
-      - "./key.pem:/home/nonroot/key.pem"
+      - "./cert.pem:/home/nonroot/cert.pem:ro"
+      - "./key.pem:/home/nonroot/key.pem:ro"
     environment:
       DATABASE_URL: "postgresql://remails:remails@psql:5432/remails"
       REDIRECT_URL: "https://remails-dev.tweedegolf-test.nl/api/authorize"
-      SESSION_KEY: ${SESSION_KEY}
-      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
-      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      SESSION_KEY: "${SESSION_KEY}"
+      OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
+      OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
 
   caddy:
     image: caddy

@@ -22,6 +22,7 @@ use oauth2::{AuthorizationCode, CsrfToken, Scope, TokenResponse};
 use reqwest::redirect::Policy;
 use serde::Deserialize;
 use std::{fmt::Debug, time::Duration};
+use tracing::error;
 
 /// Handles the login request.
 /// Generates the authorization URL and CSRF token, sets the CSRF token as a cookie,
@@ -149,17 +150,25 @@ pub(super) async fn authorize(
     cookie_storage: CookieStorage,
 ) -> Result<Response, Error> {
     let jar = cookie_storage.jar;
-    
-    dbg!(query.code.clone());
-    dbg!(std::env::var("OAUTH_CLIENT_SECRET"));
+
+    // Create a new HTTP client
+    let client = reqwest::Client::builder()
+        .use_rustls_tls()
+        .redirect(Policy::none())
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|e| Error::FetchUser(e.to_string()))?;
 
     // Exchange the authorization code for an access token
-    let token = dbg!(service
+    let token = service
         .oauth_client
-        .exchange_code(AuthorizationCode::new(query.code.clone())))
-        .request_async(&reqwest::Client::new())
+        .exchange_code(AuthorizationCode::new(query.code.clone()))
+        .request_async(&client)
         .await
-        .map_err(|e| Error::OauthToken(e.to_string()))?;
+        .map_err(|e| {
+            error!("OAuth flow with GitHub failed. Cannot exchange authorization code: {e:?}");
+            Error::OauthToken(e.to_string())
+        })?;
 
     // Get the CSRF token cookie from the cookie jar
     let mut csrf_cookie = jar.get(CSRF_COOKIE_NAME).ok_or(Error::MissingCSRFCookie)?;
@@ -177,13 +186,6 @@ pub(super) async fn authorize(
     if query.state != *csrf_token.secret() {
         return Err(Error::CSRFTokenMismatch);
     }
-
-    // Create a new HTTP client
-    let client = reqwest::Client::builder()
-        .redirect(Policy::none())
-        .timeout(Duration::from_secs(2))
-        .build()
-        .map_err(|e| Error::FetchUser(e.to_string()))?;
 
     // Fetch user data from the GitHub API
     let user_data: GitHubUser = client
