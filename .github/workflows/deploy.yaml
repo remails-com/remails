@@ -3,9 +3,6 @@ run-name: "Deploy ${{ github.ref_name }} to Scaleway"
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 45-deployment
 
 permissions:
   packages: read
