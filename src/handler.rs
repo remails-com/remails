@@ -1,14 +1,14 @@
+use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
-
-use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+use url::Url;
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -24,13 +24,28 @@ pub enum HandlerError {
     DeliverMessage(mail_send::Error),
 }
 
+pub struct HandlerConfig {
+    pub test_smtp_addr: Option<Url>,
+}
+
+impl Default for HandlerConfig {
+    fn default() -> Self {
+        let test_smtp_addr = std::env::var("TEST_SMTP_ADDR")
+            .ok()
+            .map(|s| Url::parse(&s).expect("Failed to parse TEST_SMTP_ADDR environment variable"));
+
+        Self { test_smtp_addr }
+    }
+}
+
 pub struct Handler {
     message_repository: MessageRepository,
     shutdown: CancellationToken,
+    config: Arc<HandlerConfig>,
 }
 
 impl Handler {
-    pub fn new(pool: PgPool, shutdown: CancellationToken) -> Self {
+    pub fn new(pool: PgPool, config: Arc<HandlerConfig>, shutdown: CancellationToken) -> Self {
         if CryptoProvider::get_default().is_none() {
             CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
                 .expect("Failed to install crypto provider");
@@ -38,6 +53,7 @@ impl Handler {
         Self {
             message_repository: MessageRepository::new(pool),
             shutdown,
+            config,
         }
     }
 
@@ -87,7 +103,18 @@ impl Handler {
                 }
             };
 
-            let client = SmtpClientBuilder::new("localhost", 1025);
+            let (hostname, port) = &self
+                .config
+                .as_ref()
+                .test_smtp_addr
+                .as_ref()
+                .and_then(|c| c.domain().zip(c.port()))
+                .unwrap_or_else(|| {
+                    warn!("No TEST_SMTP_ADDR found. Using localhost:1025; actual mail transfer is not supported yet.");
+                    ("localhost", 1025)
+                });
+
+            let client = SmtpClientBuilder::new(hostname, *port);
 
             let mut client = match client.connect_plain().await {
                 Ok(client) => {
@@ -167,6 +194,7 @@ mod test {
 
     use super::*;
 
+    use crate::test::random_port;
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
     use serial_test::serial;
@@ -176,8 +204,9 @@ mod test {
     #[traced_test]
     #[serial]
     async fn test_handle_message(pool: PgPool) {
+        let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), 1025).await;
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
         let message: mail_send::smtp::message::Message = MessageBuilder::new()
@@ -203,7 +232,10 @@ mod test {
             .unwrap();
 
         let message = NewMessage::from_builder_message(message, user.id());
-        let handler = Handler::new(pool, CancellationToken::new());
+        let config = HandlerConfig {
+            test_smtp_addr: Some(format!("smtp://localhost:{mailcrab_port}").parse().unwrap()),
+        };
+        let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
         let message = handler.handle_message(message).await.unwrap();
         handler.send_message(message).await.unwrap();

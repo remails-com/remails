@@ -1,4 +1,4 @@
-use std::{fs::File, io, net::SocketAddrV4, path::PathBuf, sync::Arc};
+use std::{fs::File, io, sync::Arc};
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
@@ -13,7 +13,10 @@ use tracing::{error, info};
 
 use crate::{
     models::{NewMessage, SmtpCredentialRepository},
-    smtp::connection::{self, ConnectionError},
+    smtp::{
+        SmtpConfig,
+        connection::{self, ConnectionError},
+    },
 };
 
 #[derive(Debug, Error)]
@@ -31,42 +34,36 @@ pub enum SmtpServerError {
 }
 
 pub struct SmtpServer {
-    address: SocketAddrV4,
     user_repository: SmtpCredentialRepository,
     queue: Sender<NewMessage>,
     shutdown: CancellationToken,
-    cert: PathBuf,
-    key: PathBuf,
+    config: Arc<SmtpConfig>,
 }
-
-const SERVER_NAME: &str = "localhost";
 
 impl SmtpServer {
     pub fn new(
-        address: SocketAddrV4,
-        cert: PathBuf,
-        key: PathBuf,
+        config: Arc<SmtpConfig>,
         user_repository: SmtpCredentialRepository,
         queue: Sender<NewMessage>,
         shutdown: CancellationToken,
-    ) -> Self {
-        Self {
-            address,
+    ) -> SmtpServer {
+        SmtpServer {
+            config,
             user_repository,
             queue,
             shutdown,
-            cert,
-            key,
         }
     }
 
     async fn load_tls_config(
         &self,
     ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), SmtpServerError> {
-        let mut cert_reader =
-            io::BufReader::new(File::open(&self.cert).map_err(SmtpServerError::Certificate)?);
-        let mut key_reader =
-            io::BufReader::new(File::open(&self.key).map_err(SmtpServerError::PrivateKey)?);
+        let mut cert_reader = io::BufReader::new(
+            File::open(&self.config.cert_file).map_err(SmtpServerError::Certificate)?,
+        );
+        let mut key_reader = io::BufReader::new(
+            File::open(&self.config.key_file).map_err(SmtpServerError::PrivateKey)?,
+        );
 
         let certs = rustls_pemfile::certs(&mut cert_reader)
             .collect::<Result<Vec<_>, io::Error>>()
@@ -86,13 +83,13 @@ impl SmtpServer {
             .with_single_cert(certs, key)
             .map_err(SmtpServerError::Tls)?;
 
-        let listener = TcpListener::bind(&self.address)
+        let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
 
         let acceptor = TlsAcceptor::from(Arc::new(config));
 
-        info!("smtp server on {}:{}", self.address, self.address.port());
+        info!("smtp server on {}", self.config.listen_addr);
 
         loop {
             select! {
@@ -108,10 +105,11 @@ impl SmtpServer {
                             let acceptor = acceptor.clone();
                             let user_repository = self.user_repository.clone();
                             let queue = self.queue.clone();
+                            let server_name =  self.config.server_name.clone();
                             tokio::spawn(async move {
                                 let mut tls_stream = acceptor.accept(stream).await.map_err(ConnectionError::Accept)?;
 
-                                connection::handle(&mut tls_stream, SERVER_NAME, peer_addr, queue, user_repository).await?;
+                                connection::handle(&mut tls_stream, server_name.as_str(), peer_addr, queue, user_repository).await?;
 
                                 tls_stream.shutdown().await.map_err(ConnectionError::Write)?;
                                 Ok::<_,ConnectionError>(())

@@ -1,11 +1,13 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct SmtpCredential {
     id: Uuid,
     username: String,
+    #[serde(skip, default)]
     password_hash: String,
     domain_id: Uuid,
     created_at: DateTime<Utc>,
