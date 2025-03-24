@@ -13,7 +13,6 @@ use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
 enum SessionState {
     Accepting,
     Ready,
-    Authenticated,
     FromReceived,
     RecipientsReceived,
     IngestingData,
@@ -126,11 +125,8 @@ impl SmtpSession {
             Request::Mail { from } => {
                 debug!("received MAIL FROM: {}", from.address);
 
-                if self.state != SessionState::Authenticated {
-                    return SessionReply::ReplyAndContinue(
-                        530,
-                        Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
-                    );
+                if self.state != SessionState::Ready {
+                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
                 }
 
                 let Some(credential) = self.authenticated_credential.as_ref() else {
@@ -230,7 +226,6 @@ impl SmtpSession {
                     }
 
                     self.authenticated_credential = Some(credential);
-                    self.state = SessionState::Authenticated;
 
                     SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())
                 } else {
@@ -308,7 +303,7 @@ impl SmtpSession {
                 return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
             }
 
-            self.state = SessionState::Authenticated;
+            self.state = SessionState::Ready;
 
             return DataReply::ReplyAndContinue(250, Self::RESPONSE_MESSAGE_ACCEPTED.into());
         }
