@@ -32,9 +32,9 @@ pub enum DataReply {
     ContinueIngest,
 }
 
-struct AttemptedAuth {
-    username: String,
-    password: String,
+struct AttemptedAuth<'a> {
+    username: &'a str,
+    password: &'a str,
 }
 
 enum AttemptedAuthError {
@@ -252,12 +252,8 @@ impl SmtpSession {
             return Err(AttemptedAuthError::SyntaxError);
         }
 
-        let username = std::str::from_utf8(username)
-            .map_err(|_| AttemptedAuthError::Utf8Error)?
-            .to_owned();
-        let password = std::str::from_utf8(password)
-            .map_err(|_| AttemptedAuthError::Utf8Error)?
-            .to_owned();
+        let username = std::str::from_utf8(username).map_err(|_| AttemptedAuthError::Utf8Error)?;
+        let password = std::str::from_utf8(password).map_err(|_| AttemptedAuthError::Utf8Error)?;
 
         Ok(AttemptedAuth { username, password })
     }
@@ -267,8 +263,8 @@ impl SmtpSession {
             return (501, Self::RESPONSE_SYNTAX_ERROR.into());
         };
 
-        match self.smtp_credentials.find_by_username(&username).await {
-            Ok(Some(credential)) if credential.verify_password(&password) => {
+        match self.smtp_credentials.find_by_username(username).await {
+            Ok(Some(credential)) if credential.verify_password(password) => {
                 self.authenticated_credential = Some(credential);
 
                 (235, Self::RESPONSE_AUTH_SUCCCESS.into())
