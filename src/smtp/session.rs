@@ -9,18 +9,12 @@ use tracing::{debug, trace};
 
 use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
 
-#[derive(Debug, PartialEq)]
-enum SessionState {
-    Accepting,
-    Ready,
-}
-
 pub struct SmtpSession {
     queue: Sender<NewMessage>,
     smtp_credentials: SmtpCredentialRepository,
 
     peer_addr: SocketAddr,
-    state: SessionState,
+    peer_name: Option<String>,
     authenticated_credential: Option<SmtpCredential>,
     current_message: Option<NewMessage>,
 }
@@ -51,11 +45,15 @@ impl SmtpSession {
     const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message queued for delivery";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
+    const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
+    const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
     const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
     const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
     const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
+    const RESPONSE_MUST_USE_ESMTP: &str = "5.5.1 Must use EHLO";
 
     pub fn new(
         peer_addr: SocketAddr,
@@ -66,7 +64,7 @@ impl SmtpSession {
             queue,
             smtp_credentials: user_repository,
             peer_addr,
-            state: SessionState::Accepting,
+            peer_name: None,
             current_message: None,
             authenticated_credential: None,
         }
@@ -93,11 +91,7 @@ impl SmtpSession {
 
         match request {
             Request::Ehlo { host } => {
-                if self.state != SessionState::Accepting {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
-                let mut response = EhloResponse::new(host);
+                let mut response = EhloResponse::new(&host);
                 response.capabilities = EXT_ENHANCED_STATUS_CODES
                     | EXT_8BIT_MIME
                     | EXT_BINARY_MIME
@@ -109,62 +103,26 @@ impl SmtpSession {
                 let mut buf = Vec::with_capacity(64);
                 response.write(&mut buf).ok();
 
-                self.state = SessionState::Ready;
+                self.peer_name = Some(host);
 
                 SessionReply::RawReply(buf)
             }
             Request::Lhlo { host: _ } => {
+                // we do not currently support LMTP
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Helo { host: _ } => {
-                //TODO
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(502, Self::RESPONSE_MUST_USE_ESMTP.into())
             }
-            Request::Mail { from } => {
-                debug!("received MAIL FROM: {}", from.address);
-
-                if self.state != SessionState::Ready {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
-                let Some(credential) = self.authenticated_credential.as_ref() else {
-                    return SessionReply::ReplyAndContinue(
-                        530,
-                        Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
-                    );
-                };
-
-                self.current_message = Some(NewMessage {
-                    smtp_credential_id: credential.id(),
-                    from_email: from.address.clone(),
-                    ..Default::default()
-                });
-
-                let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
-                SessionReply::ReplyAndContinue(250, response_message)
-            }
-            Request::Rcpt { to } => {
-                debug!("received RCPT TO: {}", to.address);
-
-                let Some(message) = self.current_message.as_mut() else {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                };
-
-                message.recipients.push(to.address.clone());
-
-                let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
-                SessionReply::ReplyAndContinue(250, response_message)
-            }
-            Request::Bdat {
-                chunk_size: _,
-                is_last: _,
-            } => SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into()),
             Request::Auth {
                 mechanism,
                 initial_response,
             } => {
-                if self.state != SessionState::Ready {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                if self.authenticated_credential.is_some() {
+                    return SessionReply::ReplyAndContinue(
+                        503,
+                        Self::RESPONSE_ALREADY_AUTHENTICATED.into(),
+                    );
                 }
 
                 if mechanism == AUTH_PLAIN {
@@ -222,6 +180,44 @@ impl SmtpSession {
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
                 }
             }
+            _ if self.peer_name.is_none() => {
+                SessionReply::ReplyAndContinue(503, Self::RESPONSE_HELLO_FIRST.into())
+            }
+            Request::Mail { from } => {
+                debug!("received MAIL FROM: {}", from.address);
+
+                let Some(credential) = self.authenticated_credential.as_ref() else {
+                    return SessionReply::ReplyAndContinue(
+                        530,
+                        Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
+                    );
+                };
+
+                self.current_message = Some(NewMessage {
+                    smtp_credential_id: credential.id(),
+                    from_email: from.address.clone(),
+                    ..Default::default()
+                });
+
+                let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
+                SessionReply::ReplyAndContinue(250, response_message)
+            }
+            Request::Rcpt { to } => {
+                debug!("received RCPT TO: {}", to.address);
+
+                let Some(message) = self.current_message.as_mut() else {
+                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_MAIL_FIRST.into());
+                };
+
+                message.recipients.push(to.address.clone());
+
+                let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
+                SessionReply::ReplyAndContinue(250, response_message)
+            }
+            Request::Bdat {
+                chunk_size: _,
+                is_last: _,
+            } => SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into()),
             Request::Noop { value: _ } => {
                 SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
             }
@@ -234,7 +230,10 @@ impl SmtpSession {
                 };
 
                 if recipients.is_empty() {
-                    return SessionReply::ReplyAndContinue(554, Self::RESPONSE_INVALID_RECIPIENTS.into());
+                    return SessionReply::ReplyAndContinue(
+                        554,
+                        Self::RESPONSE_INVALID_RECIPIENTS.into(),
+                    );
                 }
 
                 SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
