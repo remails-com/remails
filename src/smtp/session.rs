@@ -31,6 +31,11 @@ pub enum DataReply {
     ContinueIngest,
 }
 
+struct AttemptedAuth {
+    user: String,
+    password: String,
+}
+
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
     const DATA_END: &[u8] = b"\r\n.\r\n";
@@ -132,49 +137,23 @@ impl SmtpSession {
                         return SessionReply::ReplyAndContinue(334, "Go ahead.".into());
                     }
 
-                    let Some(decoded) = base64_decode(initial_response.as_bytes()) else {
-                        return SessionReply::ReplyAndContinue(
-                            501,
-                            Self::RESPONSE_SYNTAX_ERROR.into(),
-                        );
-                    };
-
-                    let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
-
-                    if parts.len() != 3 {
-                        return SessionReply::ReplyAndContinue(
-                            501,
-                            Self::RESPONSE_SYNTAX_ERROR.into(),
-                        );
-                    }
-
-                    let username = String::from_utf8_lossy(parts[1]);
-                    let password = String::from_utf8_lossy(parts[2]);
-
-                    trace!(
-                        "decoded credentials, username: {username} password ({} characters)",
-                        password.len()
-                    );
-
-                    let Ok(Some(credential)) =
-                        self.smtp_credentials.find_by_username(&username).await
+                    let Ok(AttemptedAuth { username, password }) =
+                        Self::decode_plain_auth(initial_response)
                     else {
                         return SessionReply::ReplyAndContinue(
-                            535,
-                            Self::RESPONSE_AUTH_ERROR.into(),
+                            501,
+                            Self::RESPONSE_SYNTAX_ERROR.into(),
                         );
                     };
 
-                    if !credential.verify_password(&password) {
-                        return SessionReply::ReplyAndContinue(
-                            535,
-                            Self::RESPONSE_AUTH_ERROR.into(),
-                        );
+                    match self.smtp_credentials.find_by_username(&username).await {
+                        Ok(Some(credential)) if credential.verify_password(&password) => {
+                            self.authenticated_credential = Some(credential);
+
+                            SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())
+                        }
+                        _ => SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into()),
                     }
-
-                    self.authenticated_credential = Some(credential);
-
-                    SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())
                 } else {
                     // other authentication methods
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
@@ -257,6 +236,23 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
         }
+    }
+
+    pub fn decode_plain_auth(data: &[u8]) -> Result<AttemptedAuth, SessionReply> {
+        let Some(decoded) = base64_decode(data.as_bytes()) else {
+            return Err(());
+        };
+
+        let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
+
+        if parts.len() != 3 {
+            return Err(());
+        }
+
+        let username = String::from_utf8_lossy(parts[1]);
+        let password = String::from_utf8_lossy(parts[2]);
+
+        Ok(AttemptedAuth { username, password })
     }
 
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
