@@ -13,9 +13,6 @@ use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
 enum SessionState {
     Accepting,
     Ready,
-    FromReceived,
-    RecipientsReceived,
-    IngestingData,
 }
 
 pub struct SmtpSession {
@@ -54,6 +51,7 @@ impl SmtpSession {
     const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message queued for delivery";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
+    const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
     const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
@@ -141,7 +139,6 @@ impl SmtpSession {
                     from_email: from.address.clone(),
                     ..Default::default()
                 });
-                self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -149,19 +146,11 @@ impl SmtpSession {
             Request::Rcpt { to } => {
                 debug!("received RCPT TO: {}", to.address);
 
-                if self.state != SessionState::FromReceived
-                    && self.state != SessionState::RecipientsReceived
-                {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
                 let Some(message) = self.current_message.as_mut() else {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
                 };
 
                 message.recipients.push(to.address.clone());
-
-                self.state = SessionState::RecipientsReceived;
 
                 let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -240,11 +229,13 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(504, Self::RESPONSE_ALREADY_TLS.into())
             }
             Request::Data => {
-                if self.state != SessionState::RecipientsReceived {
+                let Some(NewMessage { recipients, .. }) = self.current_message.as_ref() else {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
+                };
 
-                self.state = SessionState::IngestingData;
+                if recipients.is_empty() {
+                    return SessionReply::ReplyAndContinue(554, Self::RESPONSE_INVALID_RECIPIENTS.into());
+                }
 
                 SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
             }
@@ -270,11 +261,6 @@ impl SmtpSession {
     }
 
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
-        if self.state != SessionState::IngestingData {
-            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-        }
-
-        // NOTE: 'self.message' and 'self.state' are most likely "in sync"
         let Some(NewMessage {
             raw_data: buffer, ..
         }) = self.current_message.as_mut()
@@ -302,8 +288,6 @@ impl SmtpSession {
 
                 return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
             }
-
-            self.state = SessionState::Ready;
 
             return DataReply::ReplyAndContinue(250, Self::RESPONSE_MESSAGE_ACCEPTED.into());
         }
