@@ -1,7 +1,7 @@
 use mail_parser::decoders::base64::base64_decode;
 use smtp_proto::{
-    AUTH_LOGIN, AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES,
-    EXT_SMTP_UTF8, EhloResponse, Request,
+    AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8,
+    EhloResponse, Request,
 };
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
@@ -24,6 +24,7 @@ pub enum SessionReply {
     ReplyAndStop(u16, String),
     RawReply(Vec<u8>),
     IngestData(u16, String),
+    IngestAuth(u16, String),
 }
 
 pub enum DataReply {
@@ -32,8 +33,13 @@ pub enum DataReply {
 }
 
 struct AttemptedAuth {
-    user: String,
+    username: String,
     password: String,
+}
+
+enum AttemptedAuthError {
+    SyntaxError,
+    Utf8Error,
 }
 
 impl SmtpSession {
@@ -103,7 +109,7 @@ impl SmtpSession {
                     | EXT_SMTP_UTF8
                     | EXT_AUTH;
 
-                response.auth_mechanisms = AUTH_PLAIN | AUTH_LOGIN;
+                response.auth_mechanisms = AUTH_PLAIN;
 
                 let mut buf = Vec::with_capacity(64);
                 response.write(&mut buf).ok();
@@ -134,26 +140,14 @@ impl SmtpSession {
                     debug!("Received AUTH PLAIN");
 
                     if initial_response.is_empty() {
-                        return SessionReply::ReplyAndContinue(334, "Go ahead.".into());
+                        return SessionReply::IngestAuth(334, "Tell me your secret.".into());
                     }
 
-                    let Ok(AttemptedAuth { username, password }) =
-                        Self::decode_plain_auth(initial_response)
-                    else {
-                        return SessionReply::ReplyAndContinue(
-                            501,
-                            Self::RESPONSE_SYNTAX_ERROR.into(),
-                        );
-                    };
+                    let (code, message) = self
+                        .handle_plain_auth(&mut initial_response.into_bytes())
+                        .await;
 
-                    match self.smtp_credentials.find_by_username(&username).await {
-                        Ok(Some(credential)) if credential.verify_password(&password) => {
-                            self.authenticated_credential = Some(credential);
-
-                            SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())
-                        }
-                        _ => SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into()),
-                    }
+                    SessionReply::ReplyAndContinue(code, message)
                 } else {
                     // other authentication methods
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
@@ -238,21 +232,40 @@ impl SmtpSession {
         }
     }
 
-    pub fn decode_plain_auth(data: &[u8]) -> Result<AttemptedAuth, SessionReply> {
-        let Some(decoded) = base64_decode(data.as_bytes()) else {
-            return Err(());
+    fn decode_plain_auth(data: &[u8]) -> Result<AttemptedAuth, AttemptedAuthError> {
+        let Some(decoded) = base64_decode(data) else {
+            return Err(AttemptedAuthError::SyntaxError);
         };
 
         let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
 
         if parts.len() != 3 {
-            return Err(());
+            return Err(AttemptedAuthError::SyntaxError);
         }
 
-        let username = String::from_utf8_lossy(parts[1]);
-        let password = String::from_utf8_lossy(parts[2]);
+        let username = std::str::from_utf8(parts[1])
+            .map_err(|_| AttemptedAuthError::Utf8Error)?
+            .to_owned();
+        let password = std::str::from_utf8(parts[2])
+            .map_err(|_| AttemptedAuthError::Utf8Error)?
+            .to_owned();
 
         Ok(AttemptedAuth { username, password })
+    }
+
+    pub(super) async fn handle_plain_auth(&mut self, data: &[u8]) -> (u16, String) {
+        let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
+            return (501, Self::RESPONSE_SYNTAX_ERROR.into());
+        };
+
+        match self.smtp_credentials.find_by_username(&username).await {
+            Ok(Some(credential)) if credential.verify_password(&password) => {
+                self.authenticated_credential = Some(credential);
+
+                (235, Self::RESPONSE_AUTH_SUCCCESS.into())
+            }
+            _ => (535, Self::RESPONSE_AUTH_ERROR.into()),
+        }
     }
 
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
