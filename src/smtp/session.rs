@@ -1,4 +1,4 @@
-use mail_parser::decoders::base64::base64_decode;
+use base64ct::Encoding;
 use smtp_proto::{
     AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8,
     EhloResponse, Request,
@@ -232,28 +232,37 @@ impl SmtpSession {
         }
     }
 
-    fn decode_plain_auth(data: &[u8]) -> Result<AttemptedAuth, AttemptedAuthError> {
-        let Some(decoded) = base64_decode(data) else {
+    fn decode_plain_auth(data: &mut [u8]) -> Result<AttemptedAuth, AttemptedAuthError> {
+        // we may need to trim off a trailing CR/LF
+        let ascii_len = data.trim_ascii_end().len();
+        let data = &mut data[..ascii_len];
+
+        let Ok(decoded) = base64ct::Base64::decode_in_place(data) else {
             return Err(AttemptedAuthError::SyntaxError);
         };
 
-        let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
+        let mut parts = decoded.split(|&b| b == 0);
 
-        if parts.len() != 3 {
+        let Some(b"") = parts.next() else {
+            return Err(AttemptedAuthError::SyntaxError);
+        };
+        let username = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
+        let password = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
+        if parts.count() != 0 {
             return Err(AttemptedAuthError::SyntaxError);
         }
 
-        let username = std::str::from_utf8(parts[1])
+        let username = std::str::from_utf8(username)
             .map_err(|_| AttemptedAuthError::Utf8Error)?
             .to_owned();
-        let password = std::str::from_utf8(parts[2])
+        let password = std::str::from_utf8(password)
             .map_err(|_| AttemptedAuthError::Utf8Error)?
             .to_owned();
 
         Ok(AttemptedAuth { username, password })
     }
 
-    pub(super) async fn handle_plain_auth(&mut self, data: &[u8]) -> (u16, String) {
+    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> (u16, String) {
         let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
             return (501, Self::RESPONSE_SYNTAX_ERROR.into());
         };

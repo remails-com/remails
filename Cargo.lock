@@ -2562,6 +2562,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "base64 0.22.1",
+ "base64ct",
  "chrono",
  "cookie",
  "dotenvy",
