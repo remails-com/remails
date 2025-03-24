@@ -263,6 +263,11 @@ impl SmtpSession {
             return (501, Self::RESPONSE_SYNTAX_ERROR.into());
         };
 
+        trace!(
+            "decoded credentials, username: {username} password ({} characters)",
+            password.len()
+        );
+
         match self.smtp_credentials.find_by_username(username).await {
             Ok(Some(credential)) if credential.verify_password(password) => {
                 self.authenticated_credential = Some(credential);
