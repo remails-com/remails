@@ -65,6 +65,7 @@ impl SmtpSession {
     const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
     const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
     const RESPONSE_MUST_USE_ESMTP: &str = "5.5.1 Must use EHLO";
+    const RESPONSE_NO_VRFY: &str = "5.5.1 VRFY command is disabled";
 
     pub fn new(
         peer_addr: SocketAddr,
@@ -220,8 +221,8 @@ impl SmtpSession {
             }
             Request::Quit => SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into()),
             Request::Vrfy { value: _ } => {
-                //TODO
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                // RFC5321, 4.1.1.6
+                SessionReply::ReplyAndContinue(502, Self::RESPONSE_NO_VRFY.into())
             }
             Request::Expn { value: _ } => {
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
