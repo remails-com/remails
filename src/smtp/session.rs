@@ -1,27 +1,20 @@
-use mail_parser::decoders::base64::base64_decode;
-use smtp_proto::*;
+use base64ct::Encoding;
+use smtp_proto::{
+    AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8,
+    EhloResponse, Request,
+};
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
 
-#[derive(Debug, PartialEq)]
-enum SessionState {
-    Accepting,
-    Ready,
-    Authenticated,
-    FromReceived,
-    RecipientsReceived,
-    IngestingData,
-}
-
 pub struct SmtpSession {
     queue: Sender<NewMessage>,
     smtp_credentials: SmtpCredentialRepository,
 
     peer_addr: SocketAddr,
-    state: SessionState,
+    peer_name: Option<String>,
     authenticated_credential: Option<SmtpCredential>,
     current_message: Option<NewMessage>,
 }
@@ -31,11 +24,22 @@ pub enum SessionReply {
     ReplyAndStop(u16, String),
     RawReply(Vec<u8>),
     IngestData(u16, String),
+    IngestAuth(u16, String),
 }
 
 pub enum DataReply {
     ReplyAndContinue(u16, String),
     ContinueIngest,
+}
+
+struct AttemptedAuth<'a> {
+    username: &'a str,
+    password: &'a str,
+}
+
+enum AttemptedAuthError {
+    SyntaxError,
+    Utf8Error,
 }
 
 impl SmtpSession {
@@ -52,10 +56,15 @@ impl SmtpSession {
     const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message queued for delivery";
     const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
+    const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
+    const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
+    const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
     const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
     const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
+    const RESPONSE_MUST_USE_ESMTP: &str = "5.5.1 Must use EHLO";
 
     pub fn new(
         peer_addr: SocketAddr,
@@ -66,7 +75,7 @@ impl SmtpSession {
             queue,
             smtp_credentials: user_repository,
             peer_addr,
-            state: SessionState::Accepting,
+            peer_name: None,
             current_message: None,
             authenticated_credential: None,
         }
@@ -93,41 +102,62 @@ impl SmtpSession {
 
         match request {
             Request::Ehlo { host } => {
-                if self.state != SessionState::Accepting {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
-                let mut response = EhloResponse::new(host);
+                let mut response = EhloResponse::new(&host);
                 response.capabilities = EXT_ENHANCED_STATUS_CODES
                     | EXT_8BIT_MIME
                     | EXT_BINARY_MIME
                     | EXT_SMTP_UTF8
                     | EXT_AUTH;
 
-                response.auth_mechanisms = AUTH_PLAIN | AUTH_LOGIN;
+                response.auth_mechanisms = AUTH_PLAIN;
 
                 let mut buf = Vec::with_capacity(64);
                 response.write(&mut buf).ok();
 
-                self.state = SessionState::Ready;
+                self.peer_name = Some(host);
 
                 SessionReply::RawReply(buf)
             }
             Request::Lhlo { host: _ } => {
+                // we do not currently support LMTP
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Helo { host: _ } => {
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(502, Self::RESPONSE_MUST_USE_ESMTP.into())
+            }
+            Request::Auth {
+                mechanism,
+                initial_response,
+            } => {
+                if self.authenticated_credential.is_some() {
+                    return SessionReply::ReplyAndContinue(
+                        503,
+                        Self::RESPONSE_ALREADY_AUTHENTICATED.into(),
+                    );
+                }
+
+                if mechanism == AUTH_PLAIN {
+                    debug!("Received AUTH PLAIN");
+
+                    if initial_response.is_empty() {
+                        return SessionReply::IngestAuth(334, "Tell me your secret.".into());
+                    }
+
+                    let (code, message) = self
+                        .handle_plain_auth(&mut initial_response.into_bytes())
+                        .await;
+
+                    SessionReply::ReplyAndContinue(code, message)
+                } else {
+                    // other authentication methods
+                    SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
+                }
+            }
+            _ if self.peer_name.is_none() => {
+                SessionReply::ReplyAndContinue(503, Self::RESPONSE_HELLO_FIRST.into())
             }
             Request::Mail { from } => {
                 debug!("received MAIL FROM: {}", from.address);
-
-                if self.state != SessionState::Authenticated {
-                    return SessionReply::ReplyAndContinue(
-                        530,
-                        Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
-                    );
-                }
 
                 let Some(credential) = self.authenticated_credential.as_ref() else {
                     return SessionReply::ReplyAndContinue(
@@ -141,7 +171,6 @@ impl SmtpSession {
                     from_email: from.address.clone(),
                     ..Default::default()
                 });
-                self.state = SessionState::FromReceived;
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -149,19 +178,11 @@ impl SmtpSession {
             Request::Rcpt { to } => {
                 debug!("received RCPT TO: {}", to.address);
 
-                if self.state != SessionState::FromReceived
-                    && self.state != SessionState::RecipientsReceived
-                {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
                 let Some(message) = self.current_message.as_mut() else {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_MAIL_FIRST.into());
                 };
 
                 message.recipients.push(to.address.clone());
-
-                self.state = SessionState::RecipientsReceived;
 
                 let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -170,70 +191,6 @@ impl SmtpSession {
                 chunk_size: _,
                 is_last: _,
             } => SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into()),
-            Request::Auth {
-                mechanism,
-                initial_response,
-            } => {
-                if self.state != SessionState::Ready {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
-
-                if mechanism == AUTH_PLAIN {
-                    debug!("Received AUTH PLAIN");
-
-                    if initial_response.is_empty() {
-                        return SessionReply::ReplyAndContinue(334, "Go ahead.".into());
-                    }
-
-                    let Some(decoded) = base64_decode(initial_response.as_bytes()) else {
-                        return SessionReply::ReplyAndContinue(
-                            501,
-                            Self::RESPONSE_SYNTAX_ERROR.into(),
-                        );
-                    };
-
-                    let parts = decoded.split(|&b| b == 0).collect::<Vec<_>>();
-
-                    if parts.len() != 3 {
-                        return SessionReply::ReplyAndContinue(
-                            501,
-                            Self::RESPONSE_SYNTAX_ERROR.into(),
-                        );
-                    }
-
-                    let username = String::from_utf8_lossy(parts[1]);
-                    let password = String::from_utf8_lossy(parts[2]);
-
-                    trace!(
-                        "decoded credentials, username: {username} password ({} characters)",
-                        password.len()
-                    );
-
-                    let Ok(Some(credential)) =
-                        self.smtp_credentials.find_by_username(&username).await
-                    else {
-                        return SessionReply::ReplyAndContinue(
-                            535,
-                            Self::RESPONSE_AUTH_ERROR.into(),
-                        );
-                    };
-
-                    if !credential.verify_password(&password) {
-                        return SessionReply::ReplyAndContinue(
-                            535,
-                            Self::RESPONSE_AUTH_ERROR.into(),
-                        );
-                    }
-
-                    self.authenticated_credential = Some(credential);
-                    self.state = SessionState::Authenticated;
-
-                    SessionReply::ReplyAndContinue(235, Self::RESPONSE_AUTH_SUCCCESS.into())
-                } else {
-                    // other authentication methods
-                    SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
-                }
-            }
             Request::Noop { value: _ } => {
                 SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
             }
@@ -241,19 +198,26 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(504, Self::RESPONSE_ALREADY_TLS.into())
             }
             Request::Data => {
-                if self.state != SessionState::RecipientsReceived {
+                let Some(NewMessage { recipients, .. }) = self.current_message.as_ref() else {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
-                }
+                };
 
-                self.state = SessionState::IngestingData;
+                if recipients.is_empty() {
+                    return SessionReply::ReplyAndContinue(
+                        554,
+                        Self::RESPONSE_INVALID_RECIPIENTS.into(),
+                    );
+                }
 
                 SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
             }
             Request::Rset => {
+                //TODO
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Quit => SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into()),
             Request::Vrfy { value: _ } => {
+                //TODO
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Expn { value: _ } => {
@@ -268,12 +232,53 @@ impl SmtpSession {
         }
     }
 
-    pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
-        if self.state != SessionState::IngestingData {
-            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+    fn decode_plain_auth(data: &mut [u8]) -> Result<AttemptedAuth, AttemptedAuthError> {
+        // we may need to trim off a trailing CR/LF
+        let ascii_len = data.trim_ascii_end().len();
+        let data = &mut data[..ascii_len];
+
+        let Ok(decoded) = base64ct::Base64::decode_in_place(data) else {
+            return Err(AttemptedAuthError::SyntaxError);
+        };
+
+        let mut parts = decoded.split(|&b| b == 0);
+
+        let Some(b"") = parts.next() else {
+            return Err(AttemptedAuthError::SyntaxError);
+        };
+        let username = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
+        let password = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
+        if parts.count() != 0 {
+            return Err(AttemptedAuthError::SyntaxError);
         }
 
-        // NOTE: 'self.message' and 'self.state' are most likely "in sync"
+        let username = std::str::from_utf8(username).map_err(|_| AttemptedAuthError::Utf8Error)?;
+        let password = std::str::from_utf8(password).map_err(|_| AttemptedAuthError::Utf8Error)?;
+
+        Ok(AttemptedAuth { username, password })
+    }
+
+    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> (u16, String) {
+        let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
+            return (501, Self::RESPONSE_SYNTAX_ERROR.into());
+        };
+
+        trace!(
+            "decoded credentials, username: {username} password ({} characters)",
+            password.len()
+        );
+
+        match self.smtp_credentials.find_by_username(username).await {
+            Ok(Some(credential)) if credential.verify_password(password) => {
+                self.authenticated_credential = Some(credential);
+
+                (235, Self::RESPONSE_AUTH_SUCCCESS.into())
+            }
+            _ => (535, Self::RESPONSE_AUTH_ERROR.into()),
+        }
+    }
+
+    pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
         let Some(NewMessage {
             raw_data: buffer, ..
         }) = self.current_message.as_mut()
@@ -301,8 +306,6 @@ impl SmtpSession {
 
                 return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
             }
-
-            self.state = SessionState::Authenticated;
 
             return DataReply::ReplyAndContinue(250, Self::RESPONSE_MESSAGE_ACCEPTED.into());
         }

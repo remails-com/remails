@@ -10,7 +10,7 @@ use axum::{
     routing::get,
 };
 use axum_extra::extract::{PrivateCookieJar, cookie};
-use base64::prelude::*;
+use base64ct::Encoding;
 use http::{HeaderMap, request::Parts};
 use oauth2::{
     AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
@@ -112,8 +112,7 @@ impl Default for Config {
 
         let session_key = match env::var("SESSION_KEY") {
             Ok(session_key_base64) => {
-                let key_bytes = BASE64_STANDARD
-                    .decode(session_key_base64)
+                let key_bytes = base64ct::Base64::decode_vec(&session_key_base64)
                     .expect("SESSION_KEY env var must be valid base 64");
                 cookie::Key::from(&key_bytes)
             }

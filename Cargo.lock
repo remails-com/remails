@@ -1900,9 +1900,9 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "memory-serve"
-version = "1.0.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d99b66275a38f88989bc90fb2717bd1e9833637d54015f5442c68b396b175f2"
+checksum = "1bd11a03cd6fdf459e65eb8d9eb00f311ab8ec5559921ffc8259fcfb0e325cc6"
 dependencies = [
  "axum",
  "brotli",
@@ -1915,9 +1915,9 @@ dependencies = [
 
 [[package]]
 name = "memory-serve-core"
-version = "1.0.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93fe505bfe7730dcb8faa7013d50c2fe0ae8a88987ec4e8eaa51c7d044bc678c"
+checksum = "4a532a2151a158e1d8254153f599e721329621dbebf392f09aa68e759fad7e5b"
 dependencies = [
  "brotli",
  "mime_guess",
@@ -1928,9 +1928,9 @@ dependencies = [
 
 [[package]]
 name = "memory-serve-macros"
-version = "1.0.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae30b9847788c65bf65d701272882b19ceccc3d488f6b55ad38786c1ea1e7653"
+checksum = "33a57be86136864cb93bb442683c9b1bef9a7023e6c8b75d788db7d545bce384"
 dependencies = [
  "memory-serve-core",
 ]
@@ -2561,7 +2561,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
- "base64 0.22.1",
+ "base64ct",
  "chrono",
  "cookie",
  "dotenvy",
@@ -2597,9 +2597,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.14"
+version = "0.12.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "989e327e510263980e231de548a33e63d34962d29ae61b467389a1a09627a254"
+checksum = "d19c46a6fdd48bc4dab94b6103fccc55d34c67cc0ad04653aad4ea2a07cd7bbb"
 dependencies = [
  "base64 0.22.1",
  "bytes",
