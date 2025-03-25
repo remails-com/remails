@@ -95,7 +95,8 @@ impl SmtpSession {
             Err(e) => {
                 debug!("failed to parse request: {e}");
 
-                return SessionReply::ReplyAndContinue(500, e.to_string());
+                // RFC 4409, 4.1
+                return SessionReply::ReplyAndContinue(554, e.to_string());
             }
         };
 
