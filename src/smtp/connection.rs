@@ -1,4 +1,4 @@
-use smtp_proto::*;
+use smtp_proto::Request;
 use std::net::SocketAddr;
 use thiserror::Error;
 use tokio::{
