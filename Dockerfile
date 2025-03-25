@@ -13,6 +13,7 @@ FROM rust:1.85-bookworm AS rust-builder
 WORKDIR /app
 COPY --from=frontend-builder /app/dist/ /app/frontend/dist/
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs build.rs ./
 COPY src/ src/
 COPY .sqlx .sqlx/
 
