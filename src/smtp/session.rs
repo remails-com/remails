@@ -103,6 +103,7 @@ impl SmtpSession {
 
         match request {
             Request::Ehlo { host } => {
+                // RFC5231, 4.1.1.1
                 let mut response = EhloResponse::new(&host);
                 response.capabilities = EXT_ENHANCED_STATUS_CODES
                     | EXT_8BIT_MIME
@@ -130,6 +131,7 @@ impl SmtpSession {
                 mechanism,
                 initial_response,
             } => {
+                // RFC 4954
                 if self.authenticated_credential.is_some() {
                     return SessionReply::ReplyAndContinue(
                         503,
@@ -158,6 +160,7 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(503, Self::RESPONSE_HELLO_FIRST.into())
             }
             Request::Mail { from } => {
+                // RFC5231, 4.1.1.2
                 debug!("received MAIL FROM: {}", from.address);
 
                 let Some(credential) = self.authenticated_credential.as_ref() else {
@@ -177,6 +180,7 @@ impl SmtpSession {
                 SessionReply::ReplyAndContinue(250, response_message)
             }
             Request::Rcpt { to } => {
+                // RFC5231, 4.1.1.3
                 debug!("received RCPT TO: {}", to.address);
 
                 let Some(message) = self.current_message.as_mut() else {
@@ -193,12 +197,14 @@ impl SmtpSession {
                 is_last: _,
             } => SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into()),
             Request::Noop { value: _ } => {
+                // RFC5321, 4.1.1.9
                 SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
             }
             Request::StartTls => {
                 SessionReply::ReplyAndContinue(504, Self::RESPONSE_ALREADY_TLS.into())
             }
             Request::Data => {
+                // RFC5231, 4.1.1.4
                 let Some(NewMessage { recipients, .. }) = self.current_message.as_ref() else {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
                 };
@@ -219,7 +225,10 @@ impl SmtpSession {
                 self.current_message = None;
                 SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
             }
-            Request::Quit => SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into()),
+            Request::Quit => {
+                // RFC5321, 4.1.1.10
+                SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into())
+            }
             Request::Vrfy { value: _ } => {
                 // RFC5321, 4.1.1.6
                 SessionReply::ReplyAndContinue(502, Self::RESPONSE_NO_VRFY.into())
