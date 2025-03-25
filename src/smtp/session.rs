@@ -212,8 +212,11 @@ impl SmtpSession {
                 SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
             }
             Request::Rset => {
-                //TODO
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                // RFC5321, 4.1.1.5. Comments about this:
+                // - this does not need to clear AUTH status
+                // - this does not clear the EHLO status
+                self.current_message = None;
+                SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
             }
             Request::Quit => SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into()),
             Request::Vrfy { value: _ } => {
