@@ -44,7 +44,7 @@ url = "2.5.4"
 oauth2 = { version = "5.0.0" }
 http = "1.3.1"
 base64ct = "1.7.1"
-reqwest = { version = "0.12.14", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
 cookie = "0.18.1"
 email_address = "0.2.9"
 sqlx-paginated = "0.2.30"
@@ -56,7 +56,7 @@ opt-level = 3
 
 [dev-dependencies]
 rand = "0.9.0"
-reqwest = { version = "0.12.14", features = ["json"] }
+reqwest = { version = "0.12.15", features = ["json"] }
 mailcrab = "1.6.0"
 serial_test = "3.2.0"
 
