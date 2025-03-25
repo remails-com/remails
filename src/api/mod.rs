@@ -3,7 +3,6 @@ use axum::{
     extract::{FromRef, State},
     routing::get,
 };
-use memory_serve::{MemoryServe, load_assets};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{net::SocketAddr, time::Duration};
@@ -125,7 +124,7 @@ impl ApiServer {
 
     /// Serve the frontend from the `frontend/dist` directory
     pub async fn serve_frontend(self) -> Self {
-        let memory_router = MemoryServe::new(load_assets!("./frontend/dist"))
+        let memory_router = memory_serve::from_local_build!()
             .index_file(Some("/index.html"))
             .into_router();
 

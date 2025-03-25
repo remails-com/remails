@@ -1,32 +1,30 @@
-import { useEffect, useState } from "react";
+import { Loader } from "@mantine/core";
 import { Login } from "./Login";
-import { WhoamiResponse } from "./types";
-import Dashboard from "./Dashboard";
+import { Pages } from "./Pages";
+import { useInitRouter, RouterContext } from "./hooks/useRouter";
+import { UserContext, useLoadUser } from "./hooks/useUser";
 
 export default function App() {
-  const [user, setUser] = useState<WhoamiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // check whether the user is logged in
-  useEffect(() => {
-    setLoading(true);
-    fetch("/api/whoami")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.role) {
-          setUser(data);
-        }
-        setLoading(false);
-      });
-  }, []);
+  const { user, loading } = useLoadUser();
+  const {
+    params,
+    route,
+    navigate
+  } = useInitRouter();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <Loader color="gray" size="xl" type="dots" />;
   }
 
   if (!user) {
     return <Login />;
   }
 
-  return <Dashboard />
+  return (
+    <RouterContext.Provider value={{ params, route, navigate }}>
+      <UserContext.Provider value={user}>
+        <Pages />
+      </UserContext.Provider>
+    </RouterContext.Provider>
+  );
 }
