@@ -189,7 +189,7 @@ impl Handler {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtpCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -221,17 +221,15 @@ mod test {
             .into_message()
             .unwrap();
 
-        let user = SmtpCredential::new(
-            "user".to_string(),
-            "pass".to_string(),
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        );
-        SmtpCredentialRepository::new(pool.clone())
-            .create(&user)
-            .await
-            .unwrap();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+        };
 
-        let message = NewMessage::from_builder_message(message, user.id());
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo.generate(&credential_request).await.unwrap();
+
+        let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
             test_smtp_addr: Some(format!("smtp://localhost:{mailcrab_port}").parse().unwrap()),
         };

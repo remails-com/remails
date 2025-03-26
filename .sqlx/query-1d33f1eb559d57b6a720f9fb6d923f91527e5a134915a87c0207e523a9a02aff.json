@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, domain_id)\n            VALUES ($1, $2, $3, $4)\n            RETURNING *\n            ",
+  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, domain_id)\n            VALUES (gen_random_uuid(), $1, $2, $3)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -36,7 +36,6 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Varchar",
         "Varchar",
         "Uuid"
@@ -51,5 +50,5 @@
       false
     ]
   },
-  "hash": "4fad5e2aef5d7a81aff2b2bf10815c47f5d3b2250082df8ee23853d98a789fe5"
+  "hash": "1d33f1eb559d57b6a720f9fb6d923f91527e5a134915a87c0207e523a9a02aff"
 }

@@ -1,14 +1,18 @@
+use crate::models::{OrganizationId, SmtpCredentialId};
 use chrono::{DateTime, Utc};
+use derive_more::{Deref, Display, From};
 use mail_send::smtp::message::IntoMessage;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub type EmailAddress = String;
 
-#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+pub struct MessageId(Uuid);
+
+#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
-    #[default]
     Processing,
     Held,
     Accepted,
@@ -17,12 +21,11 @@ pub enum MessageStatus {
     Failed,
 }
 
-#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
-    id: Uuid,
-    smtp_credential_id: Uuid,
-    organization_id: Uuid,
+    id: MessageId,
+    smtp_credential_id: SmtpCredentialId,
+    organization_id: OrganizationId,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -32,9 +35,9 @@ pub struct Message {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct NewMessage {
-    pub smtp_credential_id: Uuid,
+    pub smtp_credential_id: SmtpCredentialId,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -43,22 +46,29 @@ pub(crate) struct NewMessage {
 }
 
 impl Message {
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> MessageId {
         self.id
     }
 }
 
 impl NewMessage {
+    pub fn new(smtp_credential_id: SmtpCredentialId, from_email: EmailAddress) -> Self {
+        NewMessage {
+            smtp_credential_id,
+            status: MessageStatus::Processing,
+            from_email,
+            recipients: vec![],
+            raw_data: vec![],
+            message_data: Default::default(),
+        }
+    }
+
     #[cfg(test)]
     pub fn from_builder_message(
         value: mail_send::smtp::message::Message<'_>,
-        smtp_credential_id: Uuid,
+        smtp_credential_id: SmtpCredentialId,
     ) -> Self {
-        let mut message = Self {
-            smtp_credential_id,
-            from_email: value.mail_from.email.parse().unwrap(),
-            ..Default::default()
-        };
+        let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
         for recipient in value.rcpt_to.iter() {
             message.recipients.push(recipient.email.parse().unwrap());
         }
@@ -129,7 +139,7 @@ impl MessageRepository {
                       m.created_at,
                       m.updated_at
             "#,
-            message.smtp_credential_id,
+            *message.smtp_credential_id,
             message.status as _,
             message.from_email,
             &message.recipients,
@@ -153,7 +163,7 @@ impl MessageRepository {
             SET status = $2
             WHERE id = $1
             "#,
-            message.id,
+            *message.id,
             message.status as _
         )
         .execute(&self.pool)
@@ -169,7 +179,7 @@ impl MessageRepository {
             SET message_data = $2
             WHERE id = $1
             "#,
-            message.id,
+            *message.id,
             message.message_data,
         )
         .execute(&self.pool)
@@ -216,7 +226,7 @@ impl MessageRepository {
 
     pub async fn find_by_id(
         &self,
-        id: Uuid,
+        id: MessageId,
         api_user_id: Option<Uuid>,
     ) -> Result<Option<Message>, sqlx::Error> {
         let message = sqlx::query_as!(
@@ -241,7 +251,7 @@ impl MessageRepository {
               AND ($2::uuid IS NULL OR u.id = $2)
             LIMIT 1
             "#,
-            id,
+            *id,
             api_user_id
         )
         .fetch_optional(&self.pool)
@@ -257,7 +267,7 @@ mod test {
     use sqlx::PgPool;
 
     use super::*;
-    use crate::models::{SmtpCredential, SmtpCredentialRepository};
+    use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     async fn message_repository(pool: PgPool) {
@@ -274,16 +284,15 @@ mod test {
             .text_body("Hello world!")
             .into_message()
             .unwrap();
-
-        let credential = SmtpCredential::new(
-            "user".to_string(),
-            "pass".to_string(),
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        );
-        SmtpCredentialRepository::new(pool)
-            .create(&credential)
+        let smtp_credential_repo = SmtpCredentialRepository::new(pool);
+        let credential = smtp_credential_repo
+            .generate(&SmtpCredentialRequest {
+                username: "user".to_string(),
+                domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            })
             .await
             .unwrap();
+
         let new_message = NewMessage::from_builder_message(message, credential.id());
 
         let message = repository.create(&new_message).await.unwrap();

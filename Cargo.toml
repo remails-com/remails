@@ -49,13 +49,13 @@ cookie = "0.18.1"
 email_address = "0.2.9"
 sqlx-paginated = "0.2.30"
 memory-serve = "1.2.0"
-serde_with = "3.12.0"
+derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug"]}
+rand = "0.9.0"
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
 
 [dev-dependencies]
-rand = "0.9.0"
 reqwest = { version = "0.12.15", features = ["json"] }
 mailcrab = "1.6.0"
 serial_test = "3.2.0"

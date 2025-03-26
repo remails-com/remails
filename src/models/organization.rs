@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
+use derive_more::{Deref, Display, From};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+pub struct OrganizationId(Uuid);
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Organization {
-    pub id: Uuid,
+    pub id: OrganizationId,
     pub name: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -64,7 +68,7 @@ impl OrganizationRepository {
 
     pub async fn get_by_id(
         &self,
-        id: Uuid,
+        id: OrganizationId,
         filter: &OrganizationFilter,
     ) -> Result<Option<Organization>, sqlx::Error> {
         sqlx::query_as!(
@@ -75,14 +79,18 @@ impl OrganizationRepository {
             WHERE id = $1
               AND ($2::uuid IS NULL OR a.api_user_id = $2)
             "#,
-            id,
+            *id,
             filter.api_user_id,
         )
         .fetch_optional(&self.pool)
         .await
     }
 
-    pub async fn remove(&self, id: Uuid, filter: &OrganizationFilter) -> Result<(), sqlx::Error> {
+    pub async fn remove(
+        &self,
+        id: OrganizationId,
+        filter: &OrganizationFilter,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM organizations
@@ -92,7 +100,7 @@ impl OrganizationRepository {
               AND o.id = $1
               AND ($2::uuid IS NULL OR a.api_user_id = $2)
             "#,
-            id,
+            *id,
             filter.api_user_id
         )
         .execute(&self.pool)
@@ -100,13 +108,13 @@ impl OrganizationRepository {
         Ok(())
     }
 
-    pub async fn add_user(&self, org_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn add_user(&self, org_id: OrganizationId, user_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO api_users_organizations (organization_id, api_user_id)
             VALUES ($1, $2)
             "#,
-            org_id,
+            *org_id,
             user_id
         )
         .execute(&self.pool)

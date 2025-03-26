@@ -40,7 +40,7 @@ impl Default for SmtpConfig {
 #[cfg(test)]
 mod test {
     use crate::{
-        models::{NewMessage, SmtpCredential, SmtpCredentialRepository},
+        models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
         smtp::{SmtpConfig, server::SmtpServer},
         test::random_port,
     };
@@ -62,16 +62,18 @@ mod test {
         JoinHandle<()>,
         mpsc::Receiver<NewMessage>,
         u16,
+        String,
     ) {
         let smtp_port = random_port();
-        let user_repository = SmtpCredentialRepository::new(pool);
+        let user_repository = SmtpCredentialRepository::new(pool.clone());
 
-        let credential = SmtpCredential::new(
-            "john".into(),
-            "p4ssw0rd".into(),
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        );
-        user_repository.create(&credential).await.unwrap();
+        let credential_request = SmtpCredentialRequest {
+            username: "john".to_string(),
+            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+        };
+
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo.generate(&credential_request).await.unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let config = Arc::new(SmtpConfig {
@@ -90,7 +92,13 @@ mod test {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        (shutdown, server_handle, receiver, smtp_port)
+        (
+            shutdown,
+            server_handle,
+            receiver,
+            smtp_port,
+            credential.cleartext_password(),
+        )
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
@@ -102,7 +110,7 @@ mod test {
                 .expect("Failed to install crypto provider")
         }
 
-        let (shutdown, server_handle, mut receiver, port) = setup_server(pool).await;
+        let (shutdown, server_handle, mut receiver, port, pwd) = setup_server(pool).await;
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@example.com"))
@@ -117,7 +125,7 @@ mod test {
         SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)
             .allow_invalid_certs()
-            .credentials(("john", "p4ssw0rd"))
+            .credentials(("john", pwd.as_str()))
             .connect()
             .await
             .unwrap()
@@ -135,7 +143,7 @@ mod test {
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
-        let (shutdown, server_handle, _, port) = setup_server(pool).await;
+        let (shutdown, server_handle, _, port, _) = setup_server(pool).await;
 
         let result = SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)
