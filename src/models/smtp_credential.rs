@@ -1,39 +1,60 @@
-use serde::Serialize;
+use derive_more::{Deref, Display, From};
+use rand::distr::{Alphanumeric, SampleString};
+use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-#[cfg_attr(test, derive(serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+pub struct SmtpCredentialId(Uuid);
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredential {
-    id: Uuid,
+    id: SmtpCredentialId,
     username: String,
-    #[serde(skip, default)]
+    #[serde(skip)]
     password_hash: String,
     domain_id: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SmtpCredentialRequest {
+    pub(crate) username: String,
+    pub(crate) domain_id: Uuid,
+}
+
+#[derive(Serialize, derive_more::Debug)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct SmtpCredentialResponse {
+    id: SmtpCredentialId,
+    username: String,
+    #[debug("****")]
+    cleartext_password: String,
+    domain_id: Uuid,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
 impl SmtpCredential {
-    pub fn new(username: String, password: String, domain_id: Uuid) -> Self {
-        let password_hash = password_auth::generate_hash(password.as_bytes());
-
-        Self {
-            id: Uuid::new_v4(),
-            username,
-            password_hash,
-            domain_id,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-
     pub fn verify_password(&self, password: &str) -> bool {
         password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
     }
 
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> SmtpCredentialId {
         self.id
+    }
+}
+
+#[cfg(test)]
+impl SmtpCredentialResponse {
+    pub fn id(&self) -> SmtpCredentialId {
+        self.id
+    }
+
+    pub fn cleartext_password(self) -> String {
+        self.cleartext_password
     }
 }
 
@@ -47,26 +68,35 @@ impl SmtpCredentialRepository {
         Self { pool }
     }
 
-    pub async fn create(
+    pub async fn generate(
         &self,
-        new_credential: &SmtpCredential,
-    ) -> Result<SmtpCredential, sqlx::Error> {
-        let credential: SmtpCredential = sqlx::query_as!(
+        new_credential: &SmtpCredentialRequest,
+    ) -> Result<SmtpCredentialResponse, sqlx::Error> {
+        let password = Alphanumeric.sample_string(&mut rand::rng(), 20);
+        let password_hash = password_auth::generate_hash(password.as_bytes());
+
+        let generated = sqlx::query_as!(
             SmtpCredential,
             r#"
             INSERT INTO smtp_credential (id, username, password_hash, domain_id)
-            VALUES ($1, $2, $3, $4)
+            VALUES (gen_random_uuid(), $1, $2, $3)
             RETURNING *
             "#,
-            new_credential.id,
-            new_credential.username,
-            new_credential.password_hash,
-            new_credential.domain_id,
+            &new_credential.username,
+            password_hash,
+            new_credential.domain_id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(credential)
+        Ok(SmtpCredentialResponse {
+            id: generated.id,
+            username: generated.username,
+            cleartext_password: password,
+            domain_id: generated.domain_id,
+            created_at: generated.created_at,
+            updated_at: generated.updated_at,
+        })
     }
 
     pub async fn find_by_username(
@@ -107,20 +137,19 @@ mod test {
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     async fn smtp_credential_repository(pool: PgPool) {
-        let repository = SmtpCredentialRepository::new(pool);
+        let credential_request = SmtpCredentialRequest {
+            username: "test".to_string(),
+            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo.generate(&credential_request).await.unwrap();
 
-        let credential = SmtpCredential::new(
-            "test".into(),
-            "password".into(),
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        );
-        assert!(credential.verify_password("password"));
+        let get_credential = credential_repo
+            .find_by_username("test")
+            .await
+            .unwrap()
+            .unwrap();
 
-        repository.create(&credential).await.unwrap();
-
-        let fetched_user = repository.find_by_username("test").await.unwrap().unwrap();
-
-        assert_eq!(fetched_user.username, "test");
-        assert!(fetched_user.verify_password("password"));
+        assert!(get_credential.verify_password(credential.cleartext_password.as_str()));
     }
 }

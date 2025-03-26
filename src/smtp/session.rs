@@ -171,11 +171,7 @@ impl SmtpSession {
                     );
                 };
 
-                self.current_message = Some(NewMessage {
-                    smtp_credential_id: credential.id(),
-                    from_email: from.address.clone(),
-                    ..Default::default()
-                });
+                self.current_message = Some(NewMessage::new(credential.id(), from.address.clone()));
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
                 SessionReply::ReplyAndContinue(250, response_message)

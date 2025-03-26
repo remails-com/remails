@@ -1,6 +1,6 @@
 use crate::{
     handler::HandlerConfig,
-    models::{Message, SmtpCredential},
+    models::{Message, SmtpCredential, SmtpCredentialResponse},
     run_api_server, run_mta,
     smtp::SmtpConfig,
 };
@@ -69,7 +69,7 @@ async fn integration_test(pool: PgPool) {
 
     let _drop_guard = token.drop_guard();
 
-    client
+    let john_pwd = client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -77,17 +77,17 @@ async fn integration_test(pool: PgPool) {
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "john",
-            "password": "p4ssw0rd",
             "domain_id": "ed28baa5-57f7-413f-8c77-7797ba6a8780"
         }))
         .send()
         .await
         .unwrap()
-        .json::<SmtpCredential>()
+        .json::<SmtpCredentialResponse>()
         .await
-        .unwrap();
+        .unwrap()
+        .cleartext_password();
 
-    client
+    let eddy_pwd = client
         .post(format!(
             "http://localhost:{}/api/smtp_credentials",
             http_port
@@ -95,15 +95,15 @@ async fn integration_test(pool: PgPool) {
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "eddy",
-            "password": "pass123",
             "domain_id": "6a45a141-6628-4c0f-823b-3cf3eb64f0c7"
         }))
         .send()
         .await
         .unwrap()
-        .json::<SmtpCredential>()
+        .json::<SmtpCredentialResponse>()
         .await
-        .unwrap();
+        .unwrap()
+        .cleartext_password();
 
     let credentials: Vec<SmtpCredential> = client
         .get(format!(
@@ -123,7 +123,7 @@ async fn integration_test(pool: PgPool) {
     let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
         .implicit_tls(true)
         .allow_invalid_certs()
-        .credentials(("john", "p4ssw0rd"))
+        .credentials(("john", john_pwd.as_str()))
         .connect()
         .await
         .unwrap();
@@ -160,7 +160,7 @@ async fn integration_test(pool: PgPool) {
     SmtpClientBuilder::new("localhost", smtp_port)
         .implicit_tls(true)
         .allow_invalid_certs()
-        .credentials(("eddy", "pass123"))
+        .credentials(("eddy", eddy_pwd.as_str()))
         .connect()
         .await
         .unwrap()

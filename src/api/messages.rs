@@ -1,10 +1,8 @@
+use crate::models::{Message, MessageFilter, MessageId, MessageRepository};
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use uuid::Uuid;
-
-use crate::models::{Message, MessageFilter, MessageRepository};
 
 use super::{
     auth::ApiUser,
@@ -42,7 +40,7 @@ pub async fn list_messages(
 }
 
 pub async fn get_message(
-    Path(id): Path<Uuid>,
+    Path(id): Path<MessageId>,
     State(repo): State<MessageRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Message> {

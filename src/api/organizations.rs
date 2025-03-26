@@ -3,13 +3,14 @@ use crate::{
         auth::ApiUser,
         error::{ApiError, ApiResult},
     },
-    models::{NewOrganization, Organization, OrganizationFilter, OrganizationRepository},
+    models::{
+        NewOrganization, Organization, OrganizationFilter, OrganizationId, OrganizationRepository,
+    },
 };
 use axum::{
     Json,
     extract::{Path, State},
 };
-use uuid::Uuid;
 
 impl TryFrom<&ApiUser> for OrganizationFilter {
     type Error = ApiError;
@@ -37,7 +38,7 @@ pub async fn list_organizations(
 }
 
 pub async fn get_organization(
-    Path(id): Path<Uuid>,
+    Path(id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Organization> {
@@ -62,7 +63,7 @@ pub async fn create_organization(
 }
 
 pub async fn remove_organization(
-    Path(id): Path<Uuid>,
+    Path(id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
 ) -> Result<(), ApiError> {
