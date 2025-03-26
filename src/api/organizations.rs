@@ -1,10 +1,8 @@
 use crate::{
-    api::{
-        auth::ApiUser,
-        error::{ApiError, ApiResult},
-    },
+    api::error::{ApiError, ApiResult},
     models::{
-        NewOrganization, Organization, OrganizationFilter, OrganizationId, OrganizationRepository,
+        ApiUser, NewOrganization, Organization, OrganizationFilter, OrganizationId,
+        OrganizationRepository,
     },
 };
 use axum::{
@@ -12,18 +10,14 @@ use axum::{
     extract::{Path, State},
 };
 
-impl TryFrom<&ApiUser> for OrganizationFilter {
-    type Error = ApiError;
-
-    fn try_from(user: &ApiUser) -> Result<Self, Self::Error> {
-        if user.is_admin() {
-            Ok(OrganizationFilter::default())
-        } else if let Some(user_id) = user.user_id() {
-            Ok(OrganizationFilter {
-                api_user_id: Some(user_id),
-            })
+impl From<&ApiUser> for OrganizationFilter {
+    fn from(user: &ApiUser) -> Self {
+        if user.is_super_admin() {
+            OrganizationFilter::default()
         } else {
-            Err(ApiError::Unauthorized)
+            OrganizationFilter {
+                orgs: Some(user.org_admin()),
+            }
         }
     }
 }
@@ -32,7 +26,7 @@ pub async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Vec<Organization>> {
-    let filter = (&api_user).try_into()?;
+    let filter = (&api_user).into();
     let organizations = repo.list(&filter).await?;
     Ok(Json(organizations))
 }
@@ -42,7 +36,7 @@ pub async fn get_organization(
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Organization> {
-    let filter = (&api_user).try_into()?;
+    let filter = (&api_user).into();
     let organization = repo
         .get_by_id(id, &filter)
         .await?
@@ -56,9 +50,7 @@ pub async fn create_organization(
     Json(new): Json<NewOrganization>,
 ) -> ApiResult<Organization> {
     let org = repo.create(new).await?;
-    if let Some(user_id) = api_user.user_id() {
-        repo.add_user(org.id, user_id).await?;
-    }
+    repo.add_user(org.id, *api_user.id()).await?;
     Ok(Json(org))
 }
 
@@ -67,7 +59,7 @@ pub async fn remove_organization(
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
 ) -> Result<(), ApiError> {
-    let filter = (&api_user).try_into()?;
+    let filter = (&api_user).into();
     repo.remove(id, &filter).await?;
     Ok(())
 }

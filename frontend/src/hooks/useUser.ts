@@ -27,7 +27,7 @@ export function useLoadUser() {
     fetch("/api/whoami")
       .then((res) => res.json())
       .then((data) => {
-        if (data.role) {
+        if (data.roles) {
           setUser(data);
         }
         setLoading(false);

@@ -1,10 +1,17 @@
+use crate::models::{ApiUserId, Error};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From};
+use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct OrganizationId(Uuid);
+
+impl OrganizationId {
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Organization {
@@ -26,7 +33,15 @@ pub struct OrganizationRepository {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct OrganizationFilter {
-    pub(crate) api_user_id: Option<Uuid>,
+    pub(crate) orgs: Option<Vec<OrganizationId>>,
+}
+
+impl OrganizationFilter {
+    fn org_uuids(&self) -> Option<Vec<Uuid>> {
+        self.orgs
+            .as_deref()
+            .map(|o| o.iter().map(|o| o.as_uuid()).collect())
+    }
 }
 
 impl OrganizationRepository {
@@ -34,8 +49,8 @@ impl OrganizationRepository {
         Self { pool }
     }
 
-    pub async fn create(&self, organization: NewOrganization) -> Result<Organization, sqlx::Error> {
-        sqlx::query_as!(
+    pub async fn create(&self, organization: NewOrganization) -> Result<Organization, Error> {
+        Ok(sqlx::query_as!(
             Organization,
             r#"
             INSERT INTO organizations (id, name)
@@ -45,77 +60,72 @@ impl OrganizationRepository {
             organization.name,
         )
         .fetch_one(&self.pool)
-        .await
+        .await?)
     }
 
-    pub async fn list(
-        &self,
-        filter: &OrganizationFilter,
-    ) -> Result<Vec<Organization>, sqlx::Error> {
-        sqlx::query_as!(
+    pub async fn list(&self, filter: &OrganizationFilter) -> Result<Vec<Organization>, Error> {
+        let orgs = filter.org_uuids();
+        Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT DISTINCT o.* FROM organizations o
-                LEFT JOIN api_users_organizations a ON o.id = a.organization_id
-            WHERE ($1::uuid IS NULL OR a.api_user_id = $1)
-            ORDER BY o.name
+            SELECT * FROM organizations
+            WHERE ($1::uuid[] IS NULL OR id = ANY($1))
+            ORDER BY name
             "#,
-            filter.api_user_id,
+            orgs.as_deref(),
         )
         .fetch_all(&self.pool)
-        .await
+        .await?)
     }
 
     pub async fn get_by_id(
         &self,
         id: OrganizationId,
         filter: &OrganizationFilter,
-    ) -> Result<Option<Organization>, sqlx::Error> {
-        sqlx::query_as!(
+    ) -> Result<Option<Organization>, Error> {
+        let orgs = filter.org_uuids();
+        Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT DISTINCT o.* FROM organizations  o
-                JOIN api_users_organizations a ON o.id = a.organization_id
+            SELECT * FROM organizations
             WHERE id = $1
-              AND ($2::uuid IS NULL OR a.api_user_id = $2)
+              AND ($2::uuid[] IS NULL OR id = ANY($2))
             "#,
             *id,
-            filter.api_user_id,
+            orgs.as_deref(),
         )
         .fetch_optional(&self.pool)
-        .await
+        .await?)
     }
 
     pub async fn remove(
         &self,
         id: OrganizationId,
         filter: &OrganizationFilter,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), Error> {
+        let orgs = filter.org_uuids();
         sqlx::query!(
             r#"
             DELETE FROM organizations
-            USING organizations o
-                LEFT JOIN api_users_organizations a ON o.id = a.organization_id
-            WHERE o.id = organizations.id
-              AND o.id = $1
-              AND ($2::uuid IS NULL OR a.api_user_id = $2)
+            WHERE id = $1
+              AND ($2::uuid[] IS NULL OR id = ANY($2))
             "#,
             *id,
-            filter.api_user_id
+            orgs.as_deref(),
         )
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn add_user(&self, org_id: OrganizationId, user_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn add_user(&self, org_id: OrganizationId, user_id: ApiUserId) -> Result<(), Error> {
         sqlx::query!(
             r#"
             INSERT INTO api_users_organizations (organization_id, api_user_id)
             VALUES ($1, $2)
             "#,
             *org_id,
-            user_id
+            *user_id
         )
         .execute(&self.pool)
         .await?;

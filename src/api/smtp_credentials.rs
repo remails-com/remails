@@ -1,20 +1,18 @@
 use axum::{Json, extract::State};
 
 use crate::models::{
-    SmtpCredential, SmtpCredentialRepository, SmtpCredentialRequest, SmtpCredentialResponse,
+    ApiUser, SmtpCredential, SmtpCredentialRepository, SmtpCredentialRequest,
+    SmtpCredentialResponse,
 };
 
-use super::{
-    auth::ApiUser,
-    error::{ApiError, ApiResult},
-};
+use super::error::{ApiError, ApiResult};
 
 pub async fn create_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     api_user: ApiUser,
     Json(request): Json<SmtpCredentialRequest>,
 ) -> ApiResult<SmtpCredentialResponse> {
-    if !api_user.is_admin() {
+    if !api_user.is_super_admin() {
         return Err(ApiError::Forbidden);
     }
 
@@ -27,7 +25,7 @@ pub async fn list_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Vec<SmtpCredential>> {
-    if !api_user.is_admin() {
+    if !api_user.is_super_admin() {
         return Err(ApiError::Forbidden);
     }
 

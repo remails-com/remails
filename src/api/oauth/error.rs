@@ -1,4 +1,4 @@
-use crate::api::error::ApiError;
+use crate::{api::error::ApiError, models};
 use axum::response::{IntoResponse, Response};
 use http::StatusCode;
 
@@ -22,6 +22,10 @@ pub enum Error {
     CSRFTokenMismatch,
     #[error("invalid state")]
     ServiceNotFound,
+    #[error("Database error: {0}")]
+    Database(#[from] models::Error),
+    #[error("Unforeseen error: {0}")]
+    Other(String),
 }
 
 impl Error {
@@ -40,6 +44,8 @@ impl Error {
             Self::MissingCSRFCookie => "Missing CSRF cookie".to_string(),
             Self::CSRFTokenMismatch => "The CSRF token did not match".to_string(),
             Self::ServiceNotFound => "Service not found".to_string(),
+            Self::Database(_) => "Database error occurred".to_string(),
+            Self::Other(_) => "Unforeseen error occurred".to_string(),
         }
     }
 
@@ -48,6 +54,8 @@ impl Error {
             Error::MissingEnvironmentVariable(_)
             | Error::Json(_)
             | Error::DeserializeUser(_)
+            | Error::Database(_)
+            | Error::Other(_)
             | Error::ServiceNotFound => StatusCode::INTERNAL_SERVER_ERROR,
 
             Error::FetchUser(_) | Error::ParseUser(_) => StatusCode::BAD_GATEWAY,

@@ -13,7 +13,7 @@ use url::Url;
 #[derive(Debug, Error)]
 pub enum HandlerError {
     #[error("failed to persist message: {0}")]
-    MessageRepositoryError(sqlx::Error),
+    MessageRepositoryError(crate::models::Error),
     #[error("failed to parse message")]
     FailedParsingMessage,
     #[error("failed to serialize message data: {0}")]

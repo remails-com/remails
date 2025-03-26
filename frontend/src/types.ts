@@ -1,6 +1,6 @@
 
 export type User = {
-  role: string;
+  roles: any[];
   email: string;
 }
 

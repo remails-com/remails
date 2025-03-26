@@ -1,26 +1,19 @@
-use crate::models::{Message, MessageFilter, MessageId, MessageRepository};
+use crate::models::{ApiUser, Message, MessageFilter, MessageId, MessageRepository};
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 
-use super::{
-    auth::ApiUser,
-    error::{ApiError, ApiResult},
-};
+use super::error::{ApiError, ApiResult};
 
-impl TryFrom<ApiUser> for MessageFilter {
-    type Error = ApiError;
-
-    fn try_from(user: ApiUser) -> Result<Self, Self::Error> {
-        if user.is_admin() {
-            Ok(Self::default())
-        } else if let Some(user_id) = user.user_id() {
-            let mut filter = Self::default();
-            filter.api_user_id = Some(user_id);
-            Ok(filter)
+impl From<ApiUser> for MessageFilter {
+    fn from(user: ApiUser) -> Self {
+        if user.is_super_admin() {
+            Self::default()
         } else {
-            Err(ApiError::Unauthorized)
+            let mut filter = Self::default();
+            filter.orgs = Some(user.org_admin());
+            filter
         }
     }
 }
@@ -30,8 +23,18 @@ pub async fn list_messages(
     State(repo): State<MessageRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Vec<Message>> {
-    if api_user.is_user() {
-        filter.api_user_id = api_user.user_id();
+    if !api_user.is_super_admin() {
+        if let Some(filter_orgs) = filter.orgs {
+            filter.orgs = Some(
+                api_user
+                    .org_admin()
+                    .into_iter()
+                    .filter(|user_org| filter_orgs.contains(user_org))
+                    .collect(),
+            );
+        } else {
+            filter.orgs = Some(api_user.org_admin())
+        }
     }
 
     let messages = repo.list_message_metadata(filter).await?;
@@ -44,10 +47,10 @@ pub async fn get_message(
     State(repo): State<MessageRepository>,
     api_user: ApiUser,
 ) -> ApiResult<Message> {
-    let filter: MessageFilter = api_user.try_into()?;
+    let filter: MessageFilter = api_user.into();
 
     let message = repo
-        .find_by_id(id, filter.api_user_id)
+        .find_by_id(id, filter)
         .await?
         .ok_or(ApiError::NotFound)?;
     Ok(Json(message))

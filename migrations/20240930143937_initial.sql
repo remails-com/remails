@@ -49,7 +49,8 @@ EXECUTE PROCEDURE update_updated_at_column();
 CREATE TABLE api_users
 (
     id             uuid PRIMARY KEY,
-    roles          jsonb,
+    email          varchar                  NOT NULL UNIQUE,
+    roles          jsonb                    NOT NULL,
     github_user_id bigint,
     created_at     timestamp with time zone NOT NULL DEFAULT now(),
     updated_at     timestamp with time zone NOT NULL DEFAULT now()
@@ -72,7 +73,7 @@ CREATE TABLE api_users_organizations
 CREATE TABLE smtp_credential
 (
     id            uuid PRIMARY KEY         NOT NULL,
-    domain_id        uuid                  NOT NULL REFERENCES domains (id),
+    domain_id     uuid                     NOT NULL REFERENCES domains (id),
     username      varchar                  NOT NULL UNIQUE CHECK (username ~ '^[a-zA-Z0-9_-]{2,128}$'),
     password_hash varchar                  NOT NULL,
     created_at    timestamp with time zone NOT NULL DEFAULT now(),

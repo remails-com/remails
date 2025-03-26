@@ -1,12 +1,23 @@
+mod api_user;
 mod message;
 mod organization;
 mod smtp_credential;
 
+pub(crate) use api_user::*;
 pub(crate) use message::*;
 pub(crate) use organization::*;
 use serde::Serialize;
 pub(crate) use smtp_credential::*;
 use sqlx_paginated::PaginatedResponse;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
+    #[error(transparent)]
+    Serialization(#[from] serde_json::Error),
+}
 
 #[derive(Serialize, Debug)]
 pub struct Paginated<T> {

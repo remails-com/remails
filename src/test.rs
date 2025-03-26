@@ -179,7 +179,7 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", "9244a050-7d72-451a-9248-4b43d5108235")
+        .header("X-Test-Login", "44729d9f-a7dc-4226-b412-36a7537f5176")
         .send()
         .await
         .unwrap()
@@ -191,7 +191,8 @@ async fn integration_test(pool: PgPool) {
 
     let messages: Vec<Message> = client
         .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", "not-existent")
+        // Non-existent organization
+        .header("X-Test-Login", "ab5647ee-ea7c-40f8-ad70-bdcbff7fa4cd")
         .send()
         .await
         .unwrap()
