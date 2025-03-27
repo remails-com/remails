@@ -1,25 +1,23 @@
-#[cfg(not(test))]
-use crate::models::UserCookie;
 use crate::{
-    api::{ApiState, error::ApiError},
-    models::{ApiUser, ApiUserRepository, ApiUserRole, OrganizationId},
+    api::{error::ApiError, ApiState},
+    models::{ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, OrganizationId},
 };
 use axum::{
-    RequestPartsExt, debug_handler,
     extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts},
-    http::{StatusCode, request::Parts},
-    response::IntoResponse,
+    http::{request::Parts, StatusCode},
+    response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
+    RequestPartsExt,
 };
 use axum_extra::extract::PrivateCookieJar;
-#[cfg(not(test))]
-use chrono::Utc;
-use cookie::SameSite;
+use chrono::{DateTime, Duration, Utc};
+use cookie::{Cookie, SameSite};
+use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, net::SocketAddr};
 #[cfg(not(test))]
 use tracing::debug;
 use tracing::{error, trace, warn};
 
-pub(crate) static SESSION_COOKIE_NAME: &str = "SESSION";
+static SESSION_COOKIE_NAME: &str = "SESSION";
 
 impl ApiUser {
     pub fn is_super_admin(&self) -> bool {
@@ -38,36 +36,99 @@ impl ApiUser {
     }
 }
 
-pub(crate) struct CookieStorage {
-    pub(crate) jar: PrivateCookieJar,
+pub(super) struct SecureCookieStorage {
+    jar: PrivateCookieJar,
 }
 
-impl FromRequestParts<ApiState> for CookieStorage {
+impl FromRequestParts<ApiState> for SecureCookieStorage {
     type Rejection = Infallible;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &ApiState,
     ) -> Result<Self, Self::Rejection> {
-        // let state = <ApiState as FromRequestParts<S>>::from_request_parts(parts, state).await.ok().unwrap();
         let jar = PrivateCookieJar::from_headers(&parts.headers, state.config.session_key.clone());
 
         Ok(Self { jar })
     }
 }
 
-/// Handles the logout request.
-/// Removes the session cookie from the cookie jar and returns a simple message indicating successful logout.
-///
-/// # Parameters
-///
-/// - `jar`: The private cookie jar containing the session cookie.
-///
-/// # Returns
-///
-/// Returns a tuple containing the updated cookie jar and a simple logout message.
-#[debug_handler(state= ApiState)]
-pub(super) async fn logout(storage: CookieStorage) -> impl IntoResponse {
+impl IntoResponseParts for SecureCookieStorage {
+    type Error = Infallible;
+
+    fn into_response_parts(self, res: ResponseParts) -> Result<ResponseParts, Self::Error> {
+        self.jar.into_response_parts(res)
+    }
+}
+
+impl SecureCookieStorage {
+    pub fn remove<C>(self, cookie: C) -> SecureCookieStorage
+    where
+        C: Into<Cookie<'static>>,
+    {
+        Self {
+            jar: self.jar.remove(cookie),
+        }
+    }
+
+    pub fn add<C>(self, cookie: C) -> SecureCookieStorage
+    where
+        C: Into<Cookie<'static>>,
+    {
+        Self {
+            jar: self.jar.add(cookie),
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<Cookie<'static>> {
+        self.jar.get(name)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserCookie {
+    id: ApiUserId,
+    expires_at: DateTime<Utc>,
+}
+
+impl UserCookie {
+    pub fn id(&self) -> &ApiUserId {
+        &self.id
+    }
+    pub fn expires_at(&self) -> &DateTime<Utc> {
+        &self.expires_at
+    }
+}
+
+impl From<ApiUser> for UserCookie {
+    fn from(user: ApiUser) -> Self {
+        Self {
+            id: *user.id(),
+            expires_at: Utc::now() + Duration::days(7),
+        }
+    }
+}
+
+pub(super) fn login(
+    user: ApiUser,
+    cookie_storage: SecureCookieStorage,
+) -> Result<SecureCookieStorage, serde_json::Error> {
+    // Serialize the user data as a string
+    let cookie: UserCookie = user.into();
+    let session_cookie_value = serde_json::to_string(&cookie)?;
+
+    // Create a new session cookie
+    let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_cookie_value);
+    session_cookie.set_http_only(true);
+    session_cookie.set_secure(true);
+    session_cookie.set_same_site(SameSite::Lax);
+    session_cookie.set_max_age(cookie::time::Duration::days(7));
+    session_cookie.set_path("/");
+
+    Ok(cookie_storage.add(session_cookie))
+}
+
+pub(super) async fn logout(storage: SecureCookieStorage) -> impl IntoResponse {
     let mut jar = storage.jar;
 
     // Remove the session cookie from the cookie jar
@@ -81,8 +142,7 @@ pub(super) async fn logout(storage: CookieStorage) -> impl IntoResponse {
         jar = jar.remove(cookie);
     }
 
-    // Return the updated cookie jar and a logout message
-    (jar, "You are now logged out 👋")
+    (jar, Redirect::to("/"))
 }
 
 impl<S> FromRequestParts<S> for ApiUser

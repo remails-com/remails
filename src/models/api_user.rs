@@ -54,30 +54,6 @@ impl ApiUser {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UserCookie {
-    id: ApiUserId,
-    expires_at: DateTime<Utc>,
-}
-
-impl UserCookie {
-    pub fn id(&self) -> &ApiUserId {
-        &self.id
-    }
-    pub fn expires_at(&self) -> &DateTime<Utc> {
-        &self.expires_at
-    }
-}
-
-impl From<ApiUser> for UserCookie {
-    fn from(user: ApiUser) -> Self {
-        Self {
-            id: user.id,
-            expires_at: Utc::now() + Duration::days(7),
-        }
-    }
-}
-
 struct PgApiUser {
     id: ApiUserId,
     email: String,

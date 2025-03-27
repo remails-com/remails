@@ -13,9 +13,9 @@ use crate::{
     },
 };
 use axum::{
-    Json, Router,
-    extract::{FromRef, State},
-    routing::get,
+    extract::{FromRef, State}, routing::get,
+    Json,
+    Router,
 };
 use base64ct::Encoding;
 use serde::Serialize;
@@ -56,7 +56,7 @@ pub struct ApiConfig {
 pub struct ApiState {
     pool: PgPool,
     config: ApiConfig,
-    oauth_service: GithubOauthService,
+    gh_oauth_service: GithubOauthService,
 }
 
 impl FromRef<ApiState> for PgPool {
@@ -91,7 +91,7 @@ impl FromRef<ApiState> for ApiUserRepository {
 
 impl FromRef<ApiState> for GithubOauthService {
     fn from_ref(state: &ApiState) -> Self {
-        state.oauth_service.clone()
+        state.gh_oauth_service.clone()
     }
 }
 
@@ -103,7 +103,7 @@ pub struct ApiServer {
 
 impl ApiServer {
     pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
-        let github_oauth = GithubOauthService::new(None).unwrap();
+        let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
         let oauth_router = github_oauth.router();
 
         let session_key = match env::var("SESSION_KEY") {
@@ -121,7 +121,7 @@ impl ApiServer {
         let state = ApiState {
             pool,
             config: ApiConfig { session_key },
-            oauth_service: github_oauth,
+            gh_oauth_service: github_oauth,
         };
 
         let router = Router::new()
