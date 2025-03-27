@@ -1,37 +1,23 @@
-use crate::{
-    api::{
-        auth::SecureCookieStorage,
-        oauth::{
-            github::{GithubOauthService, GITHUB_ACCEPT_TYPE, GITHUB_EMAILS_URL, GITHUB_USER_URL}, Error,
-            CSRF_COOKIE_NAME,
-        },
-        USER_AGENT_VALUE,
-    },
-    models::{ApiUser, ApiUserRepository, NewApiUser},
+use crate::api::{
+    ApiState,
+    auth::{SecureCookieStorage, login},
+    oauth::{CSRF_COOKIE_NAME, Error, OAuthService},
 };
-use axum::extract::State;
-/// This module contains the request handlers for the GitHub OAuth flow.
-/// It includes functions for login, logout, and authorization.
+use axum::extract::{FromRef, State};
+/// This module contains the request handlers for the OAuth flow.
+/// It includes functions for login, and authorization.
 /// These handlers are used by the Axum framework to handle incoming HTTP requests.
 use axum::{
     extract::Query,
     response::{IntoResponse, Redirect, Response},
 };
-use axum_extra::extract::{cookie::Cookie, CookieJar};
+use axum_extra::extract::cookie::Cookie;
 use cookie::SameSite;
-use http::{
-    header::{ACCEPT, USER_AGENT},
-    HeaderValue,
-};
-use oauth2::{
-    AccessToken, AuthorizationCode, CsrfToken, ErrorResponse, RevocableToken, Scope,
-    TokenIntrospectionResponse, TokenResponse,
-};
+use oauth2::{AuthorizationCode, CsrfToken, TokenResponse};
 use reqwest::redirect::Policy;
 use serde::Deserialize;
 use std::{fmt::Debug, time::Duration};
-use tracing::{debug, error, trace};
-use crate::api::auth::login;
+use tracing::error;
 
 /// Handles the login request.
 /// Generates the authorization URL and CSRF token, sets the CSRF token as a cookie,
@@ -39,7 +25,7 @@ use crate::api::auth::login;
 ///
 /// # Parameters
 ///
-/// - `oauth_client`: The `GitHubOAuthClient` instance.
+/// - `oauth_service`: The `OAuthService` instance.
 /// - `jar`: The private cookie jar to store the CSRF token cookie.
 ///
 /// # Returns
@@ -50,17 +36,22 @@ use crate::api::auth::login;
 /// # Errors
 ///
 /// Returns an `Error` if there is an issue generating the CSRF token or setting the cookie.
-pub(super) async fn oauth_login(
-    State(oauth_client): State<GithubOauthService>,
+pub(super) async fn oauth_login<T>(
+    State(oauth_service): State<T>,
     cookie_storage: SecureCookieStorage,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<impl IntoResponse, Error>
+where
+    T: OAuthService,
+    T: FromRef<ApiState>,
+{
     // Generate the authorization URL and CSRF token
-    let (auth_url, csrf_token) = oauth_client
-        .oauth_client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("read:user".to_string()))
-        .add_scope(Scope::new("user:email".to_string()))
-        .url();
+    let mut oauth = oauth_service
+        .oauth_client()
+        .authorize_url(CsrfToken::new_random);
+    for scope in T::scopes() {
+        oauth = oauth.add_scope(scope);
+    }
+    let (auth_url, csrf_token) = oauth.url();
 
     // Serialize the CSRF token as a string
     let csrf_cookie_value = serde_json::to_string(&csrf_token)?;
@@ -89,7 +80,6 @@ pub(super) struct AuthRequest {
     state: String,
 }
 
-
 /// Handles the authorization request.
 /// Exchanges the authorization code for an access token,
 /// validates the CSRF token, fetches user data and organizations,
@@ -110,26 +100,30 @@ pub(super) struct AuthRequest {
 ///
 /// Returns an `Error` if there is an issue exchanging the authorization code for an access token,
 /// validating the CSRF token, fetching user data or organizations, or setting the session cookie.
-pub(super) async fn authorize(
-    State(service): State<GithubOauthService>,
+pub(super) async fn authorize<T>(
+    State(service): State<T>,
     Query(query): Query<AuthRequest>,
     cookie_storage: SecureCookieStorage,
-) -> Result<Response, Error> {
+) -> Result<Response, Error>
+where
+    T: OAuthService,
+    T: FromRef<ApiState>,
+{
     let client = reqwest::Client::builder()
         .use_rustls_tls()
         .redirect(Policy::none())
         .timeout(Duration::from_secs(2))
         .build()
         .map_err(|e| Error::FetchUser(e.to_string()))?;
-    
+
     // Exchange the authorization code for an access token
     let token = service
-        .oauth_client
+        .oauth_client()
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&client)
         .await
         .map_err(|e| {
-            error!("OAuth flow with GitHub failed. Cannot exchange authorization code: {e:?}");
+            error!("OAuth flow failed. Cannot exchange authorization code: {e:?}");
             Error::OauthToken(e.to_string())
         })?;
 
@@ -152,7 +146,7 @@ pub(super) async fn authorize(
     if query.state != *csrf_token.secret() {
         return Err(Error::CSRFTokenMismatch);
     }
-    
+
     let api_user = service.fetch_user(token.access_token()).await?;
 
     let cookie_storage = login(api_user, cookie_storage)?;

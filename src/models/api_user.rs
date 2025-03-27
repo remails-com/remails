@@ -1,5 +1,5 @@
 use crate::models::{Error, OrganizationId};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,7 @@ pub struct ApiUser {
     id: ApiUserId,
     pub email: String,
     roles: Vec<ApiUserRole>,
+    #[allow(unused)]
     github_user_id: Option<i64>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -119,6 +120,7 @@ impl ApiUserRepository {
         .transpose()?)
     }
 
+    #[cfg_attr(test, allow(dead_code))]
     pub async fn find_by_id(&self, id: ApiUserId) -> Result<Option<ApiUser>, Error> {
         Ok(sqlx::query_as!(
             PgApiUser,

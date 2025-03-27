@@ -1,12 +1,12 @@
 use crate::{
-    api::{error::ApiError, ApiState},
+    api::{ApiState, error::ApiError},
     models::{ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, OrganizationId},
 };
 use axum::{
-    extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts},
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
     RequestPartsExt,
+    extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts},
+    http::{StatusCode, request::Parts},
+    response::{IntoResponse, IntoResponseParts, Redirect, ResponseParts},
 };
 use axum_extra::extract::PrivateCookieJar;
 use chrono::{DateTime, Duration, Utc};

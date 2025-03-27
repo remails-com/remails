@@ -14,14 +14,10 @@ pub enum Error {
     ParseUser(String),
     #[error("json {0}")]
     Json(#[from] serde_json::Error),
-    #[error("failed deserializing user {0}")]
-    DeserializeUser(serde_json::Error),
     #[error("missing csrf cookie")]
     MissingCSRFCookie,
     #[error("the CSRF token did not match")]
     CSRFTokenMismatch,
-    #[error("invalid state")]
-    ServiceNotFound,
     #[error("Database error: {0}")]
     Database(#[from] models::Error),
     #[error("Unforeseen error: {0}")]
@@ -38,12 +34,8 @@ impl Error {
             Self::FetchUser(_) => "An error occurred while fetching the GitHub user".to_string(),
             Self::ParseUser(_) => "An error occurred while parsing the GitHub user".to_string(),
             Self::Json(_) => "An error occurred while processing JSON".to_string(),
-            Self::DeserializeUser(_) => {
-                "An error occurred while deserializing the user".to_string()
-            }
             Self::MissingCSRFCookie => "Missing CSRF cookie".to_string(),
             Self::CSRFTokenMismatch => "The CSRF token did not match".to_string(),
-            Self::ServiceNotFound => "Service not found".to_string(),
             Self::Database(_) => "Database error occurred".to_string(),
             Self::Other(_) => "Unforeseen error occurred".to_string(),
         }
@@ -53,10 +45,8 @@ impl Error {
         match self {
             Error::MissingEnvironmentVariable(_)
             | Error::Json(_)
-            | Error::DeserializeUser(_)
             | Error::Database(_)
-            | Error::Other(_)
-            | Error::ServiceNotFound => StatusCode::INTERNAL_SERVER_ERROR,
+            | Error::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
 
             Error::FetchUser(_) | Error::ParseUser(_) => StatusCode::BAD_GATEWAY,
 

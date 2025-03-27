@@ -13,9 +13,9 @@ use crate::{
     },
 };
 use axum::{
-    extract::{FromRef, State}, routing::get,
-    Json,
-    Router,
+    Json, Router,
+    extract::{FromRef, State},
+    routing::get,
 };
 use base64ct::Encoding;
 use serde::Serialize;

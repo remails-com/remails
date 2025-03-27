@@ -1,30 +1,28 @@
 use super::handlers::{authorize, oauth_login};
 use crate::{
-    api::{oauth, oauth::Error, ApiState, USER_AGENT_VALUE},
+    api::{
+        ApiState, USER_AGENT_VALUE,
+        oauth::{Error, OAuthService},
+    },
     models::{ApiUser, ApiUserRepository, NewApiUser},
 };
-use axum::{
-    response::{Redirect, Response},
-    routing::get,
-    Router,
-};
+use axum::{Router, routing::get};
 use http::{
-    header::{ACCEPT, USER_AGENT},
     HeaderValue,
+    header::{ACCEPT, USER_AGENT},
 };
 use oauth2::{
+    AccessToken, AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
+    Scope, StandardRevocableToken, TokenUrl,
     basic::{
         BasicClient, BasicErrorResponse, BasicRevocationErrorResponse,
         BasicTokenIntrospectionResponse, BasicTokenResponse,
-    }, AccessToken, AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet,
-    RedirectUrl, StandardRevocableToken,
-    TokenUrl,
+    },
 };
 use reqwest::redirect::Policy;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{Deserialize, de::DeserializeOwned};
 use std::{env, fmt::Debug, time::Duration};
 use tracing::{debug, trace};
-use url::Url;
 
 pub(super) static GITHUB_AUTH_URL: &str = "https://github.com/login/oauth/authorize";
 pub(super) static GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
@@ -112,28 +110,11 @@ impl GithubOauthService {
     /// Returns a `Router` instance for the service.
     pub fn router(&self) -> Router<ApiState> {
         Router::new()
-            .route("/login/github", get(oauth_login))
-            .route("/oauth/authorize/github", get(authorize))
-    }
-
-    pub async fn fetch_user(&self, token: &AccessToken) -> Result<ApiUser, Error> {
-        // Fetch user data from the GitHub API
-        let user_data: GitHubUser = self.fetch_gh_api(GITHUB_USER_URL, token).await?;
-
-        if let Some(existing_user) = self.user_repository.find_by_github_id(user_data.id).await? {
-            trace!(
-                user_id = existing_user.id().to_string(),
-                "Signed in with GitHub for existing user"
-            );
-            Ok(existing_user)
-        } else {
-            let new = self.github_sign_up(user_data.id, token).await?;
-            debug!(
-                user_id = new.id().to_string(),
-                "Signed up new user via GitHub"
-            );
-            Ok(new)
-        }
+            .route("/login/github", get(oauth_login::<GithubOauthService>))
+            .route(
+                "/oauth/authorize/github",
+                get(authorize::<GithubOauthService>),
+            )
     }
 
     async fn github_sign_up(
@@ -188,5 +169,51 @@ impl GithubOauthService {
             .json()
             .await
             .map_err(|e| Error::ParseUser(e.to_string()))
+    }
+}
+
+impl OAuthService for GithubOauthService {
+    fn scopes() -> Vec<Scope> {
+        vec![
+            Scope::new("read:user".to_string()),
+            Scope::new("user:email".to_string()),
+        ]
+    }
+
+    fn oauth_client(
+        &self,
+    ) -> &Client<
+        BasicErrorResponse,
+        BasicTokenResponse,
+        BasicTokenIntrospectionResponse,
+        StandardRevocableToken,
+        BasicRevocationErrorResponse,
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointSet,
+    > {
+        &self.oauth_client
+    }
+
+    async fn fetch_user(&self, token: &AccessToken) -> Result<ApiUser, Error> {
+        // Fetch user data from the GitHub API
+        let user_data: GitHubUser = self.fetch_gh_api(GITHUB_USER_URL, token).await?;
+
+        if let Some(existing_user) = self.user_repository.find_by_github_id(user_data.id).await? {
+            trace!(
+                user_id = existing_user.id().to_string(),
+                "Signed in with GitHub for existing user"
+            );
+            Ok(existing_user)
+        } else {
+            let new = self.github_sign_up(user_data.id, token).await?;
+            debug!(
+                user_id = new.id().to_string(),
+                "Signed up new user via GitHub"
+            );
+            Ok(new)
+        }
     }
 }
