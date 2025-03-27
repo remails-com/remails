@@ -17,6 +17,8 @@ pub enum Error {
     Database(#[from] sqlx::Error),
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
+    #[error(transparent)]
+    Email(#[from] email_address::Error),
 }
 
 #[derive(Serialize, Debug)]

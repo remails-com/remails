@@ -3,13 +3,14 @@ use axum::{
     Json,
     response::{IntoResponse, Response},
 };
+use email_address::EmailAddress;
 use serde::Serialize;
 use serde_json::json;
 
 #[derive(Debug, Serialize)]
 pub struct WhoamiResponse {
     pub roles: Vec<ApiUserRole>,
-    pub email: String,
+    pub email: EmailAddress,
 }
 
 impl From<ApiUser> for WhoamiResponse {

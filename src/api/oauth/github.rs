@@ -146,7 +146,7 @@ impl GithubOauthService {
 
         Ok(self
             .user_repository
-            .create(&NewApiUser {
+            .create(NewApiUser {
                 email,
                 roles: vec![],
                 github_user_id: Some(github_user_id),

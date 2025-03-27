@@ -4,7 +4,23 @@ use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    sqlx::Type,
+    PartialOrd,
+    Ord,
+    Eq,
+)]
+#[sqlx(transparent)]
 pub struct OrganizationId(Uuid);
 
 impl OrganizationId {

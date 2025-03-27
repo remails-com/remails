@@ -45,12 +45,20 @@ CREATE TRIGGER update_domains_updated_at
     FOR EACH ROW
 EXECUTE PROCEDURE update_updated_at_column();
 
+CREATE TYPE role AS ENUM (
+    'admin'
+    );
+
+CREATE TYPE org_role AS
+(
+    org_id uuid,
+    role   role
+);
 
 CREATE TABLE api_users
 (
     id             uuid PRIMARY KEY,
     email          varchar                  NOT NULL UNIQUE,
-    roles          jsonb                    NOT NULL,
     github_user_id bigint,
     created_at     timestamp with time zone NOT NULL DEFAULT now(),
     updated_at     timestamp with time zone NOT NULL DEFAULT now()
@@ -65,10 +73,29 @@ CREATE TABLE api_users_organizations
 (
     api_user_id     uuid                     NOT NULL REFERENCES api_users (id) ON DELETE CASCADE,
     organization_id uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    role            role                     NOT NULL,
     created_at      timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at      timestamp with time zone NOT NULL DEFAULT now(),
     PRIMARY KEY (api_user_id, organization_id)
 );
+CREATE TRIGGER update_api_users_organizations_updated_at
+    BEFORE UPDATE
+    ON api_users_organizations
+    FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();
 
+CREATE TABLE api_users_global_role
+(
+    api_user_id uuid PRIMARY KEY REFERENCES api_users (id) ON DELETE CASCADE,
+    role        role                     NOT NULL,
+    created_at  timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at  timestamp with time zone NOT NULL DEFAULT now()
+);
+CREATE TRIGGER update_api_users_global_role_updated_at
+    BEFORE UPDATE
+    ON api_users_global_role
+    FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TABLE smtp_credential
 (
