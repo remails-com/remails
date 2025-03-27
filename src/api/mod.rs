@@ -160,6 +160,7 @@ impl ApiServer {
     pub async fn serve_frontend(self) -> Self {
         let memory_router = memory_serve::from_local_build!()
             .index_file(Some("/index.html"))
+            .fallback(Some("/index.html"))
             .into_router();
 
         let router = self.router.merge(memory_router);
