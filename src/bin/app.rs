@@ -9,6 +9,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+#[cfg(feature = "load-fixtures")]
+use tracing::error;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
@@ -28,6 +31,11 @@ async fn main() -> anyhow::Result<()> {
         .connect(&database_url)
         .await
         .context("failed to connect to database")?;
+
+    #[cfg(feature = "load-fixtures")]
+    if let Err(e) = remails::load_fixtures(&pool).await {
+        error!("Failed to load fixtures: {e:?}");
+    }
 
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
     let smtp_config = SmtpConfig::default();

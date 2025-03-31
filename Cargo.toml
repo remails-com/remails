@@ -17,6 +17,9 @@ path = "src/bin/management.rs"
 name = "mta"
 path = "src/bin/mta.rs"
 
+[features]
+load-fixtures = []
+
 [dependencies]
 anyhow = "1.0.97"
 axum = { version = "0.8.3", features = ["macros"] }
@@ -48,7 +51,7 @@ reqwest = { version = "0.12.15", default-features = false, features = ["json", "
 cookie = "0.18.1"
 email_address = "0.2.9"
 sqlx-paginated = "0.2.30"
-memory-serve = "1.2.0"
+memory-serve = "1.2.1"
 derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug"]}
 rand = "0.9.0"
 

@@ -7,6 +7,7 @@ export type Navigate = (name: RouteName, params?: RouteParams) => void;
 export interface Route {
   name: RouteName;
   path: string;
+  children?: Route[];
 }
 
 export interface RouterContextProps {
@@ -15,10 +16,20 @@ export interface RouterContextProps {
   navigate: Navigate;
 }
 
-export const routes = [
+export const routes: Route[] = [
   {
-    name: 'organisations',
-    path: '/organisations',
+    name: 'organizations',
+    path: '/organizations',
+    children: [
+      {
+        name: 'add',
+        path: '/add',
+      },
+      {
+        name: 'edit',
+        path: '/edit/{id}',
+      }
+    ]
   },
   {
     name: 'domains',
