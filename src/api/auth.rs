@@ -91,6 +91,7 @@ pub struct UserCookie {
     expires_at: DateTime<Utc>,
 }
 
+#[cfg(not(test))]
 impl UserCookie {
     pub fn id(&self) -> &ApiUserId {
         &self.id
@@ -153,6 +154,7 @@ where
 {
     type Rejection = ApiError;
 
+    #[cfg_attr(test, allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
             error!("could not determine client IP address");

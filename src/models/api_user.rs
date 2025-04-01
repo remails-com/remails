@@ -1,5 +1,4 @@
 use crate::models::{Error, OrganizationId};
-use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
@@ -10,6 +9,7 @@ use uuid::Uuid;
 pub struct ApiUserId(Uuid);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
 pub enum ApiUserRole {
     SuperAdmin,
@@ -30,8 +30,6 @@ pub struct ApiUser {
     roles: Vec<ApiUserRole>,
     #[allow(unused)]
     github_user_id: Option<i64>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 #[cfg(test)]
@@ -42,8 +40,6 @@ impl ApiUser {
             email: "test@test.com".parse().unwrap(),
             roles,
             github_user_id: None,
-            created_at: Default::default(),
-            updated_at: Default::default(),
         }
     }
 }
@@ -76,8 +72,6 @@ struct PgApiUser {
     organization_roles: Vec<PgOrgRole>,
     global_roles: Vec<Option<PgRole>>,
     github_user_id: Option<i64>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 impl TryFrom<PgApiUser> for ApiUser {
@@ -109,8 +103,6 @@ impl TryFrom<PgApiUser> for ApiUser {
             email: u.email.parse()?,
             roles,
             github_user_id: u.github_user_id,
-            created_at: u.created_at,
-            updated_at: u.updated_at,
         })
     }
 }
@@ -186,7 +178,9 @@ impl ApiUserRepository {
         sqlx::query_as!(
             PgApiUser,
             r#"
-            SELECT u.*,
+            SELECT u.id,
+                   u.email,
+                   u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
@@ -208,7 +202,9 @@ impl ApiUserRepository {
         sqlx::query_as!(
             PgApiUser,
             r#"
-            SELECT u.*,
+            SELECT u.id,
+                   u.email,
+                   u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 

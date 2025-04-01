@@ -1,6 +1,7 @@
+export type Role = 'super_admin' | { organization_admin: string };
 
-export type User = {
-  roles: any[];
+export interface User {
+  roles: Role[];
   email: string;
 }
 
