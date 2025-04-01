@@ -3,7 +3,7 @@ use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, str::FromStr, sync::Arc};
+use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -16,10 +16,6 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
-    #[error("failed to connect to upstream server: {0}")]
-    ConnectToUpstream(mail_send::Error),
-    #[error("failed to deliver message: {0}")]
-    DeliverMessage(mail_send::Error),
 }
 
 pub struct HandlerConfig {
@@ -94,68 +90,98 @@ impl Handler {
         Ok(message)
     }
 
-    pub async fn resolve_mail_domain(&self) -> () {
-        self.config.resolver.mx_lookup("localhost").await.unwrap();
+    //TODO: only allow mx record if the preference is lower than our own, to prevent loops
+    pub async fn resolve_mail_domain(&self, domain: &str, prio: &mut Range<u16>) -> String {
+        // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
+        // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
+        let lookup = self
+            .config
+            .resolver
+            .mx_lookup(&format!("{domain}."))
+            .await
+            .unwrap();
+
+        let destination = lookup
+            .iter()
+            .filter(|mx| prio.contains(&mx.preference()))
+            .min_by_key(|mx| mx.preference())
+            .unwrap();
+
+        // make sure we don't accept this SMTP server again if it fails us
+        prio.start = destination.preference() + 1;
+
+        debug!("using mail server: {destination:?}");
+        destination.exchange().to_utf8()
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
 
-        for recipient in &message.recipients {
-            let _domain = match email_address::EmailAddress::from_str(recipient) {
+        //TODO: this clone here isn't too bad, but maybe we can do better
+        'rcpt: for recipient in &message.recipients.clone() {
+            let mail_address = match email_address::EmailAddress::from_str(recipient) {
                 Ok(address) => address,
                 Err(err) => {
                     warn!("Invalid email address {recipient}: {err}");
-                    continue;
+                    continue 'rcpt;
                 }
             };
 
-            #[cfg(test)]
-            let (hostname, port) = self.config.forced_smtp_addr;
-            #[cfg(not(test))]
-            let (hostname, port) = ("localhost", 25);
+            let domain = mail_address.domain();
 
-            self.resolve_mail_domain();
+            //TODO: use our own priority
+            let mut priority = 0..1000;
 
-            let client = SmtpClientBuilder::new(hostname, port);
+            'mx: while !priority.is_empty() {
+                // TODO: mock the MX resolver for test cases instead of polluting this code flow
+                #[cfg(test)]
+                let (hostname, port) = self.config.forced_smtp_addr;
 
-            let mut client = match client.connect_plain().await {
-                Ok(client) => {
-                    trace!("connected to upstream server");
+                #[cfg(not(test))]
+                let hostname = self.resolve_mail_domain(domain, &mut priority).await;
 
-                    client
-                }
-                Err(e) => {
-                    error!("failed to connect to upstream server: {e}");
+                #[cfg(not(test))]
+                let port = 25;
 
+                let client = SmtpClientBuilder::new(hostname, port);
+
+                let mut client = match client.connect_plain().await {
+                    Ok(client) => {
+                        trace!("connected to upstream server");
+
+                        client
+                    }
+                    Err(e) => {
+                        error!("failed to connect to upstream server: {e}");
+
+                        continue 'mx;
+                    }
+                };
+
+                // TODO FIXME: since messages can be rather large, this clone can have a negative impact on the performance
+                // if the server gets under stress; and it can probably be fixed by making "update_message_status" more efficient
+                // (does it really need to UPDATE the message body simply for setting the status?)
+                if let Err(e) = client.send(message.clone()).await {
+                    error!("failed to send message: {e}");
+
+                    continue 'mx;
+                } else {
                     self.message_repository
-                        .update_message_status(&mut message, MessageStatus::Failed)
+                        .update_message_status(&mut message, MessageStatus::Delivered)
                         .await
                         .map_err(HandlerError::MessageRepositoryError)?;
 
-                    return Err(HandlerError::ConnectToUpstream(e));
+                    break 'mx;
                 }
-            };
-
-            // TODO FIXME: since messages can be rather large, this clone can have a negative impact on the performance
-            // if the server gets under stress; and it can probably be fixed by making "update_message_status" more efficient
-            // (does it really need to UPDATE the message body simply for setting the status?)
-            if let Err(e) = client.send(message.clone()).await {
-                error!("failed to send message: {e}");
-
-                self.message_repository
-                    .update_message_status(&mut message, MessageStatus::Failed)
-                    .await
-                    .map_err(HandlerError::MessageRepositoryError)?;
-
-                return Err(HandlerError::DeliverMessage(e));
             }
-        }
 
-        self.message_repository
-            .update_message_status(&mut message, MessageStatus::Delivered)
-            .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            self.message_repository
+                .update_message_status(&mut message, MessageStatus::Failed)
+                .await
+                .map_err(HandlerError::MessageRepositoryError)?;
+
+            // potential TODO: do we want to accumulate errors here to return at the end?
+        }
 
         Ok(())
     }
@@ -237,6 +263,7 @@ mod test {
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
+            resolver: Resolver::builder_tokio().unwrap().build(),
             forced_smtp_addr: ("localhost", mailcrab_port),
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
