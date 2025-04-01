@@ -305,6 +305,8 @@ impl SmtpSession {
         }
 
         if buffer.ends_with(Self::DATA_END) {
+            buffer.truncate(buffer.len() - Self::DATA_END.len());
+
             let Some(message) = self.current_message.take() else {
                 return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
             };
