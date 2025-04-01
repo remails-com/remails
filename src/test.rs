@@ -57,11 +57,7 @@ async fn integration_test(pool: PgPool) {
     };
 
     let handler_config = HandlerConfig {
-        test_smtp_addr: Some(
-            format!("smtp://localhost:{mailcrab_random_port}")
-                .parse()
-                .unwrap(),
-        ),
+        forced_smtp_addr: ("localhost", mailcrab_random_port),
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;

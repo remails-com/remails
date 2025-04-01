@@ -1,4 +1,5 @@
 use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
@@ -8,7 +9,6 @@ use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
-use url::Url;
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -23,22 +23,24 @@ pub enum HandlerError {
 }
 
 pub struct HandlerConfig {
-    pub test_smtp_addr: Option<Url>,
+    pub resolver: Resolver<TokioConnectionProvider>,
+    #[cfg(test)]
+    pub forced_smtp_addr: (&'static str, u16),
 }
 
+#[cfg(not(test))]
 impl Default for HandlerConfig {
     fn default() -> Self {
-        let test_smtp_addr = std::env::var("TEST_SMTP_ADDR")
-            .ok()
-            .map(|s| Url::parse(&s).expect("Failed to parse TEST_SMTP_ADDR environment variable"));
-
-        Self { test_smtp_addr }
+        Self {
+            resolver: Resolver::builder_tokio().unwrap().build(),
+        }
     }
 }
 
 pub struct Handler {
     message_repository: MessageRepository,
     shutdown: CancellationToken,
+    #[allow(unused)]
     config: Arc<HandlerConfig>,
 }
 
@@ -66,7 +68,7 @@ impl Handler {
 
         // TODO: check limits etc
 
-        debug!("parsing message {}", message.id());
+        debug!("parsing message {} {}", message.id(), message.message_data);
 
         let json_message_data = {
             // parse and save message contents
@@ -92,6 +94,10 @@ impl Handler {
         Ok(message)
     }
 
+    pub async fn resolve_mail_domain(&self) -> () {
+        self.config.resolver.mx_lookup("localhost").await.unwrap();
+    }
+
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
 
@@ -104,18 +110,14 @@ impl Handler {
                 }
             };
 
-            let (hostname, port) = &self
-                .config
-                .as_ref()
-                .test_smtp_addr
-                .as_ref()
-                .and_then(|c| c.domain().zip(c.port()))
-                .unwrap_or_else(|| {
-                    warn!("No TEST_SMTP_ADDR found. Using localhost:1025; actual mail transfer is not supported yet.");
-                    ("localhost", 1025)
-                });
+            #[cfg(test)]
+            let (hostname, port) = self.config.forced_smtp_addr;
+            #[cfg(not(test))]
+            let (hostname, port) = ("localhost", 25);
 
-            let client = SmtpClientBuilder::new(hostname, *port);
+            self.resolve_mail_domain();
+
+            let client = SmtpClientBuilder::new(hostname, port);
 
             let mut client = match client.connect_plain().await {
                 Ok(client) => {
@@ -235,7 +237,7 @@ mod test {
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
-            test_smtp_addr: Some(format!("smtp://localhost:{mailcrab_port}").parse().unwrap()),
+            forced_smtp_addr: ("localhost", mailcrab_port),
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
