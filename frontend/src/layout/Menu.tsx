@@ -8,10 +8,10 @@ export function Menu() {
   return (
     <>
       <NavLink
-        label="Organisations"
-        active={route.name === 'organisations'}
+        label="Organizations"
+        active={route.name === 'organizations'}
         leftSection={<IconBuildings size={16} stroke={1.5} />}
-        onClick={() => navigate('organisations')}
+        onClick={() => navigate('organizations')}
       />
       <NavLink
         label="Domains"

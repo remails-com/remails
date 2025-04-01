@@ -1,17 +1,19 @@
-import { Badge, Loader, Table } from "@mantine/core";
-import { useMessageLog } from "./hooks/useMessageLog";
+import { Badge, Table } from "@mantine/core";
+import { useMessageLog } from "../hooks/useMessageLog";
+import { Loader } from "../Loader";
+import { formatDateTime } from "../util";
 
 export function MessageLog() {
   const { messages, loading } = useMessageLog();
 
   if (loading) {
-    return <Loader color="gray" size="xl" type="dots" />;
+    return <Loader />;
   }
 
   const rows = messages.map((message) => (
     <Table.Tr key={message.id}>
       <Table.Td>{message.id}</Table.Td>
-      <Table.Td>{new Date(message.created_at).toISOString().slice(0, 19)}</Table.Td>
+      <Table.Td>{formatDateTime(message.created_at)}</Table.Td>
       <Table.Td>
         <Badge color="secondary" size="lg" variant="light" mr="sm" tt="none">
           {message.from_email}

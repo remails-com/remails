@@ -14,9 +14,15 @@ mod smtp;
 pub use crate::handler::HandlerConfig;
 pub use smtp::SmtpConfig;
 
+#[cfg(feature = "load-fixtures")]
+pub use fixtures::load_fixtures;
+
 mod models;
 #[cfg(test)]
 mod test;
+
+#[cfg(feature = "load-fixtures")]
+mod fixtures;
 
 pub async fn run_mta(
     pool: PgPool,
