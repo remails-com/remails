@@ -2,7 +2,7 @@ use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
-use std::{str::FromStr, sync::Arc};
+use std::{borrow::Cow::Borrowed, str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -14,8 +14,6 @@ use url::Url;
 pub enum HandlerError {
     #[error("failed to persist message: {0}")]
     MessageRepositoryError(crate::models::Error),
-    #[error("failed to parse message")]
-    FailedParsingMessage,
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
     #[error("failed to connect to upstream server: {0}")]
@@ -74,7 +72,10 @@ impl Handler {
             // parse and save message contents
             let message_data = MessageParser::default()
                 .parse(&message.raw_data)
-                .ok_or(HandlerError::FailedParsingMessage)?;
+                .ok_or_else(|| mail_parser::Message {
+                    raw_message: Borrowed(&message.raw_data),
+                    ..Default::default()
+                });
 
             serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
         };
