@@ -16,9 +16,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY build.rs build.rs ./
 COPY src/ src/
 COPY .sqlx .sqlx/
+COPY migrations migrations/
 
 # Don't depend on live sqlx during build use cached .sqlx
-RUN SQLX_OFFLINE=true cargo build --release --bin app
+RUN SQLX_OFFLINE=true cargo build --release --bin app --features load-fixtures
 
 FROM debian:bookworm-slim AS final
 RUN apt-get update && apt-get install libssl3 -y && apt-get upgrade -y
