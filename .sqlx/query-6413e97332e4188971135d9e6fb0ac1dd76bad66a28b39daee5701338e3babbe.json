@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO api_users_organizations (api_user_id, organization_id, role) \n                VALUES ($1, $2, $3)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6413e97332e4188971135d9e6fb0ac1dd76bad66a28b39daee5701338e3babbe"
+}

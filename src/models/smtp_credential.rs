@@ -1,3 +1,4 @@
+use crate::models::Error;
 use derive_more::{Deref, Display, From};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
@@ -71,7 +72,7 @@ impl SmtpCredentialRepository {
     pub async fn generate(
         &self,
         new_credential: &SmtpCredentialRequest,
-    ) -> Result<SmtpCredentialResponse, sqlx::Error> {
+    ) -> Result<SmtpCredentialResponse, Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 20);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -99,10 +100,7 @@ impl SmtpCredentialRepository {
         })
     }
 
-    pub async fn find_by_username(
-        &self,
-        username: &str,
-    ) -> Result<Option<SmtpCredential>, sqlx::Error> {
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<SmtpCredential>, Error> {
         let credential = sqlx::query_as!(
             SmtpCredential,
             r#"
@@ -116,7 +114,7 @@ impl SmtpCredentialRepository {
         Ok(credential)
     }
 
-    pub async fn list(&self) -> Result<Vec<SmtpCredential>, sqlx::Error> {
+    pub async fn list(&self) -> Result<Vec<SmtpCredential>, Error> {
         let credentials = sqlx::query_as!(
             SmtpCredential,
             r#"

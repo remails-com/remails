@@ -1,12 +1,11 @@
-use crate::api::oauth::{
-    COOKIE_NAME, CSRF_COOKIE_NAME, Error, USER_AGENT_VALUE,
-    github::{
-        CookieStorage, GITHUB_ACCEPT_TYPE, GITHUB_EMAILS_URL, GITHUB_USER_URL, GithubOauthService,
-        User,
-    },
+use crate::api::{
+    ApiState,
+    auth::{SecureCookieStorage, login},
+    oauth::{CSRF_COOKIE_NAME, Error, OAuthService},
 };
-/// This module contains the request handlers for the GitHub OAuth flow.
-/// It includes functions for login, logout, and authorization.
+use axum::extract::{FromRef, State};
+/// This module contains the request handlers for the OAuth flow.
+/// It includes functions for login, and authorization.
 /// These handlers are used by the Axum framework to handle incoming HTTP requests.
 use axum::{
     extract::Query,
@@ -14,11 +13,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::Cookie;
 use cookie::SameSite;
-use http::{
-    HeaderValue,
-    header::{ACCEPT, USER_AGENT},
-};
-use oauth2::{AuthorizationCode, CsrfToken, Scope, TokenResponse};
+use oauth2::{AuthorizationCode, CsrfToken, TokenResponse};
 use reqwest::redirect::Policy;
 use serde::Deserialize;
 use std::{fmt::Debug, time::Duration};
@@ -30,7 +25,7 @@ use tracing::error;
 ///
 /// # Parameters
 ///
-/// - `service`: The `GithubOauthService` instance.
+/// - `oauth_service`: The `OAuthService` instance.
 /// - `jar`: The private cookie jar to store the CSRF token cookie.
 ///
 /// # Returns
@@ -41,19 +36,22 @@ use tracing::error;
 /// # Errors
 ///
 /// Returns an `Error` if there is an issue generating the CSRF token or setting the cookie.
-pub(super) async fn login(
-    service: GithubOauthService,
-    cookie_storage: CookieStorage,
-) -> Result<impl IntoResponse, Error> {
-    let jar = cookie_storage.jar;
-
+pub(super) async fn oauth_login<T>(
+    State(oauth_service): State<T>,
+    cookie_storage: SecureCookieStorage,
+) -> Result<impl IntoResponse, Error>
+where
+    T: OAuthService,
+    T: FromRef<ApiState>,
+{
     // Generate the authorization URL and CSRF token
-    let (auth_url, csrf_token) = service
-        .oauth_client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("read:user".to_string()))
-        .add_scope(Scope::new("user:email".to_string()))
-        .url();
+    let mut oauth = oauth_service
+        .oauth_client()
+        .authorize_url(CsrfToken::new_random);
+    for scope in T::scopes() {
+        oauth = oauth.add_scope(scope);
+    }
+    let (auth_url, csrf_token) = oauth.url();
 
     // Serialize the CSRF token as a string
     let csrf_cookie_value = serde_json::to_string(&csrf_token)?;
@@ -69,38 +67,10 @@ pub(super) async fn login(
     csrf_cookie.set_path("/");
 
     // Add the CSRF token cookie to the cookie jar
-    let updated_jar = jar.add(csrf_cookie);
+    let cookie_storage = cookie_storage.add(csrf_cookie);
 
     // Return the updated cookie jar and a redirect response to the authorization URL
-    Ok((updated_jar, Redirect::to(auth_url.to_string().as_str())))
-}
-
-/// Handles the logout request.
-/// Removes the session cookie from the cookie jar and returns a simple message indicating successful logout.
-///
-/// # Parameters
-///
-/// - `jar`: The private cookie jar containing the session cookie.
-///
-/// # Returns
-///
-/// Returns a tuple containing the updated cookie jar and a simple logout message.
-pub(super) async fn logout(storage: CookieStorage) -> impl IntoResponse {
-    let mut jar = storage.jar;
-
-    // Remove the session cookie from the cookie jar
-    if let Some(mut cookie) = jar.get(COOKIE_NAME) {
-        // Set cookie attributes (necessary for removal) and remove it from the jar
-        cookie.set_http_only(true);
-        cookie.set_secure(true);
-        cookie.set_same_site(SameSite::Lax);
-        cookie.set_path("/");
-
-        jar = jar.remove(cookie);
-    }
-
-    // Return the updated cookie jar and a logout message
-    (jar, "You are now logged out 👋")
+    Ok((cookie_storage, Redirect::to(auth_url.to_string().as_str())))
 }
 
 /// Represents the request parameters for the authorization request.
@@ -108,20 +78,6 @@ pub(super) async fn logout(storage: CookieStorage) -> impl IntoResponse {
 pub(super) struct AuthRequest {
     code: String,
     state: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubUser {
-    pub id: usize,
-    pub login: String,
-    pub avatar_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubEmail {
-    email: String,
-    verified: bool,
-    primary: bool,
 }
 
 /// Handles the authorization request.
@@ -144,14 +100,15 @@ struct GitHubEmail {
 ///
 /// Returns an `Error` if there is an issue exchanging the authorization code for an access token,
 /// validating the CSRF token, fetching user data or organizations, or setting the session cookie.
-pub(super) async fn authorize(
-    service: GithubOauthService,
+pub(super) async fn authorize<T>(
+    State(service): State<T>,
     Query(query): Query<AuthRequest>,
-    cookie_storage: CookieStorage,
-) -> Result<Response, Error> {
-    let jar = cookie_storage.jar;
-
-    // Create a new HTTP client
+    cookie_storage: SecureCookieStorage,
+) -> Result<Response, Error>
+where
+    T: OAuthService,
+    T: FromRef<ApiState>,
+{
     let client = reqwest::Client::builder()
         .use_rustls_tls()
         .redirect(Policy::none())
@@ -161,17 +118,20 @@ pub(super) async fn authorize(
 
     // Exchange the authorization code for an access token
     let token = service
-        .oauth_client
+        .oauth_client()
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&client)
         .await
         .map_err(|e| {
-            error!("OAuth flow with GitHub failed. Cannot exchange authorization code: {e:?}");
+            error!("OAuth flow failed. Cannot exchange authorization code: {e:?}");
             Error::OauthToken(e.to_string())
         })?;
 
     // Get the CSRF token cookie from the cookie jar
-    let mut csrf_cookie = jar.get(CSRF_COOKIE_NAME).ok_or(Error::MissingCSRFCookie)?;
+    let mut csrf_cookie = cookie_storage
+        .get(CSRF_COOKIE_NAME)
+        .ok_or(Error::MissingCSRFCookie)?
+        .clone();
 
     // Set cookie attributes
     csrf_cookie.set_same_site(SameSite::Lax);
@@ -187,68 +147,13 @@ pub(super) async fn authorize(
         return Err(Error::CSRFTokenMismatch);
     }
 
-    // Fetch user data from the GitHub API
-    let user_data: GitHubUser = client
-        .get(GITHUB_USER_URL)
-        .header(ACCEPT, HeaderValue::from_static(GITHUB_ACCEPT_TYPE))
-        .header(USER_AGENT, HeaderValue::from_static(USER_AGENT_VALUE))
-        .bearer_auth(token.access_token().secret())
-        .send()
-        .await
-        .map_err(|e| Error::FetchUser(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| Error::ParseUser(e.to_string()))?;
+    let api_user = service.fetch_user(token.access_token()).await?;
 
-    // Fetch email addresses from the GitHub API
-    let emails: Vec<GitHubEmail> = client
-        .get(GITHUB_EMAILS_URL)
-        .header(ACCEPT, HeaderValue::from_static(GITHUB_ACCEPT_TYPE))
-        .header(USER_AGENT, HeaderValue::from_static(USER_AGENT_VALUE))
-        .bearer_auth(token.access_token().secret())
-        .send()
-        .await
-        .map_err(|e| Error::FetchUser(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| Error::ParseUser(e.to_string()))?;
+    let cookie_storage = login(api_user, cookie_storage)?;
 
-    let mut email = None;
-
-    // find the email address that is allowed
-    for e in &emails {
-        if e.verified && e.primary {
-            email = Some(e.email.clone());
-        }
-    }
-
-    // if no primary email address is found, return an error
-    let email = match email {
-        Some(email) => email,
-        None => return Ok("No verified and primary email address found".into_response()),
-    };
-
-    let user: User = User {
-        id: user_data.id,
-        login: user_data.login,
-        email,
-        avatar_url: user_data.avatar_url,
-    };
-
-    // Serialize the user data as a string
-    let session_cookie_value = serde_json::to_string(&user)?;
-
-    // Create a new session cookie
-    let mut session_cookie = Cookie::new(COOKIE_NAME, session_cookie_value);
-    session_cookie.set_http_only(true);
-    session_cookie.set_secure(true);
-    session_cookie.set_same_site(SameSite::Lax);
-    session_cookie.set_max_age(cookie::time::Duration::days(7));
-    session_cookie.set_path("/");
-
-    // Remove the CSRF token cookie and add the session cookie to the cookie jar
-    let updated_jar = jar.remove(csrf_cookie).add(session_cookie);
+    // Remove the CSRF token cookie
+    let cookie_storage = cookie_storage.remove(csrf_cookie);
 
     // Return the updated cookie jar and a redirect response to the home page
-    Ok((updated_jar, Redirect::to("/")).into_response())
+    Ok((cookie_storage, Redirect::to("/")).into_response())
 }

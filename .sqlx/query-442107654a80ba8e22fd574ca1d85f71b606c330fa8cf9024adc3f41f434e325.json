@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   array_agg(distinct g.role) AS \"global_roles!: Vec<Option<PgRole>>\"\n            FROM api_users u \n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id \n            WHERE github_user_id = $1\n            GROUP BY u.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "github_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "organization_roles!: Vec<PgOrgRole>",
+        "type_info": {
+          "Custom": {
+            "name": "org_role[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "org_role",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "org_id",
+                        "Uuid"
+                      ],
+                      [
+                        "role",
+                        {
+                          "Custom": {
+                            "name": "role",
+                            "kind": {
+                              "Enum": [
+                                "admin"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "global_roles!: Vec<Option<PgRole>>",
+        "type_info": {
+          "Custom": {
+            "name": "role[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "role",
+                  "kind": {
+                    "Enum": [
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "442107654a80ba8e22fd574ca1d85f71b606c330fa8cf9024adc3f41f434e325"
+}

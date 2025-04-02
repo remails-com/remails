@@ -1,23 +1,23 @@
+use crate::models::{ApiUser, ApiUserRole};
 use axum::{
     Json,
     response::{IntoResponse, Response},
 };
+use email_address::EmailAddress;
 use serde::Serialize;
 use serde_json::json;
 
-use super::auth::{ApiUser, Role};
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct WhoamiResponse {
-    pub role: Role,
-    pub email: String,
+    pub roles: Vec<ApiUserRole>,
+    pub email: EmailAddress,
 }
 
 impl From<ApiUser> for WhoamiResponse {
     fn from(user: ApiUser) -> Self {
-        Self {
+        WhoamiResponse {
+            roles: user.roles(),
             email: user.email,
-            role: user.role,
         }
     }
 }

@@ -46,7 +46,7 @@ export function Login() {
             variant="filled"
             color="black"
             component="a"
-            href="/api/login"
+            href="/api/login/github"
           >
             Github
           </Button>

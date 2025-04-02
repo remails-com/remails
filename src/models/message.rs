@@ -1,4 +1,4 @@
-use crate::models::{OrganizationId, SmtpCredentialId};
+use crate::models::{Error, OrganizationId, SmtpCredentialId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From};
 use mail_send::smtp::message::IntoMessage;
@@ -96,7 +96,7 @@ pub struct MessageRepository {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct MessageFilter {
-    pub api_user_id: Option<Uuid>,
+    pub orgs: Option<Vec<OrganizationId>>,
     offset: i64,
     limit: i64,
     status: Option<MessageStatus>,
@@ -105,11 +105,19 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            api_user_id: None,
+            orgs: None,
             offset: 0,
             limit: 100,
             status: None,
         }
+    }
+}
+
+impl MessageFilter {
+    fn org_uuids(&self) -> Option<Vec<Uuid>> {
+        self.orgs
+            .as_deref()
+            .map(|o| o.iter().map(|o| o.as_uuid()).collect())
     }
 }
 
@@ -118,8 +126,8 @@ impl MessageRepository {
         Self { pool }
     }
 
-    pub async fn create(&self, message: &NewMessage) -> Result<Message, sqlx::Error> {
-        sqlx::query_as!(
+    pub async fn create(&self, message: &NewMessage) -> Result<Message, Error> {
+        Ok(sqlx::query_as!(
             Message,
             r#"
             INSERT INTO messages AS m (id, smtp_credential_id, organization_id, status, from_email, recipients, raw_data, message_data)
@@ -146,15 +154,15 @@ impl MessageRepository {
             message.raw_data,
             message.message_data
         )
-        .fetch_one(&self.pool)
-        .await
+            .fetch_one(&self.pool)
+            .await?)
     }
 
     pub async fn update_message_status(
         &self,
         message: &mut Message,
         status: MessageStatus,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), Error> {
         message.status = status;
 
         sqlx::query!(
@@ -172,7 +180,7 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub async fn update_message_data(&self, message: &Message) -> Result<(), sqlx::Error> {
+    pub async fn update_message_data(&self, message: &Message) -> Result<(), Error> {
         sqlx::query!(
             r#"
             UPDATE messages
@@ -191,8 +199,9 @@ impl MessageRepository {
     pub async fn list_message_metadata(
         &self,
         filter: MessageFilter,
-    ) -> Result<Vec<Message>, sqlx::Error> {
-        sqlx::query_as!(
+    ) -> Result<Vec<Message>, Error> {
+        let orgs = filter.org_uuids();
+        Ok(sqlx::query_as!(
             Message,
             r#"
             SELECT
@@ -208,9 +217,8 @@ impl MessageRepository {
                 m.updated_at
             FROM messages m
                 JOIN organizations o ON o.id = m.organization_id
-                LEFT JOIN api_users_organizations au ON au.organization_id = o.id
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND ($4::uuid IS NULL OR au.api_user_id = $4)
+              AND ($4::uuid[] IS NULL OR o.id = ANY($4))
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
@@ -218,17 +226,18 @@ impl MessageRepository {
             filter.offset,
             filter.limit,
             filter.status as _,
-            filter.api_user_id
+            orgs.as_deref(),
         )
         .fetch_all(&self.pool)
-        .await
+        .await?)
     }
 
     pub async fn find_by_id(
         &self,
         id: MessageId,
-        api_user_id: Option<Uuid>,
-    ) -> Result<Option<Message>, sqlx::Error> {
+        filter: MessageFilter,
+    ) -> Result<Option<Message>, Error> {
+        let orgs = filter.org_uuids();
         let message = sqlx::query_as!(
             Message,
             r#"
@@ -245,14 +254,12 @@ impl MessageRepository {
                 m.updated_at
             FROM messages  m
                 JOIN organizations o ON o.id = m.organization_id
-                LEFT JOIN api_users_organizations au ON au.organization_id = o.id
-                LEFT JOIN api_users u ON au.api_user_id = u.id
             WHERE m.id = $1
-              AND ($2::uuid IS NULL OR u.id = $2)
+              AND ($2::uuid[] IS NULL OR o.id = ANY($2))
             LIMIT 1
             "#,
             *id,
-            api_user_id
+            orgs.as_deref(),
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -298,7 +305,7 @@ mod test {
         let message = repository.create(&new_message).await.unwrap();
 
         let mut fetched_message = repository
-            .find_by_id(message.id, None)
+            .find_by_id(message.id, MessageFilter::default())
             .await
             .unwrap()
             .unwrap();

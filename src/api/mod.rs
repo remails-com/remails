@@ -1,19 +1,6 @@
-use axum::{
-    Json, Router,
-    extract::{FromRef, State},
-    routing::get,
-};
-use serde::Serialize;
-use sqlx::PgPool;
-use std::{net::SocketAddr, time::Duration};
-use thiserror::Error;
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
-use tracing::{error, info};
-
 use crate::{
     api::{
+        auth::logout,
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
@@ -21,9 +8,26 @@ use crate::{
         },
         smtp_credentials::{create_smtp_credential, list_smtp_credential},
     },
-    models::{MessageRepository, OrganizationRepository, SmtpCredentialRepository},
+    models::{
+        ApiUserRepository, MessageRepository, OrganizationRepository, SmtpCredentialRepository,
+    },
 };
+use axum::{
+    Json, Router,
+    extract::{FromRef, State},
+    routing::get,
+};
+use base64ct::Encoding;
+use serde::Serialize;
+use sqlx::PgPool;
+use std::{env, net::SocketAddr, time::Duration};
+use thiserror::Error;
+use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tracing::{error, info, log::warn};
 
+mod api_users;
 mod auth;
 mod error;
 mod messages;
@@ -31,6 +35,8 @@ mod oauth;
 mod organizations;
 mod smtp_credentials;
 mod whoami;
+
+static USER_AGENT_VALUE: &str = "remails";
 
 #[derive(Debug, Error)]
 pub enum ApiServerError {
@@ -40,10 +46,17 @@ pub enum ApiServerError {
     Serve(std::io::Error),
 }
 
+#[derive(Clone, derive_more::Debug)]
+pub struct ApiConfig {
+    #[debug("****")]
+    pub session_key: cookie::Key,
+}
+
 #[derive(Clone)]
 pub struct ApiState {
     pool: PgPool,
-    oauth_service: GithubOauthService,
+    config: ApiConfig,
+    gh_oauth_service: GithubOauthService,
 }
 
 impl FromRef<ApiState> for PgPool {
@@ -70,9 +83,15 @@ impl FromRef<ApiState> for OrganizationRepository {
     }
 }
 
+impl FromRef<ApiState> for ApiUserRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        ApiUserRepository::new(state.pool.clone())
+    }
+}
+
 impl FromRef<ApiState> for GithubOauthService {
     fn from_ref(state: &ApiState) -> Self {
-        state.oauth_service.clone()
+        state.gh_oauth_service.clone()
     }
 }
 
@@ -84,11 +103,25 @@ pub struct ApiServer {
 
 impl ApiServer {
     pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
-        let github_oauth = GithubOauthService::new(None).unwrap();
+        let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
         let oauth_router = github_oauth.router();
+
+        let session_key = match env::var("SESSION_KEY") {
+            Ok(session_key_base64) => {
+                let key_bytes = base64ct::Base64::decode_vec(&session_key_base64)
+                    .expect("SESSION_KEY env var must be valid base 64");
+                cookie::Key::from(&key_bytes)
+            }
+            Err(_) => {
+                warn!("Could not find SESSION_KEY; generating one");
+                cookie::Key::generate()
+            }
+        };
+
         let state = ApiState {
             pool,
-            oauth_service: github_oauth,
+            config: ApiConfig { session_key },
+            gh_oauth_service: github_oauth,
         };
 
         let router = Router::new()
@@ -108,6 +141,7 @@ impl ApiServer {
                 "/organizations/{id}",
                 get(get_organization).delete(remove_organization),
             )
+            .route("/logout", get(logout))
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
@@ -126,6 +160,7 @@ impl ApiServer {
     pub async fn serve_frontend(self) -> Self {
         let memory_router = memory_serve::from_local_build!()
             .index_file(Some("/index.html"))
+            .fallback(Some("/index.html"))
             .into_router();
 
         let router = self.router.merge(memory_router);

@@ -2,10 +2,36 @@ mod error;
 mod github;
 mod handlers;
 
+use crate::models::ApiUser;
 pub use error::Error;
 #[cfg_attr(test, allow(unused))]
-pub use github::{GithubOauthService, User};
+pub(in crate::api) use github::GithubOauthService;
+use oauth2::{
+    AccessToken, Client, EndpointNotSet, EndpointSet, Scope, StandardRevocableToken,
+    basic::{
+        BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse,
+        BasicTokenResponse,
+    },
+};
 
-static COOKIE_NAME: &str = "SESSION";
 static CSRF_COOKIE_NAME: &str = "CSRF";
-static USER_AGENT_VALUE: &str = "remails";
+
+trait OAuthService {
+    fn scopes() -> Vec<Scope>;
+    fn oauth_client(
+        &self,
+    ) -> &Client<
+        BasicErrorResponse,
+        BasicTokenResponse,
+        BasicTokenIntrospectionResponse,
+        StandardRevocableToken,
+        BasicRevocationErrorResponse,
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointSet,
+    >;
+
+    async fn fetch_user(&self, token: &AccessToken) -> Result<ApiUser, Error>;
+}
