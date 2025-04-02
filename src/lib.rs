@@ -23,6 +23,7 @@ mod test;
 
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
+mod odoo;
 
 pub async fn run_mta(
     pool: PgPool,

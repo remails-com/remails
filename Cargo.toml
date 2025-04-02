@@ -19,6 +19,7 @@ path = "src/bin/mta.rs"
 
 [features]
 load-fixtures = []
+odoo-live-tests = []
 
 [dependencies]
 anyhow = "1.0.97"
