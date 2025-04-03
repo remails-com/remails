@@ -94,18 +94,23 @@ impl Handler {
     pub async fn resolve_mail_domain(&self, domain: &str, prio: &mut Range<u16>) -> String {
         // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
         // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
-        let lookup = self
-            .config
-            .resolver
-            .mx_lookup(&format!("{domain}."))
-            .await
-            .unwrap();
+        let domain = format!("{domain}.");
 
-        let destination = lookup
+        let lookup = self.config.resolver.mx_lookup(&domain).await.unwrap();
+
+        let Some(destination) = lookup
             .iter()
             .filter(|mx| prio.contains(&mx.preference()))
             .min_by_key(|mx| mx.preference())
-            .unwrap();
+        else {
+            if prio.contains(&0) {
+                // no MX records found, use an implicit MX record
+                prio.start = u16::MAX;
+                return domain;
+            } else {
+                panic!("no MX records can be used");
+            }
+        };
 
         // make sure we don't accept this SMTP server again if it fails us
         prio.start = destination.preference() + 1;
