@@ -44,7 +44,6 @@ enum AttemptedAuthError {
 
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
-    const DATA_END: &[u8] = b"\r\n.\r\n";
 
     const RESPONSE_OK: &str = "2.0.0 Ok";
     const RESPONSE_FROM_OK: &str = "2.1.0 Originator <[email]> ok";
@@ -309,8 +308,10 @@ impl SmtpSession {
             return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
         }
 
-        if buffer.ends_with(Self::DATA_END) {
-            buffer.truncate(buffer.len() - Self::DATA_END.len());
+        const DATA_END: &[u8] = b"\r\n.\r\n";
+
+        if buffer.ends_with(DATA_END) || buffer == &DATA_END[2..] {
+            buffer.truncate(buffer.len() - DATA_END.len());
 
             let Some(message) = self.current_message.take() else {
                 return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
