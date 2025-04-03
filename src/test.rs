@@ -57,8 +57,7 @@ async fn integration_test(pool: PgPool) {
     };
 
     let handler_config = HandlerConfig {
-        resolver: hickory_resolver::Resolver::builder_tokio().unwrap().build(),
-        forced_smtp_addr: ("localhost", mailcrab_random_port),
+        resolver: crate::handler::mock::Resolver("localhost", mailcrab_random_port),
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;

@@ -1,4 +1,5 @@
 use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+#[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
@@ -26,16 +27,19 @@ enum ResolveError {
 }
 
 pub struct HandlerConfig {
+    #[cfg(not(test))]
     pub resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
-    pub forced_smtp_addr: (&'static str, u16),
+    pub resolver: mock::Resolver,
 }
 
 #[cfg(not(test))]
 impl Default for HandlerConfig {
     fn default() -> Self {
         Self {
-            resolver: Resolver::builder_tokio().expect("could not build Resolver").build(),
+            resolver: Resolver::builder_tokio()
+                .expect("could not build Resolver")
+                .build(),
         }
     }
 }
@@ -103,12 +107,19 @@ impl Handler {
         &self,
         domain: &str,
         prio: &mut Range<u16>,
-    ) -> Result<String, ResolveError> {
+    ) -> Result<(String, u16), ResolveError> {
+        let smtp_port = 25;
+
         // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
         // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
         let domain = format!("{domain}.");
 
-        let lookup = self.config.resolver.mx_lookup(&domain).await.map_err(ResolveError::Dns)?;
+        let lookup = self
+            .config
+            .resolver
+            .mx_lookup(&domain)
+            .await
+            .map_err(ResolveError::Dns)?;
 
         let Some(destination) = lookup
             .iter()
@@ -117,17 +128,20 @@ impl Handler {
         else {
             return if prio.contains(&0) {
                 prio.start = u16::MAX;
-                Ok(domain)
+                Ok((domain, smtp_port))
             } else {
                 Err(ResolveError::AllServersExhausted)
             };
         };
 
+        #[cfg(test)]
+        let smtp_port = destination.port();
+
         // make sure we don't accept this SMTP server again if it fails us
         prio.start = destination.preference() + 1;
 
         debug!("using mail server: {destination:?}");
-        Ok(destination.exchange().to_utf8())
+        Ok((destination.exchange().to_utf8(), smtp_port))
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
@@ -149,17 +163,10 @@ impl Handler {
             let mut priority = 0..1000;
 
             'mx: while !priority.is_empty() {
-                // TODO: mock the MX resolver for test cases instead of polluting this code flow
-                #[cfg(test)]
-                let (hostname, port) = self.config.forced_smtp_addr;
-
-                #[cfg(not(test))]
-                let Ok(hostname) = self.resolve_mail_domain(domain, &mut priority).await else {
+                let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await
+                else {
                     break 'mx;
                 };
-
-                #[cfg(not(test))]
-                let port = 25;
 
                 let client = SmtpClientBuilder::new(hostname, port);
 
@@ -238,6 +245,9 @@ impl Handler {
 }
 
 #[cfg(test)]
+pub mod mock;
+
+#[cfg(test)]
 mod test {
     use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
     use std::net::Ipv4Addr;
@@ -250,7 +260,7 @@ mod test {
     use serial_test::serial;
     use tracing_test::traced_test;
 
-    #[sqlx::test(fixtures("organizations", "domains"))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
     #[traced_test]
     #[serial]
     async fn test_handle_message(pool: PgPool) {
@@ -281,8 +291,7 @@ mod test {
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
-            resolver: Resolver::builder_tokio().unwrap().build(),
-            forced_smtp_addr: ("localhost", mailcrab_port),
+            resolver: super::mock::Resolver("localhost", mailcrab_port),
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
