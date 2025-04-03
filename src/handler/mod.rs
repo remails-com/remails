@@ -102,7 +102,6 @@ impl Handler {
         Ok(message)
     }
 
-    //TODO: only allow mx record if the preference is lower than our own, to prevent loops
     async fn resolve_mail_domain(
         &self,
         domain: &str,
@@ -147,7 +146,7 @@ impl Handler {
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
 
-        //TODO: this clone here isn't too bad, but maybe we can do better
+        //TODO FIXME: this clone here isn't too bad, but maybe we can do better
         'rcpt: for recipient in &message.recipients.clone() {
             let mail_address = match email_address::EmailAddress::from_str(recipient) {
                 Ok(address) => address,
@@ -159,7 +158,8 @@ impl Handler {
 
             let domain = mail_address.domain();
 
-            //TODO: use our own priority
+            //TODO: only allow mx record if the preference is lower than our own, to prevent loops, see issue #74
+            // we have here hardcoded our priority as being 1000
             let mut priority = 0..1000;
 
             'mx: while !priority.is_empty() {
