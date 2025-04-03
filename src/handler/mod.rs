@@ -18,6 +18,13 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
 }
 
+//TODO: do we want to do anything with DNS errors?
+enum ResolveError {
+    #[allow(dead_code)]
+    Dns(hickory_resolver::ResolveError),
+    AllServersExhausted,
+}
+
 pub struct HandlerConfig {
     pub resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
@@ -28,7 +35,7 @@ pub struct HandlerConfig {
 impl Default for HandlerConfig {
     fn default() -> Self {
         Self {
-            resolver: Resolver::builder_tokio().unwrap().build(),
+            resolver: Resolver::builder_tokio().expect("could not build Resolver").build(),
         }
     }
 }
@@ -75,6 +82,7 @@ impl Handler {
                     ..Default::default()
                 });
 
+            // this should never fail since mail_parser::Message has a derived Serialize instance
             serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
         };
 
@@ -91,32 +99,35 @@ impl Handler {
     }
 
     //TODO: only allow mx record if the preference is lower than our own, to prevent loops
-    pub async fn resolve_mail_domain(&self, domain: &str, prio: &mut Range<u16>) -> String {
+    async fn resolve_mail_domain(
+        &self,
+        domain: &str,
+        prio: &mut Range<u16>,
+    ) -> Result<String, ResolveError> {
         // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
         // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
         let domain = format!("{domain}.");
 
-        let lookup = self.config.resolver.mx_lookup(&domain).await.unwrap();
+        let lookup = self.config.resolver.mx_lookup(&domain).await.map_err(ResolveError::Dns)?;
 
         let Some(destination) = lookup
             .iter()
             .filter(|mx| prio.contains(&mx.preference()))
             .min_by_key(|mx| mx.preference())
         else {
-            if prio.contains(&0) {
-                // no MX records found, use an implicit MX record
+            return if prio.contains(&0) {
                 prio.start = u16::MAX;
-                return domain;
+                Ok(domain)
             } else {
-                panic!("no MX records can be used");
-            }
+                Err(ResolveError::AllServersExhausted)
+            };
         };
 
         // make sure we don't accept this SMTP server again if it fails us
         prio.start = destination.preference() + 1;
 
         debug!("using mail server: {destination:?}");
-        destination.exchange().to_utf8()
+        Ok(destination.exchange().to_utf8())
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
@@ -143,7 +154,9 @@ impl Handler {
                 let (hostname, port) = self.config.forced_smtp_addr;
 
                 #[cfg(not(test))]
-                let hostname = self.resolve_mail_domain(domain, &mut priority).await;
+                let Ok(hostname) = self.resolve_mail_domain(domain, &mut priority).await else {
+                    break 'mx;
+                };
 
                 #[cfg(not(test))]
                 let port = 25;
