@@ -59,6 +59,7 @@ impl SmtpSession {
     const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
     const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
     const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_NESTED_MAIL: &str = "5.5.1 Error: nested MAIL command";
     const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
@@ -170,6 +171,10 @@ impl SmtpSession {
                         Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
                     );
                 };
+
+                if self.current_message.is_some() {
+                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_NESTED_MAIL.into());
+                }
 
                 self.current_message = Some(NewMessage::new(credential.id(), from.address.clone()));
 
