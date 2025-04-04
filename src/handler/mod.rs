@@ -4,7 +4,7 @@ use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::MessageParser;
 use mail_send::SmtpClientBuilder;
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc};
+use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -31,12 +31,14 @@ pub struct HandlerConfig {
     pub resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
     pub resolver: mock::Resolver,
+    pub domain: String,
 }
 
 #[cfg(not(test))]
-impl Default for HandlerConfig {
-    fn default() -> Self {
+impl HandlerConfig {
+    pub fn new(domain: impl Into<String>) -> Self {
         Self {
+            domain: domain.into(),
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
@@ -167,9 +169,13 @@ impl Handler {
                     break 'mx;
                 };
 
-                let client = SmtpClientBuilder::new(hostname, port);
+                let client = SmtpClientBuilder::new(hostname, port)
+                    .implicit_tls(true)
+                    .say_ehlo(true)
+                    .helo_host(&self.config.domain)
+                    .timeout(Duration::from_secs(60));
 
-                let mut client = match client.connect_plain().await {
+                let mut client = match client.connect().await {
                     Ok(client) => {
                         trace!("connected to upstream server");
 
@@ -290,6 +296,7 @@ mod test {
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
+            domain: "test".to_string(),
             resolver: super::mock::Resolver("localhost", mailcrab_port),
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
