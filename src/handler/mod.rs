@@ -47,7 +47,6 @@ impl Default for HandlerConfig {
 pub struct Handler {
     message_repository: MessageRepository,
     shutdown: CancellationToken,
-    #[allow(unused)]
     config: Arc<HandlerConfig>,
 }
 
