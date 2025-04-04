@@ -44,7 +44,6 @@ enum AttemptedAuthError {
 
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
-    const DATA_END: &[u8] = b"\r\n.\r\n";
 
     const RESPONSE_OK: &str = "2.0.0 Ok";
     const RESPONSE_FROM_OK: &str = "2.1.0 Originator <[email]> ok";
@@ -59,6 +58,7 @@ impl SmtpSession {
     const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
     const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
     const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_NESTED_MAIL: &str = "5.5.1 Error: nested MAIL command";
     const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
     const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
@@ -170,6 +170,10 @@ impl SmtpSession {
                         Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
                     );
                 };
+
+                if self.current_message.is_some() {
+                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_NESTED_MAIL.into());
+                }
 
                 self.current_message = Some(NewMessage::new(credential.id(), from.address.clone()));
 
@@ -304,8 +308,10 @@ impl SmtpSession {
             return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
         }
 
-        if buffer.ends_with(Self::DATA_END) {
-            buffer.truncate(buffer.len() - Self::DATA_END.len());
+        const DATA_END: &[u8] = b"\r\n.\r\n";
+
+        if buffer.ends_with(DATA_END) || buffer == &DATA_END[2..] {
+            buffer.truncate(buffer.len() - DATA_END.len());
 
             let Some(message) = self.current_message.take() else {
                 return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
