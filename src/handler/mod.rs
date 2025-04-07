@@ -129,7 +129,7 @@ impl Handler {
 
         // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
         // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
-        let domain = format!("{domain}.");
+        let domain = format!("{domain}{}", if domain.ends_with('.') { "" } else { "." });
 
         let lookup = self
             .config
