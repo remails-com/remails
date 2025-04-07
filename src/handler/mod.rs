@@ -19,6 +19,16 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
 }
 
+#[derive(Debug, Error)]
+enum SendError {
+    #[error("invalid recipient: {0}")]
+    InvalidRcpt(email_address::Error),
+    #[error("could not find a working MX receiver")]
+    NoWorkingMx,
+    #[error("failed to send message: {0}")]
+    SendFailure(mail_send::Error),
+}
+
 //TODO: do we want to do anything with DNS errors?
 enum ResolveError {
     #[allow(dead_code)]
@@ -151,74 +161,81 @@ impl Handler {
         Ok((destination.exchange().to_utf8(), smtp_port))
     }
 
-    pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
-        info!("sending message {}", message.id());
+    async fn send_single_message(
+        &self,
+        message: &Message,
+        recipient: &str,
+    ) -> Result<(), SendError> {
+        let mail_address = match email_address::EmailAddress::from_str(recipient) {
+            Ok(address) => address,
+            Err(err) => {
+                warn!("Invalid email address {recipient}: {err}");
+                return Err(SendError::InvalidRcpt(err));
+            }
+        };
 
-        //TODO FIXME: this clone here isn't too bad, but maybe we can do better
-        'rcpt: for recipient in &message.recipients.clone() {
-            let mail_address = match email_address::EmailAddress::from_str(recipient) {
-                Ok(address) => address,
-                Err(err) => {
-                    warn!("Invalid email address {recipient}: {err}");
-                    continue 'rcpt;
-                }
+        let domain = mail_address.domain();
+
+        //TODO: only allow mx record if the preference is lower than our own, to prevent loops, see issue #74
+        // we have here hardcoded our priority as being 1000
+        let mut priority = 0..1000;
+
+        while !priority.is_empty() {
+            let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await else {
+                break;
             };
 
-            let domain = mail_address.domain();
+            let client = SmtpClientBuilder::new(hostname, port)
+                .implicit_tls(true)
+                .say_ehlo(true)
+                .helo_host(&self.config.domain)
+                .timeout(Duration::from_secs(60));
 
-            //TODO: only allow mx record if the preference is lower than our own, to prevent loops, see issue #74
-            // we have here hardcoded our priority as being 1000
-            let mut priority = 0..1000;
+            match client.connect_plain().await {
+                Ok(mut client) => {
+                    trace!("connected to upstream server");
 
-            'mx: while !priority.is_empty() {
-                let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await
-                else {
-                    break 'mx;
-                };
+                    // TODO FIXME: since messages can be rather large, this clone can have a negative impact on the performance
+                    // if the server gets under stress; and it can probably be fixed by making "update_message_status" more efficient
+                    // (does it really need to UPDATE the message body simply for setting the status?)
+                    if let Err(e) = client.send(message.clone()).await {
+                        error!("failed to send message: {e}");
+                        return Err(SendError::SendFailure(e));
+                    };
 
-                let client = SmtpClientBuilder::new(hostname, port)
-                    .implicit_tls(true)
-                    .say_ehlo(true)
-                    .helo_host(&self.config.domain)
-                    .timeout(Duration::from_secs(60));
-
-                let mut client = match client.connect().await {
-                    Ok(client) => {
-                        trace!("connected to upstream server");
-
-                        client
-                    }
-                    Err(e) => {
-                        error!("failed to connect to upstream server: {e}");
-
-                        continue 'mx;
-                    }
-                };
-
-                // TODO FIXME: since messages can be rather large, this clone can have a negative impact on the performance
-                // if the server gets under stress; and it can probably be fixed by making "update_message_status" more efficient
-                // (does it really need to UPDATE the message body simply for setting the status?)
-                if let Err(e) = client.send(message.clone()).await {
-                    error!("failed to send message: {e}");
-
-                    continue 'mx;
-                } else {
-                    self.message_repository
-                        .update_message_status(&mut message, MessageStatus::Delivered)
-                        .await
-                        .map_err(HandlerError::MessageRepositoryError)?;
-
-                    break 'mx;
+                    return Ok(());
                 }
-            }
+                Err(e) => {
+                    error!("failed to connect to upstream server: {e}");
 
-            self.message_repository
-                .update_message_status(&mut message, MessageStatus::Failed)
-                .await
-                .map_err(HandlerError::MessageRepositoryError)?;
-
-            // potential TODO: do we want to accumulate errors here to return at the end?
+                    continue;
+                }
+            };
         }
+
+        Err(SendError::NoWorkingMx)
+    }
+
+    pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
+        info!("sending message {}", message.id());
+        let mut had_failures = false;
+
+        for recipient in &message.recipients {
+            // maybe we should take more interest in the content of these error messages
+            had_failures |= self.send_single_message(&message, recipient).await.is_err()
+        }
+
+        self.message_repository
+            .update_message_status(
+                &mut message,
+                if had_failures {
+                    MessageStatus::Failed
+                } else {
+                    MessageStatus::Delivered
+                },
+            )
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?;
 
         Ok(())
     }
@@ -303,6 +320,7 @@ mod test {
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {
+            allow_plain: true,
             domain: "test".to_string(),
             resolver: super::mock::Resolver("localhost", mailcrab_port),
         };

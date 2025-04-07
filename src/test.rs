@@ -57,6 +57,7 @@ async fn integration_test(pool: PgPool) {
     };
 
     let handler_config = HandlerConfig {
+        allow_plain: true,
         domain: "test".to_string(),
         resolver: crate::handler::mock::Resolver("localhost", mailcrab_random_port),
     };
