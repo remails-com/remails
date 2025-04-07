@@ -195,10 +195,7 @@ impl Handler {
                 Ok(mut client) => {
                     trace!("connected to upstream server");
 
-                    // TODO FIXME: since messages can be rather large, this clone can have a negative impact on the performance
-                    // if the server gets under stress; and it can probably be fixed by making "update_message_status" more efficient
-                    // (does it really need to UPDATE the message body simply for setting the status?)
-                    if let Err(e) = client.send(message.clone()).await {
+                    if let Err(e) = client.send(message).await {
                         error!("failed to send message: {e}");
                         return Err(SendError::SendFailure(e));
                     };

@@ -88,6 +88,16 @@ impl<'a> IntoMessage<'a> for Message {
     }
 }
 
+impl<'a> IntoMessage<'a> for &'a Message {
+    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'a>> {
+        Ok(mail_send::smtp::message::Message {
+            mail_from: self.from_email.as_str().into(),
+            rcpt_to: self.recipients.iter().map(|m| m.as_str().into()).collect(),
+            body: self.raw_data.as_slice().into(),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
     pool: sqlx::PgPool,
