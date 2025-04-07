@@ -38,11 +38,11 @@ enum ResolveError {
 
 pub struct HandlerConfig {
     #[cfg(not(test))]
-    pub resolver: Resolver<TokioConnectionProvider>,
+    pub(crate) resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
-    pub resolver: mock::Resolver,
-    pub domain: String,
-    pub allow_plain: bool,
+    pub(crate) resolver: mock::Resolver,
+    pub(crate) domain: String,
+    pub(crate) allow_plain: bool,
 }
 
 #[cfg(not(test))]
@@ -184,12 +184,12 @@ impl Handler {
             };
 
             let client = SmtpClientBuilder::new(hostname, port)
-                .implicit_tls(true)
+                .implicit_tls(false)
                 .say_ehlo(true)
                 .helo_host(&self.config.domain)
                 .timeout(Duration::from_secs(60));
 
-            match client.connect_plain().await {
+            match client.connect().await {
                 Ok(mut client) => {
                     trace!("connected to upstream server");
 
