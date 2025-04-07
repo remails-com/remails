@@ -32,17 +32,24 @@ pub struct HandlerConfig {
     #[cfg(test)]
     pub resolver: mock::Resolver,
     pub domain: String,
+    pub allow_plain: bool,
 }
 
 #[cfg(not(test))]
 impl HandlerConfig {
     pub fn new(domain: impl Into<String>) -> Self {
         Self {
+            allow_plain: false,
             domain: domain.into(),
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
         }
+    }
+
+    pub fn allow_plain_smtp(mut self, value: bool) -> Self {
+        self.allow_plain = value;
+        self
     }
 }
 
