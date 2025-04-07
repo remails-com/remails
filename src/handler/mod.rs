@@ -123,7 +123,7 @@ impl Handler {
     async fn resolve_mail_domain(
         &self,
         domain: &str,
-        prio: &mut Range<u16>,
+        prio: &mut Range<u32>,
     ) -> Result<(String, u16), ResolveError> {
         let smtp_port = 25;
 
@@ -140,11 +140,11 @@ impl Handler {
 
         let Some(destination) = lookup
             .iter()
-            .filter(|mx| prio.contains(&mx.preference()))
+            .filter(|mx| prio.contains(&u32::from(mx.preference())))
             .min_by_key(|mx| mx.preference())
         else {
             return if prio.contains(&0) {
-                prio.start = u16::MAX;
+                prio.start = u32::MAX;
                 Ok((domain, smtp_port))
             } else {
                 Err(ResolveError::AllServersExhausted)
@@ -155,7 +155,7 @@ impl Handler {
         let smtp_port = destination.port();
 
         // make sure we don't accept this SMTP server again if it fails us
-        prio.start = destination.preference() + 1;
+        prio.start = u32::from(destination.preference()) + 1;
 
         debug!("using mail server: {destination:?}");
         Ok((destination.exchange().to_utf8(), smtp_port))
@@ -176,9 +176,7 @@ impl Handler {
 
         let domain = mail_address.domain();
 
-        //TODO: only allow mx record if the preference is lower than our own, to prevent loops, see issue #74
-        // we have here hardcoded our priority as being 1000
-        let mut priority = 0..1000;
+        let mut priority = 0..65536;
 
         while !priority.is_empty() {
             let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await else {
