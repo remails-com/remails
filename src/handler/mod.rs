@@ -217,14 +217,26 @@ impl Handler {
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
-        let mut had_failures = false;
+        let mut had_failures = true;
 
-        for recipient in &message.recipients {
-            // maybe we should take more interest in the content of these error messages?
-            had_failures |= self
-                .send_single_message(recipient, &message, Protection::Tls)
-                .await
-                .is_err()
+        let order: &[Protection] = if self.config.allow_plain {
+            &[Protection::Tls, Protection::Plaintext]
+        } else {
+            &[Protection::Tls]
+        };
+
+        'next_rcpt: for recipient in &message.recipients {
+            for &protection in order {
+                // maybe we should take more interest in the content of these error messages?
+                if self
+                    .send_single_message(recipient, &message, protection)
+                    .await
+                    .is_ok()
+                {
+                    continue 'next_rcpt;
+                }
+            }
+            had_failures = true;
         }
 
         self.message_repository
