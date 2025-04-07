@@ -1,7 +1,6 @@
 use crate::models::{Error, OrganizationId, SmtpCredentialId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From};
-use mail_send::smtp::message::IntoMessage;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -68,6 +67,7 @@ impl NewMessage {
         value: mail_send::smtp::message::Message<'_>,
         smtp_credential_id: SmtpCredentialId,
     ) -> Self {
+        use mail_send::smtp::message::IntoMessage;
         let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
         for recipient in value.rcpt_to.iter() {
             message.recipients.push(recipient.email.parse().unwrap());
@@ -75,26 +75,6 @@ impl NewMessage {
         message.raw_data = value.into_message().unwrap().body.to_vec();
 
         message
-    }
-}
-
-impl<'a> IntoMessage<'a> for Message {
-    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'a>> {
-        Ok(mail_send::smtp::message::Message {
-            mail_from: self.from_email.into(),
-            rcpt_to: self.recipients.into_iter().map(|m| m.into()).collect(),
-            body: self.raw_data.into(),
-        })
-    }
-}
-
-impl<'a> IntoMessage<'a> for &'a Message {
-    fn into_message(self) -> mail_send::Result<mail_send::smtp::message::Message<'a>> {
-        Ok(mail_send::smtp::message::Message {
-            mail_from: self.from_email.as_str().into(),
-            rcpt_to: self.recipients.iter().map(|m| m.as_str().into()).collect(),
-            body: self.raw_data.as_slice().into(),
-        })
     }
 }
 
@@ -280,7 +260,7 @@ impl MessageRepository {
 
 #[cfg(test)]
 mod test {
-    use mail_send::mail_builder::MessageBuilder;
+    use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use sqlx::PgPool;
 
     use super::*;

@@ -2,7 +2,7 @@ use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::MessageParser;
-use mail_send::SmtpClientBuilder;
+use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
 use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -183,6 +183,13 @@ impl Handler {
 
         let mut priority = 0..65536;
 
+        // restrict the recipients; this object is cheap to clone
+        let message = smtp::message::Message {
+            mail_from: message.from_email.as_str().into(),
+            rcpt_to: vec![recipient.into()],
+            body: message.raw_data.as_slice().into(),
+        };
+
         while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
             let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
@@ -194,14 +201,14 @@ impl Handler {
                 Protection::Tls => {
                     chain(smtp.connect().await, async |mut client| {
                         trace!("securely connected to upstream server");
-                        client.send(message).await
+                        client.send(message.clone()).await
                     })
                     .await
                 }
                 Protection::Plaintext => {
                     chain(smtp.connect_plain().await, async |mut client| {
                         trace!("INSECURELY connected to upstream server");
-                        client.send(message).await
+                        client.send(message.clone()).await
                     })
                     .await
                 }
