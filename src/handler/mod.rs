@@ -25,8 +25,6 @@ enum SendError {
     InvalidRcpt(email_address::Error),
     #[error("could not find a working MX receiver")]
     NoWorkingMx,
-    #[error("failed to send message: {0}")]
-    SendFailure(mail_send::Error),
 }
 
 //TODO: do we want to do anything with DNS errors?
@@ -34,6 +32,12 @@ enum ResolveError {
     #[allow(dead_code)]
     Dns(hickory_resolver::ResolveError),
     AllServersExhausted,
+}
+
+#[derive(Clone, Copy)]
+enum Protection {
+    Plaintext,
+    Tls,
 }
 
 pub struct HandlerConfig {
@@ -157,14 +161,15 @@ impl Handler {
         // make sure we don't accept this SMTP server again if it fails us
         prio.start = u32::from(destination.preference()) + 1;
 
-        debug!("using mail server: {destination:?}");
+        debug!("trying mail server: {destination:?}");
         Ok((destination.exchange().to_utf8(), smtp_port))
     }
 
     async fn send_single_message(
         &self,
-        message: &Message,
         recipient: &str,
+        message: &Message,
+        security: Protection,
     ) -> Result<(), SendError> {
         let mail_address = match email_address::EmailAddress::from_str(recipient) {
             Ok(address) => address,
@@ -178,34 +183,33 @@ impl Handler {
 
         let mut priority = 0..65536;
 
-        while !priority.is_empty() {
-            let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await else {
-                break;
-            };
-
-            let client = SmtpClientBuilder::new(hostname, port)
+        while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
+            let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
                 .say_ehlo(true)
                 .helo_host(&self.config.domain)
                 .timeout(Duration::from_secs(60));
 
-            match client.connect().await {
-                Ok(mut client) => {
-                    trace!("connected to upstream server");
-
-                    if let Err(e) = client.send(message).await {
-                        error!("failed to send message: {e}");
-                        return Err(SendError::SendFailure(e));
-                    };
-
-                    return Ok(());
+            let result = match security {
+                Protection::Tls => {
+                    chain(smtp.connect().await, async |mut client| {
+                        trace!("securely connected to upstream server");
+                        client.send(message).await
+                    })
+                    .await
                 }
-                Err(e) => {
-                    error!("failed to connect to upstream server: {e}");
-
-                    continue;
+                Protection::Plaintext => {
+                    chain(smtp.connect_plain().await, async |mut client| {
+                        trace!("INSECURELY connected to upstream server");
+                        client.send(message).await
+                    })
+                    .await
                 }
             };
+
+            let Err(err) = result else { return Ok(()) };
+
+            trace!("could not use server: {err}");
         }
 
         Err(SendError::NoWorkingMx)
@@ -216,8 +220,11 @@ impl Handler {
         let mut had_failures = false;
 
         for recipient in &message.recipients {
-            // maybe we should take more interest in the content of these error messages
-            had_failures |= self.send_single_message(&message, recipient).await.is_err()
+            // maybe we should take more interest in the content of these error messages?
+            had_failures |= self
+                .send_single_message(recipient, &message, Protection::Tls)
+                .await
+                .is_err()
         }
 
         self.message_repository
@@ -266,6 +273,15 @@ impl Handler {
             }
         });
     }
+}
+
+// Utility function similar to the 'and_then' function on Result
+async fn chain<T1, T2, E>(
+    result: Result<T1, E>,
+    then: impl AsyncFnOnce(T1) -> Result<T2, E>,
+) -> Result<T2, E> {
+    let value = result?;
+    then(value).await
 }
 
 #[cfg(test)]
