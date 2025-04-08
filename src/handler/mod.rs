@@ -17,6 +17,8 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
+    #[error("could not generate signature: {0}")]
+    DkimError(mail_auth::Error),
 }
 
 #[derive(Debug, Error)]
@@ -87,32 +89,31 @@ impl Handler {
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        let mut message = self
+        let mut message: Message = self
             .message_repository
             .create(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        debug!("stored message {}", message.id());
+        trace!("stored message {}", message.id());
 
         // TODO: check limits etc
 
-        debug!("parsing message {} {}", message.id(), message.message_data);
+        trace!("parsing message {} {}", message.id(), message.message_data);
 
-        let json_message_data = {
-            // parse and save message contents
-            let message_data = MessageParser::default()
-                .parse(&message.raw_data)
-                .ok_or_else(|| mail_parser::Message {
-                    raw_message: Borrowed(&message.raw_data),
-                    ..Default::default()
-                });
+        // parse and save message contents
+        let message_data: mail_parser::Message = MessageParser::default()
+            .parse(&message.raw_data)
+            .unwrap_or_else(|| mail_parser::Message {
+                raw_message: Borrowed(&message.raw_data),
+                ..Default::default()
+            });
 
-            // this should never fail since mail_parser::Message has a derived Serialize instance
-            serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
-        };
+        // this should never fail since mail_parser::Message has a derived Serialize instance
+        let json_message_data =
+            serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?;
 
-        debug!("updating message {}", message.id());
+        trace!("updating message {}", message.id());
 
         message.message_data = json_message_data;
 
@@ -120,6 +121,33 @@ impl Handler {
             .update_message_data(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
+
+        let mut generated_headers = Vec::new();
+
+        trace!("signing with dkim");
+
+        // TODO: this should be based off the domain in the database
+        let key = crate::dkim::PrivateKey::test_key("remails.tweedegolf-test.nl", "default")
+            .map_err(HandlerError::DkimError)?;
+
+        generated_headers.extend(
+            key.dkim_header(&message.raw_data)
+                .map_err(HandlerError::DkimError)?
+                .into_bytes(),
+        );
+
+        trace!("adding headers");
+
+        // TODO: we could 'overallocate' the original raw message data to prepend this stuff without
+        // needing to allocate or move data around.
+        let hdr_size = generated_headers.len();
+        let msg_len = message.raw_data.len();
+
+        message
+            .raw_data
+            .resize(msg_len + hdr_size, Default::default());
+        message.raw_data.copy_within(..msg_len, hdr_size);
+        message.raw_data[..hdr_size].copy_from_slice(&generated_headers);
 
         Ok(message)
     }
