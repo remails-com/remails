@@ -1,16 +1,19 @@
 use crate::{
     api::{ApiState, error::ApiError},
-    models::{ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, OrganizationId},
+    models::{
+        ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, NewApiUser, OrganizationId, Password,
+    },
 };
 use axum::{
-    RequestPartsExt,
-    extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts},
+    Json, RequestPartsExt,
+    extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts, State},
     http::{StatusCode, request::Parts},
-    response::{IntoResponse, IntoResponseParts, Redirect, ResponseParts},
+    response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
 };
 use axum_extra::extract::PrivateCookieJar;
 use chrono::{DateTime, Duration, Utc};
 use cookie::{Cookie, SameSite};
+use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, net::SocketAddr};
 #[cfg(not(test))]
@@ -108,6 +111,59 @@ impl From<ApiUser> for UserCookie {
             expires_at: Utc::now() + Duration::days(7),
         }
     }
+}
+
+#[derive(Deserialize)]
+pub(super) struct PasswordLogin {
+    email: EmailAddress,
+    password: Password,
+}
+
+pub(super) async fn password_login(
+    State(repo): State<ApiUserRepository>,
+    mut cookie_storage: SecureCookieStorage,
+    Json(login_attempt): Json<PasswordLogin>,
+) -> Result<Response, ApiError> {
+    repo.check_password(&login_attempt.email, login_attempt.password)
+        .await?;
+    let user = repo
+        .find_by_email(&login_attempt.email)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    cookie_storage = login(user, cookie_storage)?;
+    Ok((cookie_storage, StatusCode::OK).into_response())
+}
+
+#[derive(Deserialize)]
+pub(super) struct PasswordRegister {
+    name: String,
+    email: EmailAddress,
+    password: Password,
+    terms: bool,
+}
+
+pub(super) async fn password_register(
+    State(repo): State<ApiUserRepository>,
+    mut cookie_storage: SecureCookieStorage,
+    Json(register_attempt): Json<PasswordRegister>,
+) -> Result<Response, ApiError> {
+    if !register_attempt.terms {
+        return Err(ApiError::BadRequest(
+            "You must accept the terms and conditions".to_string(),
+        ));
+    }
+    let new = NewApiUser {
+        email: register_attempt.email,
+        name: register_attempt.name.trim().to_string(),
+        password: Some(register_attempt.password),
+        roles: vec![],
+        github_user_id: None,
+    };
+
+    let user = repo.create(new).await?;
+
+    cookie_storage = login(user, cookie_storage)?;
+    Ok((cookie_storage, StatusCode::CREATED).into_response())
 }
 
 pub(super) fn login(

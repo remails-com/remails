@@ -9,6 +9,7 @@ use serde_json::json;
 
 #[derive(Debug, Serialize)]
 pub struct WhoamiResponse {
+    pub name: String,
     pub roles: Vec<ApiUserRole>,
     pub email: EmailAddress,
 }
@@ -17,6 +18,7 @@ impl From<ApiUser> for WhoamiResponse {
     fn from(user: ApiUser) -> Self {
         WhoamiResponse {
             roles: user.roles(),
+            name: user.name,
             email: user.email,
         }
     }

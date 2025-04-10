@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { User, WhoamiResponse } from "../types";
+import {createContext, useContext, useEffect, useState} from "react";
+import {User, WhoamiResponse} from "../types";
 
 export const UserContext = createContext<WhoamiResponse | null>(null)
 
@@ -20,6 +20,9 @@ export function useUser(): User {
 export function useLoadUser() {
   const [user, setUser] = useState<WhoamiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cacheInvalidate, setCacheInvalidate] = useState<boolean>(false);
+
+  const invalidate = () => setCacheInvalidate(!cacheInvalidate);
 
   // check whether the user is logged in
   useEffect(() => {
@@ -32,7 +35,7 @@ export function useLoadUser() {
         }
         setLoading(false);
       });
-  }, []);
+  }, [cacheInvalidate]);
 
-  return { user, loading }
+  return {user, loading, invalidate}
 }

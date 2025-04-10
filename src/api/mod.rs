@@ -1,6 +1,6 @@
 use crate::{
     api::{
-        auth::logout,
+        auth::{logout, password_login, password_register},
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
@@ -15,7 +15,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{FromRef, State},
-    routing::get,
+    routing::{get, post},
 };
 use base64ct::Encoding;
 use serde::Serialize;
@@ -142,6 +142,8 @@ impl ApiServer {
                 get(get_organization).delete(remove_organization),
             )
             .route("/logout", get(logout))
+            .route("/login/password", post(password_login))
+            .route("/register/password", post(password_register))
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
