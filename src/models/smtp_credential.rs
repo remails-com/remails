@@ -1,29 +1,34 @@
-use crate::models::Error;
-use derive_more::{Deref, Display, From};
+use crate::models::{Error, streams::StreamId};
+use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+)]
+#[sqlx(transparent)]
 pub struct SmtpCredentialId(Uuid);
 
 #[derive(Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredential {
     id: SmtpCredentialId,
+    description: String,
     username: String,
     #[serde(skip)]
     password_hash: String,
-    domain_id: Uuid,
+    stream_id: StreamId,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SmtpCredentialRequest {
+    pub(crate) description: String,
     pub(crate) username: String,
-    pub(crate) domain_id: Uuid,
+    pub(crate) stream_id: StreamId,
 }
 
 #[derive(Serialize, derive_more::Debug)]
@@ -33,7 +38,7 @@ pub struct SmtpCredentialResponse {
     username: String,
     #[debug("****")]
     cleartext_password: String,
-    domain_id: Uuid,
+    stream_id: StreamId,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -79,13 +84,14 @@ impl SmtpCredentialRepository {
         let generated = sqlx::query_as!(
             SmtpCredential,
             r#"
-            INSERT INTO smtp_credential (id, username, password_hash, domain_id)
-            VALUES (gen_random_uuid(), $1, $2, $3)
+            INSERT INTO smtp_credentials (id, description, username, password_hash, stream_id)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
             RETURNING *
             "#,
+            new_credential.description,
             &new_credential.username,
             password_hash,
-            new_credential.domain_id
+            *new_credential.stream_id
         )
         .fetch_one(&self.pool)
         .await?;
@@ -94,7 +100,7 @@ impl SmtpCredentialRepository {
             id: generated.id,
             username: generated.username,
             cleartext_password: password,
-            domain_id: generated.domain_id,
+            stream_id: generated.stream_id,
             created_at: generated.created_at,
             updated_at: generated.updated_at,
         })
@@ -104,7 +110,7 @@ impl SmtpCredentialRepository {
         let credential = sqlx::query_as!(
             SmtpCredential,
             r#"
-            SELECT * FROM smtp_credential WHERE username = $1 LIMIT 1
+            SELECT * FROM smtp_credentials WHERE username = $1 LIMIT 1
             "#,
             username
         )
@@ -118,7 +124,7 @@ impl SmtpCredentialRepository {
         let credentials = sqlx::query_as!(
             SmtpCredential,
             r#"
-            SELECT * FROM smtp_credential ORDER BY created_at DESC
+            SELECT * FROM smtp_credentials ORDER BY created_at DESC
             "#,
         )
         .fetch_all(&self.pool)
@@ -133,11 +139,15 @@ mod test {
     use super::*;
     use sqlx::PgPool;
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "domains", "projects", "streams")
+    ))]
     async fn smtp_credential_repository(pool: PgPool) {
         let credential_request = SmtpCredentialRequest {
             username: "test".to_string(),
-            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            stream_id: "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            description: "Test SMTP credential description".to_string(),
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo.generate(&credential_request).await.unwrap();

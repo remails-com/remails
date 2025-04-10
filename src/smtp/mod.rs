@@ -69,7 +69,8 @@ mod test {
 
         let credential_request = SmtpCredentialRequest {
             username: "john".to_string(),
-            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            stream_id: "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            description: "Test SMTP credential description".to_string(),
         };
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
@@ -101,7 +102,10 @@ mod test {
         )
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "domains", "projects", "streams")
+    ))]
     #[traced_test]
     async fn test_smtp(pool: PgPool) {
         if crypto::CryptoProvider::get_default().is_none() {
@@ -140,7 +144,10 @@ mod test {
         assert_eq!(received_message.from_email, "john@example.com");
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "domains", "projects", "streams")
+    ))]
     #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, _, port, _) = setup_server(pool).await;

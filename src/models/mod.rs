@@ -1,7 +1,10 @@
 mod api_user;
+mod domains;
 mod message;
 mod organization;
+mod projects;
 mod smtp_credential;
+mod streams;
 
 pub(crate) use api_user::*;
 pub(crate) use message::*;

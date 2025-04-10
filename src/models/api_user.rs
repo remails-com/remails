@@ -183,7 +183,7 @@ impl ApiUserRepository {
         for global_role in global_roles {
             sqlx::query!(
                 r#"
-                INSERT INTO api_users_global_role (api_user_id, role) 
+                INSERT INTO api_users_global_roles (api_user_id, role) 
                 VALUES ($1, $2)
                 "#,
                 user_id,
@@ -209,7 +209,7 @@ impl ApiUserRepository {
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE github_user_id = $1
             GROUP BY u.id
             "#,
@@ -234,7 +234,7 @@ impl ApiUserRepository {
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE u.id = $1
             GROUP BY u.id
             "#,
@@ -258,7 +258,7 @@ impl ApiUserRepository {
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE u.email = $1
             GROUP BY u.id
             "#,

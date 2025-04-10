@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.smtp_credential_id,\n                m.organization_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n                JOIN organizations o ON o.id = m.organization_id\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND ($4::uuid[] IS NULL OR o.id = ANY($4))\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.domain_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n                JOIN organizations o ON o.id = m.organization_id\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND ($4::uuid[] IS NULL OR o.id = ANY($4))\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -10,16 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "smtp_credential_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 2,
         "name": "organization_id",
         "type_info": "Uuid"
       },
       {
+        "ordinal": 2,
+        "name": "domain_id",
+        "type_info": "Uuid"
+      },
+      {
         "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "stream_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "smtp_credential_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -38,32 +53,32 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 7,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 5,
+        "ordinal": 8,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 6,
+        "ordinal": 9,
         "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 7,
+        "ordinal": 10,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 8,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 12,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -93,7 +108,10 @@
     "nullable": [
       false,
       false,
+      true,
       false,
+      false,
+      true,
       false,
       false,
       false,
@@ -103,5 +121,5 @@
       false
     ]
   },
-  "hash": "dece654168ed0b86eead951905b58767ad5ae187a6dc20556f56059cdbbfd7e3"
+  "hash": "a8a235198f7c29a6f1d6d106508078fdbcd5e90dede8962c56a8d7156c3e3ac3"
 }

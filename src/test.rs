@@ -24,7 +24,7 @@ pub fn random_port() -> u16 {
     rng.random_range(10_000..30_000)
 }
 
-#[sqlx::test(fixtures("organizations", "domains", "api_users"))]
+#[sqlx::test(fixtures("organizations", "domains", "api_users", "projects", "streams"))]
 #[traced_test]
 #[serial]
 async fn integration_test(pool: PgPool) {
@@ -75,7 +75,8 @@ async fn integration_test(pool: PgPool) {
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "john",
-            "domain_id": "ed28baa5-57f7-413f-8c77-7797ba6a8780"
+            "stream_id": "85785f4c-9167-4393-bbf2-3c3e21067e4a",
+            "description": "John test credential"
         }))
         .send()
         .await
@@ -93,7 +94,8 @@ async fn integration_test(pool: PgPool) {
         .header("X-Test-Login", "admin")
         .json(&json!({
             "username": "eddy",
-            "domain_id": "6a45a141-6628-4c0f-823b-3cf3eb64f0c7"
+            "stream_id": "6af665cd-698e-47ca-9d6b-966f8e8fa07f",
+            "description": "Eddy test credential"
         }))
         .send()
         .await

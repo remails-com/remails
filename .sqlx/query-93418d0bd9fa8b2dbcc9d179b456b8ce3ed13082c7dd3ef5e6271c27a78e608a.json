@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM smtp_credential ORDER BY created_at DESC\n            ",
+  "query": "\n            INSERT INTO smtp_credentials (id, description, username, password_hash, stream_id)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -10,34 +10,45 @@
       },
       {
         "ordinal": 1,
-        "name": "domain_id",
+        "name": "stream_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 2,
-        "name": "username",
+        "name": "description",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
-        "name": "password_hash",
+        "name": "username",
         "type_info": "Varchar"
       },
       {
         "ordinal": 4,
+        "name": "password_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Uuid"
+      ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -46,5 +57,5 @@
       false
     ]
   },
-  "hash": "ada4151cd51c956d1d041bd92de08b3cbfbf14840beeea774f79e11af8f06fdc"
+  "hash": "93418d0bd9fa8b2dbcc9d179b456b8ce3ed13082c7dd3ef5e6271c27a78e608a"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO api_users_global_role (api_user_id, role) \n                VALUES ($1, $2)\n                ",
+  "query": "\n                INSERT INTO api_users_global_roles (api_user_id, role) \n                VALUES ($1, $2)\n                ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -20,5 +20,5 @@
     },
     "nullable": []
   },
-  "hash": "2c5fdf69d8528366aa237c9c0c24fecc2a98efc564587a6df3d4c89f5e6e8cb4"
+  "hash": "a56f37e36ee800417f880361a642dcb0b48dc11da6a211bb96c8ad583fc4d0ab"
 }
