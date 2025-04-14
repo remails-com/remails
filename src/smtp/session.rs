@@ -151,6 +151,7 @@ impl SmtpSession {
                     SessionReply::ReplyAndContinue(code, message)
                 } else {
                     // other authentication methods
+                    debug!("Received unsupported AUTH request");
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
                 }
             }
