@@ -20,6 +20,8 @@ pub enum ConnectionError {
     Write(std::io::Error),
     #[error("failed to read tcp stream: {0}")]
     Read(std::io::Error),
+    #[error("connection dropped unexpectedly")]
+    Dropped,
 }
 
 const BUFFER_SIZE: usize = 1024;
@@ -105,6 +107,13 @@ async fn read_buf(
         .read_buf(buffer)
         .await
         .map_err(ConnectionError::Read)
+        .and_then(|size| {
+            if size > 0 {
+                Ok(size)
+            } else {
+                Err(ConnectionError::Dropped)
+            }
+        })
 }
 
 async fn read_line(
@@ -118,6 +127,13 @@ async fn read_line(
         .read_until(b'\n', buffer)
         .await
         .map_err(ConnectionError::Read)
+        .and_then(|size| {
+            if size > 0 {
+                Ok(size)
+            } else {
+                Err(ConnectionError::Dropped)
+            }
+        })
 }
 
 async fn write_reply(
