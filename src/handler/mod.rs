@@ -102,7 +102,7 @@ impl Handler {
         trace!("parsing message {} {}", message.id(), message.message_data);
 
         // parse and save message contents
-        let message_data: mail_parser::Message = MessageParser::default()
+        let parsed_msg: mail_parser::Message = MessageParser::default()
             .parse(&message.raw_data)
             .unwrap_or_else(|| mail_parser::Message {
                 raw_message: Borrowed(&message.raw_data),
@@ -111,7 +111,7 @@ impl Handler {
 
         // this should never fail since mail_parser::Message has a derived Serialize instance
         let json_message_data =
-            serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?;
+            serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
 
         trace!("updating message {}", message.id());
 
@@ -131,7 +131,7 @@ impl Handler {
             .map_err(HandlerError::DkimError)?;
 
         generated_headers.extend(
-            key.dkim_header(&message.raw_data)
+            key.dkim_header(&parsed_msg)
                 .map_err(HandlerError::DkimError)?
                 .into_bytes(),
         );
