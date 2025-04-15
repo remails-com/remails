@@ -5,7 +5,7 @@ import { useInitRouter, RouterContext } from "./hooks/useRouter";
 import { UserContext, useLoadUser } from "./hooks/useUser";
 
 export default function App() {
-  const { user, loading, invalidate } = useLoadUser();
+  const { user, loading, setUser } = useLoadUser();
   const {
     params,
     route,
@@ -17,7 +17,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login reevaluate={invalidate} />;
+    return <Login setUser={setUser} />;
   }
 
   return (

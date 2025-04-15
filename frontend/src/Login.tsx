@@ -16,13 +16,13 @@ import {useForm} from '@mantine/form';
 import {upperFirst, useToggle} from '@mantine/hooks';
 import {IconBrandGithub, IconX} from '@tabler/icons-react';
 import {useState} from "react";
-import {SignUpRequest} from "./types.ts";
+import {SignUpRequest, WhoamiResponse} from "./types.ts";
 
 interface LoginProps {
-  reevaluate: () => void;
+  setUser: (user: WhoamiResponse) => void;
 }
 
-export function Login({reevaluate}: LoginProps) {
+export function Login({setUser}: LoginProps) {
   const [type, toggle] = useToggle(['login', 'register']);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const xIcon = <IconX size={20}/>;
@@ -59,7 +59,7 @@ export function Login({reevaluate}: LoginProps) {
         } else if (res.status !== 200) {
           setGlobalError('Something went wrong');
         } else {
-          reevaluate()
+          res.json().then(setUser)
         }
       })
     }
@@ -77,7 +77,7 @@ export function Login({reevaluate}: LoginProps) {
         } else if (res.status !== 201) {
           setGlobalError('Something went wrong');
         }
-        reevaluate()
+        res.json().then(setUser)
       })
     }
   }

@@ -1,5 +1,5 @@
 use crate::{
-    api::{ApiState, error::ApiError},
+    api::{ApiState, error::ApiError, whoami::WhoamiResponse},
     models::{
         ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, NewApiUser, OrganizationId, Password,
     },
@@ -104,8 +104,8 @@ impl UserCookie {
     }
 }
 
-impl From<ApiUser> for UserCookie {
-    fn from(user: ApiUser) -> Self {
+impl From<&ApiUser> for UserCookie {
+    fn from(user: &ApiUser) -> Self {
         Self {
             id: *user.id(),
             expires_at: Utc::now() + Duration::days(7),
@@ -130,8 +130,9 @@ pub(super) async fn password_login(
         .find_by_email(&login_attempt.email)
         .await?
         .ok_or(ApiError::NotFound)?;
-    cookie_storage = login(user, cookie_storage)?;
-    Ok((cookie_storage, StatusCode::OK).into_response())
+    cookie_storage = login(&user, cookie_storage)?;
+    let whoami = WhoamiResponse::from(user);
+    Ok((StatusCode::OK, cookie_storage, Json(whoami)).into_response())
 }
 
 #[derive(Deserialize)]
@@ -162,12 +163,13 @@ pub(super) async fn password_register(
 
     let user = repo.create(new).await?;
 
-    cookie_storage = login(user, cookie_storage)?;
-    Ok((cookie_storage, StatusCode::CREATED).into_response())
+    cookie_storage = login(&user, cookie_storage)?;
+    let whoami = WhoamiResponse::from(user);
+    Ok((StatusCode::CREATED, cookie_storage, Json(whoami)).into_response())
 }
 
 pub(super) fn login(
-    user: ApiUser,
+    user: &ApiUser,
     cookie_storage: SecureCookieStorage,
 ) -> Result<SecureCookieStorage, serde_json::Error> {
     // Serialize the user data as a string
