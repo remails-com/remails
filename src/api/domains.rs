@@ -3,8 +3,8 @@ use crate::{
     models::{ApiDomain, ApiUser, DomainRepository, NewDomain, OrganizationId, ProjectId},
 };
 use axum::{
-    Json,
     extract::{Path, State},
+    Json,
 };
 use serde::Deserialize;
 
@@ -17,6 +17,14 @@ fn has_write_access(
         return Ok(());
     }
     Err(ApiError::Forbidden)
+}
+
+fn has_read_access(
+    org: OrganizationId,
+    proj: Option<ProjectId>,
+    user: &ApiUser,
+) -> Result<(), ApiError> {
+    has_write_access(org, proj, user)
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,4 +42,20 @@ pub async fn create_domain(
     has_write_access(org_id, project_id, &user)?;
 
     Ok(Json(repo.create(new, org_id, project_id).await?.into()))
+}
+
+pub async fn list_domains(
+    State(repo): State<DomainRepository>,
+    user: ApiUser,
+    Path(DomainPath { org_id, project_id }): Path<DomainPath>,
+) -> ApiResult<Vec<ApiDomain>> {
+    has_read_access(org_id, project_id, &user)?;
+
+    Ok(Json(
+        repo.list(org_id, project_id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
 }

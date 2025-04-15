@@ -141,7 +141,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "domains", "projects", "streams")
+        scripts("organizations", "projects", "domains", "streams")
     ))]
     async fn smtp_credential_repository(pool: PgPool) {
         let credential_request = SmtpCredentialRequest {

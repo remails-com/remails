@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   array_agg(distinct g.role) AS \"global_roles!: Vec<Option<PgRole>>\"\n            FROM api_users u \n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id\n            WHERE u.email = $1\n            GROUP BY u.id\n            ",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   array_agg(distinct g.role) AS \"global_roles!: Vec<Option<PgRole>>\"\n            FROM api_users u\n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id\n            WHERE u.email = $1\n            GROUP BY u.id\n            ",
   "describe": {
     "columns": [
       {
@@ -96,5 +96,5 @@
       null
     ]
   },
-  "hash": "82cdb92b454ad9ad86fe93a9928eb9fed08ff686228bcb7f3d208342447c06fd"
+  "hash": "f91bd972808138d8e8a80138c0855d75929af6f280f7bc69411c0da9035cd0b6"
 }

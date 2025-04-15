@@ -46,6 +46,9 @@ impl From<sqlx::Error> for Error {
                 return Error::Conflict;
             }
         }
+        if matches!(sql, sqlx::Error::RowNotFound) {
+            return Error::NotFound("not found");
+        }
         Error::Database(sql)
     }
 }

@@ -321,7 +321,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "domains", "projects", "streams")
+        scripts("organizations", "projects", "domains", "streams")
     ))]
     #[traced_test]
     #[serial]

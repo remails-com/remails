@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE\n            FROM domains d\n                USING projects p\n            WHERE (d.project_id IS NULL OR\n                   (\n                       d.project_id = p.id\n                           AND d.project_id = $2\n                           AND p.organization_id = $1\n                       )\n                )\n              AND (d.organization_id IS NULL OR d.organization_id = $1)\n              AND (d.id = $3)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bea28f545e0053f3877e5c98afc14506511bb46454d8f38b0a1723a34fc9340f"
+}
