@@ -19,6 +19,10 @@ pub enum Error {
     Serialization(#[from] serde_json::Error),
     #[error(transparent)]
     Email(#[from] email_address::Error),
+    #[error("{0}")]
+    NotFound(&'static str),
+    #[error("conflict")]
+    Conflict,
 }
 
 #[derive(Serialize, Debug)]

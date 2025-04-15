@@ -8,6 +8,11 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
 
+#[derive(From, derive_more::Debug, Deserialize)]
+#[debug("*****")]
+#[serde(transparent)]
+pub struct Password(String);
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
@@ -16,9 +21,11 @@ pub enum ApiUserRole {
     OrganizationAdmin(OrganizationId),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug)]
 pub struct NewApiUser {
     pub email: EmailAddress,
+    pub name: String,
+    pub password: Option<Password>,
     pub roles: Vec<ApiUserRole>,
     pub github_user_id: Option<i64>,
 }
@@ -26,6 +33,7 @@ pub struct NewApiUser {
 #[derive(Debug)]
 pub struct ApiUser {
     id: ApiUserId,
+    pub name: String,
     pub email: EmailAddress,
     roles: Vec<ApiUserRole>,
     #[allow(unused)]
@@ -37,6 +45,7 @@ impl ApiUser {
     pub fn new(roles: Vec<ApiUserRole>) -> Self {
         Self {
             id: "0b8c948a-8f0c-4b63-a70e-78a9a186f7a2".parse().unwrap(),
+            name: "Test User".to_string(),
             email: "test@test.com".parse().unwrap(),
             roles,
             github_user_id: None,
@@ -68,6 +77,7 @@ struct PgOrgRole {
 
 struct PgApiUser {
     id: ApiUserId,
+    name: String,
     email: String,
     organization_roles: Vec<PgOrgRole>,
     global_roles: Vec<Option<PgRole>>,
@@ -100,6 +110,7 @@ impl TryFrom<PgApiUser> for ApiUser {
         );
         Ok(Self {
             id: u.id,
+            name: u.name,
             email: u.email.parse()?,
             roles,
             github_user_id: u.github_user_id,
@@ -118,19 +129,31 @@ impl ApiUserRepository {
     }
 
     pub async fn create(&self, user: NewApiUser) -> Result<ApiUser, Error> {
+        let password_hash = user.password.map(|pw| password_auth::generate_hash(pw.0));
+
         let mut tx = self.pool.begin().await?;
 
         let user_id = sqlx::query_scalar!(
             r#"
-            INSERT INTO api_users (id, email, github_user_id)
-            VALUES (gen_random_uuid(), $1, $2)
+            INSERT INTO api_users (id, email, name, password_hash, github_user_id)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
             RETURNING id
             "#,
             user.email.as_str(),
+            user.name,
+            password_hash,
             user.github_user_id
         )
         .fetch_one(&mut *tx)
-        .await?;
+        .await
+        .map_err(|err| {
+            if let sqlx::Error::Database(db_err) = &err {
+                if db_err.is_unique_violation() {
+                    return Error::Conflict;
+                }
+            }
+            Error::Database(err)
+        })?;
 
         let (organization_roles, global_roles) = user.roles.into_iter().fold(
             (Vec::new(), Vec::new()),
@@ -180,6 +203,7 @@ impl ApiUserRepository {
             r#"
             SELECT u.id,
                    u.email,
+                   u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
@@ -204,6 +228,7 @@ impl ApiUserRepository {
             r#"
             SELECT u.id,
                    u.email,
+                   u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
@@ -219,6 +244,54 @@ impl ApiUserRepository {
             .await?
             .map(TryInto::try_into)
             .transpose()
+    }
+
+    pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
+        sqlx::query_as!(
+            PgApiUser,
+            r#"
+            SELECT u.id,
+                   u.email,
+                   u.name,
+                   u.github_user_id,
+                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+            FROM api_users u 
+                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+            WHERE u.email = $1
+            GROUP BY u.id
+            "#,
+            email.as_str()
+        )
+            .fetch_optional(&self.pool)
+            .await?
+            .map(TryInto::try_into)
+            .transpose()
+    }
+
+    pub async fn check_password(
+        &self,
+        email: &EmailAddress,
+        password: Password,
+    ) -> Result<(), Error> {
+        let hash = sqlx::query_scalar!(
+            r#"
+            SELECT password_hash FROM api_users WHERE email = $1
+            "#,
+            email.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+
+        if let Some(hash) = hash {
+            password_auth::verify_password(password.0, &hash)
+                .inspect_err(|err| tracing::trace!("wrong password for {}: {}", email, err))
+                .map_err(|_| Error::NotFound("User not found or wrong password"))?;
+            return Ok(());
+        }
+        Err(Error::NotFound("User not found or wrong password"))
     }
 }
 
@@ -237,7 +310,20 @@ mod test {
 
             self.github_user_id == other.github_user_id
                 && self.email == other.email
+                && self.name == other.name
                 && self_roles == other_roles
+        }
+    }
+
+    impl Clone for NewApiUser {
+        fn clone(&self) -> Self {
+            Self {
+                email: self.email.clone(),
+                name: self.name.clone(),
+                password: None,
+                roles: self.roles.clone(),
+                github_user_id: self.github_user_id,
+            }
         }
     }
 
@@ -247,6 +333,8 @@ mod test {
 
         let user = NewApiUser {
             email: "test@email.com".parse().unwrap(),
+            name: "Test User".to_string(),
+            password: None,
             roles: vec![
                 ApiUserRole::SuperAdmin,
                 ApiUserRole::OrganizationAdmin(
@@ -262,6 +350,8 @@ mod test {
 
         let user = NewApiUser {
             email: "test2@email.com".parse().unwrap(),
+            name: "Test User 2".to_string(),
+            password: None,
             roles: vec![],
             github_user_id: None,
         };

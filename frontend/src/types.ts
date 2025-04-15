@@ -2,6 +2,7 @@ export type Role = 'super_admin' | { organization_admin: string };
 
 export interface User {
   roles: Role[];
+  name: string;
   email: string;
 }
 
@@ -20,4 +21,14 @@ export interface Organization {
   name: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface PasswordLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignUpRequest extends PasswordLoginRequest{
+  name: string,
+  terms: boolean,
 }

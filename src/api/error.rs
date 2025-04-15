@@ -1,4 +1,4 @@
-use crate::{api::oauth, models};
+use crate::{api::oauth, models, models::Error};
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use thiserror::Error;
@@ -29,10 +29,21 @@ impl IntoResponse for ApiError {
         error!("API server error: {self} {self:?}");
 
         let (status, message) = match self {
-            ApiError::Database(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Database error".to_string(),
-            ),
+            ApiError::Database(db) => match db {
+                Error::Serialization(err) => {
+                    error!("{err}");
+                    (StatusCode::BAD_REQUEST, err.to_string())
+                }
+                Error::NotFound(err) => {
+                    error!("{err}");
+                    (StatusCode::NOT_FOUND, "Not found".to_string())
+                }
+                Error::Conflict => (StatusCode::CONFLICT, "Conflict".to_string()),
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                ),
+            },
             ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
             ApiError::OAuth(err) => (err.status_code(), err.user_message()),

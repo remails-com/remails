@@ -5,7 +5,7 @@ import { useInitRouter, RouterContext } from "./hooks/useRouter";
 import { UserContext, useLoadUser } from "./hooks/useUser";
 
 export default function App() {
-  const { user, loading } = useLoadUser();
+  const { user, loading, setUser } = useLoadUser();
   const {
     params,
     route,
@@ -17,7 +17,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login />;
+    return <Login setUser={setUser} />;
   }
 
   return (

@@ -58,8 +58,10 @@ CREATE TYPE org_role AS
 CREATE TABLE api_users
 (
     id             uuid PRIMARY KEY,
+    name           varchar                  NOT NULL,
     email          varchar                  NOT NULL UNIQUE,
     github_user_id bigint,
+    password_hash  varchar,
     created_at     timestamp with time zone NOT NULL DEFAULT now(),
     updated_at     timestamp with time zone NOT NULL DEFAULT now()
 );

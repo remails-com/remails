@@ -149,7 +149,7 @@ where
 
     let api_user = service.fetch_user(token.access_token()).await?;
 
-    let cookie_storage = login(api_user, cookie_storage)?;
+    let cookie_storage = login(&api_user, cookie_storage)?;
 
     // Remove the CSRF token cookie
     let cookie_storage = cookie_storage.remove(csrf_cookie);

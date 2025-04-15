@@ -34,7 +34,7 @@ export function Dashboard({ children }: DashboardProps) {
               color="#666"
               variant="outline"
             >
-              {user.email}
+              {user.name}
             </Button>
             <Button
               leftSection={<IconLogout />}

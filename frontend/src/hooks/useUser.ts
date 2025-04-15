@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { User, WhoamiResponse } from "../types";
+import {createContext, useContext, useEffect, useState} from "react";
+import {User, WhoamiResponse} from "../types";
 
 export const UserContext = createContext<WhoamiResponse | null>(null)
 
@@ -34,5 +34,5 @@ export function useLoadUser() {
       });
   }, []);
 
-  return { user, loading }
+  return {user, loading, setUser}
 }

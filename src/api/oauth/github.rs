@@ -53,6 +53,7 @@ pub struct GithubOauthService {
 
 #[derive(Debug, Deserialize)]
 struct GitHubUser {
+    pub name: String,
     pub id: i64,
 }
 
@@ -119,7 +120,7 @@ impl GithubOauthService {
 
     async fn github_sign_up(
         &self,
-        github_user_id: i64,
+        github_user: GitHubUser,
         token: &AccessToken,
     ) -> Result<ApiUser, Error> {
         // Fetch email addresses from the GitHub API
@@ -148,8 +149,10 @@ impl GithubOauthService {
             .user_repository
             .create(NewApiUser {
                 email,
+                name: github_user.name,
+                password: None,
                 roles: vec![],
-                github_user_id: Some(github_user_id),
+                github_user_id: Some(github_user.id),
             })
             .await?)
     }
@@ -208,7 +211,7 @@ impl OAuthService for GithubOauthService {
             );
             Ok(existing_user)
         } else {
-            let new = self.github_sign_up(user_data.id, token).await?;
+            let new = self.github_sign_up(user_data, token).await?;
             debug!(
                 user_id = new.id().to_string(),
                 "Signed up new user via GitHub"
