@@ -1,7 +1,7 @@
 use base64ct::Encoding;
 use smtp_proto::{
-    AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_BINARY_MIME, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8,
-    EhloResponse, Request,
+    AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8, EhloResponse,
+    Request,
 };
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
@@ -106,11 +106,8 @@ impl SmtpSession {
             Request::Ehlo { host } => {
                 // RFC5231, 4.1.1.1
                 let mut response = EhloResponse::new(&host);
-                response.capabilities = EXT_ENHANCED_STATUS_CODES
-                    | EXT_8BIT_MIME
-                    | EXT_BINARY_MIME
-                    | EXT_SMTP_UTF8
-                    | EXT_AUTH;
+                response.capabilities =
+                    EXT_ENHANCED_STATUS_CODES | EXT_8BIT_MIME | EXT_SMTP_UTF8 | EXT_AUTH;
 
                 response.auth_mechanisms = AUTH_PLAIN;
 
@@ -154,6 +151,7 @@ impl SmtpSession {
                     SessionReply::ReplyAndContinue(code, message)
                 } else {
                     // other authentication methods
+                    debug!("Received unsupported AUTH request");
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
                 }
             }
