@@ -1,21 +1,25 @@
 use crate::{
     api::{
         auth::{logout, password_login, password_register},
+        domains::create_domain,
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_organizations, remove_organization,
         },
+        projects::{create_project, list_projects, remove_project},
         smtp_credentials::{create_smtp_credential, list_smtp_credential},
+        streams::{create_stream, list_streams, remove_stream},
     },
     models::{
-        ApiUserRepository, MessageRepository, OrganizationRepository, SmtpCredentialRepository,
+        ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
+        ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
 };
 use axum::{
     Json, Router,
     extract::{FromRef, State},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use base64ct::Encoding;
 use serde::Serialize;
@@ -29,11 +33,14 @@ use tracing::{error, info, log::warn};
 
 mod api_users;
 mod auth;
+mod domains;
 mod error;
 mod messages;
 mod oauth;
 mod organizations;
+mod projects;
 mod smtp_credentials;
+mod streams;
 mod whoami;
 
 static USER_AGENT_VALUE: &str = "remails";
@@ -80,6 +87,24 @@ impl FromRef<ApiState> for SmtpCredentialRepository {
 impl FromRef<ApiState> for OrganizationRepository {
     fn from_ref(state: &ApiState) -> Self {
         OrganizationRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for ProjectRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        ProjectRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for StreamRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        StreamRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for DomainRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        DomainRepository::new(state.pool.clone())
     }
 }
 
@@ -140,6 +165,27 @@ impl ApiServer {
             .route(
                 "/organizations/{id}",
                 get(get_organization).delete(remove_organization),
+            )
+            .route(
+                "/organizations/{org_id}/projects",
+                get(list_projects).post(create_project),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}",
+                delete(remove_project),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams",
+                get(list_streams).post(create_stream),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
+                delete(remove_stream),
+            )
+            .route("/organizations/{org_id}/domains", post(create_domain))
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/domains",
+                post(create_domain),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))

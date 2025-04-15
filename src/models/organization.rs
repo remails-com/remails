@@ -33,8 +33,8 @@ impl OrganizationId {
 pub struct Organization {
     pub id: OrganizationId,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -137,8 +137,8 @@ impl OrganizationRepository {
     pub async fn add_user(&self, org_id: OrganizationId, user_id: ApiUserId) -> Result<(), Error> {
         sqlx::query!(
             r#"
-            INSERT INTO api_users_organizations (organization_id, api_user_id)
-            VALUES ($1, $2)
+            INSERT INTO api_users_organizations (organization_id, api_user_id, role)
+            VALUES ($1, $2, 'admin')
             "#,
             *org_id,
             *user_id

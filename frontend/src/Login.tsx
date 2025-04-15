@@ -76,8 +76,9 @@ export function Login({setUser}: LoginProps) {
           form.setFieldError('email', 'This email is already registered, try logging in instead');
         } else if (res.status !== 201) {
           setGlobalError('Something went wrong');
+        } else {
+          res.json().then(setUser)
         }
-        res.json().then(setUser)
       })
     }
   }

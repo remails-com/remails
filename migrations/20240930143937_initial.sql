@@ -100,7 +100,7 @@ CREATE TYPE dkim_key_type AS ENUM (
 CREATE TABLE domains
 (
     id              uuid PRIMARY KEY,
-    domain          varchar                  NOT NULL,
+    domain          varchar                  NOT NULL UNIQUE,
     organization_id uuid REFERENCES organizations (id) ON DELETE CASCADE,
     project_id      uuid REFERENCES projects (id),
     CONSTRAINT either_organization_or_project CHECK ( (organization_id IS NULL) != (project_id IS NULL) ),
@@ -120,7 +120,7 @@ EXECUTE PROCEDURE update_updated_at_column();
 CREATE TABLE streams
 (
     id         uuid PRIMARY KEY,
-    project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
+    project_id uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     name       varchar                  NOT NULL,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
