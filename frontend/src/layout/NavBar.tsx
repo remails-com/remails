@@ -2,7 +2,7 @@ import { NavLink } from "@mantine/core";
 import { IconBuildings, IconLockPassword, IconMail, IconWorldWww } from "@tabler/icons-react";
 import { useRouter } from "../hooks/useRouter";
 
-export function Menu() {
+export function NavBar() {
   const { route, navigate } = useRouter();
 
   return (
