@@ -11,13 +11,14 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 pub struct SmtpCredentialId(Uuid);
 
-#[derive(Serialize)]
+#[derive(Serialize, derive_more::Debug)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredential {
     id: SmtpCredentialId,
     description: String,
     username: String,
     #[serde(skip)]
+    #[debug("******")]
     password_hash: String,
     stream_id: StreamId,
     created_at: DateTime<Utc>,
@@ -161,11 +162,41 @@ impl SmtpCredentialRepository {
 
         Ok(credentials)
     }
+
+    pub async fn remove(
+        &self,
+        org_id: OrganizationId,
+        project_id: ProjectId,
+        stream_id: StreamId,
+        credential_id: SmtpCredentialId,
+    ) -> Result<SmtpCredentialId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM smtp_credentials c 
+                   USING streams s 
+                       JOIN projects p ON s.project_id = p.id 
+                   WHERE c.stream_id = s.id 
+                     AND p.organization_id = $1
+                     AND p.id = $2
+                     AND s.id = $3 
+                     AND c.id = $4
+            RETURNING c.id
+            "#,
+            *org_id,
+            *project_id,
+            *stream_id,
+            *credential_id,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::models::MessageRepository;
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
@@ -182,10 +213,7 @@ mod test {
         }
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
     async fn smtp_credential_repository(pool: PgPool) {
         let credential_request = SmtpCredentialRequest {
             username: "test".to_string(),
@@ -216,5 +244,123 @@ mod test {
             .unwrap();
 
         assert!(get_credential.verify_password(credential.cleartext_password.as_str()));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn remove_happy_flow(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let rm_cred = credential_repo
+            .remove(org_id, project_id, stream_id, credential_id)
+            .await
+            .unwrap();
+        assert_eq!(credential_id, rm_cred);
+
+        let not_found = credential_repo.find_by_username("marc").await.unwrap();
+        assert!(not_found.is_none())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn remove_org_does_not_match_proj(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let not_found = credential_repo
+            .remove(org_id, project_id, stream_id, credential_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let still_there = credential_repo.find_by_username("marc").await.unwrap();
+        assert!(still_there.is_some())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn remove_proj_does_not_match_stream(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let not_found = credential_repo
+            .remove(org_id, project_id, stream_id, credential_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+
+        let not_found = credential_repo
+            .remove(org_id, project_id, stream_id, credential_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let still_there = credential_repo.find_by_username("marc").await.unwrap();
+        assert!(still_there.is_some())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials", "messages")
+    ))]
+    async fn remove_with_depending_messages(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+        let message_repo = MessageRepository::new(db.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
+
+        let message = message_repo
+            .find_by_id(org_id, Some(project_id), Some(stream_id), message_id)
+            .await
+            .unwrap();
+
+        // Making sure we are actually deleting a credential that has a message associated
+        assert_eq!(message.smtp_credential_id(), Some(credential_id));
+
+        // Deleting the credential
+        let rm_cred = credential_repo
+            .remove(org_id, project_id, stream_id, credential_id)
+            .await
+            .unwrap();
+        assert_eq!(credential_id, rm_cred);
+
+        // Making sure the credential is actually gone
+        let not_found = credential_repo.find_by_username("marc").await.unwrap();
+        assert!(not_found.is_none());
+
+        // Making sure the message is still there
+        let message = message_repo
+            .find_by_id(org_id, Some(project_id), Some(stream_id), message_id)
+            .await
+            .unwrap();
+
+        // And has no credential associated anymore
+        assert_eq!(message.smtp_credential_id(), None);
     }
 }

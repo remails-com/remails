@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM smtp_credentials c \n                   USING streams s \n                       JOIN projects p ON s.project_id = p.id \n                   WHERE c.stream_id = s.id \n                     AND p.organization_id = $1\n                     AND p.id = $2\n                     AND s.id = $3 \n                     AND c.id = $4\n            RETURNING c.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b85c61a072b142be8581562c3f939eb223a8470f0e32db837a0a3c4ead361a29"
+}

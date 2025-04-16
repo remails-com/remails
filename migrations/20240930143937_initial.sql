@@ -162,10 +162,10 @@ CREATE TABLE messages
 (
     id                 uuid PRIMARY KEY         NOT NULL,
     organization_id    uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    domain_id          uuid REFERENCES domains (id),
+    domain_id          uuid                     REFERENCES domains (id) ON DELETE SET NULL,
     project_id         uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     stream_id          uuid                     NOT NULL REFERENCES streams (id) ON DELETE CASCADE,
-    smtp_credential_id uuid REFERENCES smtp_credentials (id),
+    smtp_credential_id uuid                     REFERENCES smtp_credentials (id) ON DELETE SET NULL,
     delivery_status    jsonb                    NOT NULL default '[]',
     status             message_status           NOT NULL,
     from_email         varchar                  NOT NULL,

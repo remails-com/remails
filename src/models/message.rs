@@ -3,13 +3,13 @@ use crate::models::{
     streams::StreamId,
 };
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From};
+use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub type EmailAddress = String;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
@@ -321,6 +321,12 @@ mod test {
 
     use super::*;
     use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
+
+    impl Message {
+        pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
+            self.smtp_credential_id
+        }
+    }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",

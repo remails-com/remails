@@ -56,3 +56,22 @@ pub async fn list_smtp_credential(
 
     Ok(Json(credentials))
 }
+
+pub async fn remove_smtp_credential(
+    State(repo): State<SmtpCredentialRepository>,
+    Path((org_id, proj_id, stream_id, credential_id)): Path<(
+        OrganizationId,
+        ProjectId,
+        StreamId,
+        SmtpCredentialId,
+    )>,
+    user: ApiUser,
+) -> ApiResult<SmtpCredentialId> {
+    has_write_access(org_id, proj_id, stream_id, Some(credential_id), &user)?;
+
+    let credentials = repo
+        .remove(org_id, proj_id, stream_id, credential_id)
+        .await?;
+
+    Ok(Json(credentials))
+}

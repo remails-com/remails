@@ -8,7 +8,7 @@ use crate::{
             create_organization, get_organization, list_organizations, remove_organization,
         },
         projects::{create_project, list_projects, remove_project},
-        smtp_credentials::{create_smtp_credential, list_smtp_credential},
+        smtp_credentials::{create_smtp_credential, list_smtp_credential, remove_smtp_credential},
         streams::{create_stream, list_streams, remove_stream},
     },
     models::{
@@ -203,6 +203,10 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
                 get(list_smtp_credential).post(create_smtp_credential),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
+                delete(remove_smtp_credential),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
