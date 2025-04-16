@@ -58,8 +58,7 @@ pub async fn remove_organization(
     Path(id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     api_user: ApiUser,
-) -> Result<(), ApiError> {
+) -> ApiResult<OrganizationId> {
     let filter = (&api_user).into();
-    repo.remove(id, &filter).await?;
-    Ok(())
+    Ok(Json(repo.remove(id, &filter).await?))
 }

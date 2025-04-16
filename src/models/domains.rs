@@ -19,7 +19,7 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 pub struct DomainId(Uuid);
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum DomainParent {
     Organization(OrganizationId),
     Project(ProjectId),
@@ -320,13 +320,13 @@ impl DomainRepository {
         .collect()
     }
 
-    pub async fn remove_domain(
+    pub async fn remove(
         &self,
         org_id: OrganizationId,
         proj_id: Option<ProjectId>,
         domain_id: DomainId,
-    ) -> Result<(), Error> {
-        sqlx::query!(
+    ) -> Result<DomainId, Error> {
+        let id = sqlx::query_scalar!(
             r#"
             DELETE
             FROM domains d
@@ -338,17 +338,21 @@ impl DomainRepository {
                            AND p.organization_id = $1
                        )
                 )
-              AND (d.organization_id IS NULL OR d.organization_id = $1)
+              AND (d.organization_id IS NULL OR
+                   (d.organization_id = $1
+                        AND $2::uuid IS NULL)
+                  )
               AND (d.id = $3)
+            RETURNING d.id
             "#,
             *org_id,
             proj_id.map(|p| p.as_uuid()),
             *domain_id
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(DomainId(id))
     }
 }
 
@@ -356,6 +360,237 @@ impl DomainRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn create_org_does_not_match_proj(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let bad_request = repo
+            .create(
+                NewDomain {
+                    domain: "test-domain.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                },
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 2
+                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(bad_request, Error::BadRequest(_)))
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn create_happy_flow(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let domain = repo
+            .create(
+                NewDomain {
+                    domain: "test-domain1.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                },
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(domain.domain, "test-domain1.com");
+        assert_eq!(
+            domain.parent_id,
+            DomainParent::Project("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap())
+        );
+
+        let domain = repo
+            .create(
+                NewDomain {
+                    domain: "test-domain2.com".to_string(),
+                    dkim_key_type: DkimKeyType::Ed25519,
+                },
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(domain.domain, "test-domain2.com");
+        assert_eq!(
+            domain.parent_id,
+            DomainParent::Organization("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
+        );
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn create_conflicting_domain(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let conflict = repo
+            .create(
+                NewDomain {
+                    domain: "test-org-2-project-1.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                },
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(conflict, Error::Conflict))
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn get_org_does_not_match_proj(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let not_found = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 2
+                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
+                // test-org-2-project-1.com
+                "ae5ff990-d2c3-4368-a58f-003581705086".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let not_found = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 2
+                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
+                // test-org-1-project-1.com
+                "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn get_with_proj_id_from_org_domain(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let not_found = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn get_happy_flow(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let domain = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                // test-org-1-project-1.com
+                "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(domain.domain, "test-org-1-project-1.com");
+
+        let domain = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(domain.domain, "test-org-1.com")
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn list_org_does_not_match_proj(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let domains = repo
+            .list(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 2
+                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
+            )
+            .await
+            .unwrap();
+        assert!(domains.is_empty());
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn list_happy_flow(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let domains = repo
+            .list(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(domains.len(), 1);
+        assert_eq!(domains[0].domain, "test-org-1.com");
+
+        let domains = repo
+            .list(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(domains.len(), 1);
+        assert_eq!(domains[0].domain, "test-org-1-project-1.com");
+    }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -378,18 +613,20 @@ mod test {
 
         assert_eq!(domain1.domain, "test-org-1-project-1.com");
 
-        repo.remove_domain(
-            // test org 2
-            "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
-            // Project 1 Organization 1
-            Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
-            // test-org-1-project-1.com
-            "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
-        )
-        .await
-        .unwrap();
+        let not_found = repo
+            .remove(
+                // test org 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                // test-org-1-project-1.com
+                "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
 
-        let still_there = repo
+        let _still_there = repo
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -423,18 +660,68 @@ mod test {
 
         assert_eq!(domain1.domain, "test-org-1.com");
 
-        repo.remove_domain(
-            // test org 2
-            "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
-            // Project 1 Organization 1
-            None,
-            // test-org-1.com
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        )
+        let not_found = repo
+            .remove(
+                // test org 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 1
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let _still_there = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "api_users", "domains")
+    ))]
+    async fn remove_with_proj_id_from_org_domain(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let domain = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
             .await
             .unwrap();
 
-        let still_there = repo
+        assert_eq!(domain.domain, "test-org-1.com");
+
+        let not_found = repo
+            .remove(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+
+        let _still_there = repo
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -468,16 +755,16 @@ mod test {
 
         assert_eq!(domain_proj.domain, "test-org-1-project-1.com");
 
-        repo.remove_domain(
-            // test org 2
+        repo.remove(
+            // test org 1
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             // Project 1 Organization 1
             Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
             // test-org-1-project-1.com
             "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
 
         let not_found = repo
             .get(
@@ -506,15 +793,15 @@ mod test {
 
         assert_eq!(domain_org.domain, "test-org-1.com");
 
-        repo.remove_domain(
+        repo.remove(
             // test org 2
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             None,
             // test-org-1.com
             "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
 
         let not_found = repo
             .get(

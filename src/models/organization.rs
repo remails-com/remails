@@ -118,20 +118,21 @@ impl OrganizationRepository {
         &self,
         id: OrganizationId,
         filter: &OrganizationFilter,
-    ) -> Result<(), Error> {
+    ) -> Result<OrganizationId, Error> {
         let orgs = filter.org_uuids();
-        sqlx::query!(
+        Ok(sqlx::query_scalar!(
             r#"
             DELETE FROM organizations
             WHERE id = $1
               AND ($2::uuid[] IS NULL OR id = ANY($2))
+            RETURNING id
             "#,
             *id,
             orgs.as_deref(),
         )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 
     pub async fn add_user(&self, org_id: OrganizationId, user_id: ApiUserId) -> Result<(), Error> {

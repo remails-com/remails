@@ -43,9 +43,8 @@ pub async fn remove_stream(
     State(repo): State<StreamRepository>,
     user: ApiUser,
     Path((org, proj, stream)): Path<(OrganizationId, ProjectId, StreamId)>,
-) -> Result<(), ApiError> {
+) -> ApiResult<StreamId> {
     has_write_access(org, proj, &user)?;
 
-    repo.remove(org, proj, stream).await?;
-    Ok(())
+    Ok(Json(repo.remove(org, proj, stream).await?))
 }

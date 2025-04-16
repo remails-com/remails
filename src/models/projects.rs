@@ -5,7 +5,18 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    Eq,
 )]
 #[sqlx(transparent)]
 pub struct ProjectId(Uuid);

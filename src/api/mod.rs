@@ -1,7 +1,7 @@
 use crate::{
     api::{
         auth::{logout, password_login, password_register},
-        domains::create_domain,
+        domains::{create_domain, delete_domain, get_domain, list_domains},
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
@@ -30,7 +30,6 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info, log::warn};
-use crate::api::domains::list_domains;
 
 mod api_users;
 mod auth;
@@ -183,10 +182,21 @@ impl ApiServer {
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
                 delete(remove_stream),
             )
-            .route("/organizations/{org_id}/domains", get(list_domains).post(create_domain))
+            .route(
+                "/organizations/{org_id}/domains",
+                get(list_domains).post(create_domain),
+            )
+            .route(
+                "/organizations/{org_id}/domains/{domain_id}",
+                get(get_domain).delete(delete_domain),
+            )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/domains",
                 get(list_domains).post(create_domain),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
+                get(get_domain).delete(delete_domain),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))

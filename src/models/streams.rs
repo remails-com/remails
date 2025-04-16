@@ -101,8 +101,8 @@ impl StreamRepository {
         organization_id: OrganizationId,
         project_id: ProjectId,
         stream_id: StreamId,
-    ) -> Result<(), Error> {
-        sqlx::query!(
+    ) -> Result<StreamId, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
             DELETE FROM streams s 
                    USING projects p 
@@ -110,14 +110,14 @@ impl StreamRepository {
                      AND s.id = $1
                      AND s.project_id = $2
                      AND p.organization_id = $3
+            RETURNING s.id
             "#,
             *stream_id,
             *project_id,
             *organization_id
         )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 }
