@@ -6,7 +6,7 @@ import {IconChevronDown, IconLogout, IconUser} from '@tabler/icons-react';
 import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
-import {useOrganizations} from "../hooks/useOrganizations.ts";
+import {useOrganization} from "../hooks/useOrganizations.ts";
 
 interface DashboardProps {
   children: ReactNode;
@@ -16,7 +16,7 @@ export function Dashboard({children}: DashboardProps) {
   const [navbarOpened, {toggle}] = useDisclosure();
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
-  const {organizations, currentOrganization, setCurrentOrganization} = useOrganizations();
+  const {organizations, currentOrganization, setCurrentOrganization} = useOrganization();
 
   return (
     <AppShell

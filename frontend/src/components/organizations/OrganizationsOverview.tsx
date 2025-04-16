@@ -1,12 +1,12 @@
 import { Table } from "@mantine/core";
 import { Loader } from "../../Loader";
-import { useOrganizations } from "../../hooks/useOrganizations";
+import { useOrganization} from "../../hooks/useOrganizations";
 import { formatDateTime } from "../../util";
 
 export function OrganizationsOverview() {
-  const { organizations, loading } = useOrganizations();
+  const { organizations } = useOrganization();
 
-  if (loading) {
+  if (!organizations) {
     return <Loader />;
   }
 

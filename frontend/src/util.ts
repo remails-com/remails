@@ -1,3 +1,4 @@
+import {Role} from "./types.ts";
 
 export function formatDateTime(date: string): string {
   return new Date(date).toLocaleDateString('en-US', {
@@ -8,4 +9,8 @@ export function formatDateTime(date: string): string {
     minute: "numeric",
     hour12: false,
   });
+}
+
+export function is_global_admin(roles: Array<Role>): boolean {
+  return roles.includes('super_admin');
 }

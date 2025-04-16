@@ -18,6 +18,34 @@ export interface RouterContextProps {
 
 export const routes: Route[] = [
   {
+    name: 'projects',
+    path: '/projects',
+    children: [
+      {
+        name: 'proj-domains',
+        path: '/projects/{id}/domains',
+      },
+      {
+        name: 'streams',
+        path: 'projects/{proj_id}/streams',
+        children: [
+          {
+            name: 'credentials',
+            path: '/projects/{proj_id}/streams/{stream_id}/credentials',
+          },
+          {
+            name: 'message-log',
+            path: '/projects/{proj_id}/streams/{stream_id}/messages',
+          },
+        ]
+      }
+    ]
+  },
+  {
+    name: 'domains',
+    path: '/domains',
+  },
+  {
     name: 'organizations',
     path: '/organizations',
     children: [
@@ -31,18 +59,6 @@ export const routes: Route[] = [
       }
     ]
   },
-  {
-    name: 'domains',
-    path: '/domains',
-  },
-  {
-    name: 'credentials',
-    path: '/credentials',
-  },
-  {
-    name: 'message-log',
-    path: '/',
-  },
 ];
 
 export function matchPath(path: string): Route {
@@ -50,7 +66,21 @@ export function matchPath(path: string): Route {
 }
 
 export function matchName(name: RouteName): Route {
-  return routes.find((r) => r.name === name) || routes[0];
+    return recursiveMatchName(routes, name) || routes[0];
+}
+
+function recursiveMatchName(routes: Route[], name: RouteName): Route | null {
+  for (const route of routes) {
+    if (route.name === name) {
+      return route;
+    } else if (route.children) {
+      const next_level = recursiveMatchName(route.children, name);
+      if (next_level) {
+        return next_level;
+      }
+    }
+  }
+  return null;
 }
 
 export const RouterContext = createContext<RouterContextProps>({
