@@ -9,6 +9,7 @@ use axum::{
     extract::{Path, State},
 };
 use serde::Deserialize;
+use tracing::{debug, info};
 
 fn has_write_access(
     org: OrganizationId,
@@ -52,7 +53,16 @@ pub async fn create_domain(
 ) -> ApiResult<ApiDomain> {
     has_write_access(org_id, project_id, None, &user)?;
 
-    Ok(Json(repo.create(new, org_id, project_id).await?.into()))
+    let domain: ApiDomain = repo.create(new, org_id, project_id).await?.into();
+
+    info!(
+        user_id = user.id().to_string(),
+        domain_id = domain.id().to_string(),
+        parent_id = ?domain.parent_id(),
+        domain = domain.domain(),
+        "created domain");
+
+    Ok(Json(domain))
 }
 
 pub async fn list_domains(
@@ -62,13 +72,22 @@ pub async fn list_domains(
 ) -> ApiResult<Vec<ApiDomain>> {
     has_read_access(org_id, project_id, None, &user)?;
 
-    Ok(Json(
-        repo.list(org_id, project_id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    ))
+    let domains = repo
+        .list(org_id, project_id)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<ApiDomain>>();
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        "listed {} domains",
+        domains.len()
+    );
+
+    Ok(Json(domains))
 }
 
 pub async fn get_domain(
@@ -82,7 +101,18 @@ pub async fn get_domain(
 ) -> ApiResult<ApiDomain> {
     has_read_access(org_id, project_id, Some(domain_id), &user)?;
 
-    Ok(Json(repo.get(org_id, project_id, domain_id).await?.into()))
+    let domain: ApiDomain = repo.get(org_id, project_id, domain_id).await?.into();
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        domain_id = domain_id.to_string(),
+        domain = domain.domain(),
+        "retrieved domain",
+    );
+
+    Ok(Json(domain))
 }
 
 pub async fn delete_domain(
@@ -96,5 +126,15 @@ pub async fn delete_domain(
 ) -> ApiResult<DomainId> {
     has_write_access(org_id, project_id, Some(domain_id), &user)?;
 
-    Ok(Json(repo.remove(org_id, project_id, domain_id).await?))
+    let domain_id = repo.remove(org_id, project_id, domain_id).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        domain_id = domain_id.to_string(),
+        "deleted domain",
+    );
+
+    Ok(Json(domain_id))
 }

@@ -6,6 +6,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use tracing::{debug, info};
 
 fn has_read_access(org: OrganizationId, proj: ProjectId, user: &ApiUser) -> Result<(), ApiError> {
     has_write_access(org, proj, user)
@@ -25,7 +26,17 @@ pub async fn list_streams(
 ) -> ApiResult<Vec<Stream>> {
     has_read_access(org, proj, &user)?;
 
-    Ok(Json(repo.list(org, proj).await?))
+    let streams = repo.list(org, proj).await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = proj.to_string(),
+        "listed {} streams",
+        streams.len()
+    );
+
+    Ok(Json(streams))
 }
 
 pub async fn create_stream(
@@ -36,7 +47,18 @@ pub async fn create_stream(
 ) -> ApiResult<Stream> {
     has_write_access(org, proj, &user)?;
 
-    Ok(Json(repo.create(new, org, proj).await?))
+    let stream = repo.create(new, org, proj).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = proj.to_string(),
+        stream_id = stream.id().to_string(),
+        stream_name = stream.name,
+        "created stream"
+    );
+
+    Ok(Json(stream))
 }
 
 pub async fn remove_stream(
@@ -46,5 +68,15 @@ pub async fn remove_stream(
 ) -> ApiResult<StreamId> {
     has_write_access(org, proj, &user)?;
 
-    Ok(Json(repo.remove(org, proj, stream).await?))
+    let stream_id = repo.remove(org, proj, stream).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = proj.to_string(),
+        stream_id = stream_id.to_string(),
+        "deleted stream",
+    );
+
+    Ok(Json(stream_id))
 }

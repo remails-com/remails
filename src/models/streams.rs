@@ -21,9 +21,15 @@ impl StreamId {
 pub struct Stream {
     id: StreamId,
     project_id: ProjectId,
-    name: String,
+    pub name: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+impl Stream {
+    pub fn id(&self) -> StreamId {
+        self.id
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -31,10 +31,16 @@ impl OrganizationId {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Organization {
-    pub id: OrganizationId,
+    id: OrganizationId,
     pub name: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+impl Organization {
+    pub fn id(&self) -> OrganizationId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

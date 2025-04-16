@@ -6,6 +6,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use tracing::{debug, info};
 
 fn has_read_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
     has_write_access(org, user)
@@ -21,31 +22,58 @@ fn has_write_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError>
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
     Path(org): Path<OrganizationId>,
-    api_user: ApiUser,
+    user: ApiUser,
 ) -> ApiResult<Vec<Project>> {
-    has_read_access(org, &api_user)?;
+    has_read_access(org, &user)?;
 
-    Ok(Json(repo.list(org).await?))
+    let projects = repo.list(org).await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        "listed {} projects",
+        projects.len()
+    );
+
+    Ok(Json(projects))
 }
 
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
-    api_user: ApiUser,
+    user: ApiUser,
     Path(org): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> ApiResult<Project> {
-    has_write_access(org, &api_user)?;
+    has_write_access(org, &user)?;
 
-    Ok(Json(repo.create(new, org).await?))
+    let project = repo.create(new, org).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = project.id().to_string(),
+        project_name = project.name,
+        "created project"
+    );
+
+    Ok(Json(project))
 }
 
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
-    api_user: ApiUser,
+    user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
-) -> Result<(), ApiError> {
-    has_write_access(org, &api_user)?;
+) -> ApiResult<ProjectId> {
+    has_write_access(org, &user)?;
 
-    repo.remove(proj, org).await?;
-    Ok(())
+    let project_id = repo.remove(proj, org).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = project_id.to_string(),
+        "deleted project",
+    );
+
+    Ok(Json(project_id))
 }

@@ -1,3 +1,4 @@
+use super::error::{ApiError, ApiResult};
 use crate::models::{
     ApiUser, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
     SmtpCredentialRequest, SmtpCredentialResponse, StreamId,
@@ -6,8 +7,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-
-use super::error::{ApiError, ApiResult};
+use tracing::{debug, info};
 
 fn has_read_access(
     org: OrganizationId,
@@ -42,6 +42,16 @@ pub async fn create_smtp_credential(
 
     let new_credential = repo.generate(org_id, proj_id, stream_id, &request).await?;
 
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = proj_id.to_string(),
+        stream_id = stream_id.to_string(),
+        credential_id = new_credential.id().to_string(),
+        credential_username = new_credential.username(),
+        "created SMTP credential"
+    );
+
     Ok(Json(new_credential))
 }
 
@@ -53,6 +63,15 @@ pub async fn list_smtp_credential(
     has_read_access(org_id, proj_id, stream_id, None, &user)?;
 
     let credentials = repo.list(org_id, proj_id, stream_id).await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = proj_id.to_string(),
+        stream_id = stream_id.to_string(),
+        "listed {} SMTP credentials",
+        credentials.len()
+    );
 
     Ok(Json(credentials))
 }
@@ -69,9 +88,18 @@ pub async fn remove_smtp_credential(
 ) -> ApiResult<SmtpCredentialId> {
     has_write_access(org_id, proj_id, stream_id, Some(credential_id), &user)?;
 
-    let credentials = repo
+    let credential_id = repo
         .remove(org_id, proj_id, stream_id, credential_id)
         .await?;
 
-    Ok(Json(credentials))
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = proj_id.to_string(),
+        stream_id = stream_id.to_string(),
+        credential_id = credential_id.to_string(),
+        "deleted SMTP credential",
+    );
+
+    Ok(Json(credential_id))
 }

@@ -31,9 +31,15 @@ impl ProjectId {
 pub struct Project {
     id: ProjectId,
     organization_id: OrganizationId,
-    name: String,
+    pub name: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+impl Project {
+    pub fn id(&self) -> ProjectId {
+        self.id
+    }
 }
 
 #[derive(Debug, Deserialize)]

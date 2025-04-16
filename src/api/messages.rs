@@ -8,6 +8,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
+use tracing::debug;
 
 fn has_read_access(
     org: OrganizationId,
@@ -63,6 +64,15 @@ pub async fn list_messages(
         .list_message_metadata(org_id, project_id, stream_id, filter)
         .await?;
 
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        stream_id = stream_id.map(|id| id.to_string()),
+        "listed {} messages",
+        messages.len()
+    );
+
     Ok(Json(messages))
 }
 
@@ -81,5 +91,15 @@ pub async fn get_message(
     let message = repo
         .find_by_id(org_id, project_id, stream_id, message_id)
         .await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        stream_id = stream_id.map(|id| id.to_string()),
+        message_id = message_id.to_string(),
+        "retrieved message",
+    );
+
     Ok(Json(message))
 }

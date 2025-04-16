@@ -43,6 +43,16 @@ pub struct SmtpCredentialResponse {
     updated_at: DateTime<Utc>,
 }
 
+impl SmtpCredentialResponse {
+    pub fn id(&self) -> SmtpCredentialId {
+        self.id
+    }
+
+    pub fn username(&self) -> String {
+        self.username.clone()
+    }
+}
+
 impl SmtpCredential {
     pub fn verify_password(&self, password: &str) -> bool {
         password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
@@ -200,16 +210,8 @@ mod test {
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
-        pub fn id(&self) -> SmtpCredentialId {
-            self.id
-        }
-
         pub fn cleartext_password(&self) -> String {
             self.cleartext_password.clone()
-        }
-
-        pub fn username(&self) -> String {
-            self.username.clone()
         }
     }
 

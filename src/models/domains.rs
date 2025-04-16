@@ -19,10 +19,23 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 pub struct DomainId(Uuid);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Copy)]
 pub enum DomainParent {
     Organization(OrganizationId),
     Project(ProjectId),
+}
+
+impl Debug for DomainParent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DomainParent::Organization(o) => {
+                write!(f, "Organization({})", o.as_uuid())
+            }
+            DomainParent::Project(p) => {
+                write!(f, "Project({})", p.as_uuid())
+            }
+        }
+    }
 }
 
 #[derive(sqlx::Type, Serialize, Deserialize, Debug)]
@@ -69,6 +82,18 @@ pub struct ApiDomain {
     dkim_public_key: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+impl ApiDomain {
+    pub fn id(&self) -> DomainId {
+        self.id
+    }
+    pub fn parent_id(&self) -> DomainParent {
+        self.parent_id
+    }
+    pub fn domain(&self) -> &str {
+        &self.domain
+    }
 }
 
 #[derive(Debug)]
