@@ -63,18 +63,25 @@ mod test {
         mpsc::Receiver<NewMessage>,
         u16,
         String,
+        String,
     ) {
         let smtp_port = random_port();
         let user_repository = SmtpCredentialRepository::new(pool.clone());
 
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
         let credential_request = SmtpCredentialRequest {
             username: "john".to_string(),
-            stream_id: "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
             description: "Test SMTP credential description".to_string(),
         };
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
-        let credential = credential_repo.generate(&credential_request).await.unwrap();
+        let credential = credential_repo
+            .generate(org_id, project_id, stream_id, &credential_request)
+            .await
+            .unwrap();
 
         let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
         let config = Arc::new(SmtpConfig {
@@ -98,6 +105,7 @@ mod test {
             server_handle,
             receiver,
             smtp_port,
+            credential.username(),
             credential.cleartext_password(),
         )
     }
@@ -114,7 +122,7 @@ mod test {
                 .expect("Failed to install crypto provider")
         }
 
-        let (shutdown, server_handle, mut receiver, port, pwd) = setup_server(pool).await;
+        let (shutdown, server_handle, mut receiver, port, username, pwd) = setup_server(pool).await;
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@example.com"))
@@ -129,7 +137,7 @@ mod test {
         SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)
             .allow_invalid_certs()
-            .credentials(("john", pwd.as_str()))
+            .credentials((username.as_str(), pwd.as_str()))
             .connect()
             .await
             .unwrap()
@@ -150,12 +158,12 @@ mod test {
     ))]
     #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
-        let (shutdown, server_handle, _, port, _) = setup_server(pool).await;
+        let (shutdown, server_handle, _, port, username, _) = setup_server(pool).await;
 
         let result = SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)
             .allow_invalid_certs()
-            .credentials(("john", "wrong"))
+            .credentials((username.as_str(), "wrong"))
             .connect()
             .await;
 

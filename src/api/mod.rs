@@ -161,10 +161,6 @@ impl ApiServer {
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route(
-                "/smtp_credentials",
-                get(list_smtp_credential).post(create_smtp_credential),
-            )
-            .route(
                 "/organizations",
                 get(list_organizations).post(create_organization),
             )
@@ -203,6 +199,10 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
                 delete(remove_stream),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
+                get(list_smtp_credential).post(create_smtp_credential),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",

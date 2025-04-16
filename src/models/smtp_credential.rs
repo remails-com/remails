@@ -1,4 +1,4 @@
-use crate::models::{Error, streams::StreamId};
+use crate::models::{Error, OrganizationId, ProjectId, streams::StreamId};
 use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,6 @@ pub struct SmtpCredential {
 pub struct SmtpCredentialRequest {
     pub(crate) description: String,
     pub(crate) username: String,
-    pub(crate) stream_id: StreamId,
 }
 
 #[derive(Serialize, derive_more::Debug)]
@@ -53,17 +52,6 @@ impl SmtpCredential {
     }
 }
 
-#[cfg(test)]
-impl SmtpCredentialResponse {
-    pub fn id(&self) -> SmtpCredentialId {
-        self.id
-    }
-
-    pub fn cleartext_password(self) -> String {
-        self.cleartext_password
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SmtpCredentialRepository {
     pool: sqlx::PgPool,
@@ -76,8 +64,35 @@ impl SmtpCredentialRepository {
 
     pub async fn generate(
         &self,
+        org_id: OrganizationId,
+        project_id: ProjectId,
+        stream_id: StreamId,
         new_credential: &SmtpCredentialRequest,
     ) -> Result<SmtpCredentialResponse, Error> {
+        sqlx::query_scalar!(
+            r#"
+            SELECT s.id FROM streams s 
+                JOIN projects p ON s.project_id = p.id
+                JOIN organizations o ON p.organization_id = o.id
+            WHERE o.id = $1 
+              AND p.id = $2 
+              AND s.id = $3
+            "#,
+            *org_id,
+            *project_id,
+            *stream_id,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::BadRequest(
+            "The stream does not exist or it does not match the provided organization or project"
+                .to_string(),
+        ))?;
+
+        // Prepend the requested username with the beginning of the organization UUID
+        // to ensure global uniqueness
+        let username = format!("{}-{}", &org_id.to_string()[0..8], new_credential.username);
+
         let password = Alphanumeric.sample_string(&mut rand::rng(), 20);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -89,9 +104,9 @@ impl SmtpCredentialRepository {
             RETURNING *
             "#,
             new_credential.description,
-            &new_credential.username,
+            username,
             password_hash,
-            *new_credential.stream_id
+            *stream_id
         )
         .fetch_one(&self.pool)
         .await?;
@@ -110,7 +125,7 @@ impl SmtpCredentialRepository {
         let credential = sqlx::query_as!(
             SmtpCredential,
             r#"
-            SELECT * FROM smtp_credentials WHERE username = $1 LIMIT 1
+            SELECT * FROM smtp_credentials WHERE username = $1
             "#,
             username
         )
@@ -120,12 +135,26 @@ impl SmtpCredentialRepository {
         Ok(credential)
     }
 
-    pub async fn list(&self) -> Result<Vec<SmtpCredential>, Error> {
+    pub async fn list(
+        &self,
+        org_id: OrganizationId,
+        project_id: ProjectId,
+        stream_id: StreamId,
+    ) -> Result<Vec<SmtpCredential>, Error> {
         let credentials = sqlx::query_as!(
             SmtpCredential,
             r#"
-            SELECT * FROM smtp_credentials ORDER BY created_at DESC
+            SELECT c.* FROM smtp_credentials c
+                JOIN streams s ON c.stream_id = s.id
+                JOIN projects p ON s.project_id = p.id
+            WHERE p.organization_id = $1 
+              AND p.id = $2 
+              AND s.id = $3
+            ORDER BY c.created_at DESC
             "#,
+            *org_id,
+            *project_id,
+            *stream_id,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -139,6 +168,20 @@ mod test {
     use super::*;
     use sqlx::PgPool;
 
+    impl SmtpCredentialResponse {
+        pub fn id(&self) -> SmtpCredentialId {
+            self.id
+        }
+
+        pub fn cleartext_password(&self) -> String {
+            self.cleartext_password.clone()
+        }
+
+        pub fn username(&self) -> String {
+            self.username.clone()
+        }
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
         scripts("organizations", "projects", "domains", "streams")
@@ -146,14 +189,28 @@ mod test {
     async fn smtp_credential_repository(pool: PgPool) {
         let credential_request = SmtpCredentialRequest {
             username: "test".to_string(),
-            stream_id: "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
             description: "Test SMTP credential description".to_string(),
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
-        let credential = credential_repo.generate(&credential_request).await.unwrap();
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+        let credential = credential_repo
+            .generate(org_id, project_id, stream_id, &credential_request)
+            .await
+            .unwrap();
+
+        assert_ne!(credential_request.username, credential.username);
+        assert!(
+            credential
+                .username
+                .ends_with(credential_request.username.as_str())
+        );
 
         let get_credential = credential_repo
-            .find_by_username("test")
+            .find_by_username(&credential.username)
             .await
             .unwrap()
             .unwrap();
