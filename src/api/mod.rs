@@ -22,6 +22,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use base64ct::Encoding;
+use http::StatusCode;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, time::Duration};
@@ -120,6 +121,13 @@ impl FromRef<ApiState> for GithubOauthService {
     }
 }
 
+async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({ "status": "Not Found" })),
+    )
+}
+
 pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
@@ -152,8 +160,6 @@ impl ApiServer {
         let router = Router::new()
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
-            .route("/messages", get(list_messages))
-            .route("/messages/{id}", get(get_message))
             .route(
                 "/smtp_credentials",
                 get(list_smtp_credential).post(create_smtp_credential),
@@ -167,6 +173,14 @@ impl ApiServer {
                 get(get_organization).delete(remove_organization),
             )
             .route(
+                "/organizations/{org_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/messages/{message_id}",
+                get(get_message),
+            )
+            .route(
                 "/organizations/{org_id}/projects",
                 get(list_projects).post(create_project),
             )
@@ -175,12 +189,28 @@ impl ApiServer {
                 delete(remove_project),
             )
             .route(
+                "/organizations/{org_id}/projects/{project_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
+                get(get_message),
+            )
+            .route(
                 "/organizations/{org_id}/projects/{project_id}/streams",
                 get(list_streams).post(create_stream),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
                 delete(remove_stream),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+                get(get_message),
             )
             .route(
                 "/organizations/{org_id}/domains",
@@ -201,6 +231,7 @@ impl ApiServer {
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
             .route("/register/password", post(password_register))
+            .fallback(api_fallback)
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),

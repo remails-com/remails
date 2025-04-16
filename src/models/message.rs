@@ -92,7 +92,6 @@ pub struct MessageRepository {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct MessageFilter {
-    pub orgs: Option<Vec<OrganizationId>>,
     offset: i64,
     limit: i64,
     status: Option<MessageStatus>,
@@ -101,19 +100,10 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            orgs: None,
             offset: 0,
             limit: 100,
             status: None,
         }
-    }
-}
-
-impl MessageFilter {
-    fn org_uuids(&self) -> Option<Vec<Uuid>> {
-        self.orgs
-            .as_deref()
-            .map(|o| o.iter().map(|o| o.as_uuid()).collect())
     }
 }
 
@@ -238,9 +228,11 @@ impl MessageRepository {
 
     pub async fn list_message_metadata(
         &self,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
         filter: MessageFilter,
     ) -> Result<Vec<Message>, Error> {
-        let orgs = filter.org_uuids();
         Ok(sqlx::query_as!(
             PgMessage,
             r#"
@@ -259,9 +251,10 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at
             FROM messages m
-                JOIN organizations o ON o.id = m.organization_id
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND ($4::uuid[] IS NULL OR o.id = ANY($4))
+              AND m.organization_id = $4 
+              AND ($5::uuid IS NULL OR m.project_id = $5) 
+              AND ($6::uuid IS NULL OR m.stream_id = $6)
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
@@ -269,7 +262,9 @@ impl MessageRepository {
             filter.offset,
             filter.limit,
             filter.status as _,
-            orgs.as_deref(),
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
         )
         .fetch_all(&self.pool)
         .await?
@@ -280,10 +275,11 @@ impl MessageRepository {
 
     pub async fn find_by_id(
         &self,
-        id: MessageId,
-        filter: MessageFilter,
-    ) -> Result<Option<Message>, Error> {
-        let orgs = filter.org_uuids();
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<Message, Error> {
         Ok(sqlx::query_as!(
             PgMessage,
             r#"
@@ -302,17 +298,19 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at
             FROM messages  m
-                JOIN organizations o ON o.id = m.organization_id
             WHERE m.id = $1
-              AND ($2::uuid[] IS NULL OR o.id = ANY($2))
-            LIMIT 1
+              AND m.organization_id = $2 
+              AND ($3::uuid IS NULL OR m.project_id = $3) 
+              AND ($4::uuid IS NULL OR m.stream_id = $4)
             "#,
-            *id,
-            orgs.as_deref(),
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
         )
-        .fetch_optional(&self.pool)
+        .fetch_one(&self.pool)
         .await?
-        .map(Into::into))
+        .into())
     }
 }
 
@@ -357,9 +355,13 @@ mod test {
         let message = repository.create(&new_message).await.unwrap();
 
         let mut fetched_message = repository
-            .find_by_id(message.id, MessageFilter::default())
+            .find_by_id(
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                Some("85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap()),
+                message.id,
+            )
             .await
-            .unwrap()
             .unwrap();
 
         assert_eq!(fetched_message.from_email, "john@example.com");

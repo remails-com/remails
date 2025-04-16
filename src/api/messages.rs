@@ -1,57 +1,85 @@
-use crate::models::{ApiUser, Message, MessageFilter, MessageId, MessageRepository};
+use super::error::{ApiError, ApiResult};
+use crate::models::{
+    ApiUser, Message, MessageFilter, MessageId, MessageRepository, OrganizationId, ProjectId,
+    StreamId,
+};
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use serde::Deserialize;
 
-use super::error::{ApiError, ApiResult};
+fn has_read_access(
+    org: OrganizationId,
+    proj: Option<ProjectId>,
+    stream: Option<StreamId>,
+    message: Option<MessageId>,
+    user: &ApiUser,
+) -> Result<(), ApiError> {
+    has_write_access(org, proj, stream, message, user)
+}
 
-impl From<ApiUser> for MessageFilter {
-    fn from(user: ApiUser) -> Self {
-        if user.is_super_admin() {
-            Self::default()
-        } else {
-            let mut filter = Self::default();
-            filter.orgs = Some(user.org_admin());
-            filter
-        }
+fn has_write_access(
+    org: OrganizationId,
+    _proj: Option<ProjectId>,
+    _stream: Option<StreamId>,
+    _message: Option<MessageId>,
+    user: &ApiUser,
+) -> Result<(), ApiError> {
+    if user.org_admin().iter().any(|o| *o == org) {
+        return Ok(());
     }
+    Err(ApiError::Forbidden)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessagePath {
+    org_id: OrganizationId,
+    project_id: Option<ProjectId>,
+    stream_id: Option<StreamId>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SpecificMessagePath {
+    org_id: OrganizationId,
+    project_id: Option<ProjectId>,
+    stream_id: Option<StreamId>,
+    message_id: MessageId,
 }
 
 pub async fn list_messages(
-    Query(mut filter): Query<MessageFilter>,
     State(repo): State<MessageRepository>,
-    api_user: ApiUser,
+    Path(MessagePath {
+        org_id,
+        project_id,
+        stream_id,
+    }): Path<MessagePath>,
+    Query(filter): Query<MessageFilter>,
+    user: ApiUser,
 ) -> ApiResult<Vec<Message>> {
-    if !api_user.is_super_admin() {
-        if let Some(filter_orgs) = filter.orgs {
-            filter.orgs = Some(
-                api_user
-                    .org_admin()
-                    .into_iter()
-                    .filter(|user_org| filter_orgs.contains(user_org))
-                    .collect(),
-            );
-        } else {
-            filter.orgs = Some(api_user.org_admin())
-        }
-    }
+    has_read_access(org_id, project_id, stream_id, None, &user)?;
 
-    let messages = repo.list_message_metadata(filter).await?;
+    let messages = repo
+        .list_message_metadata(org_id, project_id, stream_id, filter)
+        .await?;
 
     Ok(Json(messages))
 }
 
 pub async fn get_message(
-    Path(id): Path<MessageId>,
     State(repo): State<MessageRepository>,
-    api_user: ApiUser,
+    Path(SpecificMessagePath {
+        org_id,
+        project_id,
+        stream_id,
+        message_id,
+    }): Path<SpecificMessagePath>,
+    user: ApiUser,
 ) -> ApiResult<Message> {
-    let filter: MessageFilter = api_user.into();
+    has_read_access(org_id, project_id, stream_id, Some(message_id), &user)?;
 
     let message = repo
-        .find_by_id(id, filter)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+        .find_by_id(org_id, project_id, stream_id, message_id)
+        .await?;
     Ok(Json(message))
 }

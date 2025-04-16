@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.domain_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                m.message_data,\n                m.created_at,\n                m.updated_at\n            FROM messages  m\n                JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND ($2::uuid[] IS NULL OR o.id = ANY($2))\n            LIMIT 1\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.domain_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND m.organization_id = $4 \n              AND ($5::uuid IS NULL OR m.project_id = $5) \n              AND ($6::uuid IS NULL OR m.stream_id = $6)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -64,7 +64,7 @@
       },
       {
         "ordinal": 9,
-        "name": "raw_data",
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
@@ -85,8 +85,26 @@
     ],
     "parameters": {
       "Left": [
+        "Int8",
+        "Int8",
+        {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        },
         "Uuid",
-        "UuidArray"
+        "Uuid",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -99,11 +117,11 @@
       false,
       false,
       false,
-      false,
-      true,
+      null,
+      null,
       false,
       false
     ]
   },
-  "hash": "4da870ab10245e16d69da57b4fca38001356f22d8144585d44c0a5a69f612d95"
+  "hash": "084f5c90114b2c82414bfe235d689182b7b689f506a7d55414ff0dd2a753d9e6"
 }

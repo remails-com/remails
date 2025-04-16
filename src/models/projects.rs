@@ -82,18 +82,19 @@ impl ProjectRepository {
         .await?)
     }
 
-    pub async fn remove(&self, id: ProjectId, org_id: OrganizationId) -> Result<(), Error> {
-        sqlx::query!(
+    pub async fn remove(&self, id: ProjectId, org_id: OrganizationId) -> Result<ProjectId, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
             DELETE FROM projects
                    WHERE id = $1
                      AND organization_id = $2
+            RETURNING id
             "#,
             *id,
             *org_id
         )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 }
