@@ -11,7 +11,8 @@ export default function App() {
   const {
     params,
     route,
-    navigate
+    navigate,
+    fullPath
   } = useInitRouter();
 
   if (loading) {
@@ -23,7 +24,7 @@ export default function App() {
   }
 
   return (
-    <RouterContext.Provider value={{params, route, navigate}}>
+    <RouterContext.Provider value={{params, route, navigate, fullPath}}>
       <UserContext.Provider value={user}>
         <OrganizationContext.Provider value={{currentOrganization, setCurrentOrganization, organizations}}>
           <Pages/>

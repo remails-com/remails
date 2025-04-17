@@ -33,13 +33,13 @@ export function NavBar() {
         label="Credentials"
         active={route.name === 'credentials'}
         leftSection={<IconLockPassword size={20} stroke={1.8}/>}
-        onClick={() => navigate('credentials')}
+        onClick={() => navigate('projects.streams.credentials')}
       />
       <NavLink
         label="Message log"
         active={route.name === 'message-log'}
         leftSection={<IconMail size={20} stroke={1.8}/>}
-        onClick={() => navigate('message-log', {
+        onClick={() => navigate('projects.streams.message-log', {
           proj_id: "3ba14adf-4de1-4fb6-8c20-50cc2ded5462",
           stream_id: "85785f4c-9167-4393-bbf2-3c3e21067e4a"
         })}

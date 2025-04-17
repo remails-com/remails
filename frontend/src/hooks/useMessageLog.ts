@@ -19,6 +19,7 @@ export function useMessageLog() {
       console.log(org_id, proj_id, stream_id);
       console.error("Missing org_id, proj_id, or stream_id");
       navigate('projects');
+      return;
     }
 
     fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams/${stream_id}/messages`)

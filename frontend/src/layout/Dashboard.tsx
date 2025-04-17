@@ -14,6 +14,7 @@ interface DashboardProps {
 
 export function Dashboard({children}: DashboardProps) {
   const [navbarOpened, {toggle}] = useDisclosure();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
   const {organizations, currentOrganization, setCurrentOrganization} = useOrganization();
