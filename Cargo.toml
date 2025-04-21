@@ -53,7 +53,7 @@ email_address = "0.2.9"
 sqlx-paginated = "0.2.31"
 memory-serve = "1.2.1"
 derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug", "from_str"]}
-rand = "0.9.0"
+rand = "0.9.1"
 hickory-resolver = "0.25.1"
 
 [dev-dependencies]
