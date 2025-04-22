@@ -1,7 +1,7 @@
 use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
-use mail_parser::MessageParser;
+use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
 use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc, time::Duration};
@@ -95,6 +95,12 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
+        //TODO: this unwrap will disappear when we refactor type EmailAddress = String away; but
+        //in any case this error should not happen
+        let from_email = email_address::EmailAddress::from_str(&message.from_email)
+            .expect("not an email address");
+        let sender_domain = from_email.domain();
+
         trace!("stored message {}", message.id());
 
         // TODO: check limits etc
@@ -122,7 +128,17 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        let mut generated_headers = Vec::new();
+        let mut generated_headers = String::new();
+
+        if !parsed_msg.parts.first().is_some_and(|msg| {
+            msg.headers
+                .iter()
+                .any(|hdr| hdr.name == HeaderName::MessageId)
+        }) {
+            trace!("adding message-id header");
+            //TODO: a better way of generating a header
+            generated_headers.push_str(&format!("Message-ID: <remails-foo-@{sender_domain}>\r\n"));
+        }
 
         trace!("signing with dkim");
 
@@ -130,13 +146,14 @@ impl Handler {
         let key = crate::dkim::PrivateKey::test_key("remails.tweedegolf-test.nl", "default")
             .map_err(HandlerError::DkimError)?;
 
-        generated_headers.extend(
-            key.dkim_header(&parsed_msg)
-                .map_err(HandlerError::DkimError)?
-                .into_bytes(),
+        generated_headers.push_str(
+            &key.dkim_header(&parsed_msg)
+                .map_err(HandlerError::DkimError)?,
         );
+        generated_headers.push_str("\r\n");
 
         trace!("adding headers");
+        debug!("{generated_headers:?}");
 
         // TODO: we could 'overallocate' the original raw message data to prepend this stuff without
         // needing to allocate or move data around.
@@ -147,7 +164,7 @@ impl Handler {
             .raw_data
             .resize(msg_len + hdr_size, Default::default());
         message.raw_data.copy_within(..msg_len, hdr_size);
-        message.raw_data[..hdr_size].copy_from_slice(&generated_headers);
+        message.raw_data[..hdr_size].copy_from_slice(generated_headers.as_bytes());
 
         Ok(message)
     }

@@ -7,7 +7,8 @@ use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub type EmailAddress = String;
+//TODO change me
+type EmailAddress = String;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
