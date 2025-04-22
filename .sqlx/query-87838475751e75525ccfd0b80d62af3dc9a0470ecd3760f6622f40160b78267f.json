@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.smtp_credential_id,\n                m.organization_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                m.message_data,\n                m.created_at,\n                m.updated_at\n            FROM messages  m\n                JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND ($2::uuid[] IS NULL OR o.id = ANY($2))\n            LIMIT 1\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.domain_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                m.message_data,\n                m.created_at,\n                m.updated_at\n            FROM messages  m\n            WHERE m.id = $1\n              AND m.organization_id = $2 \n              AND ($3::uuid IS NULL OR m.project_id = $3) \n              AND ($4::uuid IS NULL OR m.stream_id = $4)\n            ",
   "describe": {
     "columns": [
       {
@@ -10,16 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "smtp_credential_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 2,
         "name": "organization_id",
         "type_info": "Uuid"
       },
       {
+        "ordinal": 2,
+        "name": "domain_id",
+        "type_info": "Uuid"
+      },
+      {
         "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "stream_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "smtp_credential_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -38,32 +53,32 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 7,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 5,
+        "ordinal": 8,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 6,
+        "ordinal": 9,
         "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 7,
+        "ordinal": 10,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 8,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 12,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -71,13 +86,18 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "UuidArray"
+        "Uuid",
+        "Uuid",
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
+      true,
       false,
+      false,
+      true,
       false,
       false,
       false,
@@ -87,5 +107,5 @@
       false
     ]
   },
-  "hash": "220f10c2355360f5fd364c001126f2a3dbe5a1caca028166e4a1065a491bfb34"
+  "hash": "87838475751e75525ccfd0b80d62af3dc9a0470ecd3760f6622f40160b78267f"
 }

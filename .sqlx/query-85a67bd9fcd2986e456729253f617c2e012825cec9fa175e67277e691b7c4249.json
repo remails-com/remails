@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)\n            RETURNING id \n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "dkim_key_type",
+            "kind": {
+              "Enum": [
+                "rsa_sha256",
+                "ed25519"
+              ]
+            }
+          }
+        },
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "85a67bd9fcd2986e456729253f617c2e012825cec9fa175e67277e691b7c4249"
+}

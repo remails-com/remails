@@ -39,6 +39,7 @@ impl IntoResponse for ApiError {
                     (StatusCode::NOT_FOUND, "Not found".to_string())
                 }
                 Error::Conflict => (StatusCode::CONFLICT, "Conflict".to_string()),
+                Error::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
                 _ => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Database error".to_string(),

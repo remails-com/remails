@@ -40,19 +40,6 @@ pub struct ApiUser {
     github_user_id: Option<i64>,
 }
 
-#[cfg(test)]
-impl ApiUser {
-    pub fn new(roles: Vec<ApiUserRole>) -> Self {
-        Self {
-            id: "0b8c948a-8f0c-4b63-a70e-78a9a186f7a2".parse().unwrap(),
-            name: "Test User".to_string(),
-            email: "test@test.com".parse().unwrap(),
-            roles,
-            github_user_id: None,
-        }
-    }
-}
-
 impl ApiUser {
     pub fn roles(&self) -> Vec<ApiUserRole> {
         self.roles.clone()
@@ -145,15 +132,7 @@ impl ApiUserRepository {
             user.github_user_id
         )
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|err| {
-            if let sqlx::Error::Database(db_err) = &err {
-                if db_err.is_unique_violation() {
-                    return Error::Conflict;
-                }
-            }
-            Error::Database(err)
-        })?;
+        .await?;
 
         let (organization_roles, global_roles) = user.roles.into_iter().fold(
             (Vec::new(), Vec::new()),
@@ -183,7 +162,7 @@ impl ApiUserRepository {
         for global_role in global_roles {
             sqlx::query!(
                 r#"
-                INSERT INTO api_users_global_role (api_user_id, role) 
+                INSERT INTO api_users_global_roles (api_user_id, role) 
                 VALUES ($1, $2)
                 "#,
                 user_id,
@@ -209,7 +188,7 @@ impl ApiUserRepository {
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE github_user_id = $1
             GROUP BY u.id
             "#,
@@ -234,7 +213,7 @@ impl ApiUserRepository {
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE u.id = $1
             GROUP BY u.id
             "#,
@@ -256,9 +235,9 @@ impl ApiUserRepository {
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
-            FROM api_users u 
+            FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_role g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE u.email = $1
             GROUP BY u.id
             "#,
@@ -299,6 +278,18 @@ impl ApiUserRepository {
 mod test {
     use crate::models::{ApiUser, ApiUserRepository, ApiUserRole, NewApiUser};
     use sqlx::PgPool;
+
+    impl ApiUser {
+        pub fn new(roles: Vec<ApiUserRole>) -> Self {
+            Self {
+                id: "0b8c948a-8f0c-4b63-a70e-78a9a186f7a2".parse().unwrap(),
+                name: "Test Api User".to_string(),
+                email: "test@test.com".parse().unwrap(),
+                roles,
+                github_user_id: None,
+            }
+        }
+    }
 
     impl PartialEq<NewApiUser> for ApiUser {
         fn eq(&self, other: &NewApiUser) -> bool {

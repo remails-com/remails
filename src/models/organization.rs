@@ -31,10 +31,16 @@ impl OrganizationId {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Organization {
-    pub id: OrganizationId,
+    id: OrganizationId,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl Organization {
+    pub fn id(&self) -> OrganizationId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -118,27 +124,28 @@ impl OrganizationRepository {
         &self,
         id: OrganizationId,
         filter: &OrganizationFilter,
-    ) -> Result<(), Error> {
+    ) -> Result<OrganizationId, Error> {
         let orgs = filter.org_uuids();
-        sqlx::query!(
+        Ok(sqlx::query_scalar!(
             r#"
             DELETE FROM organizations
             WHERE id = $1
               AND ($2::uuid[] IS NULL OR id = ANY($2))
+            RETURNING id
             "#,
             *id,
             orgs.as_deref(),
         )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 
     pub async fn add_user(&self, org_id: OrganizationId, user_id: ApiUserId) -> Result<(), Error> {
         sqlx::query!(
             r#"
-            INSERT INTO api_users_organizations (organization_id, api_user_id)
-            VALUES ($1, $2)
+            INSERT INTO api_users_organizations (organization_id, api_user_id, role)
+            VALUES ($1, $2, 'admin')
             "#,
             *org_id,
             *user_id

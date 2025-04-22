@@ -23,28 +23,6 @@ CREATE TRIGGER update_organizations_updated_at
 EXECUTE PROCEDURE update_updated_at_column();
 
 
-CREATE TYPE dkim_key_type AS ENUM (
-    'rsa_sha256',
-    'ed25519'
-    );
-
-CREATE TABLE domains
-(
-    id              uuid PRIMARY KEY,
-    domain          varchar                  NOT NULL,
-    organization_id uuid REFERENCES organizations (id) ON DELETE CASCADE,
-    dkim_key_type   dkim_key_type,
-    dkim_pkcs8_der  bytea,
-    created_at      timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at      timestamp with time zone NOT NULL DEFAULT now()
-);
-
-CREATE TRIGGER update_domains_updated_at
-    BEFORE UPDATE
-    ON domains
-    FOR EACH ROW
-EXECUTE PROCEDURE update_updated_at_column();
-
 CREATE TYPE role AS ENUM (
     'admin'
     );
@@ -86,7 +64,7 @@ CREATE TRIGGER update_api_users_organizations_updated_at
     FOR EACH ROW
 EXECUTE PROCEDURE update_updated_at_column();
 
-CREATE TABLE api_users_global_role
+CREATE TABLE api_users_global_roles
 (
     api_user_id uuid PRIMARY KEY REFERENCES api_users (id) ON DELETE CASCADE,
     role        role                     NOT NULL,
@@ -95,14 +73,70 @@ CREATE TABLE api_users_global_role
 );
 CREATE TRIGGER update_api_users_global_role_updated_at
     BEFORE UPDATE
-    ON api_users_global_role
+    ON api_users_global_roles
     FOR EACH ROW
 EXECUTE PROCEDURE update_updated_at_column();
 
-CREATE TABLE smtp_credential
+CREATE TABLE projects
+(
+    id              uuid PRIMARY KEY,
+    organization_id uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    name            varchar                  NOT NULL,
+    created_at      timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at      timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER update_projects_updated_at
+    BEFORE UPDATE
+    ON projects
+    FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE TYPE dkim_key_type AS ENUM (
+    'rsa_sha256',
+    'ed25519'
+    );
+
+CREATE TABLE domains
+(
+    id              uuid PRIMARY KEY,
+    domain          varchar                  NOT NULL UNIQUE,
+    organization_id uuid REFERENCES organizations (id) ON DELETE CASCADE,
+    project_id      uuid REFERENCES projects (id),
+    CONSTRAINT either_organization_or_project CHECK ( (organization_id IS NULL) != (project_id IS NULL) ),
+    dkim_key_type   dkim_key_type,
+    dkim_pkcs8_der  bytea,
+    created_at      timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at      timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER update_domains_updated_at
+    BEFORE UPDATE
+    ON domains
+    FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();
+
+
+CREATE TABLE streams
+(
+    id         uuid PRIMARY KEY,
+    project_id uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    name       varchar                  NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER update_streams_updated_at
+    BEFORE UPDATE
+    ON streams
+    FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE TABLE smtp_credentials
 (
     id            uuid PRIMARY KEY         NOT NULL,
-    domain_id     uuid                     NOT NULL REFERENCES domains (id),
+    stream_id     uuid                     NOT NULL REFERENCES streams (id),
+    description   varchar                  NOT NULL,
     username      varchar                  NOT NULL UNIQUE CHECK (username ~ '^[a-zA-Z0-9_-]{2,128}$'),
     password_hash varchar                  NOT NULL,
     created_at    timestamp with time zone NOT NULL DEFAULT now(),
@@ -111,7 +145,7 @@ CREATE TABLE smtp_credential
 
 CREATE TRIGGER update_smtp_credential_updated_at
     BEFORE UPDATE
-    ON smtp_credential
+    ON smtp_credentials
     FOR EACH ROW
 EXECUTE PROCEDURE update_updated_at_column();
 
@@ -127,8 +161,12 @@ CREATE TYPE message_status AS ENUM (
 CREATE TABLE messages
 (
     id                 uuid PRIMARY KEY         NOT NULL,
-    smtp_credential_id uuid                     NOT NULL REFERENCES smtp_credential (id),
-    organization_id    uuid                     NOT NULL REFERENCES organizations (id),
+    organization_id    uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    domain_id          uuid                     REFERENCES domains (id) ON DELETE SET NULL,
+    project_id         uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    stream_id          uuid                     NOT NULL REFERENCES streams (id) ON DELETE CASCADE,
+    smtp_credential_id uuid                     REFERENCES smtp_credentials (id) ON DELETE SET NULL,
+    delivery_status    jsonb                    NOT NULL default '[]',
     status             message_status           NOT NULL,
     from_email         varchar                  NOT NULL,
     recipients         varchar[]                NOT NULL,

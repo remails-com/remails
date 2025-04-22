@@ -4,7 +4,7 @@ use crate::{
     run_api_server, run_mta,
     smtp::SmtpConfig,
 };
-use http::{HeaderMap, header, header::CONTENT_TYPE};
+use http::{HeaderMap, StatusCode, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
 use rand::Rng;
@@ -24,7 +24,7 @@ pub fn random_port() -> u16 {
     rng.random_range(10_000..30_000)
 }
 
-#[sqlx::test(fixtures("organizations", "domains", "api_users"))]
+#[sqlx::test(fixtures("organizations", "api_users", "projects", "domains", "streams"))]
 #[traced_test]
 #[serial]
 async fn integration_test(pool: PgPool) {
@@ -67,48 +67,54 @@ async fn integration_test(pool: PgPool) {
 
     let _drop_guard = token.drop_guard();
 
-    let john_pwd = client
+    let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
+    let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
+    let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
+
+    let john_cred = client
         .post(format!(
-            "http://localhost:{}/api/smtp_credentials",
+            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
             http_port
         ))
-        .header("X-Test-Login", "admin")
+        .header("X-Test-Login", org_id)
         .json(&json!({
             "username": "john",
-            "domain_id": "ed28baa5-57f7-413f-8c77-7797ba6a8780"
+            "description": "John test credential"
         }))
         .send()
         .await
         .unwrap()
         .json::<SmtpCredentialResponse>()
         .await
-        .unwrap()
-        .cleartext_password();
+        .unwrap();
 
-    let eddy_pwd = client
+    let org_id = "5d55aec5-136a-407c-952f-5348d4398204";
+    let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95";
+    let stream_id = "6af665cd-698e-47ca-9d6b-966f8e8fa07f";
+
+    let eddy_cred = client
         .post(format!(
-            "http://localhost:{}/api/smtp_credentials",
+            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
             http_port
         ))
-        .header("X-Test-Login", "admin")
+        .header("X-Test-Login", org_id)
         .json(&json!({
             "username": "eddy",
-            "domain_id": "6a45a141-6628-4c0f-823b-3cf3eb64f0c7"
+            "description": "Eddy test credential"
         }))
         .send()
         .await
         .unwrap()
         .json::<SmtpCredentialResponse>()
         .await
-        .unwrap()
-        .cleartext_password();
+        .unwrap();
 
     let credentials: Vec<SmtpCredential> = client
         .get(format!(
-            "http://localhost:{}/api/smtp_credentials",
+            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
             http_port
         ))
-        .header("X-Test-Login", "admin")
+        .header("X-Test-Login", org_id)
         .send()
         .await
         .unwrap()
@@ -116,12 +122,15 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    assert_eq!(credentials.len(), 2);
+    assert_eq!(credentials.len(), 1);
 
     let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
         .implicit_tls(true)
         .allow_invalid_certs()
-        .credentials(("john", john_pwd.as_str()))
+        .credentials((
+            john_cred.username().as_str(),
+            john_cred.cleartext_password().as_str(),
+        ))
         .connect()
         .await
         .unwrap();
@@ -158,7 +167,10 @@ async fn integration_test(pool: PgPool) {
     SmtpClientBuilder::new("localhost", smtp_port)
         .implicit_tls(true)
         .allow_invalid_certs()
-        .credentials(("eddy", eddy_pwd.as_str()))
+        .credentials((
+            eddy_cred.username().as_str(),
+            eddy_cred.cleartext_password().as_str(),
+        ))
         .connect()
         .await
         .unwrap()
@@ -175,8 +187,11 @@ async fn integration_test(pool: PgPool) {
         _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
     }
 
+    let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
+    let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
+    let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
     let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/api/messages", http_port))
+        .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
         .header("X-Test-Login", "44729d9f-a7dc-4226-b412-36a7537f5176")
         .send()
         .await
@@ -187,28 +202,14 @@ async fn integration_test(pool: PgPool) {
 
     assert_eq!(messages.len(), 10);
 
-    let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/api/messages", http_port))
+    let status = client
+        .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
         // Non-existent organization
         .header("X-Test-Login", "ab5647ee-ea7c-40f8-ad70-bdcbff7fa4cd")
         .send()
         .await
         .unwrap()
-        .json()
-        .await
-        .unwrap();
+        .status();
 
-    assert_eq!(messages.len(), 0);
-
-    let messages: Vec<Message> = client
-        .get(format!("http://localhost:{}/api/messages", http_port))
-        .header("X-Test-Login", "admin")
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-
-    assert_eq!(messages.len(), 11);
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

@@ -1,23 +1,28 @@
 use crate::{
     api::{
         auth::{logout, password_login, password_register},
+        domains::{create_domain, delete_domain, get_domain, list_domains},
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_organizations, remove_organization,
         },
-        smtp_credentials::{create_smtp_credential, list_smtp_credential},
+        projects::{create_project, list_projects, remove_project},
+        smtp_credentials::{create_smtp_credential, list_smtp_credential, remove_smtp_credential},
+        streams::{create_stream, list_streams, remove_stream},
     },
     models::{
-        ApiUserRepository, MessageRepository, OrganizationRepository, SmtpCredentialRepository,
+        ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
+        ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
 };
 use axum::{
     Json, Router,
     extract::{FromRef, State},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use base64ct::Encoding;
+use http::StatusCode;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, time::Duration};
@@ -29,11 +34,14 @@ use tracing::{error, info, log::warn};
 
 mod api_users;
 mod auth;
+mod domains;
 mod error;
 mod messages;
 mod oauth;
 mod organizations;
+mod projects;
 mod smtp_credentials;
+mod streams;
 mod whoami;
 
 static USER_AGENT_VALUE: &str = "remails";
@@ -83,6 +91,24 @@ impl FromRef<ApiState> for OrganizationRepository {
     }
 }
 
+impl FromRef<ApiState> for ProjectRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        ProjectRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for StreamRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        StreamRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for DomainRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        DomainRepository::new(state.pool.clone())
+    }
+}
+
 impl FromRef<ApiState> for ApiUserRepository {
     fn from_ref(state: &ApiState) -> Self {
         ApiUserRepository::new(state.pool.clone())
@@ -93,6 +119,13 @@ impl FromRef<ApiState> for GithubOauthService {
     fn from_ref(state: &ApiState) -> Self {
         state.gh_oauth_service.clone()
     }
+}
+
+async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({ "status": "Not Found" })),
+    )
 }
 
 pub struct ApiServer {
@@ -127,12 +160,6 @@ impl ApiServer {
         let router = Router::new()
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
-            .route("/messages", get(list_messages))
-            .route("/messages/{id}", get(get_message))
-            .route(
-                "/smtp_credentials",
-                get(list_smtp_credential).post(create_smtp_credential),
-            )
             .route(
                 "/organizations",
                 get(list_organizations).post(create_organization),
@@ -141,9 +168,74 @@ impl ApiServer {
                 "/organizations/{id}",
                 get(get_organization).delete(remove_organization),
             )
+            .route(
+                "/organizations/{org_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/messages/{message_id}",
+                get(get_message),
+            )
+            .route(
+                "/organizations/{org_id}/projects",
+                get(list_projects).post(create_project),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}",
+                delete(remove_project),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
+                get(get_message),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams",
+                get(list_streams).post(create_stream),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
+                delete(remove_stream),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
+                get(list_smtp_credential).post(create_smtp_credential),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
+                delete(remove_smtp_credential),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+                get(list_messages),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+                get(get_message),
+            )
+            .route(
+                "/organizations/{org_id}/domains",
+                get(list_domains).post(create_domain),
+            )
+            .route(
+                "/organizations/{org_id}/domains/{domain_id}",
+                get(get_domain).delete(delete_domain),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/domains",
+                get(list_domains).post(create_domain),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
+                get(get_domain).delete(delete_domain),
+            )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
             .route("/register/password", post(password_register))
+            .fallback(api_fallback)
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),

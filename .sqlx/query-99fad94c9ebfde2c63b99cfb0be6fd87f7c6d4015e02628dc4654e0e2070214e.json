@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM smtp_credential ORDER BY created_at DESC\n            ",
+  "query": "\n            SELECT * FROM projects WHERE organization_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -10,35 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "domain_id",
+        "name": "organization_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 2,
-        "name": "username",
+        "name": "name",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
-        "name": "password_hash",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
-      false,
       false,
       false,
       false,
@@ -46,5 +42,5 @@
       false
     ]
   },
-  "hash": "ada4151cd51c956d1d041bd92de08b3cbfbf14840beeea774f79e11af8f06fdc"
+  "hash": "99fad94c9ebfde2c63b99cfb0be6fd87f7c6d4015e02628dc4654e0e2070214e"
 }

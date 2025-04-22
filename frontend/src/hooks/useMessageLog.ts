@@ -7,6 +7,7 @@ export function useMessageLog() {
   
   useEffect(() => {
     setLoading(true);
+    // FIXME: The URL changed as part of #88
     fetch("/api/messages")
       .then((res) => res.json())
       .then((data) => {

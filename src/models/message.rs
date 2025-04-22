@@ -1,12 +1,15 @@
-use crate::models::{Error, OrganizationId, SmtpCredentialId};
+use crate::models::{
+    Error, OrganizationId, SmtpCredentialId, domains::DomainId, projects::ProjectId,
+    streams::StreamId,
+};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From};
+use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub type EmailAddress = String;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
@@ -23,8 +26,11 @@ pub enum MessageStatus {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     id: MessageId,
-    smtp_credential_id: SmtpCredentialId,
     organization_id: OrganizationId,
+    domain_id: Option<DomainId>,
+    project_id: ProjectId,
+    stream_id: StreamId,
+    smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -86,7 +92,6 @@ pub struct MessageRepository {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct MessageFilter {
-    pub orgs: Option<Vec<OrganizationId>>,
     offset: i64,
     limit: i64,
     status: Option<MessageStatus>,
@@ -95,7 +100,6 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            orgs: None,
             offset: 0,
             limit: 100,
             status: None,
@@ -103,11 +107,39 @@ impl Default for MessageFilter {
     }
 }
 
-impl MessageFilter {
-    fn org_uuids(&self) -> Option<Vec<Uuid>> {
-        self.orgs
-            .as_deref()
-            .map(|o| o.iter().map(|o| o.as_uuid()).collect())
+struct PgMessage {
+    id: MessageId,
+    organization_id: OrganizationId,
+    domain_id: Option<Uuid>,
+    project_id: ProjectId,
+    stream_id: StreamId,
+    smtp_credential_id: Option<Uuid>,
+    status: MessageStatus,
+    from_email: EmailAddress,
+    recipients: Vec<EmailAddress>,
+    raw_data: Vec<u8>,
+    message_data: serde_json::Value,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl From<PgMessage> for Message {
+    fn from(m: PgMessage) -> Self {
+        Self {
+            id: m.id,
+            organization_id: m.organization_id,
+            domain_id: m.domain_id.map(Into::into),
+            project_id: m.project_id,
+            stream_id: m.stream_id,
+            smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            status: m.status,
+            from_email: m.from_email,
+            recipients: m.recipients,
+            raw_data: m.raw_data,
+            message_data: m.message_data,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        }
     }
 }
 
@@ -118,24 +150,31 @@ impl MessageRepository {
 
     pub async fn create(&self, message: &NewMessage) -> Result<Message, Error> {
         Ok(sqlx::query_as!(
-            Message,
+            PgMessage,
             r#"
-            INSERT INTO messages AS m (id, smtp_credential_id, organization_id, status, from_email, recipients, raw_data, message_data)
-            SELECT gen_random_uuid(), $1, o.id, $2, $3, $4, $5, $6
-            FROM smtp_credential s
-                JOIN domains d ON d.id = s.domain_id
-                JOIN organizations o ON o.id = d.organization_id
+            INSERT INTO messages AS m (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
+            SELECT gen_random_uuid(), o.id, COALESCE(d_p.id, d_o.id), p.id, streams.id, $1, $2, $3, $4, $5, $6
+            FROM smtp_credentials s
+                JOIN streams ON s.stream_id = streams.id
+                JOIN projects p ON p.id = streams.project_id
+                JOIN organizations o ON o.id = p.organization_id
+                LEFT JOIN domains d_p ON d_p.project_id = p.id
+                LEFT JOIN domains d_o ON d_o.organization_id = o.id
             WHERE s.id = $1
-            RETURNING m.id,
-                      m.smtp_credential_id,
-                      m.organization_id,
-                      m.status as "status: _",
-                      m.from_email,
-                      m.recipients,
-                      m.raw_data,
-                      m.message_data,
-                      m.created_at,
-                      m.updated_at
+            RETURNING
+                m.id,
+                m.organization_id,
+                m.domain_id AS "domain_id: Uuid",
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
+                m.status as "status: _",
+                m.from_email,
+                m.recipients,
+                m.raw_data,
+                m.message_data,
+                m.created_at,
+                m.updated_at
             "#,
             *message.smtp_credential_id,
             message.status as _,
@@ -145,7 +184,8 @@ impl MessageRepository {
             message.message_data
         )
             .fetch_one(&self.pool)
-            .await?)
+            .await?
+            .into())
     }
 
     pub async fn update_message_status(
@@ -188,16 +228,21 @@ impl MessageRepository {
 
     pub async fn list_message_metadata(
         &self,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
         filter: MessageFilter,
     ) -> Result<Vec<Message>, Error> {
-        let orgs = filter.org_uuids();
         Ok(sqlx::query_as!(
-            Message,
+            PgMessage,
             r#"
             SELECT
                 m.id,
-                m.smtp_credential_id,
                 m.organization_id,
+                m.domain_id,
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
                 m.status as "status: _",
                 m.from_email,
                 m.recipients,
@@ -206,9 +251,10 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at
             FROM messages m
-                JOIN organizations o ON o.id = m.organization_id
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND ($4::uuid[] IS NULL OR o.id = ANY($4))
+              AND m.organization_id = $4 
+              AND ($5::uuid IS NULL OR m.project_id = $5) 
+              AND ($6::uuid IS NULL OR m.stream_id = $6)
             ORDER BY created_at DESC
             OFFSET $1
             LIMIT $2
@@ -216,25 +262,34 @@ impl MessageRepository {
             filter.offset,
             filter.limit,
             filter.status as _,
-            orgs.as_deref(),
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
         )
         .fetch_all(&self.pool)
-        .await?)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
     }
 
     pub async fn find_by_id(
         &self,
-        id: MessageId,
-        filter: MessageFilter,
-    ) -> Result<Option<Message>, Error> {
-        let orgs = filter.org_uuids();
-        let message = sqlx::query_as!(
-            Message,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<Message, Error> {
+        Ok(sqlx::query_as!(
+            PgMessage,
             r#"
             SELECT
                 m.id,
-                m.smtp_credential_id,
                 m.organization_id,
+                m.domain_id,
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
                 m.status as "status: _",
                 m.from_email,
                 m.recipients,
@@ -243,18 +298,19 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at
             FROM messages  m
-                JOIN organizations o ON o.id = m.organization_id
             WHERE m.id = $1
-              AND ($2::uuid[] IS NULL OR o.id = ANY($2))
-            LIMIT 1
+              AND m.organization_id = $2 
+              AND ($3::uuid IS NULL OR m.project_id = $3) 
+              AND ($4::uuid IS NULL OR m.stream_id = $4)
             "#,
-            *id,
-            orgs.as_deref(),
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
         )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(message)
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 }
 
@@ -266,7 +322,16 @@ mod test {
     use super::*;
     use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
+    impl Message {
+        pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
+            self.smtp_credential_id
+        }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "domains", "streams")
+    ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
 
@@ -282,11 +347,21 @@ mod test {
             .into_message()
             .unwrap();
         let smtp_credential_repo = SmtpCredentialRepository::new(pool);
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
         let credential = smtp_credential_repo
-            .generate(&SmtpCredentialRequest {
-                username: "user".to_string(),
-                domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            })
+            .generate(
+                org_id,
+                project_id,
+                stream_id,
+                &SmtpCredentialRequest {
+                    username: "user".to_string(),
+                    description: "Test SMTP credential description".to_string(),
+                },
+            )
             .await
             .unwrap();
 
@@ -295,9 +370,13 @@ mod test {
         let message = repository.create(&new_message).await.unwrap();
 
         let mut fetched_message = repository
-            .find_by_id(message.id, MessageFilter::default())
+            .find_by_id(
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                Some("85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap()),
+                message.id,
+            )
             .await
-            .unwrap()
             .unwrap();
 
         assert_eq!(fetched_message.from_email, "john@example.com");

@@ -319,7 +319,10 @@ mod test {
     use serial_test::serial;
     use tracing_test::traced_test;
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "domains", "streams")
+    ))]
     #[traced_test]
     #[serial]
     async fn test_handle_message(pool: PgPool) {
@@ -342,11 +345,18 @@ mod test {
 
         let credential_request = SmtpCredentialRequest {
             username: "user".to_string(),
-            domain_id: "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            description: "Test SMTP credential description".to_string(),
         };
 
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
-        let credential = credential_repo.generate(&credential_request).await.unwrap();
+        let credential = credential_repo
+            .generate(org_id, project_id, stream_id, &credential_request)
+            .await
+            .unwrap();
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let config = HandlerConfig {

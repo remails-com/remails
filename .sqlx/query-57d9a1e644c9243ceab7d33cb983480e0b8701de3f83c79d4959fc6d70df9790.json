@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO smtp_credential (id, username, password_hash, domain_id)\n            VALUES (gen_random_uuid(), $1, $2, $3)\n            RETURNING *\n            ",
+  "query": "\n            INSERT INTO projects (id, organization_id, name)\n            VALUES (gen_random_uuid(), $1, $2)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -10,35 +10,29 @@
       },
       {
         "ordinal": 1,
-        "name": "domain_id",
+        "name": "organization_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 2,
-        "name": "username",
+        "name": "name",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
-        "name": "password_hash",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Uuid"
+        "Uuid",
+        "Varchar"
       ]
     },
     "nullable": [
@@ -46,9 +40,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "1d33f1eb559d57b6a720f9fb6d923f91527e5a134915a87c0207e523a9a02aff"
+  "hash": "57d9a1e644c9243ceab7d33cb983480e0b8701de3f83c79d4959fc6d70df9790"
 }

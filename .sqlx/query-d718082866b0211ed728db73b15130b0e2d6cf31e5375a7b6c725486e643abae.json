@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id,\n                   domain,\n                   organization_id,\n                   project_id,\n                   dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   dkim_pkcs8_der,\n                   created_at,\n                   updated_at                \n            FROM domains\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "domain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "dkim_key_type: DkimKeyType",
+        "type_info": {
+          "Custom": {
+            "name": "dkim_key_type",
+            "kind": {
+              "Enum": [
+                "rsa_sha256",
+                "ed25519"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dkim_pkcs8_der",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "d718082866b0211ed728db73b15130b0e2d6cf31e5375a7b6c725486e643abae"
+}

@@ -10,7 +10,7 @@ const FIXTURES: &[(&str, &str)] = &[
     ("api_users.sql", include_str!("fixtures/api_users.sql")),
     (
         "smtp_credential.sql",
-        include_str!("fixtures/smtp_credential.sql"),
+        include_str!("fixtures/smtp_credentials.sql"),
     ),
     ("messages.sql", include_str!("fixtures/messages.sql")),
 ];

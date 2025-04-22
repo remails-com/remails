@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at                \n            FROM domains d \n                LEFT JOIN projects p ON d.project_id = p.id\n                LEFT JOIN organizations o ON d.organization_id = o.id \n            WHERE d.id = $3\n              AND (\n                  ($2::uuid IS NULL AND d.organization_id = $1) \n                      OR\n                  ($2 IS NOT NULL AND d.project_id = $2 AND p.organization_id = $1)\n                  )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "domain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "dkim_key_type: DkimKeyType",
+        "type_info": {
+          "Custom": {
+            "name": "dkim_key_type",
+            "kind": {
+              "Enum": [
+                "rsa_sha256",
+                "ed25519"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dkim_pkcs8_der",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "75e3aed4d32838939a468db06fc33604a11313b917b78ab9b641c767187008b7"
+}
