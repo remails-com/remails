@@ -96,7 +96,7 @@ function matchPathRecursive(path: string, routes: Route[], pathParams: { [k: str
         }
         console.log('matched segment', route_elem, path_elems[index])
       }
-      if (route.children) {
+      if (route.children && path_elems.length > route_elems.length) {
         const rec_res = matchPathRecursive(path_elems.slice(route_elems.length).join('/'), route.children, new_path_params);
         console.log('rec_res', rec_res)
         if (rec_res) {

@@ -16,7 +16,39 @@ export interface Message {
   status: string;
 }
 
+export interface State {
+  organizations: Organization[];
+  currentOrganization?: Organization;
+  projects: Project[];
+  streams: Stream[];
+  loading: boolean;
+}
+
+export type Action = {
+  type: 'set_organizations';
+  organizations: Organization[];
+} | {
+  type: 'load_organizations'
+} | {
+  type: 'set_current_organization';
+  organization: Organization;
+};
+
 export interface Organization {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Stream {
   id: string;
   name: string;
   created_at: string;
@@ -28,7 +60,7 @@ export interface PasswordLoginRequest {
   password: string;
 }
 
-export interface SignUpRequest extends PasswordLoginRequest{
+export interface SignUpRequest extends PasswordLoginRequest {
   name: string,
   terms: boolean,
 }

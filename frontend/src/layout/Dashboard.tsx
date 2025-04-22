@@ -6,7 +6,7 @@ import {IconChevronDown, IconLogout, IconUser} from '@tabler/icons-react';
 import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
-import {useOrganization} from "../hooks/useOrganizations.ts";
+import {useRemails} from "../hooks/useRemails.ts";
 
 interface DashboardProps {
   children: ReactNode;
@@ -17,7 +17,7 @@ export function Dashboard({children}: DashboardProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
-  const {organizations, currentOrganization, setCurrentOrganization} = useOrganization();
+  const {state: {organizations, currentOrganization}, dispatch} = useRemails();
 
   return (
     <AppShell
@@ -54,7 +54,8 @@ export function Dashboard({children}: DashboardProps) {
               </Menu.Target>
               <Menu.Dropdown>
                 {organizations.map((org) => (
-                  <Menu.Item key={org.id} value={org.id} onClick={() => setCurrentOrganization(org)}>
+                  <Menu.Item key={org.id} value={org.id}
+                             onClick={() => dispatch({type: 'set_current_organization', organization: org})}>
                     <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
                   </Menu.Item>
                 ))}
