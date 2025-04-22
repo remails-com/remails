@@ -98,7 +98,7 @@ impl Handler {
 
         trace!("stored message {}", message.id());
 
-        // TODO: check limits etc
+        // TODO: check limits, whether the sender_domain is owned, etc
 
         trace!("parsing message {} {}", message.id(), message.message_data);
 
@@ -131,8 +131,13 @@ impl Handler {
                 .any(|hdr| hdr.name == HeaderName::MessageId)
         }) {
             trace!("adding message-id header");
-            //TODO: a better way of generating a header
-            generated_headers.push_str(&format!("Message-ID: <remails-foo-@{sender_domain}>\r\n"));
+            use aws_lc_rs::digest;
+            use base64ct::{Base64UrlUnpadded, Encoding};
+            let hash = digest::digest(&digest::SHA224, &message.raw_data);
+            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
+
+            generated_headers
+                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
         }
 
         trace!("signing with dkim");
