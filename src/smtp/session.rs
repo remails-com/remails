@@ -1,4 +1,5 @@
 use base64ct::Encoding;
+use email_address::EmailAddress;
 use smtp_proto::{
     AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8, EhloResponse,
     Request,
@@ -57,7 +58,9 @@ impl SmtpSession {
     const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
     const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
     const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
-    const RESPONSE_INVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_NOVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
+    const RESPONSE_INVALID_SENDER: &str = "5.1.7 This sender address is not valid";
+    const RESPONSE_INVALID_EMAIL: &str = "5.1.3 This email address is not valid";
     const RESPONSE_NESTED_MAIL: &str = "5.5.1 Error: nested MAIL command";
     const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
     const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
@@ -167,6 +170,13 @@ impl SmtpSession {
                 // RFC5231, 4.1.1.2
                 debug!("received MAIL FROM: {}", from.address);
 
+                let Ok(from_address) = from.address.parse::<EmailAddress>() else {
+                    return SessionReply::ReplyAndContinue(
+                        553,
+                        Self::RESPONSE_INVALID_SENDER.into(),
+                    );
+                };
+
                 let Some(credential) = self.authenticated_credential.as_ref() else {
                     return SessionReply::ReplyAndContinue(
                         530,
@@ -178,7 +188,7 @@ impl SmtpSession {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_NESTED_MAIL.into());
                 }
 
-                self.current_message = Some(NewMessage::new(credential.id(), from.address.clone()));
+                self.current_message = Some(NewMessage::new(credential.id(), from_address));
 
                 let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -187,11 +197,18 @@ impl SmtpSession {
                 // RFC5231, 4.1.1.3
                 debug!("received RCPT TO: {}", to.address);
 
+                let Ok(to_address) = to.address.parse::<EmailAddress>() else {
+                    return SessionReply::ReplyAndContinue(
+                        553,
+                        Self::RESPONSE_INVALID_EMAIL.into(),
+                    );
+                };
+
                 let Some(message) = self.current_message.as_mut() else {
                     return SessionReply::ReplyAndContinue(503, Self::RESPONSE_MAIL_FIRST.into());
                 };
 
-                message.recipients.push(to.address.clone());
+                message.recipients.push(to_address);
 
                 let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
                 SessionReply::ReplyAndContinue(250, response_message)
@@ -216,7 +233,7 @@ impl SmtpSession {
                 if recipients.is_empty() {
                     return SessionReply::ReplyAndContinue(
                         554,
-                        Self::RESPONSE_INVALID_RECIPIENTS.into(),
+                        Self::RESPONSE_NOVALID_RECIPIENTS.into(),
                     );
                 }
 

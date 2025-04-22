@@ -1,15 +1,16 @@
 use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc, time::Duration};
+use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -23,8 +24,6 @@ pub enum HandlerError {
 
 #[derive(Debug, Error)]
 enum SendError {
-    #[error("invalid recipient: {0}")]
-    InvalidRcpt(email_address::Error),
     #[error("could not find a working MX receiver")]
     NoWorkingMx,
 }
@@ -95,11 +94,7 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        //TODO: this unwrap will disappear when we refactor type EmailAddress = String away; but
-        //in any case this error should not happen
-        let from_email = email_address::EmailAddress::from_str(&message.from_email)
-            .expect("not an email address");
-        let sender_domain = from_email.domain();
+        let sender_domain = message.from_email.domain();
 
         trace!("stored message {}", message.id());
 
@@ -212,26 +207,18 @@ impl Handler {
 
     async fn send_single_message(
         &self,
-        recipient: &str,
+        recipient: &EmailAddress,
         message: &Message,
         security: Protection,
     ) -> Result<(), SendError> {
-        let mail_address = match email_address::EmailAddress::from_str(recipient) {
-            Ok(address) => address,
-            Err(err) => {
-                warn!("Invalid email address {recipient}: {err}");
-                return Err(SendError::InvalidRcpt(err));
-            }
-        };
-
-        let domain = mail_address.domain();
+        let domain = recipient.domain();
 
         let mut priority = 0..65536;
 
         // restrict the recipients; this object is cheap to clone
         let message = smtp::message::Message {
             mail_from: message.from_email.as_str().into(),
-            rcpt_to: vec![recipient.into()],
+            rcpt_to: vec![recipient.email().into()],
             body: message.raw_data.as_slice().into(),
         };
 

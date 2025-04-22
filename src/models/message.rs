@@ -4,11 +4,10 @@ use crate::models::{
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use uuid::Uuid;
-
-//TODO change me
-type EmailAddress = String;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
@@ -116,17 +115,19 @@ struct PgMessage {
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
     status: MessageStatus,
-    from_email: EmailAddress,
-    recipients: Vec<EmailAddress>,
+    from_email: String,
+    recipients: Vec<String>,
     raw_data: Vec<u8>,
     message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
-impl From<PgMessage> for Message {
-    fn from(m: PgMessage) -> Self {
-        Self {
+impl TryFrom<PgMessage> for Message {
+    type Error = super::Error;
+
+    fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: m.id,
             organization_id: m.organization_id,
             domain_id: m.domain_id.map(Into::into),
@@ -134,13 +135,17 @@ impl From<PgMessage> for Message {
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             status: m.status,
-            from_email: m.from_email,
-            recipients: m.recipients,
+            from_email: EmailAddress::from_str(&m.from_email)?,
+            recipients: m
+                .recipients
+                .iter()
+                .map(|addr| addr.parse())
+                .collect::<Result<Vec<_>, _>>()?,
             raw_data: m.raw_data,
             message_data: m.message_data,
             created_at: m.created_at,
             updated_at: m.updated_at,
-        }
+        })
     }
 }
 
@@ -179,14 +184,14 @@ impl MessageRepository {
             "#,
             *message.smtp_credential_id,
             message.status as _,
-            message.from_email,
-            &message.recipients,
+            message.from_email.as_str(),
+            &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
             message.raw_data,
             message.message_data
         )
             .fetch_one(&self.pool)
             .await?
-            .into())
+            .try_into()?)
     }
 
     pub async fn update_message_status(
@@ -270,8 +275,8 @@ impl MessageRepository {
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(Into::into)
-        .collect())
+        .map(TryInto::try_into)
+        .collect::<Result<Vec<_>, Error>>()?)
     }
 
     pub async fn find_by_id(
@@ -311,7 +316,7 @@ impl MessageRepository {
         )
         .fetch_one(&self.pool)
         .await?
-        .into())
+        .try_into()?)
     }
 }
 
