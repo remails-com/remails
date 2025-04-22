@@ -385,10 +385,16 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(fetched_message.from_email, "john@example.com");
+        assert_eq!(
+            fetched_message.from_email,
+            "john@example.com".parse().unwrap()
+        );
 
-        fetched_message.recipients.sort();
-        let expected = vec!["james@test.com", "jane@example.com"];
+        fetched_message.recipients.sort_by_key(|x| x.email());
+        let expected = vec![
+            "james@test.com".parse().unwrap(),
+            "jane@example.com".parse().unwrap(),
+        ];
 
         assert_eq!(fetched_message.recipients, expected);
     }

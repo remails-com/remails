@@ -149,7 +149,10 @@ mod test {
         server_handle.await.unwrap();
 
         let received_message = receiver.recv().await.unwrap();
-        assert_eq!(received_message.from_email, "john@example.com");
+        assert_eq!(
+            received_message.from_email,
+            "john@example.com".parse().unwrap()
+        );
     }
 
     #[sqlx::test(fixtures(
