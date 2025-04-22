@@ -155,7 +155,7 @@ impl MessageRepository {
     }
 
     pub async fn create(&self, message: &NewMessage) -> Result<Message, Error> {
-        Ok(sqlx::query_as!(
+        sqlx::query_as!(
             PgMessage,
             r#"
             INSERT INTO messages AS m (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
@@ -191,7 +191,7 @@ impl MessageRepository {
         )
             .fetch_one(&self.pool)
             .await?
-            .try_into()?)
+            .try_into()
     }
 
     pub async fn update_message_status(
@@ -239,7 +239,7 @@ impl MessageRepository {
         stream_id: Option<StreamId>,
         filter: MessageFilter,
     ) -> Result<Vec<Message>, Error> {
-        Ok(sqlx::query_as!(
+        sqlx::query_as!(
             PgMessage,
             r#"
             SELECT
@@ -276,7 +276,7 @@ impl MessageRepository {
         .await?
         .into_iter()
         .map(TryInto::try_into)
-        .collect::<Result<Vec<_>, Error>>()?)
+        .collect::<Result<Vec<_>, Error>>()
     }
 
     pub async fn find_by_id(
@@ -286,7 +286,7 @@ impl MessageRepository {
         stream_id: Option<StreamId>,
         message_id: MessageId,
     ) -> Result<Message, Error> {
-        Ok(sqlx::query_as!(
+        sqlx::query_as!(
             PgMessage,
             r#"
             SELECT
@@ -316,7 +316,7 @@ impl MessageRepository {
         )
         .fetch_one(&self.pool)
         .await?
-        .try_into()?)
+        .try_into()
     }
 }
 
