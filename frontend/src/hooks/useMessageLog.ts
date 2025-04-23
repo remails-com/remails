@@ -1,13 +1,11 @@
 import {useEffect, useState} from "react";
 import {Message} from "../types";
-import {useRouter} from "./useRouter.ts";
 import {useRemails} from "./useRemails.ts";
 
 export function useMessageLog() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const {params, navigate} = useRouter();
-  const {state: {currentOrganization}} = useRemails();
+  const {state: {currentOrganization, params}, navigate} = useRemails();
 
   const org_id = currentOrganization?.id;
   const proj_id = params.proj_id;

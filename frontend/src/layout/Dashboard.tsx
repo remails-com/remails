@@ -7,31 +7,29 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
-import {useRouter} from "../hooks/useRouter.ts";
 
 interface DashboardProps {
   children: ReactNode;
 }
 
 export function Dashboard({children}: DashboardProps) {
-  const {navigate, breadcrumbItems} = useRouter();
   const [navbarOpened, {toggle}] = useDisclosure();
   const {state} = useRemails();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
-  const {state: {organizations, currentOrganization}, dispatch} = useRemails();
+  const {state: {organizations, currentOrganization, breadcrumbItems}, navigate, dispatch} = useRemails();
 
   const breadcrumbs = breadcrumbItems.map(item => (
     <Anchor key={item.route} onClick={() => navigate(item.route)}>
       {item.title.replace(/^{([\w,.]*)}$/, (_match, path ) => {
-        console.log('item.route', item.route)
         const elems = path.split('.')
         let current_obj = state;
         for (const elem of elems){
+          // @ts-ignore
           current_obj = current_obj[elem] || 'loading...';
         }
-        return current_obj
+        return current_obj as unknown as string;
       })}
     </Anchor>
   ));

@@ -1,18 +1,17 @@
 import {ReactNode} from 'react';
-import {useRouter} from './hooks/useRouter.ts';
 import {Dashboard} from './layout/Dashboard';
 import {MessageLog} from './components/MessageLog';
 import {OrganizationsOverview} from './components/organizations/OrganizationsOverview';
 import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
 import {StreamsOverview} from "./components/streams/StreamsOverview.tsx";
 import {Project} from "./components/projects/Project.tsx";
+import {useRemails} from "./hooks/useRemails.ts";
+import {Stream} from "./components/streams/Stream.tsx";
 
 export function Pages() {
-  const {route} = useRouter();
+  const {state: {route}} = useRemails();
 
   let element: ReactNode = route.name;
-
-  console.log('route.name', route.name)
 
   if (route.name === 'message-log') {
     element = <MessageLog/>
@@ -32,6 +31,10 @@ export function Pages() {
 
   if (route.name === 'project') {
     element = <Project/>
+  }
+
+  if (route.name === 'stream') {
+    element = <Stream />
   }
 
   return (

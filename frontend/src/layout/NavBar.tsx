@@ -5,12 +5,12 @@ import {
   IconMail,
   IconServer,
 } from "@tabler/icons-react";
-import {useRouter} from "../hooks/useRouter.ts";
 import {useUser} from "../hooks/useUser.ts";
 import {is_global_admin} from "../util.ts";
+import {useRemails} from "../hooks/useRemails.ts";
 
 export function NavBar() {
-  const {route, navigate} = useRouter();
+  const {state: {route}, navigate} = useRemails();
   const {roles} = useUser();
 
   return (

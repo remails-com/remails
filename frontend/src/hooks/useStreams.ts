@@ -1,21 +1,19 @@
 import {useEffect} from "react";
 import {useRemails} from "./useRemails.ts";
 import {useProjects} from "./useProjects.ts";
-import {useRouter} from "./useRouter.ts";
 
 
 export function useStreams() {
   const {currentProject} = useProjects();
-  const {params} = useRouter();
-  const {state: {currentOrganization, currentStream, streams}, dispatch} = useRemails()
+  const {state: {currentOrganization, currentStream, streams, params}, dispatch} = useRemails()
 
   useEffect(() => {
-    dispatch({type: 'load_streams'});
-
     if (!currentOrganization || !currentProject) {
-      console.log("organization or project missing", currentOrganization, currentProject);
+      console.error("organization or project missing", currentOrganization, currentProject);
       return
     }
+
+    dispatch({type: 'load_streams'});
 
     fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject?.id}/streams`)
       .then((res) => res.json())
@@ -28,6 +26,10 @@ export function useStreams() {
 
   useEffect(() => {
     if (params.stream_id && streams) {
+      if (params.stream_id === currentStream?.id) {
+        return
+      }
+
       const nextCurrentStream = streams.find((s) => s.id === params.stream_id);
       if (nextCurrentStream) {
         dispatch({type: "set_current_stream", stream: nextCurrentStream})

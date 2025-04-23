@@ -1,7 +1,9 @@
 import {ActionDispatch, createContext, useContext, useEffect, useReducer} from "react";
 import {Action, State} from "../types.ts";
+import {_navigate, initRouter, matchName, Navigate, RouteName, RouteParams, routes} from "../router.ts";
 
 function reducer(state: State, action: Action): State {
+  console.log('fired action', action)
   if (action.type === 'load_organizations') {
     return {...state, organizations: [], currentOrganization: undefined, loading: true}
   }
@@ -11,6 +13,7 @@ function reducer(state: State, action: Action): State {
   if (action.type === 'set_current_organization') {
     return {
       ...state,
+      ..._navigate('projects', {}, state),
       currentOrganization: action.organization,
       currentProject: undefined,
       projects: [],
@@ -22,7 +25,7 @@ function reducer(state: State, action: Action): State {
     return {...state, projects: [], currentProject: undefined, loading: true}
   }
   if (action.type === 'set_projects') {
-    return {...state, projects: action.projects, currentProject: action.projects[0], loading: false}
+    return {...state, projects: action.projects, loading: false}
   }
   if (action.type === 'set_current_project') {
     return {...state, currentProject: action.project}
@@ -36,21 +39,39 @@ function reducer(state: State, action: Action): State {
   if (action.type === 'set_current_stream') {
     return {...state, currentStream: action.stream}
   }
+  if (action.type === 'set_route') {
+    return {
+      ...state,
+      route: action.route,
+      fullPath: action.fullPath,
+      fullName: action.fullName,
+      breadcrumbItems: action.breadcrumbItems,
+      params: action.params,
+    }
+  }
 
   return state
 }
 
-export const RemailsContext = createContext<{ state: State, dispatch: ActionDispatch<[Action]> }>(
+export const RemailsContext = createContext<{ state: State, dispatch: ActionDispatch<[Action]>, navigate: Navigate }>(
   {
     state: {
       organizations: [],
       projects: [],
       streams: [],
-      loading: true
+      loading: true,
+      route: routes[0],
+      fullPath: "",
+      fullName: "",
+      params: {},
+      breadcrumbItems: [],
     },
     dispatch: () => {
       throw new Error('RemailsContext must be used within RemailsProvider');
     },
+    navigate: (_name: RouteName, _params?: RouteParams) => {
+      throw new Error("RemailsContext must be used within RemailsProvider");
+    }
   });
 
 export function useRemails() {
@@ -58,12 +79,33 @@ export function useRemails() {
 }
 
 export function useLoadRemails() {
+  const initialRoute = initRouter();
+
   const [state, dispatch] = useReducer(reducer, {
     organizations: [],
     projects: [],
     streams: [],
-    loading: true
+    loading: true,
+    ...initialRoute
   });
+
+  // handle back / forward events
+  useEffect(() => {
+    window.addEventListener('popstate', (event) => {
+      if (event.state?.routeName) {
+        dispatch({type: "set_route", params: event.state?.routeParams || {}, ...matchName(event.state.routeName)});
+      } else {
+        dispatch({
+          type: "set_route",
+          params: initialRoute.params,
+          route: initialRoute.route,
+          fullPath: initialRoute.fullPath,
+          fullName: initialRoute.fullName,
+          breadcrumbItems: initialRoute.breadcrumbItems
+        });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/organizations")
@@ -77,8 +119,13 @@ export function useLoadRemails() {
       )
   }, []);
 
+  const navigate = (name: RouteName, params: RouteParams = {}) => {
+    dispatch({type: "set_route", ..._navigate(name, params, state)});
+  }
+
   return {
     state,
     dispatch,
+    navigate,
   };
 }

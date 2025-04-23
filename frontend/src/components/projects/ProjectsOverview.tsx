@@ -4,11 +4,9 @@ import {formatDateTime} from "../../util";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconEdit} from "@tabler/icons-react";
-import {useRouter} from "../../hooks/useRouter.ts";
 
 export function ProjectsOverview() {
-  const {navigate} = useRouter();
-  const {state: {loading}} = useRemails();
+  const {state: {loading}, navigate} = useRemails();
   const {projects} = useProjects();
 
   if (loading) {

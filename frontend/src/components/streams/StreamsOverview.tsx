@@ -1,11 +1,12 @@
-import {Table} from "@mantine/core";
+import {Button, Table} from "@mantine/core";
 import {Loader} from "../../Loader";
 import {formatDateTime} from "../../util";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
+import {IconEdit} from "@tabler/icons-react";
 
 export function StreamsOverview() {
-  const {state: {loading}} = useRemails();
+  const {state: {loading}, navigate} = useRemails();
   const {streams} = useStreams();
 
   if (loading) {
@@ -16,6 +17,9 @@ export function StreamsOverview() {
     <Table.Tr key={stream.id}>
       <Table.Td>{stream.name}</Table.Td>
       <Table.Td>{formatDateTime(stream.updated_at)}</Table.Td>
+      <Table.Td><Button onClick={() => navigate('projects.project.streams.stream', {
+        stream_id: stream.id,
+      })}><IconEdit/></Button></Table.Td>
     </Table.Tr>
   ));
 
@@ -25,6 +29,7 @@ export function StreamsOverview() {
         <Table.Tr>
           <Table.Th>Name</Table.Th>
           <Table.Th>Updated</Table.Th>
+          <Table.Th></Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>{rows}</Table.Tbody>

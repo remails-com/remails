@@ -1,5 +1,4 @@
-import {createContext, useContext, useEffect, useState} from 'react';
-import {BreadcrumbItem} from "../types.ts";
+import {BreadcrumbItem, State} from "./types.ts";
 
 export type RouteName = string;
 export type RouteParams = Record<string, string>;
@@ -10,15 +9,6 @@ export interface Route {
   path: string;
   display: string;
   children?: Route[];
-}
-
-export interface RouterContextProps {
-  route: Route;
-  fullPath: string;
-  fullName: string;
-  params: RouteParams;
-  breadcrumbItems: BreadcrumbItem[];
-  navigate: Navigate;
 }
 
 export const routes: Route[] = [
@@ -210,21 +200,60 @@ function recursiveMatchName(routes: Route[], name_elems: string[], fullPath: str
   return null
 }
 
-export const RouterContext = createContext<RouterContextProps>({
-  route: routes[0],
-  fullPath: routes[0].path,
-  fullName: routes[0].name,
-  params: {},
-  breadcrumbItems: [],
-  navigate: () => {
-  },
-});
+export function _navigate(name: RouteName, params: RouteParams, state: State): {
+  route: Route,
+  fullPath: string,
+  fullName: string,
+  params: { [k: string]: string },
+  breadcrumbItems: BreadcrumbItem[]
+} {
+  let {route: newRoute, fullPath: path, breadcrumbItems, fullName} = matchName(name);
 
-export function useRouter(): RouterContextProps {
-  return useContext(RouterContext);
+  const queryParams: { [k: string]: string } = {...params};
+  params = {...wellKnownPathVars(state), ...params}
+
+  path = path.replace(/{(\w*)}/g, (_match, path_var) => {
+    console.log(path_var, params)
+    const path = params[path_var] || `{${path_var}}`;
+    delete queryParams[path_var]
+    return path;
+  })
+
+  if (params && Object.keys(params).length > 0) {
+    const searchParams = new URLSearchParams(queryParams);
+    const fullPath = Object.keys(queryParams).length === 0 ? path : `${path}?${searchParams}`;
+    window.history.pushState(
+      {routeName: name, routeParams: params},
+      '',
+      fullPath
+    );
+    return {route: newRoute, fullPath: path, fullName, breadcrumbItems, params};
+  } else {
+    window.history.pushState(
+      {routeName: name, routeParams: {}},
+      '',
+      path
+    );
+    return {route: newRoute, fullPath: path, fullName, breadcrumbItems, params: {}};
+  }
 }
 
-export function useInitRouter(): RouterContextProps {
+function wellKnownPathVars(state: State): { [k: string]: string } {
+  const res: { [k: string]: string } = {}
+  if (state.currentOrganization) {
+    res.org_id = state.currentOrganization.id
+  }
+  if (state.currentProject) {
+    res.proj_id = state.currentProject.id
+  }
+  if (state.currentStream) {
+    res.stream_id = state.currentStream.id
+  }
+  return res;
+
+}
+
+export function initRouter() {
   const currentPath = window.location.pathname;
   const {
     route: init_route,
@@ -237,77 +266,14 @@ export function useInitRouter(): RouterContextProps {
     fullName: routes[0].name,
     breadcrumbItems: [{title: routes[0].display, route: routes[0].name}]
   };
-  const [route, setRoute] = useState<{
-    route: Route,
-    fullPath: string,
-    fullName: string,
-    breadcrumbItems: BreadcrumbItem[]
-  }>({route: init_route, fullPath: currentPath, fullName: initFullName, breadcrumbItems: path_breadcrumbItems});
-
   const queryString = new URLSearchParams(window.location.search);
-  const [params, setParams] = useState<RouteParams>(
-    {...Object.fromEntries(queryString), ...path_params}
-  );
-
-  // handle back / forward events
-  useEffect(() => {
-    window.addEventListener('popstate', (event) => {
-      if (event.state?.routeName) {
-        setRoute(matchName(event.state.routeName));
-      } else {
-        setRoute({
-          route: init_route,
-          fullPath: currentPath,
-          fullName: initFullName,
-          breadcrumbItems: path_breadcrumbItems
-        });
-        setParams({...Object.fromEntries(queryString), ...path_params});
-      }
-      if (event.state?.routeParams) {
-        setParams(event.state.routeParams);
-      }
-    });
-  }, []);
-
-  // navigate to a new route
-  const navigate = (name: RouteName, params: RouteParams = {}) => {
-    let {route: newRoute, fullPath: path, breadcrumbItems} = matchName(name);
-
-    if (params && Object.keys(params).length > 0) {
-      const queryParams: { [k: string]: string } = {};
-      for (const key of Object.keys(params)) {
-        if (path.includes(`{${key}}`)) {
-          path = path.replace(`{${key}}`, params[key])
-        } else {
-          queryParams[key] = params[key];
-        }
-      }
-      const searchParams = new URLSearchParams(queryParams);
-      const fullPath = Object.keys(queryParams).length === 0 ? path : `${path}?${searchParams}`;
-      window.history.pushState(
-        {routeName: name, routeParams: params},
-        '',
-        fullPath
-      );
-      setRoute({route: newRoute, fullPath: path, fullName: initFullName, breadcrumbItems});
-      setParams(params);
-    } else {
-      window.history.pushState(
-        {routeName: name, routeParams: {}},
-        '',
-        path
-      );
-      setRoute({route: newRoute, fullPath: path, fullName: initFullName, breadcrumbItems});
-      setParams({});
-    }
-  };
+  const params = {...Object.fromEntries(queryString), ...path_params};
 
   return {
-    params,
-    route: route.route,
-    fullPath: route.fullPath,
-    fullName: route.fullName,
-    breadcrumbItems: route.breadcrumbItems,
-    navigate,
+    route: init_route,
+    fullPath: currentPath,
+    fullName: initFullName,
+    breadcrumbItems: path_breadcrumbItems,
+    params
   };
 }

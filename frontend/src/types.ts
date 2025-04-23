@@ -1,4 +1,4 @@
-import {Navigate, Route, RouteParams} from "./hooks/useRouter.ts";
+import {Route, RouteParams} from "./router.ts";
 
 export type Role = 'super_admin' | { organization_admin: string };
 
@@ -33,10 +33,9 @@ export interface State {
   fullName: string;
   params: RouteParams;
   breadcrumbItems: BreadcrumbItem[];
-  navigate: Navigate;
 }
 
-export interface BreadcrumbItem  {
+export interface BreadcrumbItem {
   title: string;
   route: string;
 }
@@ -69,8 +68,14 @@ export type Action = {
   type: 'navigate';
   route: string;
   params?: RouteParams;
-}
-  ;
+} | {
+  type: 'set_route',
+  route: Route;
+  fullPath: string;
+  fullName: string;
+  params: RouteParams;
+  breadcrumbItems: BreadcrumbItem[];
+};
 
 export interface Organization {
   id: string;
