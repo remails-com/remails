@@ -1,4 +1,4 @@
-import {AppShell, Burger, Button, Flex, Group, Menu, Text} from '@mantine/core';
+import {Anchor, AppShell, Breadcrumbs, Burger, Button, Flex, Group, Menu, Text} from '@mantine/core';
 import {useDisclosure} from '@mantine/hooks';
 import logo from '../img/logo.png';
 import ColorTheme from './ColorTheme';
@@ -7,17 +7,34 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
+import {useRouter} from "../hooks/useRouter.ts";
 
 interface DashboardProps {
   children: ReactNode;
 }
 
 export function Dashboard({children}: DashboardProps) {
+  const {navigate, breadcrumbItems} = useRouter();
   const [navbarOpened, {toggle}] = useDisclosure();
+  const {state} = useRemails();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
   const {state: {organizations, currentOrganization}, dispatch} = useRemails();
+
+  const breadcrumbs = breadcrumbItems.map(item => (
+    <Anchor key={item.route} onClick={() => navigate(item.route)}>
+      {item.title.replace(/^{([\w,.]*)}$/, (_match, path ) => {
+        console.log('item.route', item.route)
+        const elems = path.split('.')
+        let current_obj = state;
+        for (const elem of elems){
+          current_obj = current_obj[elem] || 'loading...';
+        }
+        return current_obj
+      })}
+    </Anchor>
+  ));
 
   return (
     <AppShell
@@ -78,6 +95,7 @@ export function Dashboard({children}: DashboardProps) {
         <NavBar/>
       </AppShell.Navbar>
       <AppShell.Main>
+        <Breadcrumbs>{breadcrumbs}</Breadcrumbs>
         {children}
       </AppShell.Main>
     </AppShell>

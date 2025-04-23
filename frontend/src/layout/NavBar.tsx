@@ -5,7 +5,7 @@ import {
   IconMail,
   IconServer,
 } from "@tabler/icons-react";
-import {useRouter} from "../hooks/useRouter";
+import {useRouter} from "../hooks/useRouter.ts";
 import {useUser} from "../hooks/useUser.ts";
 import {is_global_admin} from "../util.ts";
 

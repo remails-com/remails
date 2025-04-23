@@ -1,33 +1,14 @@
-import {createContext, useContext, useEffect, useState} from "react";
-import {Organization, Project,} from "../types";
+import {useEffect} from "react";
+import {useRemails} from "./useRemails.ts";
+import {useRouter} from "./useRouter.ts";
 
-export interface ProjectsContextProps {
-  currentProject?: Project;
-  setCurrentProject: (currentProject: Project) => void;
-  projects: Project[];
-  loading: boolean;
-}
-
-export const ProjectContext = createContext<ProjectsContextProps | null>(null);
-
-export function useProjects(): ProjectsContextProps {
-  const projects = useContext(ProjectContext);
-
-  if (!projects) {
-    throw new Error("useProject must be used within a ProjectProvider");
-  }
-
-  return projects;
-}
-
-export function useLoadProjects(currentOrganization?: Organization) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentProject, setCurrentProject] = useState<Project | undefined>(undefined);
+export function useProjects() {
+  const {state: {currentOrganization, projects, currentProject}, dispatch} = useRemails();
+  const {params} = useRouter();
 
   useEffect(() => {
-    setLoading(true);
-    
+    dispatch({type: 'load_projects'})
+
     if (!currentOrganization) {
       return
     }
@@ -36,12 +17,19 @@ export function useLoadProjects(currentOrganization?: Organization) {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setProjects(data);
-          setCurrentProject(data[0]);
+          dispatch({type: 'set_projects', projects: data});
         }
-        setLoading(false);
       });
   }, [currentOrganization]);
 
-  return {projects, loading, currentProject, setCurrentProject}
+  useEffect(() => {
+    if (params.proj_id && projects) {
+      const nextCurrentProject = projects.find((p) => p.id === params.proj_id);
+      if (nextCurrentProject) {
+        dispatch({type: "set_current_project", project: nextCurrentProject})
+      }
+    }
+  }, [params.proj_id, projects]);
+
+  return {projects, currentProject}
 }

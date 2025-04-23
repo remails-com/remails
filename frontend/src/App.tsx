@@ -1,27 +1,20 @@
 import {Loader} from "@mantine/core";
 import {Login} from "./Login";
 import {Pages} from "./Pages";
-import {RouterContext, useInitRouter} from "./hooks/useRouter";
+import {RouterContext, useInitRouter} from "./hooks/useRouter.ts";
 import {useLoadUser, UserContext} from "./hooks/useUser";
-import {ProjectContext, useLoadProjects} from "./hooks/useProjects.ts";
-import {StreamContext, useLoadStreams} from "./hooks/useStreams.ts";
 import {RemailsContext, useLoadRemails} from "./hooks/useRemails.ts";
 
 export default function App() {
   const {user, loading, setUser} = useLoadUser();
   const {state, dispatch} = useLoadRemails();
-  const {projects, setCurrentProject, currentProject, loading: loadingProject} = useLoadProjects(state.currentOrganization);
-  const {
-    currentStream,
-    setCurrentStream,
-    streams,
-    loading: loadingStream
-  } = useLoadStreams(state.currentOrganization, currentProject);
   const {
     params,
     route,
     navigate,
-    fullPath
+    fullPath,
+    fullName,
+    breadcrumbItems
   } = useInitRouter();
 
   if (loading) {
@@ -33,14 +26,10 @@ export default function App() {
   }
 
   return (
-    <RouterContext.Provider value={{params, route, navigate, fullPath}}>
+    <RouterContext.Provider value={{params, route, navigate, fullPath, fullName, breadcrumbItems}}>
       <UserContext.Provider value={user}>
         <RemailsContext.Provider value={{state, dispatch}}>
-          <ProjectContext.Provider value={{projects, setCurrentProject, currentProject, loading: loadingProject}}>
-            <StreamContext.Provider value={{streams, setCurrentStream, currentStream, loading: loadingStream}}>
-              <Pages/>
-            </StreamContext.Provider>
-          </ProjectContext.Provider>
+          <Pages/>
         </RemailsContext.Provider>
       </UserContext.Provider>
     </RouterContext.Provider>

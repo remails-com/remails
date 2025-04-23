@@ -1,14 +1,15 @@
-import { Table } from "@mantine/core";
-import { Loader } from "../../Loader";
-import { formatDateTime } from "../../util";
+import {Table} from "@mantine/core";
+import {Loader} from "../../Loader";
+import {formatDateTime} from "../../util";
 import {useStreams} from "../../hooks/useStreams.ts";
+import {useRemails} from "../../hooks/useRemails.ts";
 
 export function StreamsOverview() {
-
-  const { streams, loading } = useStreams();
+  const {state: {loading}} = useRemails();
+  const {streams} = useStreams();
 
   if (loading) {
-    return <Loader />;
+    return <Loader/>;
   }
 
   const rows = streams.map((stream) => (

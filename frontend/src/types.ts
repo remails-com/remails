@@ -1,3 +1,5 @@
+import {Navigate, Route, RouteParams} from "./hooks/useRouter.ts";
+
 export type Role = 'super_admin' | { organization_admin: string };
 
 export interface User {
@@ -20,8 +22,23 @@ export interface State {
   organizations: Organization[];
   currentOrganization?: Organization;
   projects: Project[];
+  currentProject?: Project;
   streams: Stream[];
+  currentStream?: Stream;
   loading: boolean;
+
+  // routing related state
+  route: Route;
+  fullPath: string;
+  fullName: string;
+  params: RouteParams;
+  breadcrumbItems: BreadcrumbItem[];
+  navigate: Navigate;
+}
+
+export interface BreadcrumbItem  {
+  title: string;
+  route: string;
 }
 
 export type Action = {
@@ -32,7 +49,28 @@ export type Action = {
 } | {
   type: 'set_current_organization';
   organization: Organization;
-};
+} | {
+  type: 'load_projects'
+} | {
+  type: 'set_current_project';
+  project: Project;
+} | {
+  type: 'set_projects';
+  projects: Project[];
+} | {
+  type: 'set_streams';
+  streams: Stream[];
+} | {
+  type: 'load_streams'
+} | {
+  type: 'set_current_stream';
+  stream: Stream;
+} | {
+  type: 'navigate';
+  route: string;
+  params?: RouteParams;
+}
+  ;
 
 export interface Organization {
   id: string;

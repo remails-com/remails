@@ -1,34 +1,19 @@
-import {createContext, useContext, useEffect, useState} from "react";
-import {Organization, Project, Stream,} from "../types";
+import {useEffect} from "react";
+import {useRemails} from "./useRemails.ts";
+import {useProjects} from "./useProjects.ts";
+import {useRouter} from "./useRouter.ts";
 
-export interface StreamContextProps {
-  currentStream?: Stream;
-  setCurrentStream: (currentStream: Stream) => void;
-  streams: Stream[];
-  loading: boolean;
-}
 
-export const StreamContext = createContext<StreamContextProps | null>(null);
-
-export function useStreams(): StreamContextProps {
-  const streams = useContext(StreamContext);
-
-  if (!streams) {
-    throw new Error("useStreams must be used within a StreamProvider");
-  }
-
-  return streams;
-}
-
-export function useLoadStreams(currentOrganization?: Organization, currentProject?: Project) {
-  const [streams, setStreams] = useState<Stream[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentStream, setCurrentStream] = useState<Stream | undefined>(undefined);
+export function useStreams() {
+  const {currentProject} = useProjects();
+  const {params} = useRouter();
+  const {state: {currentOrganization, currentStream, streams}, dispatch} = useRemails()
 
   useEffect(() => {
-    setLoading(true);
+    dispatch({type: 'load_streams'});
 
     if (!currentOrganization || !currentProject) {
+      console.log("organization or project missing", currentOrganization, currentProject);
       return
     }
 
@@ -36,12 +21,19 @@ export function useLoadStreams(currentOrganization?: Organization, currentProjec
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setStreams(data);
-          setCurrentStream(data[0]);
+          dispatch({type: 'set_streams', streams: data});
         }
-        setLoading(false);
       });
   }, [currentOrganization, currentProject]);
 
-  return {streams, loading, currentStream, setCurrentStream}
+  useEffect(() => {
+    if (params.stream_id && streams) {
+      const nextCurrentStream = streams.find((s) => s.id === params.stream_id);
+      if (nextCurrentStream) {
+        dispatch({type: "set_current_stream", stream: nextCurrentStream})
+      }
+    }
+  }, [params.stream_id, streams]);
+
+  return {streams, currentStream}
 }
