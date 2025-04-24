@@ -2,14 +2,14 @@ import {Anchor, Breadcrumbs as MantineBreadcrumbs} from "@mantine/core";
 import {useProjects} from "../hooks/useProjects.ts";
 import {useRemails} from "../hooks/useRemails.ts";
 import {BreadcrumbItem} from "../types.ts";
-import {useCurrentOrganisation} from "../hooks/useCurrentOrganisation.ts";
+import {useCurrentOrganization} from "../hooks/useCurrentOrganization.ts";
 import {useStreams} from "../hooks/useStreams.ts";
 
 
 export function Breadcrumbs() {
   const {projects, currentProject} = useProjects();
   const {currentStream} = useStreams();
-  const currentOrganisation = useCurrentOrganisation();
+  const currentOrganisation = useCurrentOrganization();
   const {navigate} = useRemails();
 
   if (!currentOrganisation) {

@@ -83,7 +83,8 @@ CREATE TABLE projects
     organization_id uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
     name            varchar                  NOT NULL,
     created_at      timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at      timestamp with time zone NOT NULL DEFAULT now()
+    updated_at      timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT unique_project_name UNIQUE (organization_id, name)
 );
 
 CREATE TRIGGER update_projects_updated_at

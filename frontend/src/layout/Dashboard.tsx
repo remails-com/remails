@@ -7,7 +7,7 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
-import { useCurrentOrganisation } from '../hooks/useCurrentOrganisation.ts';
+import { useCurrentOrganization } from '../hooks/useCurrentOrganization.ts';
 import {Breadcrumbs} from "./Breadcrumbs.tsx";
 
 interface DashboardProps {
@@ -19,21 +19,7 @@ export function Dashboard({children}: DashboardProps) {
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
   const {state: {organizations}, navigate} = useRemails();
-  const currentOrganization = useCurrentOrganisation();
-
-  // const breadcrumbs = breadcrumbItems.map(item => (
-  //   <Anchor key={item.route} onClick={() => navigate(item.route)}>
-  //     {item.title.replace(/^{([\w,.]*)}$/, (_match, path ) => {
-  //       const elems = path.split('.')
-  //       let current_obj = state;
-  //       for (const elem of elems){
-  //         // @ts-ignore
-  //         current_obj = current_obj[elem] || 'loading...';
-  //       }
-  //       return current_obj as unknown as string;
-  //     })}
-  //   </Anchor>
-  // ));
+  const currentOrganization = useCurrentOrganization();
 
   return (
     <AppShell

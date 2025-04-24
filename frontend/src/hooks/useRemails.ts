@@ -17,6 +17,14 @@ function reducer(state: State, action: Action): State {
     return {...state, projects: action.projects, loading: false}
   }
 
+  if (action.type === 'add_project') {
+    return {...state, projects: [...state.projects || [], action.project], loading: false}
+  }
+
+  if (action.type === 'remove_project') {
+    return {...state, projects: state.projects?.filter(p => p.id !== action.projectId) || []}
+  }
+
   if (action.type === 'set_streams') {
     return {...state, streams: action.streams, loading: false}
   }

@@ -106,7 +106,7 @@ export function Login({setUser}: LoginProps) {
 
         <Divider label="Or continue with email" labelPosition="center" my="lg"/>
 
-        <form onSubmit={form.onSubmit((values) => submit(values))}>
+        <form onSubmit={form.onSubmit(submit)}>
           <Stack>
             {type === 'register' && (
               <TextInput

@@ -48,6 +48,12 @@ export type Action = {
   type: 'set_projects';
   projects: Project[] | null;
 } | {
+  type: 'add_project';
+  project: Project;
+} | {
+  type: 'remove_project';
+  projectId: string;
+} |{
   type: 'set_streams';
   streams: Stream[] | null;
 }| {

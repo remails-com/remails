@@ -1,44 +1,60 @@
-import {Button, Table} from "@mantine/core";
+import {Button, Flex, Table} from "@mantine/core";
 import {Loader} from "../../Loader";
 import {formatDateTime} from "../../util";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
-import {IconEdit} from "@tabler/icons-react";
+import { IconEdit, IconPencilPlus} from "@tabler/icons-react";
 import {ProjectDetails} from "./ProjectDetails.tsx";
-import {useCurrentOrganisation} from "../../hooks/useCurrentOrganisation.ts";
+import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useDisclosure} from "@mantine/hooks";
+import {NewProject} from "./NewProject.tsx";
+
 
 export function ProjectsOverview() {
+  const [opened, {open, close}] = useDisclosure(false);
+
   const {state: {loading, fullName}, navigate} = useRemails();
   const {projects, currentProject} = useProjects();
-  const currentOrganisation = useCurrentOrganisation();
+  const currentOrganisation = useCurrentOrganization();
 
   if (loading || projects === null || currentOrganisation === null) {
     return <Loader/>;
   }
 
   if (fullName.startsWith('projects.project') && currentProject) {
-    return <ProjectDetails />;
+    return <ProjectDetails/>;
   }
 
   const rows = projects.map((project) => (
     <Table.Tr key={project.id}>
       <Table.Td>{project.name}</Table.Td>
       <Table.Td>{formatDateTime(project.updated_at)}</Table.Td>
-      <Table.Td><Button
-        onClick={() => navigate('projects.project', {proj_id: project.id, org_id: currentOrganisation.id })}><IconEdit/></Button></Table.Td>
+      <Table.Td>
+        <Button
+          onClick={() => navigate('projects.project', {
+            proj_id: project.id,
+            org_id: currentOrganisation.id
+          })}><IconEdit/></Button>
+      </Table.Td>
     </Table.Tr>
   ));
 
   return (
-    <Table>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Name</Table.Th>
-          <Table.Th>Updated</Table.Th>
-          <Table.Th></Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>{rows}</Table.Tbody>
-    </Table>
+    <>
+      <NewProject opened={opened} close={close}/>
+      <Flex justify="flex-end">
+        <Button onClick={() => open()} leftSection={<IconPencilPlus/>}> New Project</Button>
+      </Flex>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Name</Table.Th>
+            <Table.Th>Updated</Table.Th>
+            <Table.Th></Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>{rows}</Table.Tbody>
+      </Table>
+    </>
   );
 }
