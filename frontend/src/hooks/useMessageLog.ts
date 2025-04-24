@@ -6,12 +6,12 @@ import { useCurrentOrganisation } from "./useCurrentOrganisation.ts";
 export function useMessageLog() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const {state: {params}, navigate} = useRemails();
+  const {state: {pathParams}, navigate} = useRemails();
   const currentOrganization = useCurrentOrganisation();
 
   const org_id = currentOrganization?.id;
-  const proj_id = params.proj_id;
-  const stream_id = params.stream_id;
+  const proj_id = pathParams.proj_id;
+  const stream_id = pathParams.stream_id;
 
   useEffect(() => {
     setLoading(true);

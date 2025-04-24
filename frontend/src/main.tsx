@@ -27,9 +27,9 @@ const theme = createTheme({
 });
 
 root.render(
-  // <StrictMode>
+  <StrictMode>
     <MantineProvider theme={theme}>
       <App />
     </MantineProvider>
-  // </StrictMode>,
+  </StrictMode>,
 );

@@ -1,8 +1,6 @@
-import {BreadcrumbItem} from "./types.ts";
-
 export type RouteName = string;
 export type RouteParams = Record<string, string>;
-export type Navigate = (name: RouteName, params?: RouteParams) => void;
+export type Navigate = (name: RouteName, pathParams?: RouteParams, queryParams?: RouteParams) => void;
 
 export interface Route {
   name: RouteName;
@@ -83,9 +81,8 @@ export function matchPath(path: string): {
   route: Route,
   params: RouteParams,
   fullName: string,
-  breadcrumbItems: BreadcrumbItem[]
 } | null {
-  const match = matchPathRecursive(path, routes, {}, [], []);
+  const match = matchPathRecursive(path, routes, {}, []);
   if (match) {
     return {...match, fullName: match.fullName.join('.')}
   } else {
@@ -101,16 +98,13 @@ function matchPathRecursive(
   pathParams: {
     [k: string]: string
   },
-  fullName: string[],
-  breadcrumbItems: BreadcrumbItem[]):
+  fullName: string[],):
   {
     route: Route,
     params: RouteParams,
     fullName: string[],
-    breadcrumbItems: BreadcrumbItem[]
   } | null {
   const new_path_params: { [k: string]: string } = {};
-  const new_breadcrumb_items = [...breadcrumbItems]
   path = path.replace(/^\/|\/$/, '');
   const path_elems = path.split('/');
   route_loop:
@@ -128,15 +122,13 @@ function matchPathRecursive(
         }
       }
       const new_full_name = [...fullName, route.name]
-      new_breadcrumb_items.push({title: route.display, route: new_full_name.join('.')})
       if (route.children && path_elems.length > route_elems.length) {
-        const rec_res = matchPathRecursive(path_elems.slice(route_elems.length).join('/'), route.children, new_path_params, new_full_name, new_breadcrumb_items);
+        const rec_res = matchPathRecursive(path_elems.slice(route_elems.length).join('/'), route.children, new_path_params, new_full_name);
         if (rec_res) {
           return {
             route: rec_res.route,
             params: {...pathParams, ...rec_res.params, ...new_path_params},
             fullName: rec_res.fullName,
-            breadcrumbItems: rec_res.breadcrumbItems
           }
         } else {
           return null;
@@ -146,7 +138,6 @@ function matchPathRecursive(
           route,
           params: {...pathParams, ...new_path_params},
           fullName: new_full_name,
-          breadcrumbItems: new_breadcrumb_items
         };
       }
     }
@@ -157,10 +148,9 @@ export function matchName(name: RouteName): {
   route: Route,
   fullPath: string,
   fullName: string,
-  breadcrumbItems: BreadcrumbItem[]
 } {
   const elems = name.split('.');
-  const match = recursiveMatchName(routes, elems, '', [], [])
+  const match = recursiveMatchName(routes, elems, '', [])
   if (match) {
     return {...match, fullName: match.fullName.join('.')}
   }
@@ -168,15 +158,13 @@ export function matchName(name: RouteName): {
     route: routes[0],
     fullPath: routes[0].path,
     fullName: routes[0].name,
-    breadcrumbItems: [{route: routes[0].name, title: routes[0].display}]
   };
 }
 
-function recursiveMatchName(routes: Route[], name_elems: string[], fullPath: string, fullName: string[], breadcrumbItems: BreadcrumbItem[]): {
+function recursiveMatchName(routes: Route[], name_elems: string[], fullPath: string, fullName: string[]): {
   route: Route,
   fullPath: string,
   fullName: string[]
-  breadcrumbItems: BreadcrumbItem[]
 } | null {
   const elem = name_elems.at(0);
   if (!elem) {
@@ -185,54 +173,56 @@ function recursiveMatchName(routes: Route[], name_elems: string[], fullPath: str
   for (const route of routes) {
     if (route.name === elem) {
       const newFullName = [...fullName, route.name]
-      breadcrumbItems.push({title: route.display, route: newFullName.join('.')});
       if (name_elems.length > 1 && route.children) {
-        return recursiveMatchName(route.children, name_elems.slice(1), `${fullPath}/${route.path.replace(/^\/|\/$/, '')}`, newFullName, breadcrumbItems)
+        return recursiveMatchName(route.children, name_elems.slice(1), `${fullPath}/${route.path.replace(/^\/|\/$/, '')}`, newFullName)
       }
       return {
         route,
         fullPath: `${fullPath}/${route.path.replace(/^\/|\/$/, '')}`,
         fullName: newFullName,
-        breadcrumbItems
       };
     }
   }
   return null
 }
 
-export function routerNavigate(name: RouteName, params: RouteParams): {
+export function routerNavigate(name: RouteName, pathParams: RouteParams, queryParams: RouteParams): {
   route: Route,
   fullPath: string,
   fullName: string,
-  params: { [k: string]: string },
-  breadcrumbItems: BreadcrumbItem[]
+  pathParams: { [k: string]: string },
+  queryParams: { [k: string]: string },
 } {
-  let {route: newRoute, fullPath: path, breadcrumbItems, fullName} = matchName(name);
+  // eslint-disable-next-line prefer-const
+  let {route: newRoute, fullPath: path, fullName} = matchName(name);
 
-  const queryParams: { [k: string]: string } = {...params};
+  const usedPathParams: RouteParams = {}
 
   path = path.replace(/{(\w*)}/g, (_match, path_var) => {
-    const path = params[path_var] || `{${path_var}}`;
-    delete queryParams[path_var]
-    return path;
+    const path = pathParams[path_var];
+    if (!path) {
+      throw new Error(`Path variable ${path_var} not found in pathParams`);
+    }
+    usedPathParams[path_var] = pathParams[path_var];
+    return path
   })
 
-  if (params && Object.keys(params).length > 0) {
+  if (queryParams && Object.keys(queryParams).length > 0) {
     const searchParams = new URLSearchParams(queryParams);
-    const fullPath = Object.keys(queryParams).length === 0 ? path : `${path}?${searchParams}`;
+    const fullPath = `${path}?${searchParams}`;
     window.history.pushState(
-      {routeName: name, routeParams: params},
+      {routeName: name, routePathParams: usedPathParams, routeQueryParams: queryParams},
       '',
       fullPath
     );
-    return {route: newRoute, fullPath: path, fullName, breadcrumbItems, params};
+    return {route: newRoute, fullPath: path, fullName, pathParams: usedPathParams, queryParams};
   } else {
     window.history.pushState(
-      {routeName: name, routeParams: {}},
+      {routeName: name, routePathParams: usedPathParams},
       '',
       path
     );
-    return {route: newRoute, fullPath: path, fullName, breadcrumbItems, params: {}};
+    return {route: newRoute, fullPath: path, fullName, pathParams: usedPathParams, queryParams: {}};
   }
 }
 
@@ -240,23 +230,19 @@ export function initRouter() {
   const currentPath = window.location.pathname;
   const {
     route: init_route,
-    params: path_params,
+    params: pathParams,
     fullName: initFullName,
-    breadcrumbItems: path_breadcrumbItems
   } = matchPath(currentPath) || {
     route: routes[0],
     params: {},
     fullName: routes[0].name,
-    breadcrumbItems: [{title: routes[0].display, route: routes[0].name}]
   };
-  const queryString = new URLSearchParams(window.location.search);
-  const params = {...Object.fromEntries(queryString), ...path_params};
 
   return {
     route: init_route,
     fullPath: currentPath,
     fullName: initFullName,
-    breadcrumbItems: path_breadcrumbItems,
-    params
+    pathParams,
+    queryParams: Object.fromEntries(new URLSearchParams(window.location.search))
   };
 }

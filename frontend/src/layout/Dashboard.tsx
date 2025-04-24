@@ -1,4 +1,4 @@
-import {Anchor, AppShell, Breadcrumbs, Burger, Button, Flex, Group, Menu, Text} from '@mantine/core';
+import {AppShell, Burger, Button, Flex, Group, Menu, Text} from '@mantine/core';
 import {useDisclosure} from '@mantine/hooks';
 import logo from '../img/logo.png';
 import ColorTheme from './ColorTheme';
@@ -8,6 +8,7 @@ import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
 import { useCurrentOrganisation } from '../hooks/useCurrentOrganisation.ts';
+import {Breadcrumbs} from "./Breadcrumbs.tsx";
 
 interface DashboardProps {
   children: ReactNode;
@@ -15,26 +16,24 @@ interface DashboardProps {
 
 export function Dashboard({children}: DashboardProps) {
   const [navbarOpened, {toggle}] = useDisclosure();
-  const {state} = useRemails();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
-  const {state: {organizations, breadcrumbItems}, navigate} = useRemails();
+  const {state: {organizations}, navigate} = useRemails();
   const currentOrganization = useCurrentOrganisation();
 
-  const breadcrumbs = breadcrumbItems.map(item => (
-    <Anchor key={item.route} onClick={() => navigate(item.route)}>
-      {item.title.replace(/^{([\w,.]*)}$/, (_match, path ) => {
-        const elems = path.split('.')
-        let current_obj = state;
-        for (const elem of elems){
-          // @ts-ignore
-          current_obj = current_obj[elem] || 'loading...';
-        }
-        return current_obj as unknown as string;
-      })}
-    </Anchor>
-  ));
+  // const breadcrumbs = breadcrumbItems.map(item => (
+  //   <Anchor key={item.route} onClick={() => navigate(item.route)}>
+  //     {item.title.replace(/^{([\w,.]*)}$/, (_match, path ) => {
+  //       const elems = path.split('.')
+  //       let current_obj = state;
+  //       for (const elem of elems){
+  //         // @ts-ignore
+  //         current_obj = current_obj[elem] || 'loading...';
+  //       }
+  //       return current_obj as unknown as string;
+  //     })}
+  //   </Anchor>
+  // ));
 
   return (
     <AppShell
@@ -94,7 +93,7 @@ export function Dashboard({children}: DashboardProps) {
         <NavBar/>
       </AppShell.Navbar>
       <AppShell.Main>
-        <Breadcrumbs>{breadcrumbs}</Breadcrumbs>
+        <Breadcrumbs/>
         {children}
       </AppShell.Main>
     </AppShell>

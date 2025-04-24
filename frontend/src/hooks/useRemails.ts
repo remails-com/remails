@@ -1,6 +1,6 @@
 import {ActionDispatch, createContext, useContext, useEffect, useReducer} from "react";
-import {Action, State} from "../types.ts";
-import {routerNavigate, initRouter, matchName, Navigate, RouteName, RouteParams, routes} from "../router.ts";
+import {Action, State, WhoamiResponse} from "../types.ts";
+import {initRouter, matchName, Navigate, RouteName, RouteParams, routerNavigate, routes} from "../router.ts";
 
 function reducer(state: State, action: Action): State {
   console.log('fired action', action)
@@ -27,8 +27,8 @@ function reducer(state: State, action: Action): State {
       route: action.route,
       fullPath: action.fullPath,
       fullName: action.fullName,
-      breadcrumbItems: action.breadcrumbItems,
-      params: action.params,
+      pathParams: action.pathParams,
+      queryParams: action.queryParams,
     }
   }
 
@@ -45,8 +45,8 @@ export const RemailsContext = createContext<{ state: State, dispatch: ActionDisp
       route: routes[0],
       fullPath: "",
       fullName: "",
-      params: {},
-      breadcrumbItems: [],
+      queryParams: {},
+      pathParams: {},
     },
     dispatch: () => {
       throw new Error('RemailsContext must be used within RemailsProvider');
@@ -60,7 +60,7 @@ export function useRemails() {
   return useContext(RemailsContext);
 }
 
-export function useLoadRemails() {
+export function useLoadRemails(user: WhoamiResponse | null) {
   const initialRoute = initRouter();
 
   const [state, dispatch] = useReducer(reducer, {
@@ -71,45 +71,56 @@ export function useLoadRemails() {
     ...initialRoute
   });
 
-  const navigate = (name: RouteName, params: RouteParams = {}) => {
-    dispatch({type: "set_route", ...routerNavigate(name, params)});
+  const navigate = (name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
+    dispatch({type: "set_route", ...routerNavigate(name, {...state.pathParams, ...pathParams}, queryParams)});
   };
 
   // handle back / forward events
   useEffect(() => {
     window.addEventListener('popstate', (event) => {
       if (event.state?.routeName) {
-        dispatch({type: "set_route", params: event.state?.routeParams || {}, ...matchName(event.state.routeName)});
+        dispatch({
+          type: "set_route",
+          pathParams: event.state?.routePathParams,
+          queryParams: event.state?.routeQueryParams || {}, ...matchName(event.state.routeName)
+        });
       } else {
         dispatch({
           type: "set_route",
-          params: initialRoute.params,
+          pathParams: initialRoute.pathParams,
+          queryParams: initialRoute.queryParams,
           route: initialRoute.route,
           fullPath: initialRoute.fullPath,
           fullName: initialRoute.fullName,
-          breadcrumbItems: initialRoute.breadcrumbItems
         });
       }
     });
   }, []);
 
   useEffect(() => {
-    fetch("/api/organizations")
-      .then((res) => res.json())
-      .then((data) => {
-          if (Array.isArray(data)) {
-            // TODO store this somehow, e.g., as cookie or in local storage
-            dispatch({type: "set_organizations", organizations: data});
-            navigate('projects', { org_id: data[0].id });
+    if (user) {
+      fetch("/api/organizations")
+        .then((res) => res.json())
+        .then((data) => {
+            if (Array.isArray(data)) {
+              // TODO store this somehow, e.g., as cookie or in local storage
+              dispatch({type: "set_organizations", organizations: data});
+              if (!state.pathParams.org_id) {
+                navigate('projects', {org_id: data[0].id});
+              }
+            }
           }
-        }
-      )
-  }, []);
+        )
+    } else {
+      dispatch({type: 'set_organizations', organizations: null})
+    }
+
+  }, [user]);
 
   // fetch projects when current organization changes
   useEffect(() => {
-    const id = state.params.org_id;
-    
+    const id = state.pathParams.org_id;
+
     if (id) {
       fetch(`/api/organizations/${id}/projects`)
         .then((res) => res.json())
@@ -118,13 +129,15 @@ export function useLoadRemails() {
             dispatch({type: 'set_projects', projects: data});
           }
         });
+    } else {
+      dispatch({type: 'set_projects', projects: null})
     }
-  }, [state.params.org_id]);
+  }, [user, state.pathParams.org_id]);
 
   // fetch streams when current project changes
   useEffect(() => {
-    const org_id = state.params.org_id;
-    const proj_id = state.params.proj_id;
+    const org_id = state.pathParams.org_id;
+    const proj_id = state.pathParams.proj_id;
 
     if (org_id && proj_id) {
       fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams`)
@@ -134,8 +147,10 @@ export function useLoadRemails() {
             dispatch({type: 'set_streams', streams: data});
           }
         });
+    } else {
+      dispatch({type: 'set_streams', streams: null})
     }
-  }, [state.params.org_id, state.params.proj_id]);
+  }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
 
   return {
     state,

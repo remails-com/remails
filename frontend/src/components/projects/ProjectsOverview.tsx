@@ -5,12 +5,14 @@ import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconEdit} from "@tabler/icons-react";
 import {ProjectDetails} from "./ProjectDetails.tsx";
+import {useCurrentOrganisation} from "../../hooks/useCurrentOrganisation.ts";
 
 export function ProjectsOverview() {
   const {state: {loading, fullName}, navigate} = useRemails();
   const {projects, currentProject} = useProjects();
+  const currentOrganisation = useCurrentOrganisation();
 
-  if (loading || projects === null) {
+  if (loading || projects === null || currentOrganisation === null) {
     return <Loader/>;
   }
 
@@ -23,7 +25,7 @@ export function ProjectsOverview() {
       <Table.Td>{project.name}</Table.Td>
       <Table.Td>{formatDateTime(project.updated_at)}</Table.Td>
       <Table.Td><Button
-        onClick={() => navigate('projects.project', {proj_id: project.id})}><IconEdit/></Button></Table.Td>
+        onClick={() => navigate('projects.project', {proj_id: project.id, org_id: currentOrganisation.id })}><IconEdit/></Button></Table.Td>
     </Table.Tr>
   ));
 

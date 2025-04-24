@@ -28,26 +28,27 @@ export interface State {
   route: Route;
   fullPath: string;
   fullName: string;
-  params: RouteParams;
-  breadcrumbItems: BreadcrumbItem[];
+  pathParams: RouteParams;
+  queryParams: RouteParams;
 }
 
 export interface BreadcrumbItem {
   title: string;
   route: string;
+  params?: RouteParams;
 }
 
 export type Action = {
   type: 'set_organizations';
-  organizations: Organization[];
+  organizations: Organization[] | null;
 } | {
   type: 'loading'
 } | {
   type: 'set_projects';
-  projects: Project[];
+  projects: Project[] | null;
 } | {
   type: 'set_streams';
-  streams: Stream[];
+  streams: Stream[] | null;
 } | {
   type: 'navigate';
   route: string;
@@ -57,8 +58,8 @@ export type Action = {
   route: Route;
   fullPath: string;
   fullName: string;
-  params: RouteParams;
-  breadcrumbItems: BreadcrumbItem[];
+  pathParams: RouteParams;
+  queryParams: RouteParams;
 };
 
 export interface Organization {

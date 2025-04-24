@@ -195,25 +195,25 @@ impl DomainRepository {
         org_id: OrganizationId,
         proj_id: Option<ProjectId>,
     ) -> Result<Domain, Error> {
-        let count = sqlx::query_scalar!(
-            r#"
+        let parent_id = if let Some(proj_id) = proj_id {
+            let count = sqlx::query_scalar!(
+                r#"
             SELECT count(p.id) FROM projects p 
                                WHERE p.organization_id = $1 
-                                 AND ($2::uuid IS NULL OR p.id = $2)
+                                 AND p.id = $2
             "#,
-            *org_id,
-            proj_id.map(|p| p.as_uuid())
-        )
-        .fetch_one(&self.pool)
-        .await?;
+                *org_id,
+                *proj_id
+            )
+            .fetch_one(&self.pool)
+            .await?;
 
-        if !matches!(count, Some(1)) {
-            return Err(Error::BadRequest(
-                "Project ID does not match organization ID".to_string(),
-            ));
-        }
+            if !matches!(count, Some(1)) {
+                return Err(Error::BadRequest(
+                    "Project ID does not match organization ID".to_string(),
+                ));
+            }
 
-        let parent_id = if let Some(proj_id) = proj_id {
             DomainParent::Project(proj_id)
         } else {
             DomainParent::Organization(org_id)
@@ -409,10 +409,7 @@ mod test {
         assert!(matches!(bad_request, Error::BadRequest(_)))
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn create_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -454,10 +451,7 @@ mod test {
         );
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn create_conflicting_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -477,10 +471,7 @@ mod test {
         assert!(matches!(conflict, Error::Conflict))
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn get_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -511,10 +502,7 @@ mod test {
         assert!(matches!(not_found, Error::NotFound(_)));
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn get_with_proj_id_from_org_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -532,10 +520,7 @@ mod test {
         assert!(matches!(not_found, Error::NotFound(_)));
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn get_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -567,10 +552,7 @@ mod test {
         assert_eq!(domain.domain, "test-org-1.com")
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn list_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -586,10 +568,7 @@ mod test {
         assert!(domains.is_empty());
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn list_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -617,10 +596,7 @@ mod test {
         assert_eq!(domains[0].domain, "test-org-1-project-1.com");
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn remove_with_project_id_that_does_not_match_org_id(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -664,10 +640,7 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn remove_with_org_id_that_does_not_match_proj_id(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -712,10 +685,7 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn remove_with_proj_id_from_org_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -759,10 +729,7 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
-    ))]
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
     async fn remove_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 

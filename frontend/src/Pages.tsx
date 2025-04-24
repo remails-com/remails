@@ -3,11 +3,7 @@ import {Dashboard} from './layout/Dashboard';
 import {MessageLog} from './components/MessageLog';
 import {OrganizationsOverview} from './components/organizations/OrganizationsOverview';
 import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
-import {StreamsOverview} from "./components/streams/StreamsOverview.tsx";
-import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
 import {useRemails} from "./hooks/useRemails.ts";
-import {StreamDetails} from "./components/streams/StreamDetails.tsx";
-import {Loader} from "./Loader.tsx";
 
 export function Pages() {
   const {state: {route, fullName}} = useRemails();

@@ -6,7 +6,7 @@ import {RemailsContext, useLoadRemails} from "./hooks/useRemails.ts";
 
 export default function App() {
   const {user, loading, setUser} = useLoadUser();
-  const {state, dispatch, navigate} = useLoadRemails();
+  const {state, dispatch, navigate} = useLoadRemails(user);
 
   if (loading) {
     return <Loader color="gray" size="xl" type="dots"/>;
