@@ -1,9 +1,11 @@
 import {Loader} from "../../Loader.tsx";
-import {useStreams} from "../../hooks/useStreams.ts";
+import {Stream} from "../../types.ts";
 
-export function Stream() {
-  const {currentStream} = useStreams()
+export interface StreamDetailsProps {
+  currentStream: Stream;
+}
 
+export function StreamDetails({currentStream}: StreamDetailsProps) {
   if (!currentStream) {
     return <Loader/>;
   }

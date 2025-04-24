@@ -4,12 +4,13 @@ import {MessageLog} from './components/MessageLog';
 import {OrganizationsOverview} from './components/organizations/OrganizationsOverview';
 import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
 import {StreamsOverview} from "./components/streams/StreamsOverview.tsx";
-import {Project} from "./components/projects/Project.tsx";
+import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
 import {useRemails} from "./hooks/useRemails.ts";
-import {Stream} from "./components/streams/Stream.tsx";
+import {StreamDetails} from "./components/streams/StreamDetails.tsx";
+import {Loader} from "./Loader.tsx";
 
 export function Pages() {
-  const {state: {route}} = useRemails();
+  const {state: {route, fullName}} = useRemails();
 
   let element: ReactNode = route.name;
 
@@ -21,21 +22,21 @@ export function Pages() {
     element = <OrganizationsOverview/>
   }
 
-  if (route.name === 'projects') {
+  if (fullName.startsWith('projects')) {
     element = <ProjectsOverview/>
   }
-
-  if (route.name === 'streams') {
-    element = <StreamsOverview/>
-  }
-
-  if (route.name === 'project') {
-    element = <Project/>
-  }
-
-  if (route.name === 'stream') {
-    element = <Stream />
-  }
+  //
+  // if (route.name === 'streams') {
+  //   element = <StreamsOverview/>
+  // }
+  //
+  // if (route.name === 'project') {
+  //   element = <ProjectDetails/>
+  // }
+  //
+  // if (route.name === 'stream') {
+  //   element = <StreamDetails />
+  // }
 
   return (
     <Dashboard>

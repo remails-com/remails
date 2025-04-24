@@ -25,7 +25,7 @@ function reducer(state: State, action: Action): State {
     return {...state, projects: [], currentProject: undefined, loading: true}
   }
   if (action.type === 'set_projects') {
-    return {...state, projects: action.projects, loading: false}
+    return {...state, projects: action.projects, currentProject: undefined, loading: false}
   }
   if (action.type === 'set_current_project') {
     return {...state, currentProject: action.project}

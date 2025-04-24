@@ -4,13 +4,18 @@ import {formatDateTime} from "../../util";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconEdit} from "@tabler/icons-react";
+import {ProjectDetails} from "./ProjectDetails.tsx";
 
 export function ProjectsOverview() {
-  const {state: {loading}, navigate} = useRemails();
-  const {projects} = useProjects();
+  const {state: {loading, fullName}, navigate} = useRemails();
+  const {projects, currentProject} = useProjects();
 
   if (loading) {
     return <Loader/>;
+  }
+
+  if (fullName.startsWith('projects.project') && currentProject) {
+    return <ProjectDetails currentProject={currentProject}/>;
   }
 
   const rows = projects.map((project) => (

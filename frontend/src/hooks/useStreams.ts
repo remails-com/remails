@@ -1,10 +1,9 @@
 import {useEffect} from "react";
 import {useRemails} from "./useRemails.ts";
-import {useProjects} from "./useProjects.ts";
+import { Project } from "../types.ts";
 
 
-export function useStreams() {
-  const {currentProject} = useProjects();
+export function useStreams(currentProject: Project) {
   const {state: {currentOrganization, currentStream, streams, params}, dispatch} = useRemails()
 
   useEffect(() => {
