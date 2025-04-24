@@ -21,6 +21,10 @@ function reducer(state: State, action: Action): State {
     return {...state, streams: action.streams, loading: false}
   }
 
+  if (action.type === 'set_messages') {
+    return {...state, messages: action.messages, loading: false}
+  }
+
   if (action.type === 'set_route') {
     return {
       ...state,
@@ -41,6 +45,7 @@ export const RemailsContext = createContext<{ state: State, dispatch: ActionDisp
       organizations: null,
       projects: null,
       streams: null,
+      messages: null,
       loading: true,
       route: routes[0],
       fullPath: "",
@@ -64,9 +69,10 @@ export function useLoadRemails(user: WhoamiResponse | null) {
   const initialRoute = initRouter();
 
   const [state, dispatch] = useReducer(reducer, {
-    organizations: [],
-    projects: [],
-    streams: [],
+    organizations: null,
+    projects: null,
+    streams: null,
+    messages: null,
     loading: true,
     ...initialRoute
   });
@@ -151,6 +157,25 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       dispatch({type: 'set_streams', streams: null})
     }
   }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
+
+
+  useEffect(() => {
+    const org_id = state.pathParams.org_id;
+    const proj_id = state.pathParams.proj_id;
+    const stream_id = state.pathParams.stream_id;
+
+    if (org_id && proj_id && stream_id) {
+      fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams/${stream_id}/messages`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            dispatch({type: 'set_messages', messages: data});
+          }
+        });
+    } else {
+      dispatch({type: 'set_messages', messages: null})
+    }
+  }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
 
   return {
     state,

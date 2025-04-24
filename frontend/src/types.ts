@@ -22,6 +22,7 @@ export interface State {
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
+  messages: Message[] | null;
   loading: boolean;
 
   // routing related state
@@ -49,6 +50,9 @@ export type Action = {
 } | {
   type: 'set_streams';
   streams: Stream[] | null;
+}| {
+  type: 'set_messages';
+  messages: Message[] | null;
 } | {
   type: 'navigate';
   route: string;
