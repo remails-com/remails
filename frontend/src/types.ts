@@ -53,10 +53,13 @@ export type Action = {
 } | {
   type: 'remove_project';
   projectId: string;
-} |{
+} | {
   type: 'set_streams';
   streams: Stream[] | null;
-}| {
+} | {
+  type: 'remove_stream';
+  streamId: string;
+} | {
   type: 'set_messages';
   messages: Message[] | null;
 } | {

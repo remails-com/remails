@@ -29,6 +29,10 @@ function reducer(state: State, action: Action): State {
     return {...state, streams: action.streams, loading: false}
   }
 
+  if (action.type === 'remove_stream') {
+    return {...state, streams: state.streams?.filter(p => p.id !== action.streamId) || []}
+  }
+
   if (action.type === 'set_messages') {
     return {...state, messages: action.messages, loading: false}
   }

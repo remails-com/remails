@@ -4,22 +4,28 @@ import {OrganizationsOverview} from './components/organizations/OrganizationsOve
 import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
 import {useRemails} from "./hooks/useRemails.ts";
 import {StreamDetails} from "./components/streams/StreamDetails.tsx";
+import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
 
 export function Pages() {
-  const {state: {route, fullName}} = useRemails();
+  const {state: {route}} = useRemails();
 
-  let element: ReactNode = route.name;
+  let element: ReactNode;
 
-  if (route.name === 'organizations') {
-    element = <OrganizationsOverview/>
-  }
-
-  if (fullName.startsWith('projects')) {
-    element = <ProjectsOverview/>
-  }
-
-  if (route.name === 'stream') {
-    element = <StreamDetails />
+  switch (route.name) {
+    case 'organizations':
+      element = <OrganizationsOverview/>
+      break
+    case 'projects':
+      element = <ProjectsOverview/>
+      break
+    case 'project':
+      element = <ProjectDetails/>
+      break
+    case 'stream':
+      element = <StreamDetails/>
+      break
+    default:
+      element = "Not Found"
   }
 
   return (

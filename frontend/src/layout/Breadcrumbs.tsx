@@ -44,6 +44,6 @@ export function Breadcrumbs() {
 
 
   return (
-    <MantineBreadcrumbs>{anchors}</MantineBreadcrumbs>
+    <MantineBreadcrumbs mb="lg">{anchors}</MantineBreadcrumbs>
   )
 }

@@ -4,7 +4,6 @@ import {formatDateTime} from "../../util";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import { IconEdit, IconPencilPlus} from "@tabler/icons-react";
-import {ProjectDetails} from "./ProjectDetails.tsx";
 import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
 import {useDisclosure} from "@mantine/hooks";
 import {NewProject} from "./NewProject.tsx";
@@ -13,16 +12,12 @@ import {NewProject} from "./NewProject.tsx";
 export function ProjectsOverview() {
   const [opened, {open, close}] = useDisclosure(false);
 
-  const {state: {loading, fullName}, navigate} = useRemails();
-  const {projects, currentProject} = useProjects();
+  const {state: {loading}, navigate} = useRemails();
+  const {projects} = useProjects();
   const currentOrganisation = useCurrentOrganization();
 
   if (loading || projects === null || currentOrganisation === null) {
     return <Loader/>;
-  }
-
-  if (fullName.startsWith('projects.project') && currentProject) {
-    return <ProjectDetails/>;
   }
 
   const rows = projects.map((project) => (
