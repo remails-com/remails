@@ -1,44 +1,26 @@
 import {ActionDispatch, createContext, useContext, useEffect, useReducer} from "react";
 import {Action, State} from "../types.ts";
-import {_navigate, initRouter, matchName, Navigate, RouteName, RouteParams, routes} from "../router.ts";
+import {routerNavigate, initRouter, matchName, Navigate, RouteName, RouteParams, routes} from "../router.ts";
 
 function reducer(state: State, action: Action): State {
   console.log('fired action', action)
-  if (action.type === 'load_organizations') {
-    return {...state, organizations: [], currentOrganization: undefined, loading: true}
-  }
+
   if (action.type === 'set_organizations') {
-    return {...state, organizations: action.organizations, currentOrganization: action.organizations[0], loading: false}
+    return {...state, organizations: action.organizations, loading: false}
   }
-  if (action.type === 'set_current_organization') {
-    return {
-      ...state,
-      ..._navigate('projects', {}, state),
-      currentOrganization: action.organization,
-      currentProject: undefined,
-      projects: [],
-      currentStream: undefined,
-      streams: []
-    }
+
+  if (action.type === 'loading') {
+    return {...state, loading: true}
   }
-  if (action.type === 'load_projects') {
-    return {...state, projects: [], currentProject: undefined, loading: true}
-  }
+
   if (action.type === 'set_projects') {
-    return {...state, projects: action.projects, currentProject: undefined, loading: false}
+    return {...state, projects: action.projects, loading: false}
   }
-  if (action.type === 'set_current_project') {
-    return {...state, currentProject: action.project}
-  }
-  if (action.type === 'load_streams') {
-    return {...state, streams: [], currentStream: undefined, loading: true}
-  }
+
   if (action.type === 'set_streams') {
-    return {...state, streams: action.streams, currentStream: action.streams[0], loading: false}
+    return {...state, streams: action.streams, loading: false}
   }
-  if (action.type === 'set_current_stream') {
-    return {...state, currentStream: action.stream}
-  }
+
   if (action.type === 'set_route') {
     return {
       ...state,
@@ -56,9 +38,9 @@ function reducer(state: State, action: Action): State {
 export const RemailsContext = createContext<{ state: State, dispatch: ActionDispatch<[Action]>, navigate: Navigate }>(
   {
     state: {
-      organizations: [],
-      projects: [],
-      streams: [],
+      organizations: null,
+      projects: null,
+      streams: null,
       loading: true,
       route: routes[0],
       fullPath: "",
@@ -89,6 +71,10 @@ export function useLoadRemails() {
     ...initialRoute
   });
 
+  const navigate = (name: RouteName, params: RouteParams = {}) => {
+    dispatch({type: "set_route", ...routerNavigate(name, params)});
+  };
+
   // handle back / forward events
   useEffect(() => {
     window.addEventListener('popstate', (event) => {
@@ -113,15 +99,43 @@ export function useLoadRemails() {
       .then((data) => {
           if (Array.isArray(data)) {
             // TODO store this somehow, e.g., as cookie or in local storage
-            dispatch({type: "set_organizations", organizations: data})
+            dispatch({type: "set_organizations", organizations: data});
+            navigate('projects', { org_id: data[0].id });
           }
         }
       )
   }, []);
 
-  const navigate = (name: RouteName, params: RouteParams = {}) => {
-    dispatch({type: "set_route", ..._navigate(name, params, state)});
-  }
+  // fetch projects when current organization changes
+  useEffect(() => {
+    const id = state.params.org_id;
+    
+    if (id) {
+      fetch(`/api/organizations/${id}/projects`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            dispatch({type: 'set_projects', projects: data});
+          }
+        });
+    }
+  }, [state.params.org_id]);
+
+  // fetch streams when current project changes
+  useEffect(() => {
+    const org_id = state.params.org_id;
+    const proj_id = state.params.proj_id;
+
+    if (org_id && proj_id) {
+      fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            dispatch({type: 'set_streams', streams: data});
+          }
+        });
+    }
+  }, [state.params.org_id, state.params.proj_id]);
 
   return {
     state,

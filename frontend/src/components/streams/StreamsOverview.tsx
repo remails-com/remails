@@ -4,17 +4,12 @@ import {formatDateTime} from "../../util";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconEdit} from "@tabler/icons-react";
-import { Project } from "../../types.ts";
 
-export interface StreamsOverviewProps {
-  currentProject: Project;
-}
-
-export function StreamsOverview({currentProject}: StreamsOverviewProps) {
+export function StreamsOverview() {
   const {state: {loading}, navigate} = useRemails();
-  const {streams} = useStreams(currentProject);
+  const {streams} = useStreams();
 
-  if (loading) {
+  if (loading || streams === null) {
     return <Loader/>;
   }
 

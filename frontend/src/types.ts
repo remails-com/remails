@@ -19,12 +19,9 @@ export interface Message {
 }
 
 export interface State {
-  organizations: Organization[];
-  currentOrganization?: Organization;
-  projects: Project[];
-  currentProject?: Project;
-  streams: Stream[];
-  currentStream?: Stream;
+  organizations: Organization[] | null;
+  projects: Project[] | null;
+  streams: Stream[] | null;
   loading: boolean;
 
   // routing related state
@@ -44,26 +41,13 @@ export type Action = {
   type: 'set_organizations';
   organizations: Organization[];
 } | {
-  type: 'load_organizations'
-} | {
-  type: 'set_current_organization';
-  organization: Organization;
-} | {
-  type: 'load_projects'
-} | {
-  type: 'set_current_project';
-  project: Project;
+  type: 'loading'
 } | {
   type: 'set_projects';
   projects: Project[];
 } | {
   type: 'set_streams';
   streams: Stream[];
-} | {
-  type: 'load_streams'
-} | {
-  type: 'set_current_stream';
-  stream: Stream;
 } | {
   type: 'navigate';
   route: string;

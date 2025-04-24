@@ -1,11 +1,13 @@
 import {useEffect, useState} from "react";
 import {Message} from "../types";
 import {useRemails} from "./useRemails.ts";
+import { useCurrentOrganisation } from "./useCurrentOrganisation.ts";
 
 export function useMessageLog() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const {state: {currentOrganization, params}, navigate} = useRemails();
+  const {state: {params}, navigate} = useRemails();
+  const currentOrganization = useCurrentOrganisation();
 
   const org_id = currentOrganization?.id;
   const proj_id = params.proj_id;
@@ -14,7 +16,6 @@ export function useMessageLog() {
   useEffect(() => {
     setLoading(true);
     if (!(org_id && proj_id && stream_id)) {
-      console.log(org_id, proj_id, stream_id);
       console.error("Missing org_id, proj_id, or stream_id");
       navigate('projects');
       return;

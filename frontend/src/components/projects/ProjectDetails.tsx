@@ -1,11 +1,14 @@
 import {StreamsOverview} from "../streams/StreamsOverview.tsx";
-import {Project} from "../../types.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { Loader } from "../../Loader.tsx";
 
-export interface ProjectDetailsProps {
-  currentProject: Project;
-}
+export function ProjectDetails() {
+  const { currentProject } = useProjects();
 
-export function ProjectDetails({currentProject}: ProjectDetailsProps) {
+  if (!currentProject) {
+    return <Loader />;
+  }
+
   return (
     <>
       ID: {currentProject.id}
@@ -13,8 +16,7 @@ export function ProjectDetails({currentProject}: ProjectDetailsProps) {
       Name: {currentProject.name}
       <br/>
       <h2>Streams</h2>
-      <StreamsOverview currentProject={currentProject}/>
+      <StreamsOverview />
     </>
-
   )
 }

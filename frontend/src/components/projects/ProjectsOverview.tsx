@@ -10,12 +10,12 @@ export function ProjectsOverview() {
   const {state: {loading, fullName}, navigate} = useRemails();
   const {projects, currentProject} = useProjects();
 
-  if (loading) {
+  if (loading || projects === null) {
     return <Loader/>;
   }
 
   if (fullName.startsWith('projects.project') && currentProject) {
-    return <ProjectDetails currentProject={currentProject}/>;
+    return <ProjectDetails />;
   }
 
   const rows = projects.map((project) => (

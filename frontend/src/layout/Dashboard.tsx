@@ -7,6 +7,7 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
+import { useCurrentOrganisation } from '../hooks/useCurrentOrganisation.ts';
 
 interface DashboardProps {
   children: ReactNode;
@@ -18,7 +19,8 @@ export function Dashboard({children}: DashboardProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
-  const {state: {organizations, currentOrganization, breadcrumbItems}, navigate, dispatch} = useRemails();
+  const {state: {organizations, breadcrumbItems}, navigate} = useRemails();
+  const currentOrganization = useCurrentOrganisation();
 
   const breadcrumbs = breadcrumbItems.map(item => (
     <Anchor key={item.route} onClick={() => navigate(item.route)}>
@@ -68,9 +70,8 @@ export function Dashboard({children}: DashboardProps) {
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {organizations.map((org) => (
-                  <Menu.Item key={org.id} value={org.id}
-                             onClick={() => dispatch({type: 'set_current_organization', organization: org})}>
+                {organizations?.map((org) => (
+                  <Menu.Item key={org.id} value={org.id} onClick={() => navigate('projects', { org_id: org.id })}>
                     <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
                   </Menu.Item>
                 ))}

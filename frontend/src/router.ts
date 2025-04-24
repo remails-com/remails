@@ -1,4 +1,4 @@
-import {BreadcrumbItem, State} from "./types.ts";
+import {BreadcrumbItem} from "./types.ts";
 
 export type RouteName = string;
 export type RouteParams = Record<string, string>;
@@ -15,7 +15,7 @@ export const routes: Route[] = [
   {
     name: 'projects',
     display: 'Projects',
-    path: '/projects',
+    path: '/{org_id}/projects',
     children: [
       {
         name: 'project',
@@ -200,7 +200,7 @@ function recursiveMatchName(routes: Route[], name_elems: string[], fullPath: str
   return null
 }
 
-export function _navigate(name: RouteName, params: RouteParams, state: State): {
+export function routerNavigate(name: RouteName, params: RouteParams): {
   route: Route,
   fullPath: string,
   fullName: string,
@@ -210,10 +210,8 @@ export function _navigate(name: RouteName, params: RouteParams, state: State): {
   let {route: newRoute, fullPath: path, breadcrumbItems, fullName} = matchName(name);
 
   const queryParams: { [k: string]: string } = {...params};
-  params = {...wellKnownPathVars(state), ...params}
 
   path = path.replace(/{(\w*)}/g, (_match, path_var) => {
-    console.log(path_var, params)
     const path = params[path_var] || `{${path_var}}`;
     delete queryParams[path_var]
     return path;
@@ -236,21 +234,6 @@ export function _navigate(name: RouteName, params: RouteParams, state: State): {
     );
     return {route: newRoute, fullPath: path, fullName, breadcrumbItems, params: {}};
   }
-}
-
-function wellKnownPathVars(state: State): { [k: string]: string } {
-  const res: { [k: string]: string } = {}
-  if (state.currentOrganization) {
-    res.org_id = state.currentOrganization.id
-  }
-  if (state.currentProject) {
-    res.proj_id = state.currentProject.id
-  }
-  if (state.currentStream) {
-    res.stream_id = state.currentStream.id
-  }
-  return res;
-
 }
 
 export function initRouter() {
