@@ -98,28 +98,42 @@ impl SmtpServer {
 
                     return Ok(());
                 }
-                result = listener.accept() => {
-                    match result {
-                        Ok((stream, peer_addr)) => {
-                            info!("connection from {}", peer_addr);
-                            let acceptor = acceptor.clone();
-                            let user_repository = self.user_repository.clone();
-                            let queue = self.queue.clone();
-                            let server_name =  self.config.server_name.clone();
-                            tokio::spawn(async move {
-                                let mut tls_stream = acceptor.accept(stream).await.map_err(ConnectionError::Accept)?;
+                result = listener.accept() => match result {
+                    Ok((stream, peer_addr)) => {
+                        info!("connection from {}", peer_addr);
+                        let acceptor = acceptor.clone();
+                        let user_repository = self.user_repository.clone();
+                        let queue = self.queue.clone();
+                        let server_name = self.config.server_name.clone();
 
-                                connection::handle(&mut tls_stream, server_name.as_str(), peer_addr, queue, user_repository).await?;
+                        let task = async move || {
+                            let mut tls_stream = acceptor
+                                .accept(stream)
+                                .await
+                                .map_err(ConnectionError::Accept)?;
 
-                                tls_stream.shutdown().await.map_err(ConnectionError::Write)?;
-                                Ok::<_,ConnectionError>(())
-                            });
-                        }
-                        Err(err) => {
-                            error!("failed to accept connection: {}", err);
-                        }
+                            connection::handle(
+                                &mut tls_stream,
+                                server_name.as_str(),
+                                peer_addr,
+                                queue,
+                                user_repository,
+                            )
+                            .await?;
+
+                            tls_stream.shutdown().await.map_err(ConnectionError::Write)
+                        };
+
+                        tokio::spawn(async {
+                            if let Err(err) = task().await {
+                                info!("{err}");
+                            }
+                        });
                     }
-                }
+                    Err(err) => {
+                        error!("failed to accept connection: {}", err);
+                    }
+                },
             }
         }
     }

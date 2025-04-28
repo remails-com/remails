@@ -4,6 +4,7 @@ use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     sync::mpsc::Sender,
+    time::{Duration, timeout},
 };
 use tracing::{debug, info, trace};
 
@@ -22,6 +23,8 @@ pub enum ConnectionError {
     Read(std::io::Error),
     #[error("connection dropped unexpectedly")]
     Dropped,
+    #[error("connection timed out")]
+    Timeout(tokio::time::error::Elapsed),
 }
 
 const BUFFER_SIZE: usize = 1024;
@@ -83,7 +86,7 @@ pub async fn handle(
             }
             SessionReply::IngestAuth(code, message) => {
                 write_reply(code, &message, &mut sink).await?;
-                read_buf(&mut reader, &mut buffer).await?;
+                read_line(&mut reader, &mut buffer).await?;
 
                 let (code, message) = session.handle_plain_auth(&mut buffer).await;
                 write_reply(code, &message, &mut sink).await?;
@@ -102,18 +105,20 @@ async fn read_buf(
 ) -> Result<usize, ConnectionError> {
     buffer.clear();
 
-    reader
-        .take(BUFFER_SIZE as u64)
-        .read_buf(buffer)
-        .await
-        .map_err(ConnectionError::Read)
-        .and_then(|size| {
-            if size > 0 {
-                Ok(size)
-            } else {
-                Err(ConnectionError::Dropped)
-            }
-        })
+    timeout(
+        Duration::from_secs(300),
+        reader.take(BUFFER_SIZE as u64).read_buf(buffer),
+    )
+    .await
+    .map_err(ConnectionError::Timeout)?
+    .map_err(ConnectionError::Read)
+    .and_then(|size| {
+        if size > 0 {
+            Ok(size)
+        } else {
+            Err(ConnectionError::Dropped)
+        }
+    })
 }
 
 async fn read_line(
@@ -122,18 +127,20 @@ async fn read_line(
 ) -> Result<usize, ConnectionError> {
     buffer.clear();
 
-    reader
-        .take(BUFFER_SIZE as u64)
-        .read_until(b'\n', buffer)
-        .await
-        .map_err(ConnectionError::Read)
-        .and_then(|size| {
-            if size > 0 {
-                Ok(size)
-            } else {
-                Err(ConnectionError::Dropped)
-            }
-        })
+    timeout(
+        Duration::from_secs(300),
+        reader.take(BUFFER_SIZE as u64).read_until(b'\n', buffer),
+    )
+    .await
+    .map_err(ConnectionError::Timeout)?
+    .map_err(ConnectionError::Read)
+    .and_then(|size| {
+        if size > 0 {
+            Ok(size)
+        } else {
+            Err(ConnectionError::Dropped)
+        }
+    })
 }
 
 async fn write_reply(

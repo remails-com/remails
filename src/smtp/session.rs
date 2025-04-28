@@ -155,7 +155,12 @@ impl SmtpSession {
                     SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
                 }
             }
-            _ if self.peer_name.is_none() => {
+            Request::Quit => {
+                // RFC5321, 4.1.1.10
+                SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into())
+            }
+            // if the client did not say EHLO, we want to ask for that first instead of processing any of the below commands
+            _ignored_command if self.peer_name.is_none() => {
                 SessionReply::ReplyAndContinue(503, Self::RESPONSE_HELLO_FIRST.into())
             }
             Request::Mail { from } => {
@@ -223,10 +228,6 @@ impl SmtpSession {
                 // - this does not clear the EHLO status
                 self.current_message = None;
                 SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
-            }
-            Request::Quit => {
-                // RFC5321, 4.1.1.10
-                SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into())
             }
             Request::Vrfy { value: _ } => {
                 // RFC5321, 4.1.1.6
