@@ -198,20 +198,20 @@ impl Handler {
                 .timeout(Duration::from_secs(60));
 
             let result = match security {
-                Protection::Tls => {
-                    chain(smtp.connect().await, async |mut client| {
+                Protection::Tls => match smtp.connect().await {
+                    Err(err) => Err(err),
+                    Ok(mut client) => {
                         trace!("securely connected to upstream server");
                         client.send(message.clone()).await
-                    })
-                    .await
-                }
-                Protection::Plaintext => {
-                    chain(smtp.connect_plain().await, async |mut client| {
+                    }
+                },
+                Protection::Plaintext => match smtp.connect_plain().await {
+                    Err(err) => Err(err),
+                    Ok(mut client) => {
                         trace!("INSECURELY connected to upstream server");
                         client.send(message.clone()).await
-                    })
-                    .await
-                }
+                    }
+                },
             };
 
             let Err(err) = result else { return Ok(()) };
@@ -292,15 +292,6 @@ impl Handler {
             }
         });
     }
-}
-
-// Utility function similar to the 'and_then' function on Result
-async fn chain<T1, T2, E>(
-    result: Result<T1, E>,
-    then: impl AsyncFnOnce(T1) -> Result<T2, E>,
-) -> Result<T2, E> {
-    let value = result?;
-    then(value).await
 }
 
 #[cfg(test)]
