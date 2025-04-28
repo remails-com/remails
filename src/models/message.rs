@@ -12,7 +12,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
-#[derive(Debug, Clone, Deserialize, Serialize, sqlx::Type)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,

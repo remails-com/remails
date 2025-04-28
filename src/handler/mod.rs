@@ -1,4 +1,7 @@
-use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+use crate::{
+    dkim::PrivateKey,
+    models::{Message, MessageRepository, MessageStatus, NewMessage},
+};
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
@@ -20,6 +23,9 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
     #[error("could not generate signature: {0}")]
     DkimError(mail_auth::Error),
+    // TODO: a message can be held for more than one reason
+    #[error("message is being held: DKIM not in DNS")]
+    MessageHeld,
 }
 
 #[derive(Debug, Error)]
@@ -74,6 +80,8 @@ pub struct Handler {
     config: Arc<HandlerConfig>,
 }
 
+pub struct DNSNotOwned;
+
 impl Handler {
     pub fn new(pool: PgPool, config: Arc<HandlerConfig>, shutdown: CancellationToken) -> Self {
         if CryptoProvider::get_default().is_none() {
@@ -87,6 +95,21 @@ impl Handler {
         }
     }
 
+    pub async fn check_dkim_key(
+        &self,
+        _key: &PrivateKey<'_>,
+        domain: &str,
+    ) -> Result<(), DNSNotOwned> {
+        let _txt_record = self
+            .config
+            .resolver
+            .txt_lookup(domain)
+            .await
+            .map_err(|_| DNSNotOwned)?;
+
+        todo!()
+    }
+
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
         let mut message: Message = self
             .message_repository
@@ -98,8 +121,11 @@ impl Handler {
 
         trace!("stored message {}", message.id());
 
-        // TODO: check limits, whether the sender_domain is owned, etc
+        // TODO: we should retrieve the key from the database
+        let key =
+            PrivateKey::test_key(sender_domain, "default").map_err(HandlerError::DkimError)?;
 
+        trace!("retrieved dkim key for domain {sender_domain}");
         trace!("parsing message {} {}", message.id(), message.message_data);
 
         // parse and save message contents
@@ -118,10 +144,21 @@ impl Handler {
 
         message.message_data = json_message_data;
 
+        // TODO: check limits, whether the sender_domain is owned, etc
+        message.status = if self.check_dkim_key(&key, sender_domain).await.is_err() {
+            MessageStatus::Held
+        } else {
+            MessageStatus::Accepted
+        };
+
         self.message_repository
             .update_message_data(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
+
+        if message.status == MessageStatus::Accepted {
+            return Err(HandlerError::MessageHeld);
+        }
 
         // generate message headers
 
@@ -147,10 +184,6 @@ impl Handler {
         // sign with dkim
 
         trace!("signing with dkim");
-
-        // TODO: this should be based off the domain in the database
-        let key = crate::dkim::PrivateKey::test_key("remails.tweedegolf-test.nl", "default")
-            .map_err(HandlerError::DkimError)?;
 
         generated_headers.push_str(
             &key.dkim_header(&parsed_msg)

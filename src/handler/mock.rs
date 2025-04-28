@@ -7,6 +7,10 @@ impl Resolver {
     pub async fn mx_lookup(&self, _: &str) -> Result<[MX; 1], hickory_resolver::ResolveError> {
         Ok([MX(*self)])
     }
+
+    pub async fn txt_lookup(&self, _: &str) -> Result<[MX; 1], hickory_resolver::ResolveError> {
+        todo!();
+    }
 }
 
 #[derive(Debug)]
