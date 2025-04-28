@@ -78,8 +78,8 @@ pub struct ApiDomain {
     id: DomainId,
     parent_id: DomainParent,
     domain: String,
-    dkim_key_type: Option<DkimKeyType>,
-    dkim_public_key: Option<String>,
+    dkim_key_type: DkimKeyType,
+    dkim_public_key: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -101,7 +101,7 @@ pub struct Domain {
     id: DomainId,
     parent_id: DomainParent,
     domain: String,
-    dkim_key: Option<DkimKey>,
+    dkim_key: DkimKey,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -111,8 +111,8 @@ struct PgDomain {
     organization_id: Option<Uuid>,
     project_id: Option<Uuid>,
     domain: String,
-    dkim_key_type: Option<DkimKeyType>,
-    dkim_pkcs8_der: Option<Vec<u8>>,
+    dkim_key_type: DkimKeyType,
+    dkim_pkcs8_der: Vec<u8>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -133,16 +133,14 @@ impl TryFrom<PgDomain> for Domain {
             Err(Error::Internal("Domain does not have a parent".to_string()))?
         };
 
-        let dkim_key = pg
-            .dkim_key_type
-            .zip(pg.dkim_pkcs8_der)
-            .map(|(t, b)| {
-                Ok::<_, Error>(match t {
-                    DkimKeyType::RsaSha256 => DkimKey::RsaSha256(RsaKey::from_pkcs8_der(&b)?),
-                    DkimKeyType::Ed25519 => DkimKey::Ed25519(Ed25519Key::from_pkcs8_der(&b)?),
-                })
-            })
-            .transpose()?;
+        let dkim_key = match pg.dkim_key_type {
+            DkimKeyType::RsaSha256 => {
+                DkimKey::RsaSha256(RsaKey::from_pkcs8_der(&pg.dkim_pkcs8_der)?)
+            }
+            DkimKeyType::Ed25519 => {
+                DkimKey::Ed25519(Ed25519Key::from_pkcs8_der(&pg.dkim_pkcs8_der)?)
+            }
+        };
 
         Ok(Self {
             id: pg.id,
@@ -157,17 +155,17 @@ impl TryFrom<PgDomain> for Domain {
 
 impl From<Domain> for ApiDomain {
     fn from(d: Domain) -> Self {
-        let dkim_key_type = d.dkim_key.as_ref().map(|k| match k {
+        let dkim_key_type = match d.dkim_key {
             DkimKey::Ed25519(_) => DkimKeyType::Ed25519,
             DkimKey::RsaSha256(_) => DkimKeyType::RsaSha256,
-        });
+        };
 
         Self {
             id: d.id,
             parent_id: d.parent_id,
             domain: d.domain,
             dkim_key_type,
-            dkim_public_key: d.dkim_key.map(|k| Base64::encode_string(&k.pub_key())),
+            dkim_public_key: Base64::encode_string(&d.dkim_key.pub_key()),
             created_at: d.created_at,
             updated_at: d.updated_at,
         }
