@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let shutdown = CancellationToken::new();
     let smtp_config = SmtpConfig::default();
     //TODO change me
-    let handler_config = HandlerConfig::new("remails-dev.tweedegolf-test.nl");
+    let handler_config = HandlerConfig::new("remails.tweedegolf-test.nl");
 
     run_mta(pool, smtp_config, handler_config, shutdown.clone()).await;
 
