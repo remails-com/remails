@@ -123,7 +123,7 @@ impl Handler {
 
         // TODO: we should retrieve the key from the database
         let key =
-            PrivateKey::test_key(sender_domain, "default").map_err(HandlerError::DkimError)?;
+            PrivateKey::test_key(sender_domain, "remails").map_err(HandlerError::DkimError)?;
 
         trace!("retrieved dkim key for domain {sender_domain}");
         trace!("parsing message {} {}", message.id(), message.message_data);
