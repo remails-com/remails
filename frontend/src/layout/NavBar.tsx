@@ -1,5 +1,5 @@
 import {NavLink} from "@mantine/core";
-import {IconBuildings, IconServer,} from "@tabler/icons-react";
+import {IconBuildings, IconServer, IconWorldWww,} from "@tabler/icons-react";
 import {useUser} from "../hooks/useUser.ts";
 import {is_global_admin} from "../util.ts";
 import {useRemails} from "../hooks/useRemails.ts";
@@ -23,18 +23,17 @@ export function NavBar() {
               leftSection={<IconBuildings size={20} stroke={1.8}/>}
               onClick={() => navigate('organizations')}
           />}
-      {/*<NavLink*/}
-      {/*    label="Domains"*/}
-      {/*    active={route.name === 'domains'}*/}
-      {/*    leftSection={<IconWorldWww size={20} stroke={1.8}/>}*/}
-      {/*    onClick={() => navigate('domains')}*/}
-      {/*    onClick={() => setLevel(1)}*/}
-      {/*/>*/}
       <NavLink
         label="Projects"
         active={fullName.startsWith('projects')}
         leftSection={<IconServer size={20} stroke={1.8}/>}
         onClick={() => navigate('projects')}
+      />
+      <NavLink
+          label="Domains"
+          active={fullName.startsWith('domains')}
+          leftSection={<IconWorldWww size={20} stroke={1.8}/>}
+          onClick={() => navigate('domains')}
       />
       {/*<NavLink*/}
       {/*    label="Credentials"*/}

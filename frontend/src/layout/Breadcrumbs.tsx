@@ -4,21 +4,27 @@ import {useRemails} from "../hooks/useRemails.ts";
 import {BreadcrumbItem} from "../types.ts";
 import {useCurrentOrganization} from "../hooks/useCurrentOrganization.ts";
 import {useStreams} from "../hooks/useStreams.ts";
+import {useDomains} from "../hooks/useDomains.ts";
 
 
 export function Breadcrumbs() {
   const {projects, currentProject} = useProjects();
   const {currentStream} = useStreams();
+  const {domains, currentDomain} = useDomains();
   const currentOrganisation = useCurrentOrganization();
-  const {navigate} = useRemails();
+  const {navigate, state: {fullName}} = useRemails();
 
   if (!currentOrganisation) {
     return <></>
   }
 
   const items: BreadcrumbItem[] = [];
-  if (projects) {
+  if (projects && fullName.startsWith('projects')) {
     items.push({title: 'Projects', route: 'projects'});
+  }
+
+  if (domains && fullName.startsWith('domains')) {
+    items.push({title: 'Domains', route: 'domains'});
   }
 
   if (currentProject) {
@@ -33,6 +39,17 @@ export function Breadcrumbs() {
       title: currentStream.name,
       route: 'projects.project.streams.stream',
     });
+  }
+
+  if (currentDomain) {
+    let route = 'domains.domain'
+    if (currentProject) {
+      route = 'projects.project.domains.domain'
+    }
+    items.push({
+      title: currentDomain.domain,
+      route,
+    })
   }
 
 

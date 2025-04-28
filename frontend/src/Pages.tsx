@@ -5,6 +5,8 @@ import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
 import {useRemails} from "./hooks/useRemails.ts";
 import {StreamDetails} from "./components/streams/StreamDetails.tsx";
 import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
+import {DomainsOverview} from "./components/domains/DomainsOverview.tsx";
+import {DomainDetails} from "./components/domains/DomainDetails.tsx";
 
 export function Pages() {
   const {state: {route}} = useRemails();
@@ -23,6 +25,12 @@ export function Pages() {
       break
     case 'stream':
       element = <StreamDetails/>
+      break
+    case 'domains':
+      element = <DomainsOverview/>
+      break
+    case 'domain':
+      element = <DomainDetails/>
       break
     default:
       element = "Not Found"

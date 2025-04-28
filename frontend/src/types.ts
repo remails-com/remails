@@ -23,6 +23,7 @@ export interface State {
   projects: Project[] | null;
   streams: Stream[] | null;
   messages: Message[] | null;
+  domains: Domain[] | null;
   loading: boolean;
 
   // routing related state
@@ -63,6 +64,15 @@ export type Action = {
   type: 'set_messages';
   messages: Message[] | null;
 } | {
+  type: 'set_domains';
+  domains: Domain[] | null;
+} | {
+  type: 'add_domain';
+  domain: Domain;
+} | {
+  type: 'remove_domain';
+  domainId: string;
+} | {
   type: 'navigate';
   route: string;
   params?: RouteParams;
@@ -92,6 +102,16 @@ export interface Project {
 export interface Stream {
   id: string;
   name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Domain {
+  id: string;
+  parent_id: { organization: string } | { project: string }
+  domain: string;
+  dkim_key_type: 'rsa_sha265' | 'ed25519';
+  dkim_public_key: string,
   created_at: string;
   updated_at: string;
 }

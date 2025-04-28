@@ -7,7 +7,7 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
-import { useCurrentOrganization } from '../hooks/useCurrentOrganization.ts';
+import {useCurrentOrganization} from '../hooks/useCurrentOrganization.ts';
 import {Breadcrumbs} from "./Breadcrumbs.tsx";
 
 interface DashboardProps {
@@ -46,17 +46,16 @@ export function Dashboard({children}: DashboardProps) {
               <Menu.Target>
                 <Button
                   leftSection={<IconUser/>}
+                  rightSection={<IconChevronDown size={20} stroke={1.8}/>}
                   color="#666"
                   variant="outline"
                 >
                   {user.name}
-                  &nbsp;
-                  <IconChevronDown size={20} stroke={1.8}/>
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
                 {organizations?.map((org) => (
-                  <Menu.Item key={org.id} value={org.id} onClick={() => navigate('projects', { org_id: org.id })}>
+                  <Menu.Item key={org.id} value={org.id} onClick={() => navigate('projects', {org_id: org.id})}>
                     <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
                   </Menu.Item>
                 ))}

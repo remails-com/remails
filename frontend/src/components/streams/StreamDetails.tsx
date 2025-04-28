@@ -1,7 +1,7 @@
 import {Loader} from "../../Loader.tsx";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {MessageLog} from "../MessageLog.tsx";
-import {Button, Grid, Group, Stack, TextInput, Tooltip} from "@mantine/core";
+import {Button, Grid, Group, Stack, Text, TextInput, Tooltip} from "@mantine/core";
 import {useForm} from "@mantine/form";
 import {IconTrash, IconX} from "@tabler/icons-react";
 import {useEffect, useState} from "react";
@@ -9,7 +9,7 @@ import {useMessages} from "../../hooks/useMessages.ts";
 import {Project} from "../../types.ts";
 import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
-import { useCurrentOrganization } from "../../hooks/useCurrentOrganization.ts";
+import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 
@@ -48,7 +48,11 @@ export function StreamDetails() {
   const confirmDeleteStream = (project: Project) => {
     modals.openConfirmModal({
       title: 'Please confirm your action',
-      children: `Are you sure you want to delete Stream ${project.name}? This action cannot be undone`,
+      children: (
+        <Text>
+          Are you sure you want to delete Stream <strong>{project.name}</strong>? This action cannot be undone
+        </Text>
+      ),
       labels: {confirm: 'Confirm', cancel: 'Cancel'},
       onCancel: () => {
       },
@@ -98,12 +102,12 @@ export function StreamDetails() {
         <h2>Stream Details</h2>
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
-           <TextInput
-            label="Name"
-            key={form.key('name')}
-            value={form.values.name}
-            onChange={(event) => form.setFieldValue('name', event.currentTarget.value)}
-           />
+            <TextInput
+              label="Name"
+              key={form.key('name')}
+              value={form.values.name}
+              onChange={(event) => form.setFieldValue('name', event.currentTarget.value)}
+            />
             <Group>
               <Tooltip label={canDelete ? 'Delete Stream' : 'Cannot delete Stream, there are Messages in it'}>
                 <Button leftSection={<IconTrash/>}

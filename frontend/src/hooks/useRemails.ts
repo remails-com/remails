@@ -37,6 +37,18 @@ function reducer(state: State, action: Action): State {
     return {...state, messages: action.messages, loading: false}
   }
 
+  if (action.type === 'set_domains') {
+    return {...state, domains: action.domains, loading: false}
+  }
+
+  if (action.type === 'add_domain') {
+    return {...state, domains: [...state.domains || [], action.domain], loading: false}
+  }
+
+  if (action.type === 'remove_domain') {
+    return {...state, domains: state.domains?.filter(d => d.id !== action.domainId) || []}
+  }
+
   if (action.type === 'set_route') {
     return {
       ...state,
@@ -48,6 +60,7 @@ function reducer(state: State, action: Action): State {
     }
   }
 
+  console.error("unknown action", action)
   return state
 }
 
@@ -58,6 +71,7 @@ export const RemailsContext = createContext<{ state: State, dispatch: ActionDisp
       projects: null,
       streams: null,
       messages: null,
+      domains: null,
       loading: true,
       route: routes[0],
       fullPath: "",
@@ -85,6 +99,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     projects: null,
     streams: null,
     messages: null,
+    domains: null,
     loading: true,
     ...initialRoute
   });
@@ -188,6 +203,29 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       dispatch({type: 'set_messages', messages: null})
     }
   }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
+
+  useEffect(() => {
+    const org_id = state.pathParams.org_id;
+    const proj_id = state.pathParams.proj_id;
+
+    let url: string;
+    if (org_id && proj_id) {
+      url = `/api/organizations/${org_id}/projects/${proj_id}/domains`
+    } else if (org_id) {
+      url = `/api/organizations/${org_id}/domains`
+    } else {
+      dispatch({type: 'set_domains', domains: null});
+      return;
+    }
+
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          dispatch({type: 'set_domains', domains: data});
+        }
+      });
+  }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
 
   return {
     state,

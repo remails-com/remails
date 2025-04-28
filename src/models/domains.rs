@@ -20,6 +20,7 @@ use uuid::Uuid;
 pub struct DomainId(Uuid);
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Copy)]
+#[serde(rename_all = "snake_case")]
 pub enum DomainParent {
     Organization(OrganizationId),
     Project(ProjectId),

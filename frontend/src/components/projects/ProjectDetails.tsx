@@ -2,7 +2,7 @@ import {StreamsOverview} from "../streams/StreamsOverview.tsx";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {Loader} from "../../Loader.tsx";
 import {useForm} from '@mantine/form';
-import {Button, Grid, Group, Stack, TextInput, Tooltip} from "@mantine/core";
+import {Button, Grid, Group, Stack, Text, TextInput, Tooltip} from "@mantine/core";
 import {Project} from "../../types.ts";
 import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
@@ -11,6 +11,7 @@ import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useEffect, useState} from "react";
+import {DomainsOverview} from "../domains/DomainsOverview.tsx";
 
 
 interface FormValues {
@@ -47,7 +48,11 @@ export function ProjectDetails() {
   const confirmDeleteProject = (project: Project) => {
     modals.openConfirmModal({
       title: 'Please confirm your action',
-      children: `Are you sure you want to delete project ${project.name}? This action cannot be undone`,
+      children: (
+        <Text>
+          Are you sure you want to delete project <strong>{project.name}</strong>? This action cannot be undone
+        </Text>
+      ),
       labels: {confirm: 'Confirm', cancel: 'Cancel'},
       onCancel: () => {
       },
@@ -115,10 +120,13 @@ export function ProjectDetails() {
         </form>
       </Grid.Col>
       <Grid.Col span={{base: 12, md: 6, lg: 9}}>
-        <h2>Streams</h2>
-        <StreamsOverview/>
+        <Stack>
+          <h2>Streams</h2>
+          <StreamsOverview/>
+          <h2>Domains</h2>
+          <DomainsOverview/>
+        </Stack>
       </Grid.Col>
     </Grid>
-
   )
 }

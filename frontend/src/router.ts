@@ -5,44 +5,42 @@ export type Navigate = (name: RouteName, pathParams?: RouteParams, queryParams?:
 export interface Route {
   name: RouteName;
   path: string;
-  display: string;
   children?: Route[];
 }
 
 export const routes: Route[] = [
   {
     name: 'projects',
-    display: 'Projects',
     path: '/{org_id}/projects',
     children: [
       {
         name: 'project',
-        display: '{currentProject.name}',
         path: '/{proj_id}',
         children: [
           {
             name: 'domains',
-            display: 'Domains',
             path: '/domains',
+            children: [
+              {
+                name: 'domain',
+                path: '/{domain_id}'
+              }
+            ]
           },
           {
             name: 'streams',
-            display: 'Streams',
             path: '/streams',
             children: [
               {
                 name: 'stream',
-                display: '{currentStream.name}',
                 path: '/{stream_id}',
                 children: [
                   {
                     name: 'credentials',
-                    display: 'Credentials',
                     path: '/credentials',
                   },
                   {
                     name: 'message-log',
-                    display: 'Messages',
                     path: '/messages',
                   },
                 ]
@@ -55,22 +53,24 @@ export const routes: Route[] = [
   },
   {
     name: 'domains',
-    display: 'Domains',
-    path: '/domains',
+    path: '/{org_id}/domains',
+    children: [
+      {
+        name: 'domain',
+        path: '/{domain_id}'
+      }
+    ]
   },
   {
     name: 'organizations',
-    display: 'Organizations',
     path: '/organizations',
     children: [
       {
         name: 'add',
-        display: 'Add Organization',
         path: '/add',
       },
       {
         name: 'edit',
-        display: 'Edit Organization',
         path: '/edit/{id}',
       }
     ]
