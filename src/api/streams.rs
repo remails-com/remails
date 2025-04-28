@@ -5,7 +5,9 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(org: OrganizationId, proj: ProjectId, user: &ApiUser) -> Result<(), ApiError> {
@@ -44,7 +46,7 @@ pub async fn create_stream(
     user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
     Json(new): Json<NewStream>,
-) -> ApiResult<Stream> {
+) -> Result<impl IntoResponse, ApiError> {
     has_write_access(org, proj, &user)?;
 
     let stream = repo.create(new, org, proj).await?;
@@ -58,7 +60,7 @@ pub async fn create_stream(
         "created stream"
     );
 
-    Ok(Json(stream))
+    Ok((StatusCode::CREATED, Json(stream)))
 }
 
 pub async fn remove_stream(

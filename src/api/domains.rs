@@ -7,7 +7,9 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
 use serde::Deserialize;
 use tracing::{debug, info};
 
@@ -50,7 +52,7 @@ pub async fn create_domain(
     user: ApiUser,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
-) -> ApiResult<ApiDomain> {
+) -> Result<impl IntoResponse, ApiError> {
     has_write_access(org_id, project_id, None, &user)?;
 
     let domain: ApiDomain = repo.create(new, org_id, project_id).await?.into();
@@ -62,7 +64,7 @@ pub async fn create_domain(
         domain = domain.domain(),
         "created domain");
 
-    Ok(Json(domain))
+    Ok((StatusCode::CREATED, Json(domain)))
 }
 
 pub async fn list_domains(

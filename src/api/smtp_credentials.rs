@@ -1,12 +1,14 @@
 use super::error::{ApiError, ApiResult};
 use crate::models::{
     ApiUser, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-    SmtpCredentialRequest, SmtpCredentialResponse, StreamId,
+    SmtpCredentialRequest, StreamId,
 };
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(
@@ -37,7 +39,7 @@ pub async fn create_smtp_credential(
     user: ApiUser,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     Json(request): Json<SmtpCredentialRequest>,
-) -> ApiResult<SmtpCredentialResponse> {
+) -> Result<impl IntoResponse, ApiError> {
     has_write_access(org_id, proj_id, stream_id, None, &user)?;
 
     let new_credential = repo.generate(org_id, proj_id, stream_id, &request).await?;
@@ -52,7 +54,7 @@ pub async fn create_smtp_credential(
         "created SMTP credential"
     );
 
-    Ok(Json(new_credential))
+    Ok((StatusCode::CREATED, Json(new_credential)))
 }
 
 pub async fn list_smtp_credential(
