@@ -2,6 +2,7 @@ use crate::{
     dkim::PrivateKey,
     models::{Message, MessageRepository, MessageStatus, NewMessage},
 };
+use base64ct::{Base64Unpadded, Base64UrlUnpadded, Encoding};
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
@@ -125,7 +126,6 @@ impl Handler {
             .find(|(key, _value)| *key == "p")?
             .1;
 
-        use base64ct::{Base64Unpadded, Encoding};
         let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
 
         if dns_key.ends_with(&domain_key.public_key()) {
@@ -199,7 +199,6 @@ impl Handler {
             // provide one ourselves.
             trace!("adding message-id header");
             use aws_lc_rs::digest;
-            use base64ct::{Base64UrlUnpadded, Encoding};
             let hash = digest::digest(&digest::SHA224, &message.raw_data);
             let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
 
