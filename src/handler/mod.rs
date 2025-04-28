@@ -123,6 +123,8 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
+        // generate message headers
+
         let mut generated_headers = String::new();
 
         if !parsed_msg.parts.first().is_some_and(|msg| {
@@ -130,6 +132,8 @@ impl Handler {
                 .iter()
                 .any(|hdr| hdr.name == HeaderName::MessageId)
         }) {
+            // the message-id header was not provided by the MUA, we are going to
+            // provide one ourselves.
             trace!("adding message-id header");
             use aws_lc_rs::digest;
             use base64ct::{Base64UrlUnpadded, Encoding};
@@ -139,6 +143,8 @@ impl Handler {
             generated_headers
                 .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
         }
+
+        // sign with dkim
 
         trace!("signing with dkim");
 
@@ -150,7 +156,6 @@ impl Handler {
             &key.dkim_header(&parsed_msg)
                 .map_err(HandlerError::DkimError)?,
         );
-        generated_headers.push_str("\r\n");
 
         trace!("adding headers");
         debug!("{generated_headers:?}");
