@@ -23,8 +23,6 @@ export function NewStream({opened, close}: NewStreamProps) {
   const {navigate, dispatch} = useRemails();
 
   const form = useForm<FormValues>({
-    mode: 'controlled',
-    onSubmitPreventDefault: 'always',
     initialValues: {
       name: ""
     },

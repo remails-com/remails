@@ -33,13 +33,12 @@ export function StreamDetails() {
     }
   }, [messages]);
 
-  const form = useForm<FormValues>({
-    mode: 'controlled',
-    onSubmitPreventDefault: 'always',
-    initialValues: {
-      name: currentStream?.name || ""
-    },
-  });
+  const form = useForm<FormValues>();
+
+  useEffect(() => {
+    form.setValues({name: currentStream?.name || ""});
+    form.resetDirty();
+  }, [currentStream]);
 
   if (!currentStream || !currentOrganisation || !currentProject) {
     return <Loader/>;

@@ -37,8 +37,6 @@ export function NewDomain({opened, close, projectId}: NewDomainProps) {
   const {navigate, dispatch} = useRemails();
 
   const form = useForm<FormValues>({
-    mode: 'controlled',
-    onSubmitPreventDefault: 'always',
     initialValues: {
       domain: ""
     },

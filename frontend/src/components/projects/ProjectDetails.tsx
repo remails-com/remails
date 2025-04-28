@@ -33,13 +33,12 @@ export function ProjectDetails() {
     }
   }, [streams]);
 
-  const form = useForm<FormValues>({
-    mode: 'controlled',
-    onSubmitPreventDefault: 'always',
-    initialValues: {
-      name: currentProject?.name || ""
-    },
-  });
+  const form = useForm<FormValues>();
+
+  useEffect(() => {
+    form.setValues({name: currentProject?.name || ""});
+    form.resetDirty();
+  }, [currentProject]);
 
   if (!currentProject || !currentOrganisation) {
     return <Loader/>;

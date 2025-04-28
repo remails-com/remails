@@ -8,7 +8,8 @@ import {Domain} from "../../types.ts";
 import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
 import {IconTrash, IconX} from "@tabler/icons-react";
-import {Button, Grid, Group, Stack, Text, TextInput, Tooltip} from "@mantine/core";
+import {Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip} from "@mantine/core";
+import {useEffect} from "react";
 
 interface FormValues {
   domain: string,
@@ -20,13 +21,12 @@ export function DomainDetails() {
   const {currentDomain} = useDomains();
   const {dispatch, navigate} = useRemails();
 
-  const form = useForm<FormValues>({
-    mode: 'controlled',
-    onSubmitPreventDefault: 'always',
-    initialValues: {
-      domain: currentDomain?.domain || ""
-    },
-  });
+  const form = useForm<FormValues>();
+
+  useEffect(() => {
+    form.setValues({domain: currentDomain?.domain || ""});
+    form.resetDirty();
+  }, [currentDomain]);
 
   if (!currentDomain || !currentOrganisation) {
     return <Loader/>;
@@ -101,7 +101,24 @@ export function DomainDetails() {
               label="Domain"
               key={form.key('domain')}
               value={form.values.domain}
-              onChange={(event) => form.setFieldValue('domain', event.currentTarget.value)}
+              readOnly={true}
+              variant='filled'
+              // onChange={(event) => form.setFieldValue('domain', event.currentTarget.value)}
+            />
+            <TextInput
+              variant='filled'
+              readOnly={true}
+              label='DKIM Key Type'
+              value={currentDomain.dkim_key_type}
+            />
+            <Textarea
+              style={{lineBreak: 'anywhere'}}
+              readOnly={true}
+              variant='filled'
+              autosize
+              maxRows={15}
+              label='DKIM Key'
+              value={currentDomain.dkim_public_key}
             />
             <Group>
               <Tooltip label='Delete Domain'>
@@ -109,7 +126,9 @@ export function DomainDetails() {
                         color="red"
                         onClick={() => confirmDeleteDomain(currentDomain)}>Delete</Button>
               </Tooltip>
-              <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>Save</Button>
+              <Tooltip label='There is currently no property you are allowed to edit'>
+                <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>Save</Button>
+              </Tooltip>
             </Group>
           </Stack>
         </form>

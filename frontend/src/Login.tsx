@@ -28,14 +28,12 @@ export function Login({setUser}: LoginProps) {
   const xIcon = <IconX size={20}/>;
 
   const form = useForm({
-    mode: 'controlled',
     initialValues: {
       email: '',
       name: '',
       password: '',
       terms: false,
     },
-    onSubmitPreventDefault: 'always',
     validate: {
       name: (val) => ((type === 'register' && val.trim().length === 0) ? 'Name cannot be empty' : null),
       email: (val) => (/^\S+@\S+$/.test(val) ? null : 'Invalid email'),
