@@ -58,6 +58,9 @@ export type Action = {
   type: 'set_streams';
   streams: Stream[] | null;
 } | {
+  type: 'add_stream';
+  stream: Stream;
+} | {
   type: 'remove_stream';
   streamId: string;
 } | {

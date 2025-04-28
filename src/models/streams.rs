@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use tracing::debug;
 use uuid::Uuid;
 
 #[derive(
@@ -54,7 +55,7 @@ impl StreamRepository {
     ) -> Result<Stream, Error> {
         let correct_org = sqlx::query_scalar!(
             r#"
-            SELECT id FROM projects WHERE id = $1
+            SELECT organization_id FROM projects WHERE id = $1
             "#,
             *project_id
         )
@@ -62,6 +63,11 @@ impl StreamRepository {
         .await?;
 
         if correct_org != *organization_id {
+            debug!(
+                correct_org = correct_org.to_string(),
+                organization_id = organization_id.to_string(),
+                "The provided organization and project IDs do not match"
+            );
             Err(Error::BadRequest(
                 "The provided organization and project IDs do not match".to_string(),
             ))?

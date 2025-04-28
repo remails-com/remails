@@ -40,7 +40,7 @@ export function NewProject({opened, close}: NewProjectProps) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({name: values.name})
+      body: JSON.stringify(values)
     }).then(res => {
       if (res.status === 201) {
         close()
@@ -66,7 +66,6 @@ export function NewProject({opened, close}: NewProjectProps) {
         })
       }
     })
-
   }
 
   return (
