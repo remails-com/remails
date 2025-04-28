@@ -37,7 +37,7 @@ sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-a
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["full"] }
 tokio-rustls = "0.26.2"
-tokio-util = { version = "0.7.14", features = ["io"] }
+tokio-util = { version = "0.7.15", features = ["io"] }
 tower-http = { version = "0.6.2", features = ["trace", "timeout"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
