@@ -42,6 +42,10 @@ const SIGNED_HEADERS: [&str; 26] = [
 ];
 
 impl<'a> PrivateKey<'a> {
+    pub fn public_key(&self) -> Vec<u8> {
+        self.sign_key.public_key()
+    }
+
     pub fn dkim_header(self, msg: &mail_parser::Message) -> Result<String, mail_auth::Error> {
         let signer = DkimSigner::from_key(self.sign_key)
             .domain(self.domain)

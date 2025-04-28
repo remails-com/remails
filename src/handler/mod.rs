@@ -80,8 +80,6 @@ pub struct Handler {
     config: Arc<HandlerConfig>,
 }
 
-pub struct DNSNotOwned;
-
 impl Handler {
     pub fn new(pool: PgPool, config: Arc<HandlerConfig>, shutdown: CancellationToken) -> Self {
         if CryptoProvider::get_default().is_none() {
@@ -95,19 +93,46 @@ impl Handler {
         }
     }
 
-    pub async fn check_dkim_key(
-        &self,
-        _key: &PrivateKey<'_>,
-        domain: &str,
-    ) -> Result<(), DNSNotOwned> {
-        let _txt_record = self
-            .config
-            .resolver
-            .txt_lookup(domain)
-            .await
-            .map_err(|_| DNSNotOwned)?;
+    pub async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, domain: &str) -> Option<()> {
+        let domain = domain.trim_matches('.');
 
-        todo!()
+        let record = format!(
+            "remails._domainkey.{domain}{}",
+            if domain.ends_with('.') { "" } else { "." }
+        );
+
+        trace!("requesting DKIM key {record}");
+
+        let dkim_record = self.config.resolver.txt_lookup(record).await.ok()?;
+
+        let dkim_record = String::from_utf8(
+            dkim_record
+                .into_iter()
+                .next()?
+                .txt_data()
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .ok()?;
+
+        trace!("dkim record: {dkim_record}");
+
+        let dns_key = dkim_record
+            .split(';')
+            .filter_map(|field| field.trim().split_once('='))
+            .find(|(key, _value)| *key == "p")?
+            .1;
+
+        use base64ct::{Base64Unpadded, Encoding};
+        let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
+
+        if dns_key.ends_with(&domain_key.public_key()) {
+            Some(())
+        } else {
+            None
+        }
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -145,7 +170,8 @@ impl Handler {
         message.message_data = json_message_data;
 
         // TODO: check limits, whether the sender_domain is owned, etc
-        message.status = if self.check_dkim_key(&key, sender_domain).await.is_err() {
+        message.status = if self.check_dkim_key(&key, sender_domain).await.is_none() {
+            info!("message held due to invalid DKIM key");
             MessageStatus::Held
         } else {
             MessageStatus::Accepted
@@ -156,7 +182,7 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        if message.status == MessageStatus::Accepted {
+        if message.status != MessageStatus::Accepted {
             return Err(HandlerError::MessageHeld);
         }
 
