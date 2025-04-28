@@ -83,7 +83,7 @@ pub async fn handle(
             }
             SessionReply::IngestAuth(code, message) => {
                 write_reply(code, &message, &mut sink).await?;
-                read_buf(&mut reader, &mut buffer).await?;
+                read_line(&mut reader, &mut buffer).await?;
 
                 let (code, message) = session.handle_plain_auth(&mut buffer).await;
                 write_reply(code, &message, &mut sink).await?;
