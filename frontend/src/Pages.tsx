@@ -7,6 +7,8 @@ import {StreamDetails} from "./components/streams/StreamDetails.tsx";
 import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
 import {DomainsOverview} from "./components/domains/DomainsOverview.tsx";
 import {DomainDetails} from "./components/domains/DomainDetails.tsx";
+import {CredentialDetails} from "./components/smtpCredentials/credentialDetails.tsx";
+import {Text} from "@mantine/core";
 
 export function Pages() {
   const {state: {route}} = useRemails();
@@ -31,6 +33,15 @@ export function Pages() {
       break
     case 'domain':
       element = <DomainDetails/>
+      break
+    case 'credential':
+      element = <CredentialDetails/>
+      break
+    case 'settings':
+      element = <Text>User account and Organization related settings (login, subscription, etc.)</Text>
+      break
+    case 'statistics':
+      element = <Text>Organization wide statistics, quotas, etc.</Text>
       break
     default:
       element = "Not Found"

@@ -35,6 +35,7 @@ pub struct SmtpCredentialRequest {
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredentialResponse {
     id: SmtpCredentialId,
+    description: String,
     username: String,
     #[debug("****")]
     cleartext_password: String,
@@ -124,6 +125,7 @@ impl SmtpCredentialRepository {
 
         Ok(SmtpCredentialResponse {
             id: generated.id,
+            description: generated.description,
             username: generated.username,
             cleartext_password: password,
             stream_id: generated.stream_id,

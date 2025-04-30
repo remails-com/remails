@@ -5,11 +5,13 @@ import {BreadcrumbItem} from "../types.ts";
 import {useCurrentOrganization} from "../hooks/useCurrentOrganization.ts";
 import {useStreams} from "../hooks/useStreams.ts";
 import {useDomains} from "../hooks/useDomains.ts";
+import {useCredentials} from "../hooks/useCredentials.ts";
 
 
 export function Breadcrumbs() {
   const {projects, currentProject} = useProjects();
   const {currentStream} = useStreams();
+  const {currentCredential} = useCredentials();
   const {domains, currentDomain} = useDomains();
   const currentOrganisation = useCurrentOrganization();
   const {navigate, state: {fullName}} = useRemails();
@@ -50,6 +52,13 @@ export function Breadcrumbs() {
       title: currentDomain.domain,
       route,
     })
+  }
+
+  if (currentCredential) {
+    items.push({
+      title: currentCredential.username,
+      route: 'projects.project.streams.stream.credentials.credential',
+    });
   }
 
 

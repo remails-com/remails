@@ -24,6 +24,7 @@ export interface State {
   streams: Stream[] | null;
   messages: Message[] | null;
   domains: Domain[] | null;
+  credentials: SmtpCredential[] | null;
   loading: boolean;
 
   // routing related state
@@ -76,6 +77,15 @@ export type Action = {
   type: 'remove_domain';
   domainId: string;
 } | {
+  type: 'set_credentials';
+  credentials: SmtpCredential[] | null;
+} | {
+  type: 'add_credential';
+  credential: SmtpCredential;
+} | {
+  type: 'remove_credential';
+  credentialId: string;
+} | {
   type: 'navigate';
   route: string;
   params?: RouteParams;
@@ -117,6 +127,19 @@ export interface Domain {
   dkim_public_key: string,
   created_at: string;
   updated_at: string;
+}
+
+export interface SmtpCredential {
+  id: string;
+  stream_id: string;
+  description: string;
+  username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SmtpCredentialResponse extends SmtpCredential {
+  cleartext_password: string;
 }
 
 export interface PasswordLoginRequest {

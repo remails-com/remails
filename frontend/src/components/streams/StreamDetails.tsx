@@ -12,6 +12,7 @@ import {notifications} from "@mantine/notifications";
 import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
+import {CredentialsOverview} from "../smtpCredentials/CredentialsOverview.tsx";
 
 interface FormValues {
   name: string,
@@ -70,7 +71,7 @@ export function StreamDetails() {
           color: 'green',
         })
         dispatch({type: "remove_stream", streamId: stream.id})
-        navigate('streams')
+        navigate('projects.project.streams')
       } else {
         notifications.show({
           title: 'Error',
@@ -120,6 +121,8 @@ export function StreamDetails() {
         </form>
       </Grid.Col>
       <Grid.Col span={{base: 12, md: 6, lg: 9}}>
+        <h2>Credentials</h2>
+        <CredentialsOverview/>
         <h2>Messages</h2>
         <MessageLog/>
       </Grid.Col>

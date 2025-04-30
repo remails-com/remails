@@ -38,6 +38,12 @@ export const routes: Route[] = [
                   {
                     name: 'credentials',
                     path: '/credentials',
+                    children: [
+                      {
+                        name: 'credential',
+                        path: '/{credential_id}'
+                      }
+                    ]
                   },
                   {
                     name: 'message-log',
@@ -60,6 +66,14 @@ export const routes: Route[] = [
         path: '/{domain_id}'
       }
     ]
+  },
+  {
+    name: 'settings',
+    path: '/{org_id}/settings',
+  },
+  {
+    name: 'statistics',
+    path: '/{org_id}/statistics',
   },
   {
     name: 'organizations',

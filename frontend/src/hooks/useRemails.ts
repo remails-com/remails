@@ -53,6 +53,18 @@ function reducer(state: State, action: Action): State {
     return {...state, domains: state.domains?.filter(d => d.id !== action.domainId) || []}
   }
 
+  if (action.type === 'set_credentials') {
+    return {...state, credentials: action.credentials, loading: false}
+  }
+
+  if (action.type === 'add_credential') {
+    return {...state, credentials: [...state.credentials || [], action.credential], loading: false}
+  }
+
+  if (action.type === 'remove_credential') {
+    return {...state, credentials: state.credentials?.filter(d => d.id !== action.credentialId) || []}
+  }
+
   if (action.type === 'set_route') {
     return {
       ...state,
@@ -76,6 +88,7 @@ export const RemailsContext = createContext<{ state: State, dispatch: ActionDisp
       streams: null,
       messages: null,
       domains: null,
+      credentials: null,
       loading: true,
       route: routes[0],
       fullPath: "",
@@ -104,6 +117,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     streams: null,
     messages: null,
     domains: null,
+    credentials: null,
     loading: true,
     ...initialRoute
   });
@@ -230,6 +244,25 @@ export function useLoadRemails(user: WhoamiResponse | null) {
         }
       });
   }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
+
+  useEffect(() => {
+    const org_id = state.pathParams.org_id;
+    const proj_id = state.pathParams.proj_id;
+    const stream_id = state.pathParams.stream_id;
+
+    if (org_id && proj_id && stream_id) {
+      fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams/${stream_id}/smtp_credentials`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            dispatch({type: 'set_credentials', credentials: data});
+          }
+        });
+    } else {
+      dispatch({type: 'set_credentials', credentials: null});
+      return;
+    }
+  }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
 
   return {
     state,
