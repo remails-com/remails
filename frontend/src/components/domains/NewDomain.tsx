@@ -1,6 +1,6 @@
 import {Button, Group, Loader, Modal, Stack, Stepper, Text, TextInput} from '@mantine/core';
 import {useForm} from "@mantine/form";
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconCheck, IconX} from "@tabler/icons-react";
 import {notifications} from '@mantine/notifications';
@@ -30,7 +30,7 @@ function validateDomain(domain: string) {
 
 export function NewDomain({opened, close, projectId}: NewDomainProps) {
   const [activeStep, setActiveStep] = useState(0);
-  const currentOrganization = useCurrentOrganization()
+  const {currentOrganization} = useOrganizations();
   const {currentProject} = useProjects();
   const [newDomain, setNewDomain] = useState<Domain | null>(null);
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);

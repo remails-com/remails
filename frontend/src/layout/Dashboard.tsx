@@ -7,7 +7,7 @@ import {useUser} from '../hooks/useUser';
 import {NavBar} from './NavBar.tsx';
 import {ReactNode, useState} from 'react';
 import {useRemails} from "../hooks/useRemails.ts";
-import {useCurrentOrganization} from '../hooks/useCurrentOrganization.ts';
+import {useOrganizations} from '../hooks/useOrganizations.ts';
 import {Breadcrumbs} from "./Breadcrumbs.tsx";
 
 interface DashboardProps {
@@ -19,7 +19,7 @@ export function Dashboard({children}: DashboardProps) {
   const [_, setUserMenuOpened] = useState(false);
   const user = useUser();
   const {state: {organizations}, navigate} = useRemails();
-  const currentOrganization = useCurrentOrganization();
+  const {currentOrganization} = useOrganizations();
 
   return (
     <AppShell

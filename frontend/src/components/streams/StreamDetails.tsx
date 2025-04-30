@@ -9,7 +9,7 @@ import {useMessages} from "../../hooks/useMessages.ts";
 import {Project} from "../../types.ts";
 import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {CredentialsOverview} from "../smtpCredentials/CredentialsOverview.tsx";
@@ -20,7 +20,7 @@ interface FormValues {
 
 export function StreamDetails() {
   const [canDelete, setCanDelete] = useState<boolean>(false);
-  const currentOrganisation = useCurrentOrganization();
+  const {currentOrganization} = useOrganizations();
   const {messages} = useMessages();
   const {currentStream} = useStreams();
   const {currentProject} = useProjects();
@@ -41,7 +41,7 @@ export function StreamDetails() {
     form.resetDirty();
   }, [currentStream]);
 
-  if (!currentStream || !currentOrganisation || !currentProject) {
+  if (!currentStream || !currentOrganization || !currentProject) {
     return <Loader/>;
   }
 
@@ -61,7 +61,7 @@ export function StreamDetails() {
   }
 
   const deleteStream = (stream: Project) => {
-    fetch(`/api/organizations/${currentOrganisation.id}/projects/${currentProject.id}/streams/${stream.id}`, {
+    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${stream.id}`, {
       method: 'DELETE',
     }).then(res => {
       if (res.status === 200) {

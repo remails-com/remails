@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
@@ -23,7 +23,7 @@ interface NewCredentialProps {
 export function NewCredential({opened, close}: NewCredentialProps) {
   const [activeStep, setActiveStep] = useState(0);
   const [visible, {toggle: toggleVisible}] = useDisclosure(false);
-  const currentOrganization = useCurrentOrganization()
+  const {currentOrganization} = useOrganizations();
   const {currentProject} = useProjects();
   const {currentStream} = useStreams();
   const [newCredential, setNewCredential] = useState<SmtpCredentialResponse | null>(null);

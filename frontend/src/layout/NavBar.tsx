@@ -3,11 +3,11 @@ import {IconBuildings, IconChartBar, IconServer, IconSettings, IconWorldWww,} fr
 import {useUser} from "../hooks/useUser.ts";
 import {is_global_admin} from "../util.ts";
 import {useRemails} from "../hooks/useRemails.ts";
-import {useCurrentOrganization} from "../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../hooks/useOrganizations.ts";
 
 export function NavBar() {
   const {state: {route, fullName}, navigate} = useRemails();
-  const currentOrganization = useCurrentOrganization();
+  const currentOrganization = useOrganizations();
   const {roles} = useUser();
 
   if (!currentOrganization) {

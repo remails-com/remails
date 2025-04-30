@@ -1,4 +1,4 @@
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useForm} from "@mantine/form";
 import {useProjects} from "../../hooks/useProjects.ts";
@@ -17,7 +17,7 @@ interface NewStreamProps {
 }
 
 export function NewStream({opened, close}: NewStreamProps) {
-  const currentOrganization = useCurrentOrganization()
+  const {currentOrganization} = useOrganizations();
   const {currentProject} = useProjects();
   const {streams} = useStreams();
   const {navigate, dispatch} = useRemails();

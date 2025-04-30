@@ -2,7 +2,7 @@ import {Anchor, Breadcrumbs as MantineBreadcrumbs} from "@mantine/core";
 import {useProjects} from "../hooks/useProjects.ts";
 import {useRemails} from "../hooks/useRemails.ts";
 import {BreadcrumbItem} from "../types.ts";
-import {useCurrentOrganization} from "../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../hooks/useOrganizations.ts";
 import {useStreams} from "../hooks/useStreams.ts";
 import {useDomains} from "../hooks/useDomains.ts";
 import {useCredentials} from "../hooks/useCredentials.ts";
@@ -13,7 +13,7 @@ export function Breadcrumbs() {
   const {currentStream} = useStreams();
   const {currentCredential} = useCredentials();
   const {domains, currentDomain} = useDomains();
-  const currentOrganisation = useCurrentOrganization();
+  const currentOrganisation = useOrganizations();
   const {navigate, state: {fullName}} = useRemails();
 
   if (!currentOrganisation) {

@@ -3,7 +3,7 @@ import {Loader} from "../../Loader";
 import {formatDateTime} from "../../util";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
-import { IconEdit, IconPencilPlus} from "@tabler/icons-react";
+import {IconEdit, IconPencilPlus} from "@tabler/icons-react";
 import {useDisclosure} from "@mantine/hooks";
 import {NewProject} from "./NewProject.tsx";
 

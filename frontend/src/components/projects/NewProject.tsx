@@ -1,6 +1,6 @@
 import {Button, Group, Modal, Stack, TextInput} from '@mantine/core';
 import {useForm} from "@mantine/form";
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconX} from "@tabler/icons-react";
 import { notifications } from '@mantine/notifications';
@@ -15,7 +15,7 @@ interface NewProjectProps {
 }
 
 export function NewProject({opened, close}: NewProjectProps) {
-  const currentOrganization = useCurrentOrganization()
+  const {currentOrganization} = useOrganizations();
   const {navigate, dispatch} = useRemails();
 
   const form = useForm<FormValues>({
@@ -28,7 +28,6 @@ export function NewProject({opened, close}: NewProjectProps) {
   });
 
   if (!currentOrganization) {
-    console.error("Cannot create project without a selected organization")
     return <></>
   }
 

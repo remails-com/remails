@@ -7,7 +7,7 @@ import {Project} from "../../types.ts";
 import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
 import {IconTrash, IconX} from "@tabler/icons-react";
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useEffect, useState} from "react";
@@ -19,7 +19,7 @@ interface FormValues {
 }
 
 export function ProjectDetails() {
-  const currentOrganisation = useCurrentOrganization();
+  const {currentOrganization} = useOrganizations();
   const [canDelete, setCanDelete] = useState<boolean>(false);
   const {currentProject} = useProjects();
   const {streams} = useStreams();
@@ -40,7 +40,7 @@ export function ProjectDetails() {
     form.resetDirty();
   }, [currentProject]);
 
-  if (!currentProject || !currentOrganisation) {
+  if (!currentProject || !currentOrganization) {
     return <Loader/>;
   }
 
@@ -60,7 +60,7 @@ export function ProjectDetails() {
   }
 
   const deleteProject = (project: Project) => {
-    fetch(`/api/organizations/${currentOrganisation.id}/projects/${project.id}`, {
+    fetch(`/api/organizations/${currentOrganization.id}/projects/${project.id}`, {
       method: 'DELETE',
     }).then(res => {
       if (res.status === 200) {

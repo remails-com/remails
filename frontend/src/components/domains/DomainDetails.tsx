@@ -1,4 +1,4 @@
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useForm} from "@mantine/form";
@@ -16,7 +16,7 @@ interface FormValues {
 }
 
 export function DomainDetails() {
-  const currentOrganisation = useCurrentOrganization();
+  const {currentOrganization} = useOrganizations();
   const {currentProject} = useProjects();
   const {currentDomain} = useDomains();
   const {dispatch, navigate} = useRemails();
@@ -28,7 +28,7 @@ export function DomainDetails() {
     form.resetDirty();
   }, [currentDomain]);
 
-  if (!currentDomain || !currentOrganisation) {
+  if (!currentDomain || !currentOrganization) {
     return <Loader/>;
   }
 
@@ -48,9 +48,9 @@ export function DomainDetails() {
   }
 
   const deleteDomain = (domain: Domain) => {
-    let url = `/api/organizations/${currentOrganisation.id}/domains/${domain.id}`;
+    let url = `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
     if (currentProject) {
-      url = `/api/organizations/${currentOrganisation.id}/projects/${currentProject.id}/domains/${domain.id}`;
+      url = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`;
     }
 
     fetch(url, {

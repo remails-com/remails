@@ -1,4 +1,4 @@
-import {useCurrentOrganization} from "../../hooks/useCurrentOrganization.ts";
+import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useCredentials} from "../../hooks/useCredentials.ts";
@@ -18,7 +18,7 @@ interface FormValues {
 }
 
 export function CredentialDetails() {
-  const currentOrganisation = useCurrentOrganization();
+  const {currentOrganization} = useOrganizations();
   const {currentStream} = useStreams();
   const {currentProject} = useProjects();
   const {currentCredential} = useCredentials();
@@ -34,7 +34,7 @@ export function CredentialDetails() {
     form.resetDirty();
   }, [currentCredential]);
 
-  if (!currentStream || !currentOrganisation || !currentProject || !currentCredential) {
+  if (!currentStream || !currentOrganization || !currentProject || !currentCredential) {
     return <Loader/>;
   }
 
@@ -55,7 +55,7 @@ export function CredentialDetails() {
   }
 
   const deleteCredential = (credential: SmtpCredential) => {
-    fetch(`/api/organizations/${currentOrganisation.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${credential.id}`, {
+    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${credential.id}`, {
       method: 'DELETE',
     }).then(res => {
       if (res.status === 200) {
