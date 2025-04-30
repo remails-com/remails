@@ -64,3 +64,5 @@ jobs:
       - name: Docker logout on VPS
         run: ssh root@${{ vars.VPS_IP }} docker logout ghcr.io
         continue-on-error: true
+      - name: Check if webpage is reachable
+        run: curl https://remails-dev.tweedegolf-test.nl
