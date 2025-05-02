@@ -2,7 +2,7 @@ use crate::{api::oauth, models, models::Error};
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use thiserror::Error;
-use tracing::error;
+use tracing::{debug, error};
 
 pub type ApiResult<T> = Result<Json<T>, ApiError>;
 
@@ -35,8 +35,12 @@ impl IntoResponse for ApiError {
                     (StatusCode::BAD_REQUEST, err.to_string())
                 }
                 Error::NotFound(err) => {
-                    error!("{err}");
+                    debug!("{err}");
                     (StatusCode::NOT_FOUND, "Not found".to_string())
+                }
+                Error::ForeignKeyViolation => {
+                    debug!("ForeignKeyViolation");
+                    (StatusCode::BAD_REQUEST, "Foreign key violation".to_string())
                 }
                 Error::Conflict => (StatusCode::CONFLICT, "Conflict".to_string()),
                 Error::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),

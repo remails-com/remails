@@ -1,21 +1,8 @@
-import { useEffect, useState } from "react";
-import { Organization } from "../types";
+import {useRemails} from "./useRemails.ts";
 
 export function useOrganizations() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {state: {organizations, pathParams}} = useRemails();
+  const currentOrganization =  organizations?.find((o) => o.id === pathParams.org_id) || null;
 
-  useEffect(() => {
-    setLoading(true);
-    fetch("/api/organizations")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setOrganizations(data);
-        }
-        setLoading(false);
-      });
-  }, []);
-
-  return { organizations, loading }
+  return {organizations, currentOrganization}
 }

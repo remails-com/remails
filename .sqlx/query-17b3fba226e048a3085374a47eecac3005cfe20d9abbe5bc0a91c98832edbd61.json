@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT count(p.id) FROM projects p \n                               WHERE p.organization_id = $1 \n                                 AND p.id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "17b3fba226e048a3085374a47eecac3005cfe20d9abbe5bc0a91c98832edbd61"
+}

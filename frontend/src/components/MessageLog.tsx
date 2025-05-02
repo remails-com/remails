@@ -1,12 +1,12 @@
 import { Badge, Table } from "@mantine/core";
-import { useMessageLog } from "../hooks/useMessageLog";
+import { useMessages } from "../hooks/useMessages.ts";
 import { Loader } from "../Loader";
 import { formatDateTime } from "../util";
 
 export function MessageLog() {
-  const { messages, loading } = useMessageLog();
+  const { messages } = useMessages();
 
-  if (loading) {
+  if (!messages) {
     return <Loader />;
   }
 

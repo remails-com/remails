@@ -1,13 +1,13 @@
-import { Table } from "@mantine/core";
-import { Loader } from "../../Loader";
-import { useOrganizations } from "../../hooks/useOrganizations";
-import { formatDateTime } from "../../util";
+import {Table} from "@mantine/core";
+import {Loader} from "../../Loader";
+import {formatDateTime} from "../../util";
+import {useRemails} from "../../hooks/useRemails.ts";
 
 export function OrganizationsOverview() {
-  const { organizations, loading } = useOrganizations();
+  const {state: {organizations}} = useRemails();
 
-  if (loading) {
-    return <Loader />;
+  if (!organizations) {
+    return <Loader/>;
   }
 
   const rows = organizations.map((organization) => (

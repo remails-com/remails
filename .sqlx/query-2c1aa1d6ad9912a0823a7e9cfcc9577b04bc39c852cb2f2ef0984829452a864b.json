@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id FROM projects WHERE id = $1\n            ",
+  "query": "\n            SELECT organization_id FROM projects WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "organization_id",
         "type_info": "Uuid"
       }
     ],
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "952d4675fcc30518f55b9cc522ab17cb211bd3c8d77ce75c4a85f921b38e6d00"
+  "hash": "2c1aa1d6ad9912a0823a7e9cfcc9577b04bc39c852cb2f2ef0984829452a864b"
 }

@@ -83,7 +83,8 @@ CREATE TABLE projects
     organization_id uuid                     NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
     name            varchar                  NOT NULL,
     created_at      timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at      timestamp with time zone NOT NULL DEFAULT now()
+    updated_at      timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT unique_project_name UNIQUE (organization_id, name)
 );
 
 CREATE TRIGGER update_projects_updated_at
@@ -104,8 +105,8 @@ CREATE TABLE domains
     organization_id uuid REFERENCES organizations (id) ON DELETE CASCADE,
     project_id      uuid REFERENCES projects (id),
     CONSTRAINT either_organization_or_project CHECK ( (organization_id IS NULL) != (project_id IS NULL) ),
-    dkim_key_type   dkim_key_type,
-    dkim_pkcs8_der  bytea,
+    dkim_key_type   dkim_key_type            NOT NULL,
+    dkim_pkcs8_der  bytea                    NOT NULL,
     created_at      timestamp with time zone NOT NULL DEFAULT now(),
     updated_at      timestamp with time zone NOT NULL DEFAULT now()
 );

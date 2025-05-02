@@ -5,7 +5,9 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
@@ -43,7 +45,7 @@ pub async fn create_project(
     user: ApiUser,
     Path(org): Path<OrganizationId>,
     Json(new): Json<NewProject>,
-) -> ApiResult<Project> {
+) -> Result<impl IntoResponse, ApiError> {
     has_write_access(org, &user)?;
 
     let project = repo.create(new, org).await?;
@@ -56,7 +58,7 @@ pub async fn create_project(
         "created project"
     );
 
-    Ok(Json(project))
+    Ok((StatusCode::CREATED, Json(project)))
 }
 
 pub async fn remove_project(

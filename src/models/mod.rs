@@ -21,6 +21,8 @@ use thiserror::Error;
 pub enum Error {
     #[error(transparent)]
     Database(sqlx::Error),
+    #[error("foreign key violation")]
+    ForeignKeyViolation,
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -44,6 +46,9 @@ impl From<sqlx::Error> for Error {
         if let sqlx::Error::Database(db_err) = &sql {
             if db_err.is_unique_violation() {
                 return Error::Conflict;
+            }
+            if db_err.is_foreign_key_violation() {
+                return Error::ForeignKeyViolation;
             }
         }
         if matches!(sql, sqlx::Error::RowNotFound) {

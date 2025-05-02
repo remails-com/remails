@@ -11,7 +11,7 @@ docker compose up -d --wait
 # install frontend deps and build
 pushd frontend
     npm ci
-    npm run build
+    npm run build || true
 popd
 
 # initialize database

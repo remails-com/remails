@@ -8,7 +8,9 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
 use tracing::{debug, info};
 
 impl From<&ApiUser> for OrganizationFilter {
@@ -64,7 +66,7 @@ pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
     Json(new): Json<NewOrganization>,
-) -> ApiResult<Organization> {
+) -> Result<impl IntoResponse, ApiError> {
     let org = repo.create(new).await?;
 
     info!(
@@ -83,7 +85,7 @@ pub async fn create_organization(
         "added user as organization admin"
     );
 
-    Ok(Json(org))
+    Ok((StatusCode::CREATED, Json(org)))
 }
 
 pub async fn remove_organization(
