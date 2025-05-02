@@ -103,7 +103,6 @@ export function DomainDetails() {
               value={form.values.domain}
               readOnly={true}
               variant='filled'
-              // onChange={(event) => form.setFieldValue('domain', event.currentTarget.value)}
             />
             <TextInput
               variant='filled'

@@ -7,7 +7,7 @@ import {StreamDetails} from "./components/streams/StreamDetails.tsx";
 import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
 import {DomainsOverview} from "./components/domains/DomainsOverview.tsx";
 import {DomainDetails} from "./components/domains/DomainDetails.tsx";
-import {CredentialDetails} from "./components/smtpCredentials/credentialDetails.tsx";
+import {CredentialDetails} from "./components/smtpCredentials/CredentialDetails.tsx";
 import {Text} from "@mantine/core";
 
 export function Pages() {

@@ -130,12 +130,6 @@ export function CredentialDetails() {
           </Stack>
         </form>
       </Grid.Col>
-      {/*<Grid.Col span={{base: 12, md: 6, lg: 9}}>*/}
-      {/*  <h2>Credentials</h2>*/}
-      {/*  <CredentialsOverview/>*/}
-      {/*  <h2>Messages</h2>*/}
-      {/*  <MessageLog/>*/}
-      {/*</Grid.Col>*/}
     </Grid>
   )
 }
