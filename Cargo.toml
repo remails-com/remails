@@ -22,9 +22,9 @@ load-fixtures = []
 
 [dependencies]
 anyhow = "1.0.98"
-axum = { version = "0.8.3", features = ["macros"] }
+axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["cookie-private", "typed-header"] }
-chrono = { version = "0.4.40", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.10.2", features = ["serde_support"] }
 mail-send = { version = "0.5.0", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
@@ -54,7 +54,7 @@ sqlx-paginated = "0.2.31"
 memory-serve = "1.2.1"
 derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug", "from_str"]}
 rand = "0.9.1"
-hickory-resolver = "0.25.1"
+hickory-resolver = "0.25.2"
 aws-lc-rs = "1.13.0"
 
 [dev-dependencies]
