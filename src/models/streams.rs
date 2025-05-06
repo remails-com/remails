@@ -1,4 +1,4 @@
-use crate::models::{Error, OrganizationId, ProjectId};
+use crate::models::{projects, Error, OrganizationId, ProjectId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
@@ -94,6 +94,12 @@ impl StreamRepository {
         organization_id: OrganizationId,
         project_id: ProjectId,
     ) -> Result<Vec<Stream>, Error> {
+        if !projects::check_org_match(organization_id, project_id, &self.pool).await? {
+            return Err(Error::BadRequest(
+                "Project ID does not match organization ID".to_string(),
+            ));
+        }
+
         Ok(sqlx::query_as!(
             Stream,
             r#"

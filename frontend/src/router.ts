@@ -77,17 +77,7 @@ export const routes: Route[] = [
   },
   {
     name: 'organizations',
-    path: '/organizations',
-    children: [
-      {
-        name: 'add',
-        path: '/add',
-      },
-      {
-        name: 'edit',
-        path: '/edit/{id}',
-      }
-    ]
+    path: '/{org_id}/organizations',
   },
 ];
 
@@ -118,11 +108,11 @@ function matchPathRecursive(
     params: RouteParams,
     fullName: string[],
   } | null {
-  const new_path_params: { [k: string]: string } = {};
   path = path.replace(/^\/|\/$/, '');
   const path_elems = path.split('/');
   route_loop:
     for (const route of routes) {
+      const new_path_params: { [k: string]: string } = {};
       const route_path = route.path.replace(/^\/|\/$/, '')
       const route_elems = route_path.split('/');
       for (const [index, route_elem] of route_elems.entries()) {

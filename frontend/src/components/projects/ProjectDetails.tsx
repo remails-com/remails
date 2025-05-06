@@ -33,7 +33,11 @@ export function ProjectDetails() {
     }
   }, [streams]);
 
-  const form = useForm<FormValues>();
+  const form = useForm<FormValues>({
+    initialValues: {
+      name: ""
+    }
+  });
 
   useEffect(() => {
     form.setValues({name: currentProject?.name || ""});
