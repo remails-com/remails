@@ -9,6 +9,7 @@ use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
 pub mod api;
+mod dkim;
 mod handler;
 mod smtp;
 pub use crate::handler::HandlerConfig;

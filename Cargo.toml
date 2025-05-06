@@ -29,7 +29,6 @@ dotenvy = "0.15.7"
 mail-parser = { version = "0.10.2", features = ["serde_support"] }
 mail-send = { version = "0.5.0", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
 password-auth = "1.0.0"
-rustls-pemfile = "2.2.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["alloc"] }
 smtp-proto = "0.1.6"
@@ -56,6 +55,8 @@ derive_more = { version = "2.0.1" , default-features = false, features = ["from"
 rand = "0.9.1"
 hickory-resolver = "0.25.2"
 aws-lc-rs = "1.13.0"
+mail-auth = "0.6.1"
+rustls-pemfile = "2.2.0"
 
 [dev-dependencies]
 reqwest = { version = "0.12.15", features = ["json"] }

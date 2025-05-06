@@ -1,15 +1,20 @@
-use crate::models::{Message, MessageRepository, MessageStatus, NewMessage};
+use crate::{
+    dkim::PrivateKey,
+    models::{Message, MessageRepository, MessageStatus, NewMessage},
+};
+use base64ct::{Base64Unpadded, Base64UrlUnpadded, Encoding};
+use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
-use mail_parser::MessageParser;
+use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, str::FromStr, sync::Arc, time::Duration};
+use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -17,12 +22,15 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
+    #[error("could not generate signature: {0}")]
+    DkimError(mail_auth::Error),
+    // TODO: a message can be held for more than one reason
+    #[error("message is being held: DKIM not in DNS")]
+    MessageHeld,
 }
 
 #[derive(Debug, Error)]
 enum SendError {
-    #[error("invalid recipient: {0}")]
-    InvalidRcpt(email_address::Error),
     #[error("could not find a working MX receiver")]
     NoWorkingMx,
 }
@@ -86,40 +94,140 @@ impl Handler {
         }
     }
 
+    pub async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, domain: &str) -> Option<()> {
+        let domain = domain.trim_matches('.');
+
+        let record = format!(
+            "remails._domainkey.{domain}{}",
+            if domain.ends_with('.') { "" } else { "." }
+        );
+
+        trace!("requesting DKIM key {record}");
+
+        let dkim_record = self.config.resolver.txt_lookup(record).await.ok()?;
+
+        let dkim_record = String::from_utf8(
+            dkim_record
+                .into_iter()
+                .next()?
+                .txt_data()
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .ok()?;
+
+        trace!("dkim record: {dkim_record}");
+
+        let dns_key = dkim_record
+            .split(';')
+            .filter_map(|field| field.trim().split_once('='))
+            .find(|(key, _value)| *key == "p")?
+            .1;
+
+        let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
+
+        if dns_key.ends_with(&domain_key.public_key()) {
+            Some(())
+        } else {
+            None
+        }
+    }
+
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        let mut message = self
+        let mut message: Message = self
             .message_repository
             .create(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        debug!("stored message {}", message.id());
+        let sender_domain = message.from_email.domain();
 
-        // TODO: check limits etc
+        trace!("stored message {}", message.id());
 
-        debug!("parsing message {} {}", message.id(), message.message_data);
+        // TODO: we should retrieve the key from the database
+        let key =
+            PrivateKey::test_key(sender_domain, "remails").map_err(HandlerError::DkimError)?;
 
-        let json_message_data = {
-            // parse and save message contents
-            let message_data = MessageParser::default()
-                .parse(&message.raw_data)
-                .ok_or_else(|| mail_parser::Message {
-                    raw_message: Borrowed(&message.raw_data),
-                    ..Default::default()
-                });
+        trace!("retrieved dkim key for domain {sender_domain}");
+        trace!("parsing message {} {}", message.id(), message.message_data);
 
-            // this should never fail since mail_parser::Message has a derived Serialize instance
-            serde_json::to_value(&message_data).map_err(HandlerError::SerializeMessageData)?
-        };
+        // parse and save message contents
+        let parsed_msg: mail_parser::Message = MessageParser::default()
+            .parse(&message.raw_data)
+            .unwrap_or_else(|| mail_parser::Message {
+                raw_message: Borrowed(&message.raw_data),
+                ..Default::default()
+            });
 
-        debug!("updating message {}", message.id());
+        // this should never fail since mail_parser::Message has a derived Serialize instance
+        let json_message_data =
+            serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
+
+        trace!("updating message {}", message.id());
 
         message.message_data = json_message_data;
+
+        // TODO: check limits, whether the sender_domain is owned, etc
+        message.status = if self.check_dkim_key(&key, sender_domain).await.is_none() {
+            info!("message held due to invalid DKIM key");
+            MessageStatus::Held
+        } else {
+            MessageStatus::Accepted
+        };
 
         self.message_repository
             .update_message_data(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
+
+        if message.status != MessageStatus::Accepted {
+            return Err(HandlerError::MessageHeld);
+        }
+
+        // generate message headers
+
+        let mut generated_headers = String::new();
+
+        if !parsed_msg.parts.first().is_some_and(|msg| {
+            msg.headers
+                .iter()
+                .any(|hdr| hdr.name == HeaderName::MessageId)
+        }) {
+            // the message-id header was not provided by the MUA, we are going to
+            // provide one ourselves.
+            trace!("adding message-id header");
+            use aws_lc_rs::digest;
+            let hash = digest::digest(&digest::SHA224, &message.raw_data);
+            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
+
+            generated_headers
+                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+        }
+
+        // sign with dkim
+
+        trace!("signing with dkim");
+
+        generated_headers.push_str(
+            &key.dkim_header(&parsed_msg)
+                .map_err(HandlerError::DkimError)?,
+        );
+
+        trace!("adding headers");
+        debug!("{generated_headers:?}");
+
+        // TODO: we could 'overallocate' the original raw message data to prepend this stuff without
+        // needing to allocate or move data around.
+        let hdr_size = generated_headers.len();
+        let msg_len = message.raw_data.len();
+
+        message
+            .raw_data
+            .resize(msg_len + hdr_size, Default::default());
+        message.raw_data.copy_within(..msg_len, hdr_size);
+        message.raw_data[..hdr_size].copy_from_slice(generated_headers.as_bytes());
 
         Ok(message)
     }
@@ -167,26 +275,18 @@ impl Handler {
 
     async fn send_single_message(
         &self,
-        recipient: &str,
+        recipient: &EmailAddress,
         message: &Message,
         security: Protection,
     ) -> Result<(), SendError> {
-        let mail_address = match email_address::EmailAddress::from_str(recipient) {
-            Ok(address) => address,
-            Err(err) => {
-                warn!("Invalid email address {recipient}: {err}");
-                return Err(SendError::InvalidRcpt(err));
-            }
-        };
-
-        let domain = mail_address.domain();
+        let domain = recipient.domain();
 
         let mut priority = 0..65536;
 
         // restrict the recipients; this object is cheap to clone
         let message = smtp::message::Message {
             mail_from: message.from_email.as_str().into(),
-            rcpt_to: vec![recipient.into()],
+            rcpt_to: vec![recipient.email().into()],
             body: message.raw_data.as_slice().into(),
         };
 

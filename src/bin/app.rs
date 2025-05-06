@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
     let smtp_config = SmtpConfig::default();
     // TODO change me
-    let handler_config = HandlerConfig::new("remails-dev.tweedegolf.nl");
+    let handler_config = HandlerConfig::new("remails.tweedegolf-test.nl");
     let shutdown = CancellationToken::new();
 
     run_mta(pool.clone(), smtp_config, handler_config, shutdown.clone()).await;
