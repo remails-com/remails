@@ -29,7 +29,7 @@ export function CredentialsOverview() {
         <Table.Td>{username}</Table.Td>
         <Table.Td>{credential.description}</Table.Td>
         <Table.Td>{formatDateTime(credential.updated_at)}</Table.Td>
-        <Table.Td><Button onClick={() => navigate('projects.project.streams.stream.credentials.credential', {
+        <Table.Td align={'right'}><Button onClick={() => navigate('projects.project.streams.stream.credentials.credential', {
           credential_id: credential.id,
         })}><IconEdit/></Button></Table.Td>
       </Table.Tr>

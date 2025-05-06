@@ -45,6 +45,9 @@ export type Action = {
   type: 'set_organizations';
   organizations: Organization[] | null;
 } | {
+  type: 'add_organization';
+  organization: Organization;
+} | {
   type: 'loading'
 } | {
   type: 'set_projects';

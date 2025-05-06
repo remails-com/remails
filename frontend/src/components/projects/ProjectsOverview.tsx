@@ -22,7 +22,7 @@ export function ProjectsOverview() {
     <Table.Tr key={project.id}>
       <Table.Td>{project.name}</Table.Td>
       <Table.Td>{formatDateTime(project.updated_at)}</Table.Td>
-      <Table.Td>
+      <Table.Td align={'right'}>
         <Button
           onClick={() => navigate('projects.project', {
             proj_id: project.id,
@@ -35,7 +35,7 @@ export function ProjectsOverview() {
     <>
       <NewProject opened={opened} close={close}/>
       <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus/>}> New Project</Button>
+        <Button onClick={() => open()} leftSection={<IconPencilPlus/>}>New Project</Button>
       </Flex>
       <Table>
         <Table.Thead>

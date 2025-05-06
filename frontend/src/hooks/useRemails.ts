@@ -9,6 +9,10 @@ function reducer(state: State, action: Action): State {
     return {...state, organizations: action.organizations, loading: false}
   }
 
+  if (action.type === 'add_organization') {
+    return {...state, organizations: [...state.organizations || [], action.organization], loading: false}
+  }
+
   if (action.type === 'loading') {
     return {...state, loading: true}
   }
