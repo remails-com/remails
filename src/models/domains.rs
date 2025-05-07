@@ -1,12 +1,10 @@
 use crate::models::{Error, OrganizationId, ProjectId};
-use aws_lc_rs::{
-    encoding::AsDer,
-    rsa::{KeyPair, KeySize},
-};
+use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair as KeyPairTrait};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
-use mail_send::mail_auth::common::crypto::{Ed25519Key, RsaKey, Sha256};
+use mail_auth::common::{crypto::Algorithm, headers::Writable};
+use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use std::fmt::{Debug, Formatter};
@@ -48,15 +46,53 @@ enum DkimKeyType {
 }
 
 pub enum DkimKey {
-    Ed25519(Ed25519Key),
-    RsaSha256(RsaKey<Sha256>),
+    Ed25519(aws_lc_rs::signature::Ed25519KeyPair),
+    RsaSha256(aws_lc_rs::rsa::KeyPair),
 }
 
 impl DkimKey {
-    pub fn pub_key(&self) -> Vec<u8> {
+    pub fn pub_key(
+        &self,
+    ) -> Result<aws_lc_rs::encoding::PublicKeyX509Der, aws_lc_rs::error::Unspecified> {
         match self {
-            DkimKey::Ed25519(k) => k.public_key(),
-            DkimKey::RsaSha256(k) => k.public_key(),
+            DkimKey::Ed25519(k) => k.public_key().as_der(),
+            DkimKey::RsaSha256(k) => k.public_key().as_der(),
+        }
+    }
+
+    pub fn into_signing_key(self) -> Result<MailAuthSigningKey, Error> {
+        match self {
+            DkimKey::Ed25519(k) => Ok(MailAuthSigningKey::Ed25519(
+                mail_auth_crypto::Ed25519Key::from_pkcs8_der(k.to_pkcs8()?.as_ref())?,
+            )),
+            DkimKey::RsaSha256(k) => Ok(MailAuthSigningKey::RsaSha256(mail_auth_crypto::RsaKey::<
+                mail_auth_crypto::Sha256,
+            >::from_pkcs8_der(
+                k.as_der()?.as_ref()
+            )?)),
+        }
+    }
+}
+
+pub enum MailAuthSigningKey {
+    Ed25519(mail_auth_crypto::Ed25519Key),
+    RsaSha256(mail_auth_crypto::RsaKey<mail_auth_crypto::Sha256>),
+}
+
+impl mail_auth_crypto::SigningKey for MailAuthSigningKey {
+    type Hasher = mail_auth_crypto::Sha256;
+
+    fn sign(&self, input: impl Writable) -> mail_auth::Result<Vec<u8>> {
+        match self {
+            MailAuthSigningKey::Ed25519(k) => k.sign(input),
+            MailAuthSigningKey::RsaSha256(k) => k.sign(input),
+        }
+    }
+
+    fn algorithm(&self) -> Algorithm {
+        match self {
+            MailAuthSigningKey::Ed25519(k) => k.algorithm(),
+            MailAuthSigningKey::RsaSha256(k) => k.algorithm(),
         }
     }
 }
@@ -136,11 +172,11 @@ impl TryFrom<PgDomain> for Domain {
 
         let dkim_key = match pg.dkim_key_type {
             DkimKeyType::RsaSha256 => {
-                DkimKey::RsaSha256(RsaKey::from_pkcs8_der(&pg.dkim_pkcs8_der)?)
+                DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?)
             }
-            DkimKeyType::Ed25519 => {
-                DkimKey::Ed25519(Ed25519Key::from_pkcs8_der(&pg.dkim_pkcs8_der)?)
-            }
+            DkimKeyType::Ed25519 => DkimKey::Ed25519(
+                aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?,
+            ),
         };
 
         Ok(Self {
@@ -166,7 +202,7 @@ impl From<Domain> for ApiDomain {
             parent_id: d.parent_id,
             domain: d.domain,
             dkim_key_type,
-            dkim_public_key: Base64::encode_string(&d.dkim_key.pub_key()),
+            dkim_public_key: Base64::encode_string(d.dkim_key.pub_key().expect("As we generate the keys ourselves, we should never run into a marshalling problem").as_ref()),
             created_at: d.created_at,
             updated_at: d.updated_at,
         }
@@ -197,8 +233,8 @@ impl DomainRepository {
         let parent_id = if let Some(proj_id) = proj_id {
             let count = sqlx::query_scalar!(
                 r#"
-            SELECT count(p.id) FROM projects p 
-                               WHERE p.organization_id = $1 
+            SELECT count(p.id) FROM projects p
+                               WHERE p.organization_id = $1
                                  AND p.id = $2
             "#,
                 *org_id,
@@ -218,12 +254,11 @@ impl DomainRepository {
             DomainParent::Organization(org_id)
         };
 
-        let key_bytes: Vec<u8> = match new.dkim_key_type {
+        let key_bytes = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
-                let key_pair = KeyPair::generate(KeySize::Rsa2048)?;
-                key_pair.as_der()?.as_ref().into()
+                aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?.as_der()?
             }
-            DkimKeyType::Ed25519 => Ed25519Key::generate_pkcs8()?,
+            DkimKeyType::Ed25519 => aws_lc_rs::signature::Ed25519KeyPair::generate()?.as_der()?,
         };
 
         let (org_id, proj_id): (Option<Uuid>, Option<Uuid>) = match parent_id {
@@ -243,7 +278,7 @@ impl DomainRepository {
             org_id,
             proj_id,
             new.dkim_key_type as DkimKeyType,
-            key_bytes,
+            key_bytes.as_ref(),
         ).fetch_one(&mut *tx).await?;
 
         let domain = Self::get_one(&mut tx, id.into()).await?;
