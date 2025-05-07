@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   array_agg(distinct g.role) AS \"global_roles!: Vec<Option<PgRole>>\"\n            FROM api_users u \n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id \n            WHERE github_user_id = $1\n            GROUP BY u.id\n            ",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   array_agg(distinct g.role) AS \"global_roles!: Vec<Option<PgRole>>\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\"\n            FROM api_users u \n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id \n            WHERE u.id = $1\n            GROUP BY u.id\n            ",
   "describe": {
     "columns": [
       {
@@ -80,11 +80,16 @@
             }
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "password_enabled!",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -93,8 +98,9 @@
       false,
       true,
       null,
+      null,
       null
     ]
   },
-  "hash": "de2dcbc8fc542a89ceeda0a8b28a6fb373212de8308f4f159c9a3211a9106978"
+  "hash": "2d95e1d267e07aa0860b5d445cb3b3acd7162777f51e9d44e38f41ae5d411a56"
 }

@@ -1,7 +1,10 @@
-use crate::api::{
-    ApiState,
-    auth::{SecureCookieStorage, login},
-    oauth::{CSRF_COOKIE_NAME, Error, OAuthService},
+use crate::{
+    api::{
+        ApiState,
+        auth::{SecureCookieStorage, login},
+        oauth::{CSRF_COOKIE_NAME, Error, OAuthService},
+    },
+    models::ApiUser,
 };
 use axum::extract::{FromRef, State};
 /// This module contains the request handlers for the OAuth flow.
@@ -103,7 +106,8 @@ pub(super) struct AuthRequest {
 pub(super) async fn authorize<T>(
     State(service): State<T>,
     Query(query): Query<AuthRequest>,
-    cookie_storage: SecureCookieStorage,
+    mut cookie_storage: SecureCookieStorage,
+    logged_in_api_user: Option<ApiUser>,
 ) -> Result<Response, Error>
 where
     T: OAuthService,
@@ -147,12 +151,14 @@ where
         return Err(Error::CSRFTokenMismatch);
     }
 
-    let api_user = service.fetch_user(token.access_token()).await?;
+    let api_user = service
+        .fetch_user(token.access_token(), logged_in_api_user)
+        .await?;
 
-    let cookie_storage = login(&api_user, cookie_storage)?;
+    cookie_storage = login(&api_user, cookie_storage)?;
 
     // Remove the CSRF token cookie
-    let cookie_storage = cookie_storage.remove(csrf_cookie);
+    cookie_storage = cookie_storage.remove(csrf_cookie);
 
     // Return the updated cookie jar and a redirect response to the home page
     Ok((cookie_storage, Redirect::to("/")).into_response())

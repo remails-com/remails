@@ -12,12 +12,16 @@ pub struct WhoamiResponse {
     pub name: String,
     pub roles: Vec<ApiUserRole>,
     pub email: EmailAddress,
+    pub github_id: Option<String>,
+    pub password_enabled: bool,
 }
 
 impl From<ApiUser> for WhoamiResponse {
     fn from(user: ApiUser) -> Self {
         WhoamiResponse {
             roles: user.roles(),
+            github_id: user.github_user_id().map(|id| id.to_string()),
+            password_enabled: user.password_enabled(),
             name: user.name,
             email: user.email,
         }

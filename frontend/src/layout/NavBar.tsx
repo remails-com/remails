@@ -6,7 +6,7 @@ import {useRemails} from "../hooks/useRemails.ts";
 
 export function NavBar() {
   const {state: {route, fullName}, navigate} = useRemails();
-  const {roles} = useUser();
+  const {user: {roles}} = useUser();
 
   return (
     <>

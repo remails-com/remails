@@ -261,7 +261,7 @@ where
                         "extracted user from session cookie"
                     );
                     Ok(ApiUserRepository::from_ref(state)
-                        .find_by_id(*user.id())
+                        .find_by_id(user.id())
                         .await?
                         .ok_or(ApiError::Unauthorized)?)
                 }

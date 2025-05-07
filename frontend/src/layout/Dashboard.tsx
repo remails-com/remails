@@ -17,7 +17,7 @@ interface DashboardProps {
 export function Dashboard({children}: DashboardProps) {
   const [navbarOpened, {toggle}] = useDisclosure();
   const [_, setUserMenuOpened] = useState(false);
-  const user = useUser();
+  const {user} = useUser();
   const {state: {organizations}, navigate} = useRemails();
   const {currentOrganization} = useOrganizations();
 

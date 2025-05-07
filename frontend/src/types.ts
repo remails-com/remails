@@ -6,6 +6,8 @@ export interface User {
   roles: Role[];
   name: string;
   email: string;
+  github_id: string | null;
+  password_enabled: boolean;
 }
 
 export type WhoamiResponse = User | { error: string; }

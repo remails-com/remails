@@ -38,6 +38,7 @@ pub struct ApiUser {
     roles: Vec<ApiUserRole>,
     #[allow(unused)]
     github_user_id: Option<i64>,
+    password_enabled: bool,
 }
 
 impl ApiUser {
@@ -46,6 +47,12 @@ impl ApiUser {
     }
     pub fn id(&self) -> &ApiUserId {
         &self.id
+    }
+    pub fn github_user_id(&self) -> Option<i64> {
+        self.github_user_id
+    }
+    pub fn password_enabled(&self) -> bool {
+        self.password_enabled
     }
 }
 
@@ -69,6 +76,7 @@ struct PgApiUser {
     organization_roles: Vec<PgOrgRole>,
     global_roles: Vec<Option<PgRole>>,
     github_user_id: Option<i64>,
+    password_enabled: bool,
 }
 
 impl TryFrom<PgApiUser> for ApiUser {
@@ -101,6 +109,7 @@ impl TryFrom<PgApiUser> for ApiUser {
             email: u.email.parse()?,
             roles,
             github_user_id: u.github_user_id,
+            password_enabled: u.password_enabled,
         })
     }
 }
@@ -173,7 +182,7 @@ impl ApiUserRepository {
         }
         tx.commit().await?;
 
-        Ok(self.find_by_id(user_id.into()).await?.unwrap())
+        Ok(self.find_by_id(&user_id.into()).await?.unwrap())
     }
 
     pub async fn find_by_github_id(&self, github_id: i64) -> Result<Option<ApiUser>, Error> {
@@ -185,7 +194,8 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
@@ -200,8 +210,34 @@ impl ApiUserRepository {
             .transpose()
     }
 
+    pub async fn add_github_id(&self, user_id: &ApiUserId, github_id: i64) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET github_user_id = $2 WHERE id = $1 
+            "#,
+            **user_id,
+            github_id,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn remove_github_id(&self, api_user_id: &ApiUserId) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET github_user_id = NULL WHERE id = $1 
+            "#,
+            **api_user_id,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     #[cfg_attr(test, allow(dead_code))]
-    pub async fn find_by_id(&self, id: ApiUserId) -> Result<Option<ApiUser>, Error> {
+    pub async fn find_by_id(&self, id: &ApiUserId) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(
             PgApiUser,
             r#"
@@ -210,14 +246,15 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE u.id = $1
             GROUP BY u.id
             "#,
-            *id
+            **id
         )
             .fetch_optional(&self.pool)
             .await?
@@ -234,7 +271,8 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
@@ -287,6 +325,7 @@ mod test {
                 email: "test@test.com".parse().unwrap(),
                 roles,
                 github_user_id: None,
+                password_enabled: false,
             }
         }
     }

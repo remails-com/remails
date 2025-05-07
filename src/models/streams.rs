@@ -1,4 +1,4 @@
-use crate::models::{projects, Error, OrganizationId, ProjectId};
+use crate::models::{Error, OrganizationId, ProjectId, projects};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};

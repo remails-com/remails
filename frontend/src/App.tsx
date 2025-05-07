@@ -17,7 +17,7 @@ export default function App() {
   }
 
   return (
-    <UserContext.Provider value={user}>
+    <UserContext.Provider value={{user, setUser}}>
       <RemailsContext.Provider value={{state, dispatch, navigate}}>
         <Pages/>
       </RemailsContext.Provider>
