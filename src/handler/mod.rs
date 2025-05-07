@@ -98,7 +98,7 @@ impl Handler {
         }
     }
 
-    pub async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, domain: &str) -> Option<()> {
+    async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, domain: &str) -> Option<()> {
         let domain = domain.trim_matches('.');
 
         let record = format!(
@@ -137,6 +137,58 @@ impl Handler {
         } else {
             None
         }
+    }
+
+    async fn check_message(
+        &self,
+        message: &Message,
+        parsed_msg: &mail_parser::Message<'_>,
+        domain: &str,
+        key: &PrivateKey<'_>,
+    ) -> MessageStatus {
+        // check MAIL FROM domain
+        let sender_domain = message.from_email.domain();
+        if sender_domain != domain {
+            info!("message held due to MAIL FROM domain ({sender_domain}) != {domain}");
+            return MessageStatus::Held;
+        }
+
+        // check From domain
+        if let Some(from) = parsed_msg.from() {
+            for addr in from.iter() {
+                if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
+                    if addr.domain() != domain {
+                        info!(
+                            "message held due to From domain ({}) != {domain}",
+                            addr.domain()
+                        );
+                        return MessageStatus::Held;
+                    }
+                }
+            }
+        };
+
+        // check Return-Path domain
+        if let Some(Ok(return_path)) = parsed_msg
+            .return_address()
+            .map(|p| p.parse::<EmailAddress>())
+        {
+            if return_path.domain() != domain {
+                info!(
+                    "message held due to Return-Path domain ({}) != {domain}",
+                    return_path.domain()
+                );
+                return MessageStatus::Held;
+            }
+        };
+
+        // check dkim key
+        if self.check_dkim_key(key, sender_domain).await.is_none() {
+            info!("message held due to invalid DKIM key");
+            return MessageStatus::Held;
+        }
+
+        MessageStatus::Accepted
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -187,14 +239,9 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        // TODO: check limits, whether the sender_domain is owned, etc
-        let sender_domain = message.from_email.domain();
-        message.status = if self.check_dkim_key(&key, sender_domain).await.is_none() {
-            info!("message held due to invalid DKIM key");
-            MessageStatus::Held
-        } else {
-            MessageStatus::Accepted
-        };
+        message.status = self
+            .check_message(&message, &parsed_msg, &domain.domain, &key)
+            .await;
 
         self.message_repository
             .update_message_data(&message)
@@ -221,8 +268,10 @@ impl Handler {
             let hash = digest::digest(&digest::SHA224, &message.raw_data);
             let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
 
-            generated_headers
-                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+            generated_headers.push_str(&format!(
+                "Message-ID: <REMAILS-{hash}@{}>\r\n",
+                domain.domain
+            ));
         }
 
         // sign with dkim
