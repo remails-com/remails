@@ -41,6 +41,18 @@ pub struct ApiUser {
     password_enabled: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ApiUserUpdate {
+    pub name: String,
+    pub email: EmailAddress,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasswordUpdate {
+    pub new_password: Password,
+    pub current_password: Password,
+}
+
 impl ApiUser {
     pub fn roles(&self) -> Vec<ApiUserRole> {
         self.roles.clone()
@@ -236,6 +248,57 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn update(&self, update: ApiUserUpdate, user_id: &ApiUserId) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET name = $2, email = $3 WHERE id = $1 
+            "#,
+            **user_id,
+            update.name,
+            update.email.as_str(),
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_password(
+        &self,
+        update: PasswordUpdate,
+        user_id: &ApiUserId,
+    ) -> Result<(), Error> {
+        let hash = sqlx::query_scalar!(
+            r#"
+            SELECT password_hash FROM api_users WHERE id = $1
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if let Some(hash) = hash {
+            password_auth::verify_password(update.current_password.0, &hash)
+                .inspect_err(|err| {
+                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
+                })
+                .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
+        }
+
+        let hash = password_auth::generate_hash(update.new_password.0);
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET password_hash = $2 WHERE id = $1 
+            "#,
+            **user_id,
+            hash
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     #[cfg_attr(test, allow(dead_code))]
     pub async fn find_by_id(&self, id: &ApiUserId) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(
@@ -256,10 +319,10 @@ impl ApiUserRepository {
             "#,
             **id
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
@@ -281,10 +344,10 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn check_password(
