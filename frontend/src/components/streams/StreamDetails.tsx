@@ -18,7 +18,7 @@ interface FormValues {
   name: string,
 }
 
-export function StreamDetails() {
+export default function StreamDetails() {
   const [canDelete, setCanDelete] = useState<boolean>(false);
   const {currentOrganization} = useOrganizations();
   const {messages} = useMessages();

@@ -160,7 +160,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
             if (Array.isArray(data)) {
               // TODO store this somehow, e.g., as cookie or in local storage
               dispatch({type: "set_organizations", organizations: data});
-              if (!state.pathParams.org_id) {
+              if (!state.pathParams.org_id && data.length > 0) {
                 navigate('projects', {org_id: data[0].id});
               }
             }

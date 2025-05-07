@@ -1,17 +1,29 @@
-import {ReactNode} from 'react';
+import {ReactNode, useEffect} from 'react';
 import {Dashboard} from './layout/Dashboard';
 import {OrganizationsOverview} from './components/organizations/OrganizationsOverview';
-import {ProjectsOverview} from "./components/projects/ProjectsOverview.tsx";
+import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
 import {useRemails} from "./hooks/useRemails.ts";
-import {StreamDetails} from "./components/streams/StreamDetails.tsx";
-import {ProjectDetails} from "./components/projects/ProjectDetails.tsx";
-import {DomainsOverview} from "./components/domains/DomainsOverview.tsx";
+import StreamDetails from "./components/streams/StreamDetails.tsx";
+import ProjectDetails from "./components/projects/ProjectDetails.tsx";
+import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import {DomainDetails} from "./components/domains/DomainDetails.tsx";
 import {CredentialDetails} from "./components/smtpCredentials/CredentialDetails.tsx";
 import {Text} from "@mantine/core";
+import {useDisclosure} from "@mantine/hooks";
+import {useOrganizations} from './hooks/useOrganizations.ts';
+import {Settings} from "./components/settings/Settings.tsx";
+import {Setup} from "./components/Setup.tsx";
 
 export function Pages() {
+  const [opened, {open, close}] = useDisclosure(false);
   const {state: {route}} = useRemails();
+  const {organizations} = useOrganizations();
+
+  useEffect(() => {
+    if (organizations?.length === 0) {
+      open();
+    }
+  }, [organizations]);
 
   let element: ReactNode;
 
@@ -38,7 +50,7 @@ export function Pages() {
       element = <CredentialDetails/>
       break
     case 'settings':
-      element = <Text>User account and Organization related settings (login, subscription, etc.)</Text>
+      element = <Settings/>
       break
     case 'statistics':
       element = <Text>Organization wide statistics, quotas, etc.</Text>
@@ -49,6 +61,10 @@ export function Pages() {
 
   return (
     <Dashboard>
+
+      {organizations?.length === 0 &&
+          <Setup opened={opened} close={close}/>
+      }
       {element}
     </Dashboard>
   );

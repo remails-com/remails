@@ -11,14 +11,14 @@ import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useEffect, useState} from "react";
-import {DomainsOverview} from "../domains/DomainsOverview.tsx";
+import DomainsOverview from "../domains/DomainsOverview.tsx";
 
 
 interface FormValues {
   name: string,
 }
 
-export function ProjectDetails() {
+export default function ProjectDetails() {
   const {currentOrganization} = useOrganizations();
   const [canDelete, setCanDelete] = useState<boolean>(false);
   const {currentProject} = useProjects();

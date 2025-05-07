@@ -8,9 +8,8 @@ import {useDisclosure} from "@mantine/hooks";
 import {NewProject} from "./NewProject.tsx";
 
 
-export function ProjectsOverview() {
+export default function ProjectsOverview() {
   const [opened, {open, close}] = useDisclosure(false);
-
   const {state: {loading}, navigate} = useRemails();
   const {projects} = useProjects();
 

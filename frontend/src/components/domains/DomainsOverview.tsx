@@ -8,7 +8,7 @@ import {useDisclosure} from "@mantine/hooks";
 import {NewDomain} from "./NewDomain.tsx";
 import {useProjects} from "../../hooks/useProjects.ts";
 
-export function DomainsOverview() {
+export default function DomainsOverview() {
   const [opened, {open, close}] = useDisclosure(false);
   const {state: {loading}, navigate} = useRemails();
   const {currentProject} = useProjects();
