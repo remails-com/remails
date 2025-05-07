@@ -2,7 +2,7 @@ use crate::{
     dkim::PrivateKey,
     models::{DomainRepository, Message, MessageRepository, MessageStatus, NewMessage},
 };
-use base64ct::{Base64Unpadded, Base64Url, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
@@ -135,6 +135,7 @@ impl Handler {
         if dns_key.iter().eq(domain_key.public_key()) {
             Some(())
         } else {
+            trace!("dkim keys are not equal!");
             None
         }
     }
@@ -219,7 +220,7 @@ impl Handler {
         trace!(
             "retrieved dkim key for domain {}: {}",
             domain.domain,
-            Base64Url::encode_string(key.public_key())
+            Base64::encode_string(key.public_key())
         );
         trace!("parsing message {} {}", message.id(), message.message_data);
 
@@ -491,9 +492,9 @@ mod test {
         let _drop_guard = token.drop_guard();
 
         let message: mail_send::smtp::message::Message = MessageBuilder::new()
-            .from(("John Doe", "john@example.com"))
+            .from(("John Doe", "john@test-org-1-project-1.com"))
             .to(vec![
-                ("Jane Doe", "jane@example.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
                 ("James Smith", "james@test.com"),
             ])
             .subject("Hi!")

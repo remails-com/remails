@@ -342,10 +342,10 @@ mod test {
         let repository = MessageRepository::new(pool.clone());
 
         let message = MessageBuilder::new()
-            .from(("John Doe", "john@example.com"))
+            .from(("John Doe", "john@test-org-1-project-1.com"))
             .to(vec![
                 ("James Smith", "james@test.com"),
-                ("Jane Doe", "jane@example.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
             ])
             .subject("Hi!")
             .html_body("<h1>Hello, world!</h1>")
@@ -387,13 +387,13 @@ mod test {
 
         assert_eq!(
             fetched_message.from_email,
-            "john@example.com".parse().unwrap()
+            "john@test-org-1-project-1.com".parse().unwrap()
         );
 
         fetched_message.recipients.sort_by_key(|x| x.email());
         let expected = vec![
             "james@test.com".parse().unwrap(),
-            "jane@example.com".parse().unwrap(),
+            "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
 
         assert_eq!(fetched_message.recipients, expected);

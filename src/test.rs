@@ -137,8 +137,8 @@ async fn integration_test(pool: PgPool) {
 
     for i in 1..=10 {
         let message = MessageBuilder::new()
-            .from(("John", "john@example.com"))
-            .to(vec![("Eddy", "eddy@example.com")])
+            .from(("John", "john@test-org-1-project-1.com"))
+            .to(vec![("Eddy", "eddy@test-org-2-project-1.com")])
             .subject("TPS reports")
             .text_body(format!(
                 "Have you finished the TPS reports yet? This is the {i}th reminder!!!"
@@ -147,18 +147,18 @@ async fn integration_test(pool: PgPool) {
 
         select! {
             Ok(recv) = mailcrab_rx.recv() => {
-                assert_eq!(recv.envelope_from.as_str(), "john@example.com");
+                assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
                 assert_eq!(recv.envelope_recipients.len(), 1);
-                assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@example.com");
+                assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
             }
             _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
         }
     }
 
     let message = MessageBuilder::new()
-        .from(("Eddy", "eddy@example.com"))
+        .from(("Eddy", "eddy@test-org-2-project-1.com"))
         .to(vec![
-            ("John", "john@example.com"),
+            ("John", "john@test-org-1-project-1.com"),
         ])
         .subject("Re: TPS reports")
         .text_body("Ah! Yeah. It's just we're putting new coversheets on all the TPS reports before they go out now.
@@ -180,9 +180,9 @@ async fn integration_test(pool: PgPool) {
 
     select! {
         Ok(recv) = mailcrab_rx.recv() => {
-            assert_eq!(recv.envelope_from.as_str(), "eddy@example.com");
+            assert_eq!(recv.envelope_from.as_str(), "eddy@test-org-2-project-1.com");
             assert_eq!(recv.envelope_recipients.len(), 1);
-            assert_eq!(recv.envelope_recipients[0].as_str(), "john@example.com");
+            assert_eq!(recv.envelope_recipients[0].as_str(), "john@test-org-1-project-1.com");
         }
         _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
     }
