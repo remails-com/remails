@@ -31,8 +31,10 @@ pub enum Error {
     BadRequest(String),
     #[error("{0}")]
     Internal(String),
-    #[error("Cryptographic error {0}")]
-    Crypto(#[from] aws_lc_rs::error::Unspecified),
+    #[error("AWS Cryptographic error {0}")]
+    AwsCrypto(#[from] aws_lc_rs::error::Unspecified),
+    #[error("AWS Cryptographic key rejected {0}")]
+    WrongCryptKey(#[from] aws_lc_rs::error::KeyRejected),
     #[error("Email Authentication error{0}")]
     MailAuth(#[from] mail_send::mail_auth::Error),
     #[error("{0}")]
