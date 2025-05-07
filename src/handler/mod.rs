@@ -1,8 +1,8 @@
 use crate::{
     dkim::PrivateKey,
-    models::{Message, MessageRepository, MessageStatus, NewMessage},
+    models::{DomainRepository, Message, MessageRepository, MessageStatus, NewMessage},
 };
-use base64ct::{Base64Unpadded, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64Unpadded, Base64Url, Base64UrlUnpadded, Encoding};
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
@@ -24,6 +24,8 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
     #[error("could not generate signature: {0}")]
     DkimError(mail_auth::Error),
+    #[error("invalid domain: {0}")]
+    DomainError(&'static str),
     // TODO: a message can be held for more than one reason
     #[error("message is being held: DKIM not in DNS")]
     MessageHeld,
@@ -77,6 +79,7 @@ impl HandlerConfig {
 
 pub struct Handler {
     message_repository: MessageRepository,
+    domain_repository: DomainRepository,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -88,7 +91,8 @@ impl Handler {
                 .expect("Failed to install crypto provider");
         }
         Self {
-            message_repository: MessageRepository::new(pool),
+            message_repository: MessageRepository::new(pool.clone()),
+            domain_repository: DomainRepository::new(pool),
             shutdown,
             config,
         }
@@ -128,7 +132,7 @@ impl Handler {
 
         let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
 
-        if dns_key.ends_with(&domain_key.public_key()) {
+        if dns_key.iter().eq(domain_key.public_key()) {
             Some(())
         } else {
             None
@@ -142,15 +146,29 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        let sender_domain = message.from_email.domain();
-
         trace!("stored message {}", message.id());
 
-        // TODO: we should retrieve the key from the database
-        let key =
-            PrivateKey::test_key(sender_domain, "remails").map_err(HandlerError::DkimError)?;
+        // retrieve the dkim key from the database
+        let domain = self
+            .domain_repository
+            .get(
+                message.organization_id,
+                Some(message.project_id),
+                message
+                    .domain_id
+                    .ok_or(HandlerError::DomainError("no domain ID in message"))?,
+            )
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?;
 
-        trace!("retrieved dkim key for domain {sender_domain}");
+        let key =
+            PrivateKey::new(&domain, "remails").map_err(HandlerError::MessageRepositoryError)?;
+
+        trace!(
+            "retrieved dkim key for domain {}: {}",
+            domain.domain,
+            Base64Url::encode_string(key.public_key())
+        );
         trace!("parsing message {} {}", message.id(), message.message_data);
 
         // parse and save message contents
@@ -170,6 +188,7 @@ impl Handler {
         message.message_data = json_message_data;
 
         // TODO: check limits, whether the sender_domain is owned, etc
+        let sender_domain = message.from_email.domain();
         message.status = if self.check_dkim_key(&key, sender_domain).await.is_none() {
             info!("message held due to invalid DKIM key");
             MessageStatus::Held

@@ -60,7 +60,7 @@ impl DkimKey {
         }
     }
 
-    pub fn into_signing_key(self) -> Result<MailAuthSigningKey, Error> {
+    pub fn signing_key(&self) -> Result<MailAuthSigningKey, Error> {
         match self {
             DkimKey::Ed25519(k) => Ok(MailAuthSigningKey::Ed25519(
                 mail_auth_crypto::Ed25519Key::from_pkcs8_der(k.to_pkcs8()?.as_ref())?,
@@ -137,8 +137,8 @@ impl ApiDomain {
 pub struct Domain {
     id: DomainId,
     parent_id: DomainParent,
-    domain: String,
-    dkim_key: DkimKey,
+    pub(crate) domain: String,
+    pub(crate) dkim_key: DkimKey,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }

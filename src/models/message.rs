@@ -26,9 +26,9 @@ pub enum MessageStatus {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     id: MessageId,
-    organization_id: OrganizationId,
-    domain_id: Option<DomainId>,
-    project_id: ProjectId,
+    pub(crate) organization_id: OrganizationId,
+    pub(crate) domain_id: Option<DomainId>,
+    pub(crate) project_id: ProjectId,
     stream_id: StreamId,
     smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
