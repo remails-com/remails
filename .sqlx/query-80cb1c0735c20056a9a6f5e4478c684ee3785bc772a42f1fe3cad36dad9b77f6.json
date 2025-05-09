@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT 1 as \"exists!\"\n            FROM streams s\n                     JOIN smtp_credentials ON s.id = smtp_credentials.stream_id\n                     JOIN projects p ON s.project_id = p.id\n                     LEFT JOIN domains dp ON p.id = dp.project_id\n                     LEFT JOIN domains dorg ON p.organization_id = dorg.organization_id\n            WHERE smtp_credentials.id = $1\n              AND ($2 SIMILAR TO '(%.)?' || dp.domain\n                OR $2 SIMILAR TO  '(%.)?' || dorg.domain)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "80cb1c0735c20056a9a6f5e4478c684ee3785bc772a42f1fe3cad36dad9b77f6"
+}

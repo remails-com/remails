@@ -1,5 +1,5 @@
-use crate::models::{Error, OrganizationId, ProjectId};
-use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair as KeyPairTrait};
+use crate::models::{Error, OrganizationId, ProjectId, SmtpCredentialId};
+use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -413,12 +413,173 @@ impl DomainRepository {
 
         Ok(DomainId(id))
     }
+
+    pub async fn check_credential(
+        &self,
+        domain: &str,
+        smtp_credential_id: SmtpCredentialId,
+    ) -> Result<bool, Error> {
+        let exists = sqlx::query_scalar!(
+            r#"
+            SELECT 1 as "exists!"
+            FROM streams s
+                     JOIN smtp_credentials ON s.id = smtp_credentials.stream_id
+                     JOIN projects p ON s.project_id = p.id
+                     LEFT JOIN domains dp ON p.id = dp.project_id
+                     LEFT JOIN domains dorg ON p.organization_id = dorg.organization_id
+            WHERE smtp_credentials.id = $1
+              AND ($2 SIMILAR TO '(%.)?' || dp.domain
+                OR $2 SIMILAR TO  '(%.)?' || dorg.domain)
+            "#,
+            *smtp_credential_id,
+            domain
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(exists.is_some())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use sqlx::PgPool;
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "api_users",
+            "domains",
+            "streams",
+            "smtp_credentials",
+        )
+    ))]
+    async fn check_credential_for_domain(db: PgPool) {
+        let repo = DomainRepository::new(db);
+
+        let valid_project_domain = repo
+            .check_credential(
+                "test-org-1-project-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(valid_project_domain);
+
+        let valid_org_domain = repo
+            .check_credential(
+                "test-org-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(valid_org_domain);
+
+        let domain_from_sibling_project = repo
+            .check_credential(
+                "test-org-1-project-2.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!domain_from_sibling_project);
+
+        let domain_from_different_org = repo
+            .check_credential(
+                "test-org-2.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!domain_from_different_org);
+
+        let domain_from_different_org_proj = repo
+            .check_credential(
+                "test-org-2-project-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!domain_from_different_org_proj);
+
+        let credential_from_same_org = repo
+            .check_credential(
+                "test-org-1.com",
+                "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(credential_from_same_org);
+
+        let credential_from_different_project = repo
+            .check_credential(
+                "test-org-1-project-1.com",
+                "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!credential_from_different_project);
+
+        let valid_subdomain = repo
+            .check_credential(
+                "asdf.test-org-1-project-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(valid_subdomain);
+
+        let double_valid_subdomain = repo
+            .check_credential(
+                "asdfss.asdf.test-org-1-project-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(double_valid_subdomain);
+
+        let invalid_subdomain = repo
+            .check_credential(
+                "asdftest-org-1-project-1.com",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!invalid_subdomain);
+
+        let invalid_postfix = repo
+            .check_credential(
+                "test-org-1-project-1.comasdf",
+                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!invalid_postfix);
+
+        let credential_does_not_exist = repo
+            .check_credential(
+                "test-org-1-project-1.com",
+                "7ba5f972-9536-4d43-9ee1-bde24aae6df3".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!credential_does_not_exist);
+    }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
