@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at                \n            FROM domains d \n                LEFT JOIN projects p ON d.project_id = p.id\n            WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "domain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "dkim_key_type: DkimKeyType",
+        "type_info": {
+          "Custom": {
+            "name": "dkim_key_type",
+            "kind": {
+              "Enum": [
+                "rsa_sha256",
+                "ed25519"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dkim_pkcs8_der",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dc35ac0e0b9796d8cee52aa180115276bf124b9caf65bef8ed9f551f3aa36d69"
+}
