@@ -329,7 +329,6 @@ impl DomainRepository {
                    d.updated_at                
             FROM domains d 
                 LEFT JOIN projects p ON d.project_id = p.id
-                LEFT JOIN organizations o ON d.organization_id = o.id 
             WHERE d.id = $3
               AND (
                   ($2::uuid IS NULL AND d.organization_id = $1) 
@@ -339,6 +338,34 @@ impl DomainRepository {
             "#,
             *org_id,
             proj_id.map(|p| p.as_uuid()),
+            *domain_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
+    }
+
+    pub async fn get_domain_by_id(
+        &self,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+    ) -> Result<Domain, Error> {
+        sqlx::query_as!(
+            PgDomain,
+            r#"
+            SELECT d.id,
+                   d.domain,
+                   d.organization_id,
+                   d.project_id,
+                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
+                   d.dkim_pkcs8_der,
+                   d.created_at,
+                   d.updated_at                
+            FROM domains d 
+                LEFT JOIN projects p ON d.project_id = p.id
+            WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)
+            "#,
+            *org_id,
             *domain_id
         )
         .fetch_one(&self.pool)
@@ -414,22 +441,25 @@ impl DomainRepository {
         Ok(DomainId(id))
     }
 
-    pub async fn check_credential(
+    pub async fn get_domain_id_associated_with_credential(
         &self,
         domain: &str,
         smtp_credential_id: SmtpCredentialId,
-    ) -> Result<bool, Error> {
-        let exists = sqlx::query_scalar!(
+    ) -> Result<Option<DomainId>, Error> {
+        let domain_id = sqlx::query_scalar!(
             r#"
-            SELECT 1 as "exists!"
+            SELECT
+                CASE
+                    WHEN $2 SIMILAR TO '(%.)?' || dorg.domain THEN dorg.id
+                    ELSE dp.id
+                END AS "domain_id!"
             FROM streams s
-                     JOIN smtp_credentials ON s.id = smtp_credentials.stream_id
-                     JOIN projects p ON s.project_id = p.id
-                     LEFT JOIN domains dp ON p.id = dp.project_id
-                     LEFT JOIN domains dorg ON p.organization_id = dorg.organization_id
+                JOIN smtp_credentials ON s.id = smtp_credentials.stream_id
+                JOIN projects p ON s.project_id = p.id
+                LEFT JOIN domains dp ON p.id = dp.project_id
+                LEFT JOIN domains dorg ON p.organization_id = dorg.organization_id
             WHERE smtp_credentials.id = $1
-              AND ($2 SIMILAR TO '(%.)?' || dp.domain
-                OR $2 SIMILAR TO  '(%.)?' || dorg.domain)
+                AND ($2 SIMILAR TO '(%.)?' || dp.domain OR $2 SIMILAR TO  '(%.)?' || dorg.domain)
             "#,
             *smtp_credential_id,
             domain
@@ -437,7 +467,7 @@ impl DomainRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(exists.is_some())
+        Ok(domain_id.map(Into::into))
     }
 }
 
@@ -461,124 +491,139 @@ mod test {
         let repo = DomainRepository::new(db);
 
         let valid_project_domain = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1-project-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(valid_project_domain);
+        assert_eq!(
+            valid_project_domain,
+            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
+        );
 
         let valid_org_domain = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(valid_org_domain);
+        assert_eq!(
+            valid_org_domain,
+            Some("ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap())
+        );
 
         let domain_from_sibling_project = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1-project-2.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!domain_from_sibling_project);
+        assert!(domain_from_sibling_project.is_none());
 
         let domain_from_different_org = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-2.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!domain_from_different_org);
+        assert!(domain_from_different_org.is_none());
 
         let domain_from_different_org_proj = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-2-project-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!domain_from_different_org_proj);
+        assert!(domain_from_different_org_proj.is_none());
 
         let credential_from_same_org = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1.com",
                 "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(credential_from_same_org);
+        assert_eq!(
+            credential_from_same_org,
+            Some("ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap())
+        );
 
         let credential_from_different_project = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1-project-1.com",
                 "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!credential_from_different_project);
+        assert!(credential_from_different_project.is_none());
 
         let valid_subdomain = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "asdf.test-org-1-project-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(valid_subdomain);
+        assert_eq!(
+            valid_subdomain,
+            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
+        );
 
         let double_valid_subdomain = repo
-            .check_credential(
-                "asdfss.asdf.test-org-1-project-1.com",
+            .get_domain_id_associated_with_credential(
+                "remails.asdf.test-org-1-project-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(double_valid_subdomain);
+        assert_eq!(
+            double_valid_subdomain,
+            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
+        );
 
         let invalid_subdomain = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "asdftest-org-1-project-1.com",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!invalid_subdomain);
+        assert!(invalid_subdomain.is_none());
 
         let invalid_postfix = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1-project-1.comasdf",
                 "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!invalid_postfix);
+        assert!(invalid_postfix.is_none());
 
         let credential_does_not_exist = repo
-            .check_credential(
+            .get_domain_id_associated_with_credential(
                 "test-org-1-project-1.com",
                 "7ba5f972-9536-4d43-9ee1-bde24aae6df3".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert!(!credential_does_not_exist);
+        assert!(credential_does_not_exist.is_none());
     }
 
     #[sqlx::test(fixtures(

@@ -1,6 +1,5 @@
 use crate::models::{
-    Error, OrganizationId, SmtpCredentialId, domains::DomainId, projects::ProjectId,
-    streams::StreamId,
+    Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -27,10 +26,9 @@ pub enum MessageStatus {
 pub struct Message {
     id: MessageId,
     pub(crate) organization_id: OrganizationId,
-    pub(crate) domain_id: Option<DomainId>,
     pub(crate) project_id: ProjectId,
-    stream_id: StreamId,
-    smtp_credential_id: Option<SmtpCredentialId>,
+    pub(crate) stream_id: StreamId,
+    pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -82,6 +80,22 @@ impl NewMessage {
 
         message
     }
+
+    #[cfg(test)]
+    pub fn from_builder_message_custom_from(
+        value: mail_send::smtp::message::Message<'_>,
+        smtp_credential_id: SmtpCredentialId,
+        smtp_from: &str,
+    ) -> Self {
+        use mail_send::smtp::message::IntoMessage;
+        let mut message = Self::new(smtp_credential_id, smtp_from.parse().unwrap());
+        for recipient in value.rcpt_to.iter() {
+            message.recipients.push(recipient.email.parse().unwrap());
+        }
+        message.raw_data = value.into_message().unwrap().body.to_vec();
+
+        message
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +124,6 @@ impl Default for MessageFilter {
 struct PgMessage {
     id: MessageId,
     organization_id: OrganizationId,
-    domain_id: Option<Uuid>,
     project_id: ProjectId,
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
@@ -130,7 +143,6 @@ impl TryFrom<PgMessage> for Message {
         Ok(Self {
             id: m.id,
             organization_id: m.organization_id,
-            domain_id: m.domain_id.map(Into::into),
             project_id: m.project_id,
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
@@ -158,19 +170,16 @@ impl MessageRepository {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
-            SELECT gen_random_uuid(), o.id, COALESCE(d_p.id, d_o.id), p.id, streams.id, $1, $2, $3, $4, $5, $6
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
+            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
             FROM smtp_credentials s
                 JOIN streams ON s.stream_id = streams.id
                 JOIN projects p ON p.id = streams.project_id
                 JOIN organizations o ON o.id = p.organization_id
-                LEFT JOIN domains d_p ON d_p.project_id = p.id
-                LEFT JOIN domains d_o ON d_o.organization_id = o.id
             WHERE s.id = $1
             RETURNING
                 m.id,
                 m.organization_id,
-                m.domain_id AS "domain_id: Uuid",
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
@@ -245,7 +254,6 @@ impl MessageRepository {
             SELECT
                 m.id,
                 m.organization_id,
-                m.domain_id,
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
@@ -292,7 +300,6 @@ impl MessageRepository {
             SELECT
                 m.id,
                 m.organization_id,
-                m.domain_id,
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,

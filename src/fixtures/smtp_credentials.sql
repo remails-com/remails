@@ -12,6 +12,6 @@ VALUES ('abbb0388-bdfa-4758-8ad0-80035999ab6c',
            -- Stream 1 Project 2 Organization 1
         'd01de497-b40a-4795-a92e-5a8b83dea565',
         'foo',
-           -- we dont't know this
+           -- we don't know this
         '$argon2id$v=19$m=16,t=2,p=1$SXlxN0U3VXNnSXN6UENWeA$2wsKyY0Ikz1qyeiWLO8SWg',
         'Test SMTP credential 2');
