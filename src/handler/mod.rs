@@ -24,9 +24,8 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
     #[error("could not generate signature: {0}")]
     DkimError(mail_auth::Error),
-    // TODO: a message can be held for more than one reason
-    #[error("message is being held: DKIM not in DNS")]
-    MessageHeld,
+    #[error("message is being held: {0}")]
+    MessageHeld(String),
 }
 
 #[derive(Debug, Error)]
@@ -164,13 +163,12 @@ impl Handler {
         &self,
         message: &Message,
         parsed_msg: &mail_parser::Message<'_>,
-    ) -> Result<(MessageStatus, Option<String>), HandlerError> {
+    ) -> Result<Result<String, String>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
         // check SMTP credentials
         let Some(smtp_credential_id) = message.smtp_credential_id else {
-            info!("message held due to missing SMTP credential");
-            return Ok((MessageStatus::Held, None));
+            return Ok(Err("missing SMTP credential".to_string()));
         };
         let Some(domain_id) = self
             .domain_repository
@@ -178,10 +176,9 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?
         else {
-            info!(
-                "message held due to SMTP credential not being permitted to use domain {sender_domain}"
-            );
-            return Ok((MessageStatus::Held, None));
+            return Ok(Err(format!(
+                "SMTP credential is not permitted to use domain {sender_domain}"
+            )));
         };
 
         let domain = self
@@ -192,11 +189,10 @@ impl Handler {
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {
-            info!(
-                "message held due to MAIL FROM domain ({sender_domain}) not being a valid (sub-)domain of {}",
+            return Ok(Err(format!(
+                "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
                 domain.domain
-            );
-            return Ok((MessageStatus::Held, None));
+            )));
         }
 
         // check From domain (can be a different subdomain)
@@ -204,12 +200,11 @@ impl Handler {
             for addr in from.iter() {
                 if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
                     if !Self::is_subdomain(addr.domain(), &domain.domain) {
-                        info!(
-                            "message held due to From domain ({}) not being a valid (sub-)domain of {}",
+                        return Ok(Err(format!(
+                            "From domain ({}) is not a valid (sub-)domain of {}",
                             addr.domain(),
                             domain.domain
-                        );
-                        return Ok((MessageStatus::Held, None));
+                        )));
                     }
                 }
             }
@@ -221,12 +216,11 @@ impl Handler {
             .map(|p| p.parse::<EmailAddress>())
         {
             if !Self::is_subdomain(return_path.domain(), &domain.domain) {
-                info!(
-                    "message held due to Return-Path domain ({}) not being a valid (sub-)domain of {}",
+                return Ok(Err(format!(
+                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
                     return_path.domain(),
                     domain.domain
-                );
-                return Ok((MessageStatus::Held, None));
+                )));
             }
         };
 
@@ -239,8 +233,7 @@ impl Handler {
             Base64::encode_string(key.public_key())
         );
         if self.check_dkim_key(&key, sender_domain).await.is_none() {
-            info!("message held due to invalid DKIM key");
-            return Ok((MessageStatus::Held, None));
+            return Ok(Err(format!("invalid DKIM key found on {sender_domain}")));
         }
 
         trace!("signing with dkim");
@@ -248,7 +241,7 @@ impl Handler {
             .dkim_header(parsed_msg)
             .map_err(HandlerError::DkimError)?;
 
-        Ok((MessageStatus::Accepted, Some(dkim_header)))
+        Ok(Ok(dkim_header))
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -276,21 +269,20 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        let (status, dkim_header) = self.check_message(&message, &parsed_msg).await?;
-        message.status = status;
+        let result = self.check_message(&message, &parsed_msg).await?;
+        message.status = match result {
+            Ok(_) => MessageStatus::Accepted,
+            Err(_) => MessageStatus::Held,
+        };
 
         self.message_repository
             .update_message_data(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        if message.status != MessageStatus::Accepted {
-            return Err(HandlerError::MessageHeld);
-        }
-
-        let Some(dkim_header) = dkim_header else {
-            error!("Missing DKIM header with MessageStatus::Accepted shouldn't happen");
-            return Err(HandlerError::MessageHeld);
+        let dkim_header = match result {
+            Ok(dkim_header) => dkim_header,
+            Err(reason) => return Err(HandlerError::MessageHeld(reason)),
         };
 
         // generate message headers
@@ -617,10 +609,7 @@ mod test {
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(matches!(
-                handler.handle_message(message).await,
-                Err(HandlerError::MessageHeld),
-            ));
+            assert!(handler.handle_message(message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
@@ -688,10 +677,7 @@ mod test {
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(matches!(
-                handler.handle_message(message).await,
-                Err(HandlerError::MessageHeld),
-            ));
+            assert!(handler.handle_message(message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
