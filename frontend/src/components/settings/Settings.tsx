@@ -6,6 +6,7 @@ import GitHubBadge from "./GitHubBadge.tsx";
 import {useUser} from "../../hooks/useUser.ts";
 import {useForm} from "@mantine/form";
 import {notifications} from "@mantine/notifications";
+import {useRemails} from "../../hooks/useRemails.ts";
 
 interface BasicFormValues {
   name: string,
@@ -20,6 +21,7 @@ interface PasswordForm {
 
 export function Settings() {
   const [opened, {open, close}] = useDisclosure(false);
+  const {navigate} = useRemails();
   const {user, setUser} = useUser()
 
   const basicForm = useForm<BasicFormValues>({
@@ -261,7 +263,9 @@ export function Settings() {
 
         <h2>Organization Settings</h2>
 
-        <NewOrganization opened={opened} close={close}/>
+        <NewOrganization opened={opened} close={close} done={(newOrg) => {
+          navigate('settings', {org_id: newOrg.id})
+        }}/>
         <Button onClick={() => open()} leftSection={<IconPencilPlus/>}>New Organization</Button>
       </Stack>
     </Container>

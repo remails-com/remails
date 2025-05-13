@@ -1,6 +1,6 @@
 import {Route, RouteParams} from "./router.ts";
 
-export type Role = 'super_admin' | { organization_admin: string };
+export type Role = { type: 'super_admin' } | { type: "organization_admin", id: string };
 
 export interface User {
   id: string

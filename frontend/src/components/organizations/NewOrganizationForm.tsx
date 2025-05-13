@@ -4,13 +4,14 @@ import {useForm} from "@mantine/form";
 import {notifications} from "@mantine/notifications";
 import {IconX} from "@tabler/icons-react";
 import {Organization} from "../../types.ts";
+import {useUser} from "../../hooks/useUser.ts";
 
 interface FormValues {
   name: string,
 }
 
 interface NewOrganizationFormProps {
-  done: () => void;
+  done: (newOrg: Organization) => void;
 }
 
 export async function saveNewOrganization(name: string): Promise<{ status: number, newOrg: Organization | null }> {
@@ -43,7 +44,8 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
 }
 
 export function NewOrganizationForm({done}: NewOrganizationFormProps) {
-  const {navigate, dispatch} = useRemails();
+  const {dispatch} = useRemails();
+  const {user, setUser} = useUser();
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -58,9 +60,9 @@ export function NewOrganizationForm({done}: NewOrganizationFormProps) {
     saveNewOrganization(values.name)
       .then(({status, newOrg}) => {
         if (status === 201 && newOrg) {
-          done()
+          done(newOrg)
+          setUser({...user, roles: [...user.roles, {type: "organization_admin", id: newOrg.id}]})
           dispatch({type: "add_organization", organization: newOrg})
-          navigate('organizations', {org_id: newOrg.id})
         }
       })
   }
@@ -78,9 +80,9 @@ export function NewOrganizationForm({done}: NewOrganizationFormProps) {
           onChange={(event) => form.setFieldValue('name', event.currentTarget.value)}
         />
         <Group justify="space-between" mt="lg">
-        <Button onClick={close} variant="outline">Cancel</Button>
-        <Button type="submit" loading={form.submitting}>Save</Button>
-      </Group>
+          <Button onClick={close} variant="outline">Cancel</Button>
+          <Button type="submit" loading={form.submitting}>Save</Button>
+        </Group>
       </Stack>
     </form>
   )

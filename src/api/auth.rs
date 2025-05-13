@@ -31,7 +31,7 @@ impl ApiUser {
 
     pub fn org_admin(&self) -> Vec<OrganizationId> {
         self.roles().iter().fold(Vec::new(), |mut acc, role| {
-            if let ApiUserRole::OrganizationAdmin(org) = role {
+            if let ApiUserRole::OrganizationAdmin { id: org } = role {
                 acc.push(*org);
             };
             acc
@@ -230,9 +230,9 @@ where
                 trace!("Test log in based on `X-Test-Login` header");
                 match header.to_str().unwrap() {
                     "admin" => Ok(ApiUser::new(vec![ApiUserRole::SuperAdmin])),
-                    token => Ok(ApiUser::new(vec![ApiUserRole::OrganizationAdmin(
-                        token.parse().unwrap(),
-                    )])),
+                    token => Ok(ApiUser::new(vec![ApiUserRole::OrganizationAdmin {
+                        id: token.parse().unwrap(),
+                    }])),
                 }
             } else {
                 warn!("No valid X-Test-Login header");

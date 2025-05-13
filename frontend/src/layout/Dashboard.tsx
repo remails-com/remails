@@ -54,7 +54,11 @@ export function Dashboard({children}: DashboardProps) {
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {organizations?.map((org) => (
+                {organizations?.filter((all_org) => {
+                  return user.roles.find((role) => {
+                    return role.type === 'organization_admin' && role.id === all_org.id;
+                  }) || all_org.id === currentOrganization?.id;
+                }).map((org) => (
                   <Menu.Item key={org.id} value={org.id} onClick={() => navigate('projects', {org_id: org.id})}>
                     <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
                   </Menu.Item>

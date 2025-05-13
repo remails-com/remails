@@ -35,7 +35,7 @@ export function OrganizationsOverview() {
 
   return (
     <>
-      <NewOrganization opened={opened} close={close}/>
+      <NewOrganization opened={opened} close={close} done={(newOrg) => navigate('organizations', {org_id: newOrg.id})}/>
       <Flex justify="flex-end">
         <Button onClick={() => open()} leftSection={<IconPencilPlus/>}>New Organization</Button>
       </Flex>

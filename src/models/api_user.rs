@@ -14,11 +14,11 @@ pub struct ApiUserId(Uuid);
 pub struct Password(String);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "type")]
 #[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
 pub enum ApiUserRole {
     SuperAdmin,
-    OrganizationAdmin(OrganizationId),
+    OrganizationAdmin { id: OrganizationId },
 }
 
 #[derive(Debug)]
@@ -100,7 +100,7 @@ impl TryFrom<PgApiUser> for ApiUser {
             .into_iter()
             .filter_map(|role| {
                 role.role.zip(role.org_id).map(|(role, org_id)| match role {
-                    PgRole::Admin => ApiUserRole::OrganizationAdmin(org_id),
+                    PgRole::Admin => ApiUserRole::OrganizationAdmin { id: org_id },
                 })
             })
             .collect();
@@ -160,7 +160,7 @@ impl ApiUserRepository {
             |(mut orgs, mut global), role| {
                 match role {
                     ApiUserRole::SuperAdmin => global.push(PgRole::Admin),
-                    ApiUserRole::OrganizationAdmin(org) => orgs.push((org, PgRole::Admin)),
+                    ApiUserRole::OrganizationAdmin { id: org } => orgs.push((org, PgRole::Admin)),
                 }
                 (orgs, global)
             },
@@ -466,9 +466,9 @@ mod test {
             password: None,
             roles: vec![
                 ApiUserRole::SuperAdmin,
-                ApiUserRole::OrganizationAdmin(
-                    "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                ),
+                ApiUserRole::OrganizationAdmin {
+                    id: "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                },
             ],
             github_user_id: Some(123),
         };
