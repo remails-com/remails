@@ -65,37 +65,6 @@ impl NewMessage {
             message_data: Default::default(),
         }
     }
-
-    #[cfg(test)]
-    pub fn from_builder_message(
-        value: mail_send::smtp::message::Message<'_>,
-        smtp_credential_id: SmtpCredentialId,
-    ) -> Self {
-        use mail_send::smtp::message::IntoMessage;
-        let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
-        for recipient in value.rcpt_to.iter() {
-            message.recipients.push(recipient.email.parse().unwrap());
-        }
-        message.raw_data = value.into_message().unwrap().body.to_vec();
-
-        message
-    }
-
-    #[cfg(test)]
-    pub fn from_builder_message_custom_from(
-        value: mail_send::smtp::message::Message<'_>,
-        smtp_credential_id: SmtpCredentialId,
-        smtp_from: &str,
-    ) -> Self {
-        use mail_send::smtp::message::IntoMessage;
-        let mut message = Self::new(smtp_credential_id, smtp_from.parse().unwrap());
-        for recipient in value.rcpt_to.iter() {
-            message.recipients.push(recipient.email.parse().unwrap());
-        }
-        message.raw_data = value.into_message().unwrap().body.to_vec();
-
-        message
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -338,6 +307,37 @@ mod test {
     impl Message {
         pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
             self.smtp_credential_id
+        }
+    }
+
+    impl NewMessage {
+        pub fn from_builder_message(
+            value: mail_send::smtp::message::Message<'_>,
+            smtp_credential_id: SmtpCredentialId,
+        ) -> Self {
+            use mail_send::smtp::message::IntoMessage;
+            let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
+            for recipient in value.rcpt_to.iter() {
+                message.recipients.push(recipient.email.parse().unwrap());
+            }
+            message.raw_data = value.into_message().unwrap().body.to_vec();
+
+            message
+        }
+
+        pub fn from_builder_message_custom_from(
+            value: mail_send::smtp::message::Message<'_>,
+            smtp_credential_id: SmtpCredentialId,
+            smtp_from: &str,
+        ) -> Self {
+            use mail_send::smtp::message::IntoMessage;
+            let mut message = Self::new(smtp_credential_id, smtp_from.parse().unwrap());
+            for recipient in value.rcpt_to.iter() {
+                message.recipients.push(recipient.email.parse().unwrap());
+            }
+            message.raw_data = value.into_message().unwrap().body.to_vec();
+
+            message
         }
     }
 

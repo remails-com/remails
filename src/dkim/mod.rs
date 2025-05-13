@@ -48,8 +48,9 @@ impl<'a> PrivateKey<'a> {
         })
     }
 
+    /// Returns the full key including header info
     pub fn public_key(&self) -> &[u8] {
-        self.pub_key.as_ref() // this is the full key including header info
+        self.pub_key.as_ref()
     }
 
     pub fn dkim_header(self, msg: &mail_parser::Message) -> Result<String, mail_auth::Error> {

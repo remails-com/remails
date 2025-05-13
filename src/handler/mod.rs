@@ -158,7 +158,8 @@ impl Handler {
         domain.ends_with(subdomain)
     }
 
-    /// Check if we are able to send this message, i.e. we are permitted to use the sender's domain and we can sign the message with DKIM
+    /// Check if we are able to send this message, i.e., we are permitted to use the sender's domain,
+    /// and we can sign the message with DKIM
     async fn check_message(
         &self,
         message: &Message,
