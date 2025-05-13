@@ -299,6 +299,42 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn delete_password(
+        &self,
+        current_password: Password,
+        user_id: &ApiUserId,
+    ) -> Result<(), Error> {
+        let hash = sqlx::query_scalar!(
+            r#"
+            SELECT password_hash FROM api_users WHERE id = $1
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if let Some(hash) = hash {
+            password_auth::verify_password(current_password.0, &hash)
+                .inspect_err(|err| {
+                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
+                })
+                .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
+        } else {
+            return Ok(());
+        };
+
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET password_hash = NULL WHERE id = $1 
+            "#,
+            **user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     #[cfg_attr(test, allow(dead_code))]
     pub async fn find_by_id(&self, id: &ApiUserId) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(

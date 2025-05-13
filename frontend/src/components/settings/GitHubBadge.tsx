@@ -24,7 +24,7 @@ export default function GitHubBadge({user_id}: GitHubBadgeProps) {
 
 
   return (
-      <Paper component="a" href={user?.html_url} radius="xl" p="lg" style={{background: "var(--mantine-color-black)"}}>
+      <Paper component="a" href={user?.html_url} radius="xl" p="sm" style={{background: "var(--mantine-color-black)"}}>
         <Group>
           <Avatar src={user?.avatar_url} size="lg"/>
           <Stack gap="xs">

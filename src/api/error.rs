@@ -22,6 +22,8 @@ pub enum ApiError {
     Serialization(#[from] serde_json::Error),
     #[error("{0}")]
     BadRequest(String),
+    #[error("{0}")]
+    PreconditionFailed(String),
 }
 
 impl IntoResponse for ApiError {
@@ -55,6 +57,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
             ApiError::Serialization(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, err),
+            ApiError::PreconditionFailed(err) => (StatusCode::PRECONDITION_FAILED, err),
         };
 
         (status, Json(json!({ "error": message }))).into_response()

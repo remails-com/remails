@@ -1,5 +1,5 @@
-import {Button, Container, Group, PasswordInput, Stack, Text, TextInput, Tooltip} from "@mantine/core";
-import {IconBrandGithub, IconPencilPlus, IconPlugConnectedX, IconX} from "@tabler/icons-react";
+import {Button, Container, Grid, Group, PasswordInput, Stack, Text, TextInput, Tooltip} from "@mantine/core";
+import {IconBrandGithub, IconPencilPlus, IconPlugConnectedX, IconTrash, IconX} from "@tabler/icons-react";
 import {useDisclosure} from "@mantine/hooks";
 import {NewOrganization} from "../organizations/NewOrganization.tsx";
 import GitHubBadge from "./GitHubBadge.tsx";
@@ -40,7 +40,7 @@ export function Settings() {
       new_password2: ''
     },
     validate: {
-      old_password: (value) => (value.length <= 6 ? 'Password should include at least 6 characters' : null),
+      old_password: (value) => ((user.password_enabled && value.length <= 6) ? 'Password should include at least 6 characters' : null),
       new_password1: (value) => (value.length <= 6 ? 'Password should include at least 6 characters' : null),
       new_password2: (value, values) => ((values.new_password1 !== value) ? 'Passwords do not match' : null),
     }
@@ -97,9 +97,47 @@ export function Settings() {
       body: JSON.stringify({current_password: update.old_password, new_password: update.new_password1})
     }).then(res => {
       if (res.status === 200) {
-        basicForm.reset()
+        passwordForm.reset()
+        setUser({...user, password_enabled: true})
         notifications.show({
           title: 'Updated',
+          color: 'green',
+          message: ''
+        })
+      } else {
+        notifications.show({
+          title: "Error",
+          message: "Something went wrong",
+          color: "red",
+          autoClose: 20000,
+          icon: <IconX size={20}/>,
+        })
+      }
+    })
+  }
+
+  const removePassword = (update: PasswordForm) => {
+    if (update.old_password.length <= 6) {
+      passwordForm.setFieldError('old_password', 'Password should include at least 6 characters')
+      return
+    }
+    if (update.new_password1 || update.new_password2) {
+      passwordForm.setFieldError('new_password1', 'Watch out, you clicked to remove your password but provided a new one.')
+      return
+    }
+
+    fetch(`/api/api_user/${user.id}/password`, {
+      method: 'DELETE',
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({current_password: update.old_password})
+    }).then(res => {
+      if (res.status === 200) {
+        passwordForm.reset()
+        setUser({...user, password_enabled: false})
+        notifications.show({
+          title: 'Removed Password login',
           color: 'green',
           message: ''
         })
@@ -201,7 +239,23 @@ export function Settings() {
               error={passwordForm.errors.new_password2}
               onChange={(event) => passwordForm.setFieldValue('new_password2', event.currentTarget.value)}
             />
-            <Button type="submit">Save</Button>
+            <Grid justify='space-between'>
+              {user.password_enabled &&
+                  <Grid.Col span={{base: 12, sm: 6}}>
+                      <Tooltip
+                          label={user.github_id ? "Delete your password. You will not be able to sign in with your email and password anymore" : "You need to connect with Github first"}>
+                          <Button disabled={!user.github_id} fullWidth={true}
+                                  onClick={() => removePassword(passwordForm.values)} color="red"
+                                  leftSection={<IconTrash/>}>
+                              Delete Password
+                          </Button>
+                      </Tooltip>
+                  </Grid.Col>}
+              <Grid.Col span={user.password_enabled ? {base: 12, sm: 6} : 12}>
+                <Button type="submit"
+                        fullWidth={true}>{user.password_enabled ? "Update Password" : "Create Password"}</Button>
+              </Grid.Col>
+            </Grid>
           </Stack>
         </form>
 

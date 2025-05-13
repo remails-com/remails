@@ -161,7 +161,7 @@ impl ApiServer {
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/api_user/{user_id}", put(api_users::update_user))
-            .route("/api_user/{user_id}/password", put(api_users::update_password))
+            .route("/api_user/{user_id}/password", put(api_users::update_password).delete(api_users::delete_password))
             .route(
                 "/organizations",
                 get(list_organizations).post(create_organization),
