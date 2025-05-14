@@ -31,6 +31,18 @@ pub struct SmtpCredentialRequest {
     pub(crate) username: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SmtpCredentialUpdateRequest {
+    pub(crate) description: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SmtpCredentialUpdateResponse {
+    pub(crate) id: SmtpCredentialId,
+    pub(crate) description: String,
+    pub(crate) username: String,
+}
+
 #[derive(Serialize, derive_more::Debug)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredentialResponse {
@@ -175,6 +187,41 @@ impl SmtpCredentialRepository {
         Ok(credentials)
     }
 
+    pub async fn update(
+        &self,
+        org_id: OrganizationId,
+        project_id: ProjectId,
+        stream_id: StreamId,
+        credential_id: SmtpCredentialId,
+        update: &SmtpCredentialUpdateRequest,
+    ) -> Result<SmtpCredentialUpdateResponse, Error> {
+        Ok(sqlx::query_as!(
+            SmtpCredentialUpdateResponse,
+            r#"
+            UPDATE smtp_credentials cred
+            SET description = $1
+            FROM streams s 
+                JOIN projects p ON s.project_id = p.id
+            WHERE cred.id = $2
+              AND cred.stream_id = s.id 
+              AND cred.stream_id = $3
+              AND s.project_id = $4
+              AND p.organization_id = $5
+            RETURNING 
+                cred.id,
+                cred.description,
+                cred.username
+            "#,
+            update.description,
+            *credential_id,
+            *stream_id,
+            *project_id,
+            *org_id,
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn remove(
         &self,
         org_id: OrganizationId,
@@ -218,7 +265,7 @@ mod test {
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
-    async fn smtp_credential_repository(pool: PgPool) {
+    async fn generate_happy_flow(pool: PgPool) {
         let credential_request = SmtpCredentialRequest {
             username: "test".to_string(),
             description: "Test SMTP credential description".to_string(),
@@ -366,5 +413,87 @@ mod test {
 
         // And has no credential associated anymore
         assert_eq!(message.smtp_credential_id(), None);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn update_happy_flow(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let update = credential_repo
+            .update(
+                org_id,
+                project_id,
+                stream_id,
+                credential_id,
+                &SmtpCredentialUpdateRequest {
+                    description: "Updated description".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(credential_id, update.id);
+        assert_eq!("Updated description", update.description);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn update_org_does_not_match_proj(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let not_found = credential_repo
+            .update(
+                org_id,
+                project_id,
+                stream_id,
+                credential_id,
+                &SmtpCredentialUpdateRequest {
+                    description: "Should not work".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "smtp_credentials")
+    ))]
+    async fn update_proj_does_not_match_stream(db: PgPool) {
+        let credential_repo = SmtpCredentialRepository::new(db.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
+
+        let not_found = credential_repo
+            .update(
+                org_id,
+                project_id,
+                stream_id,
+                credential_id,
+                &SmtpCredentialUpdateRequest {
+                    description: "Should not work".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(not_found, Error::NotFound(_)));
     }
 }

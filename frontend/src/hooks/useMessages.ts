@@ -23,6 +23,8 @@ export function useMessages() {
           .then(setCurrentMessage)
 
       }
+    } else {
+      setCurrentMessage(null)
     }
   }, [currentOrganization, currentProject, currentStream, pathParams.message_id]);
 

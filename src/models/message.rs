@@ -50,7 +50,7 @@ pub struct ApiMessage {
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: String,
-    pub message_data: ApiMessageData,
+    message_data: ApiMessageData,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -207,7 +207,7 @@ impl TryFrom<PgMessage> for Message {
 }
 
 impl From<mail_parser::Message<'_>> for ApiMessageData {
-    fn from(m: mail_parser::Message) -> Self {
+    fn from(m: mail_parser::Message<'_>) -> Self {
         // TODO get rid of as many allocations as possible here
         Self {
             subject: m.subject().map(|s| s.to_string()),

@@ -13,7 +13,6 @@ import {notifications} from "@mantine/notifications";
 import {IconTrash, IconX} from "@tabler/icons-react";
 
 interface FormValues {
-  username: string,
   description: string,
 }
 
@@ -24,12 +23,15 @@ export function CredentialDetails() {
   const {currentCredential} = useCredentials();
   const {dispatch, navigate} = useRemails();
 
-  const form = useForm<FormValues>();
+  const form = useForm<FormValues>({
+    initialValues: {
+      description: ""
+    }
+  });
 
   useEffect(() => {
     form.setValues({
-      username: currentCredential?.username || "",
-      description: currentCredential?.description
+      description: currentCredential?.description || ''
     });
     form.resetDirty();
   }, [currentCredential]);
@@ -54,39 +56,58 @@ export function CredentialDetails() {
     });
   }
 
-  const deleteCredential = (credential: SmtpCredential) => {
-    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${credential.id}`, {
+  const deleteCredential = async (credential: SmtpCredential) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${credential.id}`, {
       method: 'DELETE',
-    }).then(res => {
-      if (res.status === 200) {
-        notifications.show({
-          title: 'Credential deleted',
-          message: `Credential with username ${credential.username} deleted`,
-          color: 'green',
-        })
-        dispatch({type: "remove_credential", credentialId: credential.id})
-        navigate('projects.project.streams.stream')
-      } else {
-        notifications.show({
-          title: 'Error',
-          message: `Credential with username ${credential.username} could not be deleted`,
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-        console.error(res)
-      }
-    })
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: 'Credential deleted',
+        message: `Credential with username ${credential.username} deleted`,
+        color: 'green',
+      });
+      dispatch({type: "remove_credential", credentialId: credential.id});
+      navigate('projects.project.streams.stream');
+    } else {
+      notifications.show({
+        title: 'Error',
+        message: `Credential with username ${credential.username} could not be deleted`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      console.error(res);
+    }
   }
 
-  const save = (values: FormValues) => {
-    form.resetDirty()
+  const save = async (values: FormValues) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${currentCredential.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values)
+    });
+    if (res.status !== 200) {
+      notifications.show({
+        title: 'Error',
+        message: `SMTP credential could not be updated`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      })
+      console.error(res)
+      return
+    }
+    const credential = await res.json();
+
     notifications.show({
-      title: "Not yet implemented",
-      message: "You found me",
-      color: 'red'
+      title: 'SMTP credential updated',
+      message: '',
+      color: 'green',
     })
-    return new Promise((resolve) => setTimeout(() => resolve(values), 500));
+    dispatch({type: "remove_credential", credentialId: credential.id})
+    dispatch({type: "add_credential", credential})
   }
 
 
@@ -99,25 +120,25 @@ export function CredentialDetails() {
             <TextInput
               variant='filled'
               label="Username"
-              key={form.key('name')}
-              value={form.values.username}
+              value={currentCredential?.username || ''}
               readOnly
             />
             <Textarea
-            label="Description"
-            autosize
-            maxRows={10}
-            key={form.key('name')}
-            value={form.values.description}
-            onChange={(event) => form.setFieldValue('description', event.currentTarget.value)}
+              label="Description"
+              autosize
+              maxRows={10}
+              key={form.key('name')}
+              value={form.values.description}
+              onChange={(event) => form.setFieldValue('description', event.currentTarget.value)}
             />
-            <Tooltip label='The password cannot be shown or changed. Please create a new credential if needed and possibly delete this one.'>
-            <TextInput
-              label='Password'
-              value='••••••••'
-              readOnly
-              variant='filled'
-            />
+            <Tooltip
+              label='The password cannot be shown or changed. Please create a new credential if needed and possibly delete this one.'>
+              <TextInput
+                label='Password'
+                value='••••••••'
+                readOnly
+                variant='filled'
+              />
             </Tooltip>
             <Group>
               <Tooltip label='Delete SMTP credential'>

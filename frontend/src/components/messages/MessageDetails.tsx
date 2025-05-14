@@ -76,7 +76,7 @@ export default function MessageDetails() {
       {subject ? <Title>{subject}</Title> :
         <Title c="dimmed" fs="italic">No Subject</Title>}
 
-      <Table variant="vertical" layout="fixed" withTableBorder>
+      <Table variant="vertical" layout="fixed" withTableBorder mt='sm'>
         <Table.Tbody>
           {table_data.map((row) => (
             <Table.Tr key={row.header}>

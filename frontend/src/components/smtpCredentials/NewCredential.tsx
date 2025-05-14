@@ -5,10 +5,10 @@ import {useStreams} from "../../hooks/useStreams.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {SmtpCredentialResponse} from "../../types.ts";
 import {useForm} from "@mantine/form";
-import {Button, Group, Modal, PasswordInput, Stack, Stepper, Textarea, TextInput} from "@mantine/core";
+import {Alert, Button, Group, Modal, PasswordInput, Stack, Stepper, Textarea, TextInput} from "@mantine/core";
 import {useDisclosure} from "@mantine/hooks";
 import {notifications} from "@mantine/notifications";
-import {IconX} from "@tabler/icons-react";
+import {IconInfoCircle, IconX} from "@tabler/icons-react";
 
 interface FormValues {
   username: string,
@@ -30,12 +30,13 @@ export function NewCredential({opened, close}: NewCredentialProps) {
   const {dispatch} = useRemails();
 
   const form = useForm<FormValues>({
+    validateInputOnBlur: true,
     initialValues: {
       username: "",
       description: ""
     },
     validate: {
-      username: (value) => (value.length < 3 ? 'Username must have at least 3 character' : null),
+      username: (value) => (value.match(/^[a-zA-Z0-9_-]{2,128}$/) ? null : 'Username must only contain alphanumeric characters or underscores and dashes and must be between 2 and 128 characters long'),
     }
   });
 
@@ -44,48 +45,50 @@ export function NewCredential({opened, close}: NewCredentialProps) {
     return <></>
   }
 
-  const create = (values: FormValues) => {
-    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials`, {
+  const create = async (values: FormValues) => {
+    console.log('match', values.username.match(/^[a-zA-Z0-9_-]{2,128}$/))
+
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials`, {
       method: 'POST',
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(values)
-    }).then(res => {
-      if (res.status === 201) {
-        res.json().then(newCredential => {
-          console.log(newCredential)
-          setNewCredential(newCredential)
-          dispatch({type: "add_credential", credential: {...newCredential, cleartext_password: undefined}})
-          setActiveStep(1)
-        })
-      } else if (res.status === 409) {
-        form.setFieldError('username', 'This username already exists')
-        return
-      } else {
-        notifications.show({
-          title: 'Error',
-          message: 'Something went wrong',
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-      }
-    })
+    });
+    if (res.status === 409) {
+      form.setFieldError('username', 'This username already exists');
+      return;
+    } else if (res.status !== 201) {
+      notifications.show({
+        title: 'Error',
+        message: 'Something went wrong',
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      return
+    }
+    const newCredential = await res.json()
+    setNewCredential(newCredential);
+    dispatch({type: "add_credential", credential: {...newCredential, cleartext_password: undefined}});
+    setActiveStep(1);
   }
 
   return (
     <>
-      <Modal opened={opened} onClose={() => {
-        close();
-        setActiveStep(0);
-        setNewCredential(null);
-      }} title="Create New SMTP credential" size="lg">
+      <Modal opened={opened}
+             onClose={activeStep === 0 ? close : () => {
+             }}
+             title="Create New SMTP credential"
+             size="lg"
+             withCloseButton={activeStep === 0}
+      >
         <Stepper active={activeStep} onStepClick={setActiveStep}>
           <Stepper.Step label="Create" allowStepSelect={false}>
             <form onSubmit={form.onSubmit(create)}>
               <Stack>
                 <TextInput
+                  data-autofocus
                   label="Username"
                   description="The final username will contain parts of your organization ID to ensure global uniqueness"
                   key={form.key('username')}
@@ -113,6 +116,11 @@ export function NewCredential({opened, close}: NewCredentialProps) {
                 readOnly
                 value={newCredential?.username}
               />
+              <Alert variant="light" color="red" title="Save this password somewhere safe!" icon={<IconInfoCircle/>}>
+                This password will only be shown once.
+                After you closed this window, we cannot show it again.
+                If you lose it, you can simply create a new credential and delete the old one, if necessary.
+              </Alert>
               <PasswordInput
                 label="Password"
                 variant='filled'
@@ -122,7 +130,11 @@ export function NewCredential({opened, close}: NewCredentialProps) {
                 value={newCredential?.cleartext_password}
               />
               <Group justify='flex-end'>
-                <Button onClick={close}>Done</Button>
+                <Button onClick={() => {
+                  setActiveStep(0);
+                  setNewCredential(null);
+                  close()
+                }}>Done</Button>
               </Group>
             </Stack>
           </Stepper.Step>

@@ -7,9 +7,12 @@ use crate::{
         organizations::{
             create_organization, get_organization, list_organizations, remove_organization,
         },
-        projects::{create_project, list_projects, remove_project},
-        smtp_credentials::{create_smtp_credential, list_smtp_credential, remove_smtp_credential},
-        streams::{create_stream, list_streams, remove_stream},
+        projects::{create_project, list_projects, remove_project, update_project},
+        smtp_credentials::{
+            create_smtp_credential, list_smtp_credential, remove_smtp_credential,
+            update_smtp_credential,
+        },
+        streams::{create_stream, list_streams, remove_stream, update_stream},
     },
     models::{
         ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
@@ -184,7 +187,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}",
-                delete(remove_project),
+                delete(remove_project).put(update_project),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/messages",
@@ -200,7 +203,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
-                delete(remove_stream),
+                delete(remove_stream).put(update_stream),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
@@ -208,7 +211,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
-                delete(remove_smtp_credential),
+                delete(remove_smtp_credential).put(update_smtp_credential),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",

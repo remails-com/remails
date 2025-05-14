@@ -1,7 +1,7 @@
 use super::error::{ApiError, ApiResult};
 use crate::models::{
     ApiUser, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-    SmtpCredentialRequest, StreamId,
+    SmtpCredentialRequest, SmtpCredentialUpdateRequest, SmtpCredentialUpdateResponse, StreamId,
 };
 use axum::{
     Json,
@@ -55,6 +55,36 @@ pub async fn create_smtp_credential(
     );
 
     Ok((StatusCode::CREATED, Json(new_credential)))
+}
+
+pub async fn update_smtp_credential(
+    State(repo): State<SmtpCredentialRepository>,
+    user: ApiUser,
+    Path((org_id, proj_id, stream_id, cred_id)): Path<(
+        OrganizationId,
+        ProjectId,
+        StreamId,
+        SmtpCredentialId,
+    )>,
+    Json(request): Json<SmtpCredentialUpdateRequest>,
+) -> ApiResult<SmtpCredentialUpdateResponse> {
+    has_write_access(org_id, proj_id, stream_id, None, &user)?;
+
+    let update = repo
+        .update(org_id, proj_id, stream_id, cred_id, &request)
+        .await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = proj_id.to_string(),
+        stream_id = stream_id.to_string(),
+        credential_id = update.id.to_string(),
+        credential_username = update.username,
+        "updated SMTP credential"
+    );
+
+    Ok(Json(update))
 }
 
 pub async fn list_smtp_credential(

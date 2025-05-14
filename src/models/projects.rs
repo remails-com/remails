@@ -89,6 +89,29 @@ impl ProjectRepository {
         .await?)
     }
 
+    pub async fn update(
+        &self,
+        organization_id: OrganizationId,
+        project_id: ProjectId,
+        update: NewProject,
+    ) -> Result<Project, Error> {
+        Ok(sqlx::query_as!(
+            Project,
+            r#"
+            UPDATE projects 
+            SET name = $3 
+            WHERE id = $2
+              AND organization_id = $1
+            RETURNING *
+            "#,
+            *organization_id,
+            *project_id,
+            update.name,
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn remove(&self, id: ProjectId, org_id: OrganizationId) -> Result<ProjectId, Error> {
         Ok(sqlx::query_scalar!(
             r#"

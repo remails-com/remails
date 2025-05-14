@@ -27,11 +27,14 @@ export function CredentialsOverview() {
     }
     return (<Table.Tr key={credential.id}>
         <Table.Td>{username}</Table.Td>
-        <Table.Td>{credential.description}</Table.Td>
+        <Table.Td>
+          <Text size="sm" lineClamp={2}>{credential.description}</Text>
+        </Table.Td>
         <Table.Td>{formatDateTime(credential.updated_at)}</Table.Td>
-        <Table.Td align={'right'}><Button onClick={() => navigate('projects.project.streams.stream.credentials.credential', {
-          credential_id: credential.id,
-        })}><IconEdit/></Button></Table.Td>
+        <Table.Td align={'right'}><Button
+          onClick={() => navigate('projects.project.streams.stream.credentials.credential', {
+            credential_id: credential.id,
+          })}><IconEdit/></Button></Table.Td>
       </Table.Tr>
     )
   });
@@ -45,9 +48,9 @@ export function CredentialsOverview() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Username</Table.Th>
+            <Table.Th miw="10rem">Username</Table.Th>
             <Table.Th>Description</Table.Th>
-            <Table.Th>Updated</Table.Th>
+            <Table.Th miw="10rem">Updated</Table.Th>
             <Table.Th></Table.Th>
           </Table.Tr>
         </Table.Thead>

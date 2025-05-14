@@ -6,6 +6,7 @@ import {useOrganizations} from "../hooks/useOrganizations.ts";
 import {useStreams} from "../hooks/useStreams.ts";
 import {useDomains} from "../hooks/useDomains.ts";
 import {useCredentials} from "../hooks/useCredentials.ts";
+import {useMessages} from "../hooks/useMessages.ts";
 
 
 export function Breadcrumbs() {
@@ -13,6 +14,7 @@ export function Breadcrumbs() {
   const {currentStream} = useStreams();
   const {currentCredential} = useCredentials();
   const {domains, currentDomain} = useDomains();
+  const {currentMessage} = useMessages();
   const currentOrganisation = useOrganizations();
   const {navigate, state: {fullName}} = useRemails();
 
@@ -58,6 +60,13 @@ export function Breadcrumbs() {
     items.push({
       title: currentCredential.username,
       route: 'projects.project.streams.stream.credentials.credential',
+    });
+  }
+
+  if (currentMessage && 'message_data' in currentMessage) {
+    items.push({
+      title: currentMessage.message_data.subject || 'No Subject',
+      route: 'projects.project.streams.stream.message-log.message',
     });
   }
 
