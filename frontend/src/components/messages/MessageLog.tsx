@@ -1,21 +1,25 @@
-import {Badge, Button, Table} from "@mantine/core";
-import { useMessages } from "../../hooks/useMessages.ts";
-import { Loader } from "../../Loader";
-import { formatDateTime } from "../../util";
+import {ActionIcon, Badge, Table, Text, Tooltip} from "@mantine/core";
+import {useMessages} from "../../hooks/useMessages.ts";
+import {Loader} from "../../Loader";
+import {formatDateTime} from "../../util";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {IconEye} from "@tabler/icons-react";
 
 export function MessageLog() {
-  const { messages } = useMessages();
+  const {messages} = useMessages();
   const {navigate} = useRemails();
 
   if (!messages) {
-    return <Loader />;
+    return <Loader/>;
   }
 
   const rows = messages.map((message) => (
     <Table.Tr key={message.id}>
-      <Table.Td>{message.id}</Table.Td>
+      <Table.Td>
+        <Tooltip label={message.id}>
+          <Text fz="sm">{message.id.slice(0, 8)}</Text>
+        </Tooltip>
+      </Table.Td>
       <Table.Td>{formatDateTime(message.created_at)}</Table.Td>
       <Table.Td>
         <Badge color="secondary" size="lg" variant="light" mr="sm" tt="none">
@@ -28,7 +32,12 @@ export function MessageLog() {
         </Badge>
       ))}</Table.Td>
       <Table.Td>{message.status}</Table.Td>
-      <Table.Td><Button onClick={() => navigate('projects.project.streams.stream.message-log.message', {message_id: message.id})}><IconEye/></Button></Table.Td>
+      <Table.Td>
+        <ActionIcon size="lg"
+                    onClick={() => navigate('projects.project.streams.stream.message-log.message', {message_id: message.id})}>
+          <IconEye/>
+        </ActionIcon>
+      </Table.Td>
     </Table.Tr>
   ));
 
@@ -37,7 +46,7 @@ export function MessageLog() {
       <Table.Thead>
         <Table.Tr>
           <Table.Th>ID</Table.Th>
-          <Table.Th>Date</Table.Th>
+          <Table.Th>Created</Table.Th>
           <Table.Th>From</Table.Th>
           <Table.Th>Recipients</Table.Th>
           <Table.Th>Status</Table.Th>

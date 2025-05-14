@@ -31,6 +31,14 @@ export interface Message extends MessageMetadata {
     date: string | null,
     html_body: string | null,
     text_body: string | null,
+    attachments: {
+      filename: string,
+      mime: string,
+      /** Human-readable size */
+      size: string,
+      /** Base64 encoded content */
+      content: string,
+    }[]
   };
   raw_data: string;
 }

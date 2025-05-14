@@ -123,6 +123,8 @@ export default function StreamDetails() {
       <Grid.Col span={{base: 12, md: 6, lg: 9}}>
         <h2>Credentials</h2>
         <CredentialsOverview/>
+      </Grid.Col>
+      <Grid.Col span={12}>
         <h2>Messages</h2>
         <MessageLog/>
       </Grid.Col>

@@ -1,9 +1,11 @@
 use crate::models::{
     Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
 };
+use base64ct::Encoding;
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
+use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -72,13 +74,24 @@ pub struct ApiMessageMetadata {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct ApiMessageData {
     pub subject: Option<String>,
     /// An RFC3339 String
     pub date: Option<String>,
     pub html_body: Option<String>,
     pub text_body: Option<String>,
+    pub attachments: Vec<Attachment>,
+}
+
+#[derive(Serialize)]
+pub struct Attachment {
+    pub filename: String,
+    pub mime: String,
+    /// Human-readable size
+    pub size: String,
+    /// Base64 encoded bytes
+    pub content: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -193,27 +206,52 @@ impl TryFrom<PgMessage> for Message {
     }
 }
 
+impl From<mail_parser::Message<'_>> for ApiMessageData {
+    fn from(m: mail_parser::Message) -> Self {
+        // TODO get rid of as many allocations as possible here
+        Self {
+            subject: m.subject().map(|s| s.to_string()),
+            html_body: m
+                .html_bodies()
+                .next()
+                .and_then(|m| m.text_contents())
+                .map(|t| t.to_string()),
+            text_body: m
+                .text_bodies()
+                .next()
+                .and_then(|m| m.text_contents())
+                .map(|t| t.to_string()),
+            date: m.date().map(mail_parser::DateTime::to_rfc3339),
+            attachments: m.attachments().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<&mail_parser::MessagePart<'_>> for Attachment {
+    fn from(part: &mail_parser::MessagePart) -> Self {
+        let filename = part.attachment_name().unwrap_or_default().to_string();
+        let mime = match part.content_type() {
+            Some(content_type) => match &content_type.c_subtype {
+                Some(subtype) => format!("{}/{}", content_type.c_type, subtype),
+                None => content_type.c_type.to_string(),
+            },
+            None => "application/octet-stream".to_owned(),
+        };
+
+        Attachment {
+            filename,
+            mime,
+            size: humansize::format_size(part.contents().len(), humansize::DECIMAL),
+            content: base64ct::Base64::encode_string(part.contents()),
+        }
+    }
+}
+
 impl TryFrom<PgMessage> for ApiMessage {
     type Error = super::Error;
 
     fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
         let message_data: Option<mail_parser::Message> = serde_json::from_value(m.message_data)?;
-        // TODO get rid of as many allocations as possible here
-        let (subject, html_body, text_body, date) = match message_data {
-            None => (None, None, None, None),
-            Some(md) => (
-                md.subject().map(|s| s.to_string()),
-                md.html_bodies()
-                    .next()
-                    .and_then(|m| m.text_contents())
-                    .map(|t| t.to_string()),
-                md.text_bodies()
-                    .next()
-                    .and_then(|m| m.text_contents())
-                    .map(|t| t.to_string()),
-                md.date().map(mail_parser::DateTime::to_rfc3339),
-            ),
-        };
         Ok(Self {
             id: m.id,
             status: m.status,
@@ -226,12 +264,7 @@ impl TryFrom<PgMessage> for ApiMessage {
                 .map(|addr| addr.parse())
                 .collect::<Result<Vec<_>, _>>()?,
             raw_data: String::from_utf8(m.raw_data)?,
-            message_data: ApiMessageData {
-                subject,
-                date,
-                html_body,
-                text_body,
-            },
+            message_data: message_data.map(Into::into).unwrap_or_default(),
             created_at: m.created_at,
             updated_at: m.updated_at,
         })

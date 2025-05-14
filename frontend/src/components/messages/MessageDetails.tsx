@@ -4,7 +4,7 @@ import {useState} from "react";
 import {Loader} from "../../Loader.tsx";
 import {Message} from "../../types.ts";
 import {formatDateTime} from "../../util.ts";
-import {IconHelp} from "@tabler/icons-react";
+import {IconHelp, IconPaperclip} from "@tabler/icons-react";
 
 export default function MessageDetails() {
   const {currentMessage} = useMessages();
@@ -47,6 +47,26 @@ export default function MessageDetails() {
       info: 'The time that remails received this message',
       value: formatDateTime(completeMessage.created_at)
     },
+    {
+      header: 'Attachments',
+      value: completeMessage.message_data.attachments.length === 0 ?
+        <Text c="dimmed" fs="italic">Message has no attachments</Text>
+        : completeMessage.message_data.attachments.map((attachment, index) => (
+          <Badge key={`${attachment.filename}-${index}`}
+                 radius="xs"
+                 variant="light"
+                 size="lg"
+                 mr="xs"
+                 leftSection={<IconPaperclip/>}
+                 rightSection={<Text fz="xs">{attachment.size}</Text>}
+                 component="a"
+                 download={attachment.filename}
+                 href={`data:${attachment.mime};base64,${attachment.content}`}
+          >
+            {attachment.filename}
+          </Badge>
+        ))
+    }
   ]
 
 
