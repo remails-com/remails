@@ -41,6 +41,8 @@ pub enum Error {
     NotFound(&'static str),
     #[error("conflict")]
     Conflict,
+    #[error("invalid utf8")]
+    FromUtf8(#[from] std::string::FromUtf8Error),
 }
 
 impl From<sqlx::Error> for Error {

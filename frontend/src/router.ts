@@ -48,6 +48,12 @@ export const routes: Route[] = [
                   {
                     name: 'message-log',
                     path: '/messages',
+                    children: [
+                      {
+                        name: 'message',
+                        path: '/{message_id}'
+                      }
+                    ]
                   },
                 ]
               },

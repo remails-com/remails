@@ -13,19 +13,33 @@ export interface User {
 
 export type WhoamiResponse = User | { error: string; }
 
-export interface Message {
+export interface MessageMetadata {
   id: string;
   from_email: string;
   created_at: string;
   recipients: string[];
   status: string;
+  delivery_status: {
+    receiver: string,
+    status: string,
+  }
+}
+
+export interface Message extends MessageMetadata {
+  message_data: {
+    subject: string | null,
+    date: string | null,
+    html_body: string | null,
+    text_body: string | null,
+  };
+  raw_data: string;
 }
 
 export interface State {
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
-  messages: Message[] | null;
+  messages: MessageMetadata[] | null;
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   loading: boolean;
@@ -72,7 +86,7 @@ export type Action = {
   streamId: string;
 } | {
   type: 'set_messages';
-  messages: Message[] | null;
+  messages: MessageMetadata[] | null;
 } | {
   type: 'set_domains';
   domains: Domain[] | null;

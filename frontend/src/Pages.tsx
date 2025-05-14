@@ -13,6 +13,7 @@ import {useDisclosure} from "@mantine/hooks";
 import {useOrganizations} from './hooks/useOrganizations.ts';
 import {Settings} from "./components/settings/Settings.tsx";
 import {Setup} from "./components/Setup.tsx";
+import MessageDetails from "./components/messages/MessageDetails.tsx";
 
 export function Pages() {
   const [opened, {open, close}] = useDisclosure(false);
@@ -54,6 +55,9 @@ export function Pages() {
       break
     case 'statistics':
       element = <Text>Organization wide statistics, quotas, etc.</Text>
+      break
+    case 'message':
+      element = <MessageDetails/>
       break
     default:
       element = "Not Found"

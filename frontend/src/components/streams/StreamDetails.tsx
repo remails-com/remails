@@ -1,6 +1,5 @@
 import {Loader} from "../../Loader.tsx";
 import {useStreams} from "../../hooks/useStreams.ts";
-import {MessageLog} from "../MessageLog.tsx";
 import {Button, Grid, Group, Stack, Text, TextInput, Tooltip} from "@mantine/core";
 import {useForm} from "@mantine/form";
 import {IconTrash, IconX} from "@tabler/icons-react";
@@ -13,6 +12,7 @@ import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {CredentialsOverview} from "../smtpCredentials/CredentialsOverview.tsx";
+import {MessageLog} from "../messages/MessageLog.tsx";
 
 interface FormValues {
   name: string,

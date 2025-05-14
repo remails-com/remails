@@ -22,7 +22,7 @@ pub enum MessageStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Message {
     id: MessageId,
     pub(crate) organization_id: OrganizationId,
@@ -30,12 +30,62 @@ pub struct Message {
     pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
+    pub delivery_status: Vec<DeliveryStatus>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct ApiMessage {
+    id: MessageId,
+    status: MessageStatus,
+    smtp_credential_id: Option<SmtpCredentialId>,
+    pub delivery_status: Vec<DeliveryStatus>,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: String,
+    pub message_data: ApiMessageData,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl ApiMessage {
+    #[cfg(test)]
+    pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
+        self.smtp_credential_id
+    }
+}
+
+#[cfg_attr(test, derive(Deserialize))]
+#[derive(Serialize)]
+pub struct ApiMessageMetadata {
+    pub id: MessageId,
+    pub status: MessageStatus,
+    pub delivery_status: Vec<DeliveryStatus>,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct ApiMessageData {
+    pub subject: Option<String>,
+    /// An RFC3339 String
+    pub date: Option<String>,
+    pub html_body: Option<String>,
+    pub text_body: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DeliveryStatus {
+    pub receiver: EmailAddress,
+    // TODO create status enum
+    pub status: String,
 }
 
 #[derive(Debug)]
@@ -108,6 +158,7 @@ struct PgMessage {
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
     status: MessageStatus,
+    delivery_status: serde_json::Value,
     from_email: String,
     recipients: Vec<String>,
     raw_data: Vec<u8>,
@@ -127,6 +178,7 @@ impl TryFrom<PgMessage> for Message {
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             status: m.status,
+            delivery_status: serde_json::from_value(m.delivery_status)?,
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
                 .recipients
@@ -135,6 +187,71 @@ impl TryFrom<PgMessage> for Message {
                 .collect::<Result<Vec<_>, _>>()?,
             raw_data: m.raw_data,
             message_data: m.message_data,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        })
+    }
+}
+
+impl TryFrom<PgMessage> for ApiMessage {
+    type Error = super::Error;
+
+    fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
+        let message_data: Option<mail_parser::Message> = serde_json::from_value(m.message_data)?;
+        // TODO get rid of as many allocations as possible here
+        let (subject, html_body, text_body, date) = match message_data {
+            None => (None, None, None, None),
+            Some(md) => (
+                md.subject().map(|s| s.to_string()),
+                md.html_bodies()
+                    .next()
+                    .and_then(|m| m.text_contents())
+                    .map(|t| t.to_string()),
+                md.text_bodies()
+                    .next()
+                    .and_then(|m| m.text_contents())
+                    .map(|t| t.to_string()),
+                md.date().map(mail_parser::DateTime::to_rfc3339),
+            ),
+        };
+        Ok(Self {
+            id: m.id,
+            status: m.status,
+            smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            delivery_status: serde_json::from_value(m.delivery_status)?,
+            from_email: EmailAddress::from_str(&m.from_email)?,
+            recipients: m
+                .recipients
+                .iter()
+                .map(|addr| addr.parse())
+                .collect::<Result<Vec<_>, _>>()?,
+            raw_data: String::from_utf8(m.raw_data)?,
+            message_data: ApiMessageData {
+                subject,
+                date,
+                html_body,
+                text_body,
+            },
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        })
+    }
+}
+
+impl TryFrom<PgMessage> for ApiMessageMetadata {
+    type Error = super::Error;
+
+    fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: m.id,
+            status: m.status,
+            delivery_status: serde_json::from_value(m.delivery_status)?,
+            from_email: EmailAddress::from_str(&m.from_email)?,
+            recipients: m
+                .recipients
+                .iter()
+                .map(|addr| addr.parse())
+                .collect::<Result<Vec<_>, _>>()?,
             created_at: m.created_at,
             updated_at: m.updated_at,
         })
@@ -164,6 +281,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.delivery_status,
                 m.from_email,
                 m.recipients,
                 m.raw_data,
@@ -227,7 +345,7 @@ impl MessageRepository {
         project_id: Option<ProjectId>,
         stream_id: Option<StreamId>,
         filter: MessageFilter,
-    ) -> Result<Vec<Message>, Error> {
+    ) -> Result<Vec<ApiMessageMetadata>, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
@@ -238,6 +356,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.delivery_status,
                 m.from_email,
                 m.recipients,
                 ''::bytea AS "raw_data!",
@@ -273,7 +392,7 @@ impl MessageRepository {
         project_id: Option<ProjectId>,
         stream_id: Option<StreamId>,
         message_id: MessageId,
-    ) -> Result<Message, Error> {
+    ) -> Result<ApiMessage, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
@@ -284,6 +403,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.delivery_status,
                 m.from_email,
                 m.recipients,
                 m.raw_data,
