@@ -52,6 +52,17 @@ impl Message {
     pub fn id(&self) -> MessageId {
         self.id
     }
+
+    pub fn prepend_headers(&mut self, headers: &str) {
+        // TODO: we could 'overallocate' the original raw message data to prepend this stuff without
+        // needing to allocate or move data around.
+        let hdr_size = headers.len();
+        let msg_len = self.raw_data.len();
+
+        self.raw_data.resize(msg_len + hdr_size, Default::default());
+        self.raw_data.copy_within(..msg_len, hdr_size);
+        self.raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
+    }
 }
 
 impl NewMessage {

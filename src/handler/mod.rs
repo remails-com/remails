@@ -266,7 +266,7 @@ impl Handler {
         trace!("stored message {}", message.id());
 
         // parse and save message contents
-        let parsed_msg: mail_parser::Message = MessageParser::default()
+        let mut parsed_msg: mail_parser::Message = MessageParser::default()
             .parse(&message.raw_data)
             .unwrap_or_else(|| mail_parser::Message {
                 raw_message: Borrowed(&message.raw_data),
@@ -274,8 +274,35 @@ impl Handler {
             });
 
         // this should never fail since mail_parser::Message has a derived Serialize instance
-        let json_message_data =
+        let mut json_message_data =
             serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
+
+        if !parsed_msg.parts.first().is_some_and(|msg| {
+            msg.headers
+                .iter()
+                .any(|hdr| hdr.name == HeaderName::MessageId)
+        }) {
+            // the message-id header was not provided by the MUA, we are going to
+            // provide one ourselves.
+            trace!("adding message-id header");
+            use aws_lc_rs::digest;
+            let hash = digest::digest(&digest::SHA224, &message.raw_data);
+            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
+
+            let sender_domain = message.from_email.domain();
+            message.prepend_headers(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+
+            // we need to re-parse the message because the data has shifted
+            parsed_msg = MessageParser::default()
+                .parse(&message.raw_data)
+                .unwrap_or_else(|| mail_parser::Message {
+                    raw_message: Borrowed(&message.raw_data),
+                    ..Default::default()
+                });
+
+            json_message_data =
+                serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
+        }
 
         trace!("updating message {}", message.id());
 
@@ -299,40 +326,10 @@ impl Handler {
 
         // generate message headers
 
-        let mut generated_headers = String::new();
-
-        if !parsed_msg.parts.first().is_some_and(|msg| {
-            msg.headers
-                .iter()
-                .any(|hdr| hdr.name == HeaderName::MessageId)
-        }) {
-            // the message-id header was not provided by the MUA, we are going to
-            // provide one ourselves.
-            trace!("adding message-id header");
-            use aws_lc_rs::digest;
-            let hash = digest::digest(&digest::SHA224, &message.raw_data);
-            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
-
-            let sender_domain = message.from_email.domain();
-            generated_headers
-                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n",));
-        }
-
-        generated_headers.push_str(&dkim_header);
-
         trace!("adding headers");
-        debug!("{generated_headers:?}");
+        debug!("{dkim_header:?}");
 
-        // TODO: we could 'overallocate' the original raw message data to prepend this stuff without
-        // needing to allocate or move data around.
-        let hdr_size = generated_headers.len();
-        let msg_len = message.raw_data.len();
-
-        message
-            .raw_data
-            .resize(msg_len + hdr_size, Default::default());
-        message.raw_data.copy_within(..msg_len, hdr_size);
-        message.raw_data[..hdr_size].copy_from_slice(generated_headers.as_bytes());
+        message.prepend_headers(&dkim_header);
 
         Ok(message)
     }
