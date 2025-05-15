@@ -22,8 +22,6 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
-    #[error("could not generate signature: {0}")]
-    DkimError(mail_auth::Error),
     #[error("message is being held: {0}")]
     MessageHeld(String),
 }
@@ -95,7 +93,7 @@ impl Handler {
         }
     }
 
-    async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, sender_domain: &str) -> Option<()> {
+    async fn check_dkim_key(&self, public_dkim_key: &[u8], sender_domain: &str) -> Option<()> {
         let domain = sender_domain.trim_matches('.');
 
         let record = format!(
@@ -129,7 +127,7 @@ impl Handler {
 
         let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
 
-        if dns_key.iter().eq(domain_key.public_key()) {
+        if dns_key.iter().eq(public_dkim_key) {
             Some(())
         } else {
             trace!("dkim keys are not equal!");
@@ -159,8 +157,13 @@ impl Handler {
     }
 
     /// Check if we are able to send this message, i.e., we are permitted to use the sender's domain,
-    /// and we can sign the message with DKIM
-    async fn check_message(
+    /// and then we sign the message with DKIM
+    ///
+    /// # Returns
+    /// * `Ok(Ok(dkim_header))` if all checks passed and we successfully signed the message
+    /// * `Ok(Err(reason))` when a message should be held in the database
+    /// * `Err(handler_error)` on critical internal server errors (mostly related to the database)
+    async fn check_and_sign_message(
         &self,
         message: &Message,
         parsed_msg: &mail_parser::Message<'_>,
@@ -226,23 +229,31 @@ impl Handler {
         };
 
         // check dkim key
-        let key =
-            PrivateKey::new(&domain, "remails").map_err(HandlerError::MessageRepositoryError)?;
+        let dkim_key = match PrivateKey::new(&domain, "remails") {
+            Ok(key) => key,
+            Err(e) => {
+                error!("error creating DKIM key: {e}");
+                return Ok(Err("internal error: could not create DKIM key".to_string()));
+            }
+        };
         trace!(
             "retrieved dkim key for domain {}: {}",
             domain.domain,
-            Base64::encode_string(key.public_key())
+            Base64::encode_string(dkim_key.public_key())
         );
-        if self.check_dkim_key(&key, sender_domain).await.is_none() {
+        if self
+            .check_dkim_key(dkim_key.public_key(), sender_domain)
+            .await
+            .is_none()
+        {
             return Ok(Err(format!("invalid DKIM key found on {sender_domain}")));
         }
 
         trace!("signing with dkim");
-        let dkim_header = key
+        Ok(dkim_key
             .dkim_header(parsed_msg)
-            .map_err(HandlerError::DkimError)?;
-
-        Ok(Ok(dkim_header))
+            .inspect_err(|e| error!("error creating DKIM header: {e}"))
+            .map_err(|_| "internal error: could not create DKIM header".to_string()))
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -270,7 +281,7 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        let result = self.check_message(&message, &parsed_msg).await?;
+        let result = self.check_and_sign_message(&message, &parsed_msg).await?;
         message.status = match result {
             Ok(_) => MessageStatus::Accepted,
             Err(_) => MessageStatus::Held,
