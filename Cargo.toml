@@ -27,17 +27,17 @@ axum-extra = { version = "0.10.1", features = ["cookie-private", "typed-header"]
 chrono = { version = "0.4.41", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.10.2", features = ["serde_support"] }
-mail-send = { version = "0.5.0", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
+mail-send = { version = "0.5.1", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
 password-auth = "1.0.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["alloc"] }
 smtp-proto = "0.1.6"
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "chrono", "uuid", "macros", "migrate", "json"] }
 thiserror = "2.0.12"
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 tokio-rustls = "0.26.2"
 tokio-util = { version = "0.7.15", features = ["io"] }
-tower-http = { version = "0.6.2", features = ["trace", "timeout"] }
+tower-http = { version = "0.6.4", features = ["trace", "timeout"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-test = "0.2.5"
@@ -54,8 +54,8 @@ memory-serve = "1.2.1"
 derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug", "from_str"]}
 rand = "0.9.1"
 hickory-resolver = "0.25.2"
-aws-lc-rs = "1.13.0"
-mail-auth = "0.6.1"
+aws-lc-rs = "1.13.1"
+mail-auth = "0.7.0"
 rustls-pemfile = "2.2.0"
 humansize = "2.1.3"
 
