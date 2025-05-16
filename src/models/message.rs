@@ -1,14 +1,15 @@
 use crate::models::{
     Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
 };
-use base64ct::Encoding;
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{mem, str::FromStr};
 use uuid::Uuid;
+
+const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
@@ -43,35 +44,33 @@ pub struct Message {
 
 #[derive(Serialize)]
 pub struct ApiMessage {
-    id: MessageId,
-    status: MessageStatus,
-    smtp_credential_id: Option<SmtpCredentialId>,
-    pub delivery_status: Vec<DeliveryStatus>,
-    pub from_email: EmailAddress,
-    pub recipients: Vec<EmailAddress>,
-    pub raw_data: String,
+    #[serde(flatten)]
+    metadata: ApiMessageMetadata,
+    pub truncated_raw_data: String,
+    is_truncated: bool,
     message_data: ApiMessageData,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 impl ApiMessage {
     #[cfg(test)]
     pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
-        self.smtp_credential_id
+        self.metadata.smtp_credential_id
     }
 }
 
 #[cfg_attr(test, derive(Deserialize))]
 #[derive(Serialize)]
 pub struct ApiMessageMetadata {
-    pub id: MessageId,
-    pub status: MessageStatus,
-    pub delivery_status: Vec<DeliveryStatus>,
-    pub from_email: EmailAddress,
-    pub recipients: Vec<EmailAddress>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    id: MessageId,
+    status: MessageStatus,
+    delivery_status: Vec<DeliveryStatus>,
+    smtp_credential_id: Option<SmtpCredentialId>,
+    from_email: EmailAddress,
+    recipients: Vec<EmailAddress>,
+    /// Human-readable size
+    raw_size: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize, Default)]
@@ -79,7 +78,6 @@ pub struct ApiMessageData {
     pub subject: Option<String>,
     /// An RFC3339 String
     pub date: Option<String>,
-    pub html_body: Option<String>,
     pub text_body: Option<String>,
     pub attachments: Vec<Attachment>,
 }
@@ -90,8 +88,6 @@ pub struct Attachment {
     pub mime: String,
     /// Human-readable size
     pub size: String,
-    /// Base64 encoded bytes
-    pub content: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -175,6 +171,7 @@ struct PgMessage {
     from_email: String,
     recipients: Vec<String>,
     raw_data: Vec<u8>,
+    raw_size: i32,
     message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -211,11 +208,6 @@ impl From<mail_parser::Message<'_>> for ApiMessageData {
         // TODO get rid of as many allocations as possible here
         Self {
             subject: m.subject().map(|s| s.to_string()),
-            html_body: m
-                .html_bodies()
-                .next()
-                .and_then(|m| m.text_contents())
-                .map(|t| t.to_string()),
             text_body: m
                 .text_bodies()
                 .next()
@@ -242,7 +234,6 @@ impl From<&mail_parser::MessagePart<'_>> for Attachment {
             filename,
             mime,
             size: humansize::format_size(part.contents().len(), humansize::DECIMAL),
-            content: base64ct::Base64::encode_string(part.contents()),
         }
     }
 }
@@ -250,23 +241,15 @@ impl From<&mail_parser::MessagePart<'_>> for Attachment {
 impl TryFrom<PgMessage> for ApiMessage {
     type Error = super::Error;
 
-    fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
-        let message_data: Option<mail_parser::Message> = serde_json::from_value(m.message_data)?;
+    fn try_from(mut m: PgMessage) -> Result<Self, Self::Error> {
+        let message_data_json = mem::take(&mut m.message_data);
+        let message_data: Option<mail_parser::Message> = serde_json::from_value(message_data_json)?;
+        let raw_data_bytes = mem::take(&mut m.raw_data);
         Ok(Self {
-            id: m.id,
-            status: m.status,
-            smtp_credential_id: m.smtp_credential_id.map(Into::into),
-            delivery_status: serde_json::from_value(m.delivery_status)?,
-            from_email: EmailAddress::from_str(&m.from_email)?,
-            recipients: m
-                .recipients
-                .iter()
-                .map(|addr| addr.parse())
-                .collect::<Result<Vec<_>, _>>()?,
-            raw_data: String::from_utf8(m.raw_data)?,
+            truncated_raw_data: String::from_utf8(raw_data_bytes)?,
+            is_truncated: m.raw_size > API_RAW_TRUNCATE_LENGTH,
             message_data: message_data.map(Into::into).unwrap_or_default(),
-            created_at: m.created_at,
-            updated_at: m.updated_at,
+            metadata: m.try_into()?,
         })
     }
 }
@@ -279,12 +262,14 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             id: m.id,
             status: m.status,
             delivery_status: serde_json::from_value(m.delivery_status)?,
+            smtp_credential_id: m.smtp_credential_id.map(Into::into),
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
                 .recipients
                 .iter()
                 .map(|addr| addr.parse())
                 .collect::<Result<Vec<_>, _>>()?,
+            raw_size: humansize::format_size(m.raw_size.unsigned_abs(), humansize::DECIMAL),
             created_at: m.created_at,
             updated_at: m.updated_at,
         })
@@ -318,6 +303,7 @@ impl MessageRepository {
                 m.from_email,
                 m.recipients,
                 m.raw_data,
+                octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.created_at,
                 m.updated_at
@@ -394,6 +380,7 @@ impl MessageRepository {
                 m.recipients,
                 ''::bytea AS "raw_data!",
                 NULL::jsonb AS "message_data",
+                octet_length(m.raw_data) as "raw_size!",
                 m.created_at,
                 m.updated_at
             FROM messages m
@@ -439,7 +426,9 @@ impl MessageRepository {
                 m.delivery_status,
                 m.from_email,
                 m.recipients,
-                m.raw_data,
+                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.
+                substring(m.raw_data FOR $5) as "raw_data!",
+                octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.created_at,
                 m.updated_at
@@ -453,6 +442,7 @@ impl MessageRepository {
             *org_id,
             project_id.map(|p| p.as_uuid()),
             stream_id.map(|s| s.as_uuid()),
+            API_RAW_TRUNCATE_LENGTH,
         )
         .fetch_one(&self.pool)
         .await?
@@ -467,12 +457,6 @@ mod test {
 
     use super::*;
     use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
-
-    impl Message {
-        pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
-            self.smtp_credential_id
-        }
-    }
 
     impl NewMessage {
         pub fn from_builder_message(
@@ -557,16 +541,19 @@ mod test {
             .unwrap();
 
         assert_eq!(
-            fetched_message.from_email,
+            fetched_message.metadata.from_email,
             "john@test-org-1-project-1.com".parse().unwrap()
         );
 
-        fetched_message.recipients.sort_by_key(|x| x.email());
+        fetched_message
+            .metadata
+            .recipients
+            .sort_by_key(|x| x.email());
         let expected = vec![
             "james@test.com".parse().unwrap(),
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
 
-        assert_eq!(fetched_message.recipients, expected);
+        assert_eq!(fetched_message.metadata.recipients, expected);
     }
 }

@@ -150,7 +150,8 @@ export function useLoadRemails(user: WhoamiResponse | null) {
         });
       }
     });
-  }, [initialRoute.fullName, initialRoute.fullPath, initialRoute.pathParams, initialRoute.queryParams, initialRoute.route]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (user) {

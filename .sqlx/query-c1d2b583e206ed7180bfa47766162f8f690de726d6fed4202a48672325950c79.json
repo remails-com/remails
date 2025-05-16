@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND m.organization_id = $4 \n              AND ($5::uuid IS NULL OR m.project_id = $5) \n              AND ($6::uuid IS NULL OR m.stream_id = $6)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND m.organization_id = $4 \n              AND ($5::uuid IS NULL OR m.project_id = $5) \n              AND ($6::uuid IS NULL OR m.stream_id = $6)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -74,11 +74,16 @@
       },
       {
         "ordinal": 11,
+        "name": "raw_size!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -119,9 +124,10 @@
       false,
       null,
       null,
+      null,
       false,
       false
     ]
   },
-  "hash": "2d5244e5284762352f938439c5739d06d815b379e20fc19fde421f779f5d4647"
+  "hash": "c1d2b583e206ed7180bfa47766162f8f690de726d6fed4202a48672325950c79"
 }

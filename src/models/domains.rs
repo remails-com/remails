@@ -792,7 +792,7 @@ mod test {
     async fn list_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
-        let domains = repo
+        let err = repo
             .list(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -800,8 +800,8 @@ mod test {
                 Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
             )
             .await
-            .unwrap();
-        assert!(domains.is_empty());
+            .unwrap_err();
+        assert!(matches!(err, Error::BadRequest(_)));
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]

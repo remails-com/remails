@@ -19,6 +19,7 @@ export interface MessageMetadata {
   created_at: string;
   recipients: string[];
   status: string;
+  raw_size: string;
   delivery_status: {
     receiver: string,
     status: string,
@@ -29,18 +30,16 @@ export interface Message extends MessageMetadata {
   message_data: {
     subject: string | null,
     date: string | null,
-    html_body: string | null,
     text_body: string | null,
     attachments: {
       filename: string,
       mime: string,
       /** Human-readable size */
       size: string,
-      /** Base64 encoded content */
-      content: string,
     }[]
   };
-  raw_data: string;
+  truncated_raw_data: string;
+  is_truncated: boolean;
 }
 
 export interface State {

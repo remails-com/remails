@@ -8,10 +8,10 @@ import {IconHelp, IconPaperclip} from "@tabler/icons-react";
 
 export default function MessageDetails() {
   const {currentMessage} = useMessages();
-  const [displayMode, setDisplayMode] = useState('html');
+  const [displayMode, setDisplayMode] = useState('text');
 
 
-  if (!currentMessage || !('message_data' in currentMessage && 'raw_data' in currentMessage)) {
+  if (!currentMessage || !('message_data' in currentMessage && 'truncated_raw_data' in currentMessage)) {
     return <Loader/>
   }
 
@@ -19,8 +19,7 @@ export default function MessageDetails() {
 
   const subject = completeMessage.message_data.subject;
   const text_body = completeMessage.message_data.text_body;
-  const html_body = completeMessage.message_data.html_body;
-  const raw = completeMessage.raw_data;
+  const raw = completeMessage.truncated_raw_data;
 
   const table_data = [
     {header: 'From', value: completeMessage.from_email},
@@ -48,6 +47,11 @@ export default function MessageDetails() {
       value: formatDateTime(completeMessage.created_at)
     },
     {
+      header: 'Total size',
+      info: 'The size of the whole message',
+      value: completeMessage.raw_size,
+    },
+    {
       header: 'Attachments',
       value: completeMessage.message_data.attachments.length === 0 ?
         <Text c="dimmed" fs="italic">Message has no attachments</Text>
@@ -59,9 +63,6 @@ export default function MessageDetails() {
                  mr="xs"
                  leftSection={<IconPaperclip/>}
                  rightSection={<Text fz="xs">{attachment.size}</Text>}
-                 component="a"
-                 download={attachment.filename}
-                 href={`data:${attachment.mime};base64,${attachment.content}`}
           >
             {attachment.filename}
           </Badge>
@@ -102,23 +103,21 @@ export default function MessageDetails() {
         value={displayMode}
         onChange={setDisplayMode}
         data={[
-          {label: 'HTML', value: 'html'},
           {label: 'Text', value: 'text'},
           {label: 'Raw', value: 'raw'},
         ]}/>
       <Paper shadow={"xl"} p='sm' withBorder>
-        {displayMode === 'html' && (
-          html_body ? <iframe sandbox='' srcDoc={html_body} style={{width: '100%', border: 'none'}}/> :
-            <Text c="dimmed" fs="italic">No HTML version provided</Text>
-        )
-        }
         {displayMode === 'text' && (
           text_body ? <Text style={{whiteSpace: 'pre-wrap'}}>{text_body}</Text> :
             <Text c="dimmed" fs="italic">No plain text version provided</Text>
         )
         }
         {displayMode === 'raw' && (
-          raw ? <Text ff='monospace' fz="sm" style={{whiteSpace: 'pre-wrap'}}>{raw}</Text> :
+          raw ? <><Text ff='monospace' fz="sm" style={{whiteSpace: 'pre-wrap'}}>{raw}</Text>
+              {completeMessage.is_truncated &&
+                  <Text c="dimmed" fs="italic">Message truncated</Text>
+              }
+            </> :
             <Text c="dimmed" fs="italic">Failed to load raw message data</Text>
         )
         }
