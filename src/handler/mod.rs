@@ -1,8 +1,8 @@
 use crate::{
     dkim::PrivateKey,
-    models::{Message, MessageRepository, MessageStatus, NewMessage},
+    models::{DomainRepository, Message, MessageRepository, MessageStatus, NewMessage},
 };
-use base64ct::{Base64Unpadded, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
@@ -22,11 +22,8 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
-    #[error("could not generate signature: {0}")]
-    DkimError(mail_auth::Error),
-    // TODO: a message can be held for more than one reason
-    #[error("message is being held: DKIM not in DNS")]
-    MessageHeld,
+    #[error("message is being held: {0}")]
+    MessageHeld(String),
 }
 
 #[derive(Debug, Error)]
@@ -77,6 +74,7 @@ impl HandlerConfig {
 
 pub struct Handler {
     message_repository: MessageRepository,
+    domain_repository: DomainRepository,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -88,14 +86,15 @@ impl Handler {
                 .expect("Failed to install crypto provider");
         }
         Self {
-            message_repository: MessageRepository::new(pool),
+            message_repository: MessageRepository::new(pool.clone()),
+            domain_repository: DomainRepository::new(pool),
             shutdown,
             config,
         }
     }
 
-    pub async fn check_dkim_key(&self, domain_key: &PrivateKey<'_>, domain: &str) -> Option<()> {
-        let domain = domain.trim_matches('.');
+    async fn check_dkim_key(&self, public_dkim_key: &[u8], sender_domain: &str) -> Option<()> {
+        let domain = sender_domain.trim_matches('.');
 
         let record = format!(
             "remails._domainkey.{domain}{}",
@@ -128,11 +127,133 @@ impl Handler {
 
         let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
 
-        if dns_key.ends_with(&domain_key.public_key()) {
+        if dns_key.iter().eq(public_dkim_key) {
             Some(())
         } else {
+            trace!("dkim keys are not equal!");
             None
         }
+    }
+
+    fn is_valid_domain(domain: &str) -> bool {
+        // RFC 1035: domains can only contain a-z, A-Z, 0-9, '-', and '.'
+        // This should specifically prevent characters like '/', '?', and '#' from being used to extend domain names
+        // E.g. "tweedegolf.com?q=gmail.com" is NOT allowed
+        domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+    }
+
+    fn is_subdomain(subdomain: &str, domain: &str) -> bool {
+        if !Self::is_valid_domain(domain) {
+            return false;
+        }
+
+        if !Self::is_valid_domain(subdomain) {
+            return false;
+        }
+
+        domain.ends_with(subdomain)
+    }
+
+    /// Check if we are able to send this message, i.e., we are permitted to use the sender's domain,
+    /// and then we sign the message with DKIM
+    ///
+    /// # Returns
+    /// * `Ok(Ok(dkim_header))` if all checks passed and we successfully signed the message
+    /// * `Ok(Err(reason))` when a message should be held in the database
+    /// * `Err(handler_error)` on critical internal server errors (mostly related to the database)
+    async fn check_and_sign_message(
+        &self,
+        message: &Message,
+        parsed_msg: &mail_parser::Message<'_>,
+    ) -> Result<Result<String, String>, HandlerError> {
+        let sender_domain = message.from_email.domain();
+
+        // check SMTP credentials
+        let Some(smtp_credential_id) = message.smtp_credential_id else {
+            return Ok(Err("missing SMTP credential".to_string()));
+        };
+        let Some(domain_id) = self
+            .domain_repository
+            .get_domain_id_associated_with_credential(sender_domain, smtp_credential_id)
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?
+        else {
+            return Ok(Err(format!(
+                "SMTP credential is not permitted to use domain {sender_domain}"
+            )));
+        };
+
+        let domain = self
+            .domain_repository
+            .get_domain_by_id(message.organization_id, domain_id)
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?;
+
+        // check MAIL FROM domain (can be a subdomain)
+        if !Self::is_subdomain(sender_domain, &domain.domain) {
+            return Ok(Err(format!(
+                "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
+                domain.domain
+            )));
+        }
+
+        // check From domain (can be a different subdomain)
+        if let Some(from) = parsed_msg.from() {
+            for addr in from.iter() {
+                if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
+                    if !Self::is_subdomain(addr.domain(), &domain.domain) {
+                        return Ok(Err(format!(
+                            "From domain ({}) is not a valid (sub-)domain of {}",
+                            addr.domain(),
+                            domain.domain
+                        )));
+                    }
+                }
+            }
+        };
+
+        // check Return-Path domain (can be a different subdomain)
+        if let Some(Ok(return_path)) = parsed_msg
+            .return_address()
+            .map(|p| p.parse::<EmailAddress>())
+        {
+            if !Self::is_subdomain(return_path.domain(), &domain.domain) {
+                return Ok(Err(format!(
+                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
+                    return_path.domain(),
+                    domain.domain
+                )));
+            }
+        };
+
+        // check dkim key
+        let dkim_key = match PrivateKey::new(&domain, "remails") {
+            Ok(key) => key,
+            Err(e) => {
+                error!("error creating DKIM key: {e}");
+                return Ok(Err("internal error: could not create DKIM key".to_string()));
+            }
+        };
+        trace!(
+            "retrieved dkim key for domain {}: {}",
+            domain.domain,
+            Base64::encode_string(dkim_key.public_key())
+        );
+        if self
+            .check_dkim_key(dkim_key.public_key(), sender_domain)
+            .await
+            .is_none()
+        {
+            return Ok(Err(format!("invalid DKIM key found on {sender_domain}")));
+        }
+
+        trace!("signing with dkim");
+        Ok(dkim_key
+            .dkim_header(parsed_msg)
+            .inspect_err(|e| error!("error creating DKIM header: {e}"))
+            .map_err(|_| "internal error: could not create DKIM header".to_string()))
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -142,16 +263,7 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        let sender_domain = message.from_email.domain();
-
         trace!("stored message {}", message.id());
-
-        // TODO: we should retrieve the key from the database
-        let key =
-            PrivateKey::test_key(sender_domain, "remails").map_err(HandlerError::DkimError)?;
-
-        trace!("retrieved dkim key for domain {sender_domain}");
-        trace!("parsing message {} {}", message.id(), message.message_data);
 
         // parse and save message contents
         let parsed_msg: mail_parser::Message = MessageParser::default()
@@ -169,12 +281,10 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        // TODO: check limits, whether the sender_domain is owned, etc
-        message.status = if self.check_dkim_key(&key, sender_domain).await.is_none() {
-            info!("message held due to invalid DKIM key");
-            MessageStatus::Held
-        } else {
-            MessageStatus::Accepted
+        let result = self.check_and_sign_message(&message, &parsed_msg).await?;
+        message.status = match result {
+            Ok(_) => MessageStatus::Accepted,
+            Err(_) => MessageStatus::Held,
         };
 
         self.message_repository
@@ -182,9 +292,10 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
-        if message.status != MessageStatus::Accepted {
-            return Err(HandlerError::MessageHeld);
-        }
+        let dkim_header = match result {
+            Ok(dkim_header) => dkim_header,
+            Err(reason) => return Err(HandlerError::MessageHeld(reason)),
+        };
 
         // generate message headers
 
@@ -202,18 +313,12 @@ impl Handler {
             let hash = digest::digest(&digest::SHA224, &message.raw_data);
             let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
 
+            let sender_domain = message.from_email.domain();
             generated_headers
-                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+                .push_str(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n",));
         }
 
-        // sign with dkim
-
-        trace!("signing with dkim");
-
-        generated_headers.push_str(
-            &key.dkim_header(&parsed_msg)
-                .map_err(HandlerError::DkimError)?,
-        );
+        generated_headers.push_str(&dkim_header);
 
         trace!("adding headers");
         debug!("{generated_headers:?}");
@@ -423,9 +528,9 @@ mod test {
         let _drop_guard = token.drop_guard();
 
         let message: mail_send::smtp::message::Message = MessageBuilder::new()
-            .from(("John Doe", "john@example.com"))
+            .from(("John Doe", "john@test-org-1-project-1.com"))
             .to(vec![
-                ("Jane Doe", "jane@example.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
                 ("James Smith", "james@test.com"),
             ])
             .subject("Hi!")
@@ -459,5 +564,137 @@ mod test {
 
         let message = handler.handle_message(message).await.unwrap();
         handler.send_message(message).await.unwrap();
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "domains", "streams")
+    ))]
+    #[traced_test]
+    #[serial]
+    async fn test_handle_invalid_mail_from(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let we_cant_use_these_emails = [
+            "john@gmail.com",
+            "john@gmail.com/test-org-1-project-1.com",
+            "john@gmail.com?q=test-org-1-project-1.com",
+            "john@gmail.com#test-org-1-project-1.com",
+        ];
+        for from_email in we_cant_use_these_emails {
+            let message: mail_send::smtp::message::Message = MessageBuilder::new()
+                .from(("John Doe", from_email))
+                .to(vec![
+                    ("Jane Doe", "jane@test-org-1-project-1.com"),
+                    ("James Smith", "james@test.com"),
+                ])
+                .subject("Hi!")
+                .html_body("<h1>Hello, world!</h1>")
+                .text_body("Hello world!")
+                .into_message()
+                .unwrap();
+
+            let credential_request = SmtpCredentialRequest {
+                username: "user".to_string(),
+                description: "Test SMTP credential description".to_string(),
+            };
+
+            let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+            let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+            let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+            let credential_repo = SmtpCredentialRepository::new(pool.clone());
+            let credential = credential_repo
+                .generate(org_id, project_id, stream_id, &credential_request)
+                .await
+                .unwrap();
+
+            // Message has invalid "MAIL FROM" and invalid "From"
+            let message = NewMessage::from_builder_message(message, credential.id());
+            let config = HandlerConfig {
+                allow_plain: true,
+                domain: "test".to_string(),
+                resolver: super::mock::Resolver("localhost", mailcrab_port),
+            };
+            let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+
+            assert!(handler.handle_message(message).await.is_err());
+
+            credential_repo
+                .remove(org_id, project_id, stream_id, credential.id())
+                .await
+                .unwrap();
+        }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "domains", "streams")
+    ))]
+    #[traced_test]
+    #[serial]
+    async fn test_handle_invalid_from(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let we_cant_use_these_emails = [
+            "john@gmail.com",
+            "john@gmail.com/test-org-1-project-1.com",
+            "john@gmail.com?q=test-org-1-project-1.com",
+            "john@gmail.com#test-org-1-project-1.com",
+        ];
+        for from_email in we_cant_use_these_emails {
+            let message: mail_send::smtp::message::Message = MessageBuilder::new()
+                .from(("John Doe", from_email))
+                .to(vec![
+                    ("Jane Doe", "jane@test-org-1-project-1.com"),
+                    ("James Smith", "james@test.com"),
+                ])
+                .subject("Hi!")
+                .html_body("<h1>Hello, world!</h1>")
+                .text_body("Hello world!")
+                .into_message()
+                .unwrap();
+
+            let credential_request = SmtpCredentialRequest {
+                username: "user".to_string(),
+                description: "Test SMTP credential description".to_string(),
+            };
+
+            let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+            let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+            let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+            let credential_repo = SmtpCredentialRepository::new(pool.clone());
+            let credential = credential_repo
+                .generate(org_id, project_id, stream_id, &credential_request)
+                .await
+                .unwrap();
+
+            // Message has valid "MAIL FROM" and invalid "From"
+            let message = NewMessage::from_builder_message_custom_from(
+                message,
+                credential.id(),
+                "john@test-org-1-project-1.com",
+            );
+            let config = HandlerConfig {
+                allow_plain: true,
+                domain: "test".to_string(),
+                resolver: super::mock::Resolver("localhost", mailcrab_port),
+            };
+            let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+
+            assert!(handler.handle_message(message).await.is_err());
+
+            credential_repo
+                .remove(org_id, project_id, stream_id, credential.id())
+                .await
+                .unwrap();
+        }
     }
 }

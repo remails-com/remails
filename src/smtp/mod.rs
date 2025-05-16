@@ -125,9 +125,9 @@ mod test {
         let (shutdown, server_handle, mut receiver, port, username, pwd) = setup_server(pool).await;
 
         let message = MessageBuilder::new()
-            .from(("John Doe", "john@example.com"))
+            .from(("John Doe", "john@test-org-1-project-1.com"))
             .to(vec![
-                ("Jane Doe", "jane@example.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
                 ("James Smith", "james@test.com"),
             ])
             .subject("Hi!")
@@ -151,7 +151,7 @@ mod test {
         let received_message = receiver.recv().await.unwrap();
         assert_eq!(
             received_message.from_email,
-            "john@example.com".parse().unwrap()
+            "john@test-org-1-project-1.com".parse().unwrap()
         );
     }
 

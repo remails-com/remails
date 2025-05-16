@@ -1,15 +1,12 @@
-use mail_auth::{
-    common::{
-        crypto::{RsaKey, Sha256},
-        headers::HeaderWriter,
-    },
-    dkim::DkimSigner,
-};
+use mail_auth::{common::headers::HeaderWriter, dkim::DkimSigner};
+
+use crate::models::{Domain, MailAuthSigningKey};
 
 pub struct PrivateKey<'a> {
     domain: &'a str,
     selector: &'a str,
-    sign_key: RsaKey<Sha256>,
+    sign_key: MailAuthSigningKey,
+    pub_key: aws_lc_rs::encoding::PublicKeyX509Der<'a>,
 }
 
 const SIGNED_HEADERS: [&str; 26] = [
@@ -42,8 +39,18 @@ const SIGNED_HEADERS: [&str; 26] = [
 ];
 
 impl<'a> PrivateKey<'a> {
-    pub fn public_key(&self) -> Vec<u8> {
-        self.sign_key.public_key()
+    pub fn new(domain: &'a Domain, selector: &'a str) -> Result<Self, crate::models::Error> {
+        Ok(Self {
+            domain: &domain.domain,
+            selector,
+            sign_key: domain.dkim_key.signing_key()?,
+            pub_key: domain.dkim_key.pub_key()?,
+        })
+    }
+
+    /// Returns the full key including header info
+    pub fn public_key(&self) -> &[u8] {
+        self.pub_key.as_ref()
     }
 
     pub fn dkim_header(self, msg: &mail_parser::Message) -> Result<String, mail_auth::Error> {
@@ -53,22 +60,5 @@ impl<'a> PrivateKey<'a> {
             .headers(SIGNED_HEADERS);
 
         signer.sign(&msg.raw_message).map(|x| x.to_header())
-    }
-
-    pub fn test_key(domain: &'a str, selector: &'a str) -> Result<Self, mail_auth::Error> {
-        use std::io::Read;
-        let mut pem = String::new();
-        let _ = std::fs::File::open("dkim_key.pem")
-            .unwrap()
-            .read_to_string(&mut pem)
-            .unwrap();
-
-        let sign_key = RsaKey::<Sha256>::from_pkcs8_pem(&pem)?;
-
-        Ok(Self {
-            sign_key,
-            domain,
-            selector,
-        })
     }
 }
