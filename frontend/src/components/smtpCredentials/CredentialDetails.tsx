@@ -34,6 +34,7 @@ export function CredentialDetails() {
       description: currentCredential?.description || ''
     });
     form.resetDirty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCredential]);
 
   if (!currentStream || !currentOrganization || !currentProject || !currentCredential) {

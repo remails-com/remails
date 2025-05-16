@@ -20,7 +20,7 @@ export default function GitHubBadge({user_id}: GitHubBadgeProps) {
       .then(res => res.json())
       .then(data => setUser(data))
       .catch(err => console.error(err))
-  }, []);
+  }, [user_id]);
 
 
   return (

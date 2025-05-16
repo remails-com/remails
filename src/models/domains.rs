@@ -1,4 +1,4 @@
-use crate::models::{projects, Error, OrganizationId, ProjectId, SmtpCredentialId};
+use crate::models::{Error, OrganizationId, ProjectId, SmtpCredentialId, projects};
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};

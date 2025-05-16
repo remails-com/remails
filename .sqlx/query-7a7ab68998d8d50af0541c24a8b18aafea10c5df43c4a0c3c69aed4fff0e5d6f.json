@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at                \n            FROM domains d \n                LEFT JOIN projects p ON d.project_id = p.id\n            WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)\n            ",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at\n            FROM domains d\n                LEFT JOIN projects p ON d.project_id = p.id\n            WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)\n            ",
   "describe": {
     "columns": [
       {
@@ -71,5 +71,5 @@
       false
     ]
   },
-  "hash": "dc35ac0e0b9796d8cee52aa180115276bf124b9caf65bef8ed9f551f3aa36d69"
+  "hash": "7a7ab68998d8d50af0541c24a8b18aafea10c5df43c4a0c3c69aed4fff0e5d6f"
 }

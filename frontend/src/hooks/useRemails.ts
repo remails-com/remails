@@ -1,4 +1,4 @@
-import {ActionDispatch, createContext, useContext, useEffect, useReducer} from "react";
+import {ActionDispatch, createContext, useCallback, useContext, useEffect, useReducer} from "react";
 import {Action, State, WhoamiResponse} from "../types.ts";
 import {initRouter, matchName, Navigate, RouteName, RouteParams, routerNavigate, routes} from "../router.ts";
 
@@ -126,9 +126,9 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     ...initialRoute
   });
 
-  const navigate = (name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
+  const navigate = useCallback((name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
     dispatch({type: "set_route", ...routerNavigate(name, {...state.pathParams, ...pathParams}, queryParams)});
-  };
+  }, [state.pathParams]);
 
   // handle back / forward events
   useEffect(() => {
@@ -150,7 +150,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
         });
       }
     });
-  }, []);
+  }, [initialRoute.fullName, initialRoute.fullPath, initialRoute.pathParams, initialRoute.queryParams, initialRoute.route]);
 
   useEffect(() => {
     if (user) {
@@ -170,7 +170,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       dispatch({type: 'set_organizations', organizations: null})
     }
 
-  }, [user]);
+  }, [user, navigate, state.pathParams.org_id]);
 
   // fetch projects when current organization changes
   useEffect(() => {

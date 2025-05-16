@@ -24,6 +24,7 @@ export function Pages() {
     if (organizations?.length === 0) {
       open();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizations]);
 
   let element: ReactNode;

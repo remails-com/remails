@@ -43,6 +43,7 @@ export default function StreamDetails() {
   useEffect(() => {
     form.setValues({name: currentStream?.name || ""});
     form.resetDirty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStream]);
 
   if (!currentStream || !currentOrganization || !currentProject) {

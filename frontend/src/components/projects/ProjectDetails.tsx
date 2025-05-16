@@ -42,6 +42,7 @@ export default function ProjectDetails() {
   useEffect(() => {
     form.setValues({name: currentProject?.name || ""});
     form.resetDirty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
   if (!currentProject || !currentOrganization) {

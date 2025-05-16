@@ -26,7 +26,7 @@ export function useMessages() {
     } else {
       setCurrentMessage(null)
     }
-  }, [currentOrganization, currentProject, currentStream, pathParams.message_id]);
+  }, [currentOrganization, currentProject, currentStream, pathParams.message_id, messages]);
 
   return {messages, currentMessage}
 }
