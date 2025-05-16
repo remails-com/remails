@@ -14,11 +14,11 @@ pub struct ApiUserId(Uuid);
 pub struct Password(String);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "type")]
 #[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
 pub enum ApiUserRole {
     SuperAdmin,
-    OrganizationAdmin(OrganizationId),
+    OrganizationAdmin { id: OrganizationId },
 }
 
 #[derive(Debug)]
@@ -38,6 +38,19 @@ pub struct ApiUser {
     roles: Vec<ApiUserRole>,
     #[allow(unused)]
     github_user_id: Option<i64>,
+    password_enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApiUserUpdate {
+    pub name: String,
+    pub email: EmailAddress,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasswordUpdate {
+    pub new_password: Password,
+    pub current_password: Password,
 }
 
 impl ApiUser {
@@ -46,6 +59,12 @@ impl ApiUser {
     }
     pub fn id(&self) -> &ApiUserId {
         &self.id
+    }
+    pub fn github_user_id(&self) -> Option<i64> {
+        self.github_user_id
+    }
+    pub fn password_enabled(&self) -> bool {
+        self.password_enabled
     }
 }
 
@@ -69,6 +88,7 @@ struct PgApiUser {
     organization_roles: Vec<PgOrgRole>,
     global_roles: Vec<Option<PgRole>>,
     github_user_id: Option<i64>,
+    password_enabled: bool,
 }
 
 impl TryFrom<PgApiUser> for ApiUser {
@@ -80,7 +100,7 @@ impl TryFrom<PgApiUser> for ApiUser {
             .into_iter()
             .filter_map(|role| {
                 role.role.zip(role.org_id).map(|(role, org_id)| match role {
-                    PgRole::Admin => ApiUserRole::OrganizationAdmin(org_id),
+                    PgRole::Admin => ApiUserRole::OrganizationAdmin { id: org_id },
                 })
             })
             .collect();
@@ -101,6 +121,7 @@ impl TryFrom<PgApiUser> for ApiUser {
             email: u.email.parse()?,
             roles,
             github_user_id: u.github_user_id,
+            password_enabled: u.password_enabled,
         })
     }
 }
@@ -139,7 +160,7 @@ impl ApiUserRepository {
             |(mut orgs, mut global), role| {
                 match role {
                     ApiUserRole::SuperAdmin => global.push(PgRole::Admin),
-                    ApiUserRole::OrganizationAdmin(org) => orgs.push((org, PgRole::Admin)),
+                    ApiUserRole::OrganizationAdmin { id: org } => orgs.push((org, PgRole::Admin)),
                 }
                 (orgs, global)
             },
@@ -173,7 +194,7 @@ impl ApiUserRepository {
         }
         tx.commit().await?;
 
-        Ok(self.find_by_id(user_id.into()).await?.unwrap())
+        Ok(self.find_by_id(&user_id.into()).await?.unwrap())
     }
 
     pub async fn find_by_github_id(&self, github_id: i64) -> Result<Option<ApiUser>, Error> {
@@ -185,7 +206,8 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
@@ -200,8 +222,121 @@ impl ApiUserRepository {
             .transpose()
     }
 
+    pub async fn add_github_id(&self, user_id: &ApiUserId, github_id: i64) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET github_user_id = $2 WHERE id = $1 
+            "#,
+            **user_id,
+            github_id,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn remove_github_id(&self, api_user_id: &ApiUserId) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET github_user_id = NULL WHERE id = $1 
+            "#,
+            **api_user_id,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update(&self, update: ApiUserUpdate, user_id: &ApiUserId) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET name = $2, email = $3 WHERE id = $1 
+            "#,
+            **user_id,
+            update.name,
+            update.email.as_str(),
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_password(
+        &self,
+        update: PasswordUpdate,
+        user_id: &ApiUserId,
+    ) -> Result<(), Error> {
+        let hash = sqlx::query_scalar!(
+            r#"
+            SELECT password_hash FROM api_users WHERE id = $1
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if let Some(hash) = hash {
+            password_auth::verify_password(update.current_password.0, &hash)
+                .inspect_err(|err| {
+                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
+                })
+                .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
+        }
+
+        let hash = password_auth::generate_hash(update.new_password.0);
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET password_hash = $2 WHERE id = $1 
+            "#,
+            **user_id,
+            hash
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_password(
+        &self,
+        current_password: Password,
+        user_id: &ApiUserId,
+    ) -> Result<(), Error> {
+        let hash = sqlx::query_scalar!(
+            r#"
+            SELECT password_hash FROM api_users WHERE id = $1
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if let Some(hash) = hash {
+            password_auth::verify_password(current_password.0, &hash)
+                .inspect_err(|err| {
+                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
+                })
+                .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
+        } else {
+            return Ok(());
+        };
+
+        sqlx::query!(
+            r#"
+            UPDATE api_users SET password_hash = NULL WHERE id = $1 
+            "#,
+            **user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     #[cfg_attr(test, allow(dead_code))]
-    pub async fn find_by_id(&self, id: ApiUserId) -> Result<Option<ApiUser>, Error> {
+    pub async fn find_by_id(&self, id: &ApiUserId) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(
             PgApiUser,
             r#"
@@ -210,19 +345,20 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u 
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
             WHERE u.id = $1
             GROUP BY u.id
             "#,
-            *id
+            **id
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
@@ -234,7 +370,8 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>"
+                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
                 LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
@@ -243,10 +380,10 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn check_password(
@@ -287,6 +424,7 @@ mod test {
                 email: "test@test.com".parse().unwrap(),
                 roles,
                 github_user_id: None,
+                password_enabled: false,
             }
         }
     }
@@ -328,9 +466,9 @@ mod test {
             password: None,
             roles: vec![
                 ApiUserRole::SuperAdmin,
-                ApiUserRole::OrganizationAdmin(
-                    "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                ),
+                ApiUserRole::OrganizationAdmin {
+                    id: "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                },
             ],
             github_user_id: Some(123),
         };

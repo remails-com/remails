@@ -1,4 +1,4 @@
-use crate::models::{Error, OrganizationId, ProjectId};
+use crate::models::{Error, OrganizationId, ProjectId, projects};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
@@ -94,6 +94,12 @@ impl StreamRepository {
         organization_id: OrganizationId,
         project_id: ProjectId,
     ) -> Result<Vec<Stream>, Error> {
+        if !projects::check_org_match(organization_id, project_id, &self.pool).await? {
+            return Err(Error::BadRequest(
+                "Project ID does not match organization ID".to_string(),
+            ));
+        }
+
         Ok(sqlx::query_as!(
             Stream,
             r#"
@@ -111,6 +117,34 @@ impl StreamRepository {
             *organization_id
         )
         .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn update(
+        &self,
+        organization_id: OrganizationId,
+        project_id: ProjectId,
+        stream_id: StreamId,
+        update: NewStream,
+    ) -> Result<Stream, Error> {
+        Ok(sqlx::query_as!(
+            Stream,
+            r#"
+            UPDATE streams s 
+                   SET name = $4 
+            FROM projects p 
+            WHERE s.id = $3
+              AND s.project_id = $2 
+              AND s.project_id = p.id 
+              AND p.organization_id = $1
+            returning s.*
+            "#,
+            *organization_id,
+            *project_id,
+            *stream_id,
+            update.name
+        )
+        .fetch_one(&self.pool)
         .await?)
     }
 
@@ -137,5 +171,220 @@ impl StreamRepository {
         .fetch_one(&self.pool)
         .await?
         .into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::{Error, NewStream};
+    use sqlx::PgPool;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn create_happy_flow(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let stream = repo
+            .create(
+                NewStream {
+                    name: "test Stream".to_string(),
+                },
+                // Organization 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(stream.name, "test Stream");
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn create_org_does_not_match_proj(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let bad_request = repo
+            .create(
+                NewStream {
+                    name: "test Stream".to_string(),
+                },
+                // Organization 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(bad_request, Error::BadRequest(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn update_happy_flow(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let updated = repo
+            .update(
+                // Organization 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+                NewStream {
+                    name: "Updated Stream Name".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.name, "Updated Stream Name");
+        assert_eq!(
+            updated.id,
+            "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap()
+        );
+        assert_ne!(updated.created_at, updated.updated_at);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn update_organization_does_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .update(
+                // Organization 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+                NewStream {
+                    name: "Updated Stream Name".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn update_project_does_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .update(
+                // Organization 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 2 Organization 1
+                "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+                NewStream {
+                    name: "Updated Stream Name".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn update_project_and_org_do_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .update(
+                // Organization 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 2
+                "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+                NewStream {
+                    name: "Updated Stream Name".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn remove_happy_flow(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let id = repo
+            .remove(
+                // Organization 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(id, "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),)
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn remove_organization_does_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .remove(
+                // Organization 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 1
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn remove_project_does_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .remove(
+                // Organization 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                // Project 2 Organization 1
+                "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "streams")))]
+    async fn remove_project_and_org_do_not_match(db: PgPool) {
+        let repo = super::StreamRepository::new(db);
+
+        let err = repo
+            .remove(
+                // Organization 2
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
+                // Project 1 Organization 2
+                "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap(),
+                // Stream 1 Project 1 Organization 1
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::NotFound(_)));
     }
 }

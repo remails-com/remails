@@ -33,5 +33,9 @@ trait OAuthService {
         EndpointSet,
     >;
 
-    async fn fetch_user(&self, token: &AccessToken) -> Result<ApiUser, Error>;
+    async fn fetch_user(
+        &self,
+        token: &AccessToken,
+        logged_in_user: Option<ApiUser>,
+    ) -> Result<ApiUser, Error>;
 }

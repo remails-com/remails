@@ -11,14 +11,14 @@ import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useStreams} from "../../hooks/useStreams.ts";
 import {useEffect, useState} from "react";
-import {DomainsOverview} from "../domains/DomainsOverview.tsx";
+import DomainsOverview from "../domains/DomainsOverview.tsx";
 
 
 interface FormValues {
   name: string,
 }
 
-export function ProjectDetails() {
+export default function ProjectDetails() {
   const {currentOrganization} = useOrganizations();
   const [canDelete, setCanDelete] = useState<boolean>(false);
   const {currentProject} = useProjects();
@@ -33,11 +33,16 @@ export function ProjectDetails() {
     }
   }, [streams]);
 
-  const form = useForm<FormValues>();
+  const form = useForm<FormValues>({
+    initialValues: {
+      name: ""
+    }
+  });
 
   useEffect(() => {
     form.setValues({name: currentProject?.name || ""});
     form.resetDirty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
   if (!currentProject || !currentOrganization) {
@@ -59,39 +64,58 @@ export function ProjectDetails() {
     });
   }
 
-  const deleteProject = (project: Project) => {
-    fetch(`/api/organizations/${currentOrganization.id}/projects/${project.id}`, {
+  const deleteProject = async (project: Project) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${project.id}`, {
       method: 'DELETE',
-    }).then(res => {
-      if (res.status === 200) {
-        notifications.show({
-          title: 'Project deleted',
-          message: `Project ${project.name} deleted`,
-          color: 'green',
-        })
-        dispatch({type: "remove_project", projectId: project.id})
-        navigate('projects')
-      } else {
-        notifications.show({
-          title: 'Error',
-          message: `Project ${project.name} could not be deleted`,
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-        console.error(res)
-      }
-    })
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: 'Project deleted',
+        message: `Project ${project.name} deleted`,
+        color: 'green',
+      });
+      dispatch({type: "remove_project", projectId: project.id});
+      navigate('projects');
+    } else {
+      notifications.show({
+        title: 'Error',
+        message: `Project ${project.name} could not be deleted`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      console.error(res);
+    }
   }
 
-  const save = (values: FormValues) => {
-    form.resetDirty()
+  const save = async (values: FormValues) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values)
+    });
+    if (res.status !== 200) {
+      notifications.show({
+        title: 'Error',
+        message: `Project could not be updated`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      })
+      console.error(res)
+      return
+    }
+    const project = await res.json();
+
     notifications.show({
-      title: "Not yet implemented",
-      message: "You found me",
-      color: 'red'
+      title: 'Project updated',
+      message: '',
+      color: 'green',
     })
-    return new Promise((resolve) => setTimeout(() => resolve(values), 500));
+    dispatch({type: "remove_project", projectId: currentProject.id})
+    dispatch({type: "add_project", project})
   }
 
   return (
@@ -107,7 +131,8 @@ export function ProjectDetails() {
               onChange={(event) => form.setFieldValue('name', event.currentTarget.value)}
             />
             <Group>
-              <Tooltip label={canDelete ? 'Delete project' : 'Cannot delete project, there are streams in it'}>
+              <Tooltip label={canDelete ? 'Delete project' : 'Cannot delete project, there are streams in it'}
+                       events={{focus: false, hover: true, touch: true}}>
                 <Button leftSection={<IconTrash/>}
                         color="red"
                         disabled={!canDelete}

@@ -1,28 +1,52 @@
 import {Route, RouteParams} from "./router.ts";
 
-export type Role = 'super_admin' | { organization_admin: string };
+export type Role = { type: 'super_admin' } | { type: "organization_admin", id: string };
 
 export interface User {
+  id: string
   roles: Role[];
   name: string;
   email: string;
+  github_id: string | null;
+  password_enabled: boolean;
 }
 
 export type WhoamiResponse = User | { error: string; }
 
-export interface Message {
+export interface MessageMetadata {
   id: string;
   from_email: string;
   created_at: string;
   recipients: string[];
   status: string;
+  raw_size: string;
+  delivery_status: {
+    receiver: string,
+    status: string,
+  }
+}
+
+export interface Message extends MessageMetadata {
+  message_data: {
+    subject: string | null,
+    date: string | null,
+    text_body: string | null,
+    attachments: {
+      filename: string,
+      mime: string,
+      /** Human-readable size */
+      size: string,
+    }[]
+  };
+  truncated_raw_data: string;
+  is_truncated: boolean;
 }
 
 export interface State {
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
-  messages: Message[] | null;
+  messages: MessageMetadata[] | null;
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   loading: boolean;
@@ -45,6 +69,9 @@ export type Action = {
   type: 'set_organizations';
   organizations: Organization[] | null;
 } | {
+  type: 'add_organization';
+  organization: Organization;
+} | {
   type: 'loading'
 } | {
   type: 'set_projects';
@@ -66,7 +93,7 @@ export type Action = {
   streamId: string;
 } | {
   type: 'set_messages';
-  messages: Message[] | null;
+  messages: MessageMetadata[] | null;
 } | {
   type: 'set_domains';
   domains: Domain[] | null;

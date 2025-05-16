@@ -71,6 +71,7 @@ export function NewProject({opened, close}: NewProjectProps) {
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
           <TextInput
+            data-autofocus
             label="Name"
             key={form.key('name')}
             value={form.values.name}

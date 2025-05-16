@@ -1,4 +1,4 @@
-import {ActionDispatch, createContext, useContext, useEffect, useReducer} from "react";
+import {ActionDispatch, createContext, useCallback, useContext, useEffect, useReducer} from "react";
 import {Action, State, WhoamiResponse} from "../types.ts";
 import {initRouter, matchName, Navigate, RouteName, RouteParams, routerNavigate, routes} from "../router.ts";
 
@@ -7,6 +7,10 @@ function reducer(state: State, action: Action): State {
 
   if (action.type === 'set_organizations') {
     return {...state, organizations: action.organizations, loading: false}
+  }
+
+  if (action.type === 'add_organization') {
+    return {...state, organizations: [...state.organizations || [], action.organization], loading: false}
   }
 
   if (action.type === 'loading') {
@@ -122,9 +126,9 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     ...initialRoute
   });
 
-  const navigate = (name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
+  const navigate = useCallback((name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
     dispatch({type: "set_route", ...routerNavigate(name, {...state.pathParams, ...pathParams}, queryParams)});
-  };
+  }, [state.pathParams]);
 
   // handle back / forward events
   useEffect(() => {
@@ -146,6 +150,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
         });
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -156,7 +161,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
             if (Array.isArray(data)) {
               // TODO store this somehow, e.g., as cookie or in local storage
               dispatch({type: "set_organizations", organizations: data});
-              if (!state.pathParams.org_id) {
+              if (!state.pathParams.org_id && data.length > 0) {
                 navigate('projects', {org_id: data[0].id});
               }
             }
@@ -166,7 +171,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       dispatch({type: 'set_organizations', organizations: null})
     }
 
-  }, [user]);
+  }, [user, navigate, state.pathParams.org_id]);
 
   // fetch projects when current organization changes
   useEffect(() => {

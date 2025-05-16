@@ -1,6 +1,6 @@
 use crate::{
     handler::HandlerConfig,
-    models::{Message, SmtpCredential, SmtpCredentialResponse},
+    models::{ApiMessageMetadata, SmtpCredential, SmtpCredentialResponse},
     run_api_server, run_mta,
     smtp::SmtpConfig,
 };
@@ -190,7 +190,7 @@ async fn integration_test(pool: PgPool) {
     let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
     let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
     let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
-    let messages: Vec<Message> = client
+    let messages: Vec<ApiMessageMetadata> = client
         .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
         .header("X-Test-Login", "44729d9f-a7dc-4226-b412-36a7537f5176")
         .send()

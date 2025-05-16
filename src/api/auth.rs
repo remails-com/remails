@@ -31,7 +31,7 @@ impl ApiUser {
 
     pub fn org_admin(&self) -> Vec<OrganizationId> {
         self.roles().iter().fold(Vec::new(), |mut acc, role| {
-            if let ApiUserRole::OrganizationAdmin(org) = role {
+            if let ApiUserRole::OrganizationAdmin { id: org } = role {
                 acc.push(*org);
             };
             acc
@@ -230,9 +230,9 @@ where
                 trace!("Test log in based on `X-Test-Login` header");
                 match header.to_str().unwrap() {
                     "admin" => Ok(ApiUser::new(vec![ApiUserRole::SuperAdmin])),
-                    token => Ok(ApiUser::new(vec![ApiUserRole::OrganizationAdmin(
-                        token.parse().unwrap(),
-                    )])),
+                    token => Ok(ApiUser::new(vec![ApiUserRole::OrganizationAdmin {
+                        id: token.parse().unwrap(),
+                    }])),
                 }
             } else {
                 warn!("No valid X-Test-Login header");
@@ -261,7 +261,7 @@ where
                         "extracted user from session cookie"
                     );
                     Ok(ApiUserRepository::from_ref(state)
-                        .find_by_id(*user.id())
+                        .find_by_id(user.id())
                         .await?
                         .ok_or(ApiError::Unauthorized)?)
                 }

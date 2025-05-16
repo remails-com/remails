@@ -22,6 +22,8 @@ pub enum Error {
     Database(#[from] models::Error),
     #[error("Unforeseen error: {0}")]
     Other(String),
+    #[error("Precondition failed: {0}")]
+    PreconditionFailed(String),
 }
 
 impl Error {
@@ -38,6 +40,7 @@ impl Error {
             Self::CSRFTokenMismatch => "The CSRF token did not match".to_string(),
             Self::Database(_) => "Database error occurred".to_string(),
             Self::Other(_) => "Unforeseen error occurred".to_string(),
+            Self::PreconditionFailed(_) => "Precondition failed".to_string(),
         }
     }
 
@@ -53,6 +56,7 @@ impl Error {
             Error::OauthToken(_) | Error::MissingCSRFCookie | Error::CSRFTokenMismatch => {
                 StatusCode::UNAUTHORIZED
             }
+            Error::PreconditionFailed(_) => StatusCode::PRECONDITION_FAILED,
         }
     }
 }

@@ -3,10 +3,12 @@ use crate::{
     api::{
         ApiState, USER_AGENT_VALUE,
         oauth::{Error, OAuthService},
+        whoami::WhoamiResponse,
     },
+    models,
     models::{ApiUser, ApiUserRepository, NewApiUser},
 };
-use axum::{Router, routing::get};
+use axum::{Json, Router, extract::State, routing::get};
 use http::{
     HeaderValue,
     header::{ACCEPT, USER_AGENT},
@@ -64,6 +66,30 @@ struct GitHubEmail {
     primary: bool,
 }
 
+pub async fn disconnect_github(
+    State(user_repository): State<ApiUserRepository>,
+    api_user: ApiUser,
+) -> Result<Json<WhoamiResponse>, Error> {
+    if !api_user.password_enabled() {
+        Err(Error::PreconditionFailed(
+            "Password-based login is not enabled".to_string(),
+        ))?;
+    };
+
+    user_repository.remove_github_id(api_user.id()).await?;
+
+    Ok(Json(
+        user_repository
+            .find_by_id(api_user.id())
+            .await
+            .transpose()
+            .ok_or(models::Error::NotFound(
+                "Could not find user to disconnect from GitHub",
+            ))??
+            .into(),
+    ))
+}
+
 impl GithubOauthService {
     /// Creates a new instance of `GithubOauthService`.
     ///
@@ -111,7 +137,10 @@ impl GithubOauthService {
     /// Returns a `Router` instance for the service.
     pub fn router(&self) -> Router<ApiState> {
         Router::new()
-            .route("/login/github", get(oauth_login::<GithubOauthService>))
+            .route(
+                "/login/github",
+                get(oauth_login::<GithubOauthService>).delete(disconnect_github),
+            )
             .route(
                 "/oauth/authorize/github",
                 get(authorize::<GithubOauthService>),
@@ -200,9 +229,24 @@ impl OAuthService for GithubOauthService {
         &self.oauth_client
     }
 
-    async fn fetch_user(&self, token: &AccessToken) -> Result<ApiUser, Error> {
+    async fn fetch_user(
+        &self,
+        token: &AccessToken,
+        logged_in_user: Option<ApiUser>,
+    ) -> Result<ApiUser, Error> {
         // Fetch user data from the GitHub API
         let user_data: GitHubUser = self.fetch_gh_api(GITHUB_USER_URL, token).await?;
+
+        // Add the GitHub ID as an additional login method to an existing API user
+        if let Some(logged_in_user) = logged_in_user {
+            debug!(
+                user_id = logged_in_user.id().to_string(),
+                "GitHub ID {} as login method for user '{}'", user_data.id, logged_in_user.name
+            );
+            self.user_repository
+                .add_github_id(logged_in_user.id(), user_data.id)
+                .await?;
+        }
 
         if let Some(existing_user) = self.user_repository.find_by_github_id(user_data.id).await? {
             trace!(

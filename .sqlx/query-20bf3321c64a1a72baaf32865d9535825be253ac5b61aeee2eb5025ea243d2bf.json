@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                m.created_at,\n                m.updated_at\n            FROM messages m\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND m.organization_id = $4 \n              AND ($5::uuid IS NULL OR m.project_id = $5) \n              AND ($6::uuid IS NULL OR m.stream_id = $6)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)\n            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6\n            FROM smtp_credentials s\n                JOIN streams ON s.stream_id = streams.id\n                JOIN projects p ON p.id = streams.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $1\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -49,39 +49,48 @@
       },
       {
         "ordinal": 6,
+        "name": "delivery_status",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 8,
-        "name": "raw_data!",
+        "ordinal": 9,
+        "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
+        "name": "raw_size!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 11,
+        "ordinal": 13,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Int8",
+        "Uuid",
         {
           "Custom": {
             "name": "message_status",
@@ -97,9 +106,10 @@
             }
           }
         },
-        "Uuid",
-        "Uuid",
-        "Uuid"
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Jsonb"
       ]
     },
     "nullable": [
@@ -111,11 +121,13 @@
       false,
       false,
       false,
+      false,
+      false,
       null,
-      null,
+      true,
       false,
       false
     ]
   },
-  "hash": "56755674dd80b66a4b1d080c462c80490a9e7218e3e8a3f680bd36a5ea3b4a2d"
+  "hash": "20bf3321c64a1a72baaf32865d9535825be253ac5b61aeee2eb5025ea243d2bf"
 }

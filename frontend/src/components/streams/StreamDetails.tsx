@@ -1,6 +1,5 @@
 import {Loader} from "../../Loader.tsx";
 import {useStreams} from "../../hooks/useStreams.ts";
-import {MessageLog} from "../MessageLog.tsx";
 import {Button, Grid, Group, Stack, Text, TextInput, Tooltip} from "@mantine/core";
 import {useForm} from "@mantine/form";
 import {IconTrash, IconX} from "@tabler/icons-react";
@@ -13,12 +12,13 @@ import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {CredentialsOverview} from "../smtpCredentials/CredentialsOverview.tsx";
+import {MessageLog} from "../messages/MessageLog.tsx";
 
 interface FormValues {
   name: string,
 }
 
-export function StreamDetails() {
+export default function StreamDetails() {
   const [canDelete, setCanDelete] = useState<boolean>(false);
   const {currentOrganization} = useOrganizations();
   const {messages} = useMessages();
@@ -34,11 +34,16 @@ export function StreamDetails() {
     }
   }, [messages]);
 
-  const form = useForm<FormValues>();
+  const form = useForm<FormValues>({
+    initialValues: {
+      name: ""
+    }
+  });
 
   useEffect(() => {
     form.setValues({name: currentStream?.name || ""});
     form.resetDirty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStream]);
 
   if (!currentStream || !currentOrganization || !currentProject) {
@@ -60,39 +65,58 @@ export function StreamDetails() {
     });
   }
 
-  const deleteStream = (stream: Project) => {
-    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${stream.id}`, {
+  const deleteStream = async (stream: Project) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${stream.id}`, {
       method: 'DELETE',
-    }).then(res => {
-      if (res.status === 200) {
-        notifications.show({
-          title: 'Stream deleted',
-          message: `Stream ${stream.name} deleted`,
-          color: 'green',
-        })
-        dispatch({type: "remove_stream", streamId: stream.id})
-        navigate('projects.project.streams')
-      } else {
-        notifications.show({
-          title: 'Error',
-          message: `Stream ${stream.name} could not be deleted`,
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-        console.error(res)
-      }
-    })
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: 'Stream deleted',
+        message: `Stream ${stream.name} deleted`,
+        color: 'green',
+      });
+      dispatch({type: "remove_stream", streamId: stream.id});
+      navigate('projects.project.streams');
+    } else {
+      notifications.show({
+        title: 'Error',
+        message: `Stream ${stream.name} could not be deleted`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      console.error(res);
+    }
   }
 
-  const save = (values: FormValues) => {
-    form.resetDirty()
+  const save = async (values: FormValues) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values)
+    });
+    if (res.status !== 200) {
+      notifications.show({
+        title: 'Error',
+        message: `Streams could not be updated`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      })
+      console.error(res)
+      return
+    }
+    const stream = await res.json();
+
     notifications.show({
-      title: "Not yet implemented",
-      message: "You found me",
-      color: 'red'
+      title: 'Stream updated',
+      message: '',
+      color: 'green',
     })
-    return new Promise((resolve) => setTimeout(() => resolve(values), 500));
+    dispatch({type: "remove_stream", streamId: currentStream.id})
+    dispatch({type: "add_stream", stream})
   }
 
 
@@ -109,7 +133,8 @@ export function StreamDetails() {
               onChange={(event) => form.setFieldValue('name', event.currentTarget.value)}
             />
             <Group>
-              <Tooltip label={canDelete ? 'Delete Stream' : 'Cannot delete Stream, there are Messages in it'}>
+              <Tooltip label={canDelete ? 'Delete Stream' : 'Cannot delete Stream, there are Messages in it'}
+                       events={{focus: false, hover: true, touch: true}}>
                 <Button leftSection={<IconTrash/>}
                         color="red"
                         disabled={!canDelete}
@@ -123,6 +148,8 @@ export function StreamDetails() {
       <Grid.Col span={{base: 12, md: 6, lg: 9}}>
         <h2>Credentials</h2>
         <CredentialsOverview/>
+      </Grid.Col>
+      <Grid.Col span={12}>
         <h2>Messages</h2>
         <MessageLog/>
       </Grid.Col>

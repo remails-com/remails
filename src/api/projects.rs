@@ -10,11 +10,19 @@ use axum::{
 use http::StatusCode;
 use tracing::{debug, info};
 
-fn has_read_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
-    has_write_access(org, user)
+fn has_read_access(
+    org: OrganizationId,
+    project: Option<ProjectId>,
+    user: &ApiUser,
+) -> Result<(), ApiError> {
+    has_write_access(org, project, user)
 }
 
-fn has_write_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
+fn has_write_access(
+    org: OrganizationId,
+    _project: Option<ProjectId>,
+    user: &ApiUser,
+) -> Result<(), ApiError> {
     if user.org_admin().iter().any(|o| *o == org) {
         return Ok(());
     }
@@ -26,7 +34,7 @@ pub async fn list_projects(
     Path(org): Path<OrganizationId>,
     user: ApiUser,
 ) -> ApiResult<Vec<Project>> {
-    has_read_access(org, &user)?;
+    has_read_access(org, None, &user)?;
 
     let projects = repo.list(org).await?;
 
@@ -40,13 +48,33 @@ pub async fn list_projects(
     Ok(Json(projects))
 }
 
+pub async fn update_project(
+    State(repo): State<ProjectRepository>,
+    Path((org, proj)): Path<(OrganizationId, ProjectId)>,
+    user: ApiUser,
+    Json(update): Json<NewProject>,
+) -> ApiResult<Project> {
+    has_write_access(org, Some(proj), &user)?;
+
+    let project = repo.update(org, proj, update).await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org.to_string(),
+        project_id = proj.to_string(),
+        "updated project",
+    );
+
+    Ok(Json(project))
+}
+
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     user: ApiUser,
     Path(org): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(org, &user)?;
+    has_write_access(org, None, &user)?;
 
     let project = repo.create(new, org).await?;
 
@@ -66,7 +94,7 @@ pub async fn remove_project(
     user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
-    has_write_access(org, &user)?;
+    has_write_access(org, Some(proj), &user)?;
 
     let project_id = repo.remove(proj, org).await?;
 

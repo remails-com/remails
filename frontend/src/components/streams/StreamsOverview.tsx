@@ -20,7 +20,7 @@ export function StreamsOverview() {
     <Table.Tr key={stream.id}>
       <Table.Td>{stream.name}</Table.Td>
       <Table.Td>{formatDateTime(stream.updated_at)}</Table.Td>
-      <Table.Td><Button onClick={() => navigate('projects.project.streams.stream', {
+      <Table.Td align={'right'}><Button onClick={() => navigate('projects.project.streams.stream', {
         stream_id: stream.id,
       })}><IconEdit/></Button></Table.Td>
     </Table.Tr>

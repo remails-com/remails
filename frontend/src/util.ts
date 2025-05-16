@@ -12,5 +12,5 @@ export function formatDateTime(date: string): string {
 }
 
 export function is_global_admin(roles: Array<Role>): boolean {
-  return roles.includes('super_admin');
+  return roles.some((role) => role.type === 'super_admin');
 }

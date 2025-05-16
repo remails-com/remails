@@ -8,7 +8,7 @@ import {useDisclosure} from "@mantine/hooks";
 import {NewDomain} from "./NewDomain.tsx";
 import {useProjects} from "../../hooks/useProjects.ts";
 
-export function DomainsOverview() {
+export default function DomainsOverview() {
   const [opened, {open, close}] = useDisclosure(false);
   const {state: {loading}, navigate} = useRemails();
   const {currentProject} = useProjects();
@@ -22,7 +22,7 @@ export function DomainsOverview() {
     <Table.Tr key={domain.id}>
       <Table.Td>{domain.domain}</Table.Td>
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
-      <Table.Td>
+      <Table.Td align={'right'}>
         <Button
           onClick={() => {
             let route = 'domains.domain';

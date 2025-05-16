@@ -44,38 +44,37 @@ export function NewStream({opened, close}: NewStreamProps) {
     return <></>
   }
 
-  const save = (values: FormValues) => {
-    fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams`, {
+  const save = async (values: FormValues) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams`, {
       method: 'POST',
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(values)
-    }).then(res => {
-      if (res.status === 201) {
-        close()
-        res.json().then(newStream => {
-          dispatch({type: "add_stream", stream: newStream})
-          navigate('projects.project.streams.stream', {stream_id: newStream.id})
-          notifications.show({
-            title: 'Stream created',
-            message: `Stream ${newStream.name} created`,
-            color: 'green',
-          })
-        })
-      } else if (res.status === 409) {
-        form.setFieldError('name', 'Stream with this name already exists')
-        return
-      } else {
-        notifications.show({
-          title: 'Error',
-          message: 'Something went wrong',
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-      }
-    })
+    });
+    if (res.status === 409) {
+      form.setFieldError('name', 'Stream with this name already exists');
+      return;
+    } else if (res.status !== 201) {
+      notifications.show({
+        title: 'Error',
+        message: 'Something went wrong',
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      return
+    }
+
+    const newStream = await res.json()
+    dispatch({type: "add_stream", stream: newStream});
+    navigate('projects.project.streams.stream', {stream_id: newStream.id});
+    notifications.show({
+      title: 'Stream created',
+      message: `Stream ${newStream.name} created`,
+      color: 'green',
+    });
+    close();
   }
 
   return (
@@ -84,6 +83,7 @@ export function NewStream({opened, close}: NewStreamProps) {
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
             <TextInput
+              data-autofocus
               label="Name"
               key={form.key('name')}
               value={form.values.name}

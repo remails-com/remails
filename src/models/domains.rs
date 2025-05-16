@@ -1,4 +1,4 @@
-use crate::models::{Error, OrganizationId, ProjectId, SmtpCredentialId};
+use crate::models::{Error, OrganizationId, ProjectId, SmtpCredentialId, projects};
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
@@ -231,19 +231,7 @@ impl DomainRepository {
         proj_id: Option<ProjectId>,
     ) -> Result<Domain, Error> {
         let parent_id = if let Some(proj_id) = proj_id {
-            let count = sqlx::query_scalar!(
-                r#"
-            SELECT count(p.id) FROM projects p
-                               WHERE p.organization_id = $1
-                                 AND p.id = $2
-            "#,
-                *org_id,
-                *proj_id
-            )
-            .fetch_one(&self.pool)
-            .await?;
-
-            if !matches!(count, Some(1)) {
+            if !projects::check_org_match(org_id, proj_id, &self.pool).await? {
                 return Err(Error::BadRequest(
                     "Project ID does not match organization ID".to_string(),
                 ));
@@ -360,8 +348,8 @@ impl DomainRepository {
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
                    d.created_at,
-                   d.updated_at                
-            FROM domains d 
+                   d.updated_at
+            FROM domains d
                 LEFT JOIN projects p ON d.project_id = p.id
             WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)
             "#,
@@ -378,6 +366,14 @@ impl DomainRepository {
         org_id: OrganizationId,
         proj_id: Option<ProjectId>,
     ) -> Result<Vec<Domain>, Error> {
+        if let Some(proj_id) = proj_id {
+            if !projects::check_org_match(org_id, proj_id, &self.pool).await? {
+                return Err(Error::BadRequest(
+                    "Project ID does not match organization ID".to_string(),
+                ));
+            }
+        }
+
         sqlx::query_as!(
             PgDomain,
             r#"
@@ -796,7 +792,7 @@ mod test {
     async fn list_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
-        let domains = repo
+        let err = repo
             .list(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -804,8 +800,8 @@ mod test {
                 Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
             )
             .await
-            .unwrap();
-        assert!(domains.is_empty());
+            .unwrap_err();
+        assert!(matches!(err, Error::BadRequest(_)));
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]

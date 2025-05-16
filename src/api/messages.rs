@@ -1,7 +1,7 @@
 use super::error::{ApiError, ApiResult};
 use crate::models::{
-    ApiUser, Message, MessageFilter, MessageId, MessageRepository, OrganizationId, ProjectId,
-    StreamId,
+    ApiMessage, ApiMessageMetadata, ApiUser, MessageFilter, MessageId, MessageRepository,
+    OrganizationId, ProjectId, StreamId,
 };
 use axum::{
     Json,
@@ -57,7 +57,7 @@ pub async fn list_messages(
     }): Path<MessagePath>,
     Query(filter): Query<MessageFilter>,
     user: ApiUser,
-) -> ApiResult<Vec<Message>> {
+) -> ApiResult<Vec<ApiMessageMetadata>> {
     has_read_access(org_id, project_id, stream_id, None, &user)?;
 
     let messages = repo
@@ -85,7 +85,7 @@ pub async fn get_message(
         message_id,
     }): Path<SpecificMessagePath>,
     user: ApiUser,
-) -> ApiResult<Message> {
+) -> ApiResult<ApiMessage> {
     has_read_access(org_id, project_id, stream_id, Some(message_id), &user)?;
 
     let message = repo

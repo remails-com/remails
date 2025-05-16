@@ -1,7 +1,6 @@
 import {useOrganizations} from "../../hooks/useOrganizations.ts";
 import {useProjects} from "../../hooks/useProjects.ts";
 import {useRemails} from "../../hooks/useRemails.ts";
-import {useForm} from "@mantine/form";
 import {useDomains} from "../../hooks/useDomains.ts";
 import {Loader} from "../../Loader.tsx";
 import {Domain} from "../../types.ts";
@@ -9,24 +8,13 @@ import {modals} from "@mantine/modals";
 import {notifications} from "@mantine/notifications";
 import {IconTrash, IconX} from "@tabler/icons-react";
 import {Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip} from "@mantine/core";
-import {useEffect} from "react";
 
-interface FormValues {
-  domain: string,
-}
 
 export function DomainDetails() {
   const {currentOrganization} = useOrganizations();
   const {currentProject} = useProjects();
   const {currentDomain} = useDomains();
   const {dispatch, navigate} = useRemails();
-
-  const form = useForm<FormValues>();
-
-  useEffect(() => {
-    form.setValues({domain: currentDomain?.domain || ""});
-    form.resetDirty();
-  }, [currentDomain]);
 
   if (!currentDomain || !currentOrganization) {
     return <Loader/>;
@@ -47,60 +35,48 @@ export function DomainDetails() {
     });
   }
 
-  const deleteDomain = (domain: Domain) => {
+  const deleteDomain = async (domain: Domain) => {
     let url = `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
     if (currentProject) {
       url = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`;
     }
 
-    fetch(url, {
+    const res = await fetch(url, {
       method: 'DELETE',
-    }).then(res => {
-      if (res.status === 200) {
-        notifications.show({
-          title: 'Domain deleted',
-          message: `Domain ${domain.domain} deleted`,
-          color: 'green',
-        })
-        dispatch({type: "remove_domain", domainId: domain.id})
-        if (currentProject) {
-          navigate('projects.project')
-        } else {
-          navigate('domains')
-        }
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: 'Domain deleted',
+        message: `Domain ${domain.domain} deleted`,
+        color: 'green',
+      });
+      dispatch({type: "remove_domain", domainId: domain.id});
+      if (currentProject) {
+        navigate('projects.project');
       } else {
-        notifications.show({
-          title: 'Error',
-          message: `Domain ${domain.domain} could not be deleted`,
-          color: 'red',
-          autoClose: 20000,
-          icon: <IconX size={20}/>,
-        })
-        console.error(res)
+        navigate('domains');
       }
-    })
-  }
-
-  const save = (values: FormValues) => {
-    form.resetDirty()
-    notifications.show({
-      title: "Not yet implemented",
-      message: "You found me",
-      color: 'red'
-    })
-    return new Promise((resolve) => setTimeout(() => resolve(values), 500));
+    } else {
+      notifications.show({
+        title: 'Error',
+        message: `Domain ${domain.domain} could not be deleted`,
+        color: 'red',
+        autoClose: 20000,
+        icon: <IconX size={20}/>,
+      });
+      console.error(res);
+    }
   }
 
   return (
     <Grid gutter="xl">
       <Grid.Col span={{base: 12, md: 6, lg: 3}}>
         <h2>Domain Details</h2>
-        <form onSubmit={form.onSubmit(save)}>
+        <form>
           <Stack>
             <TextInput
               label="Domain"
-              key={form.key('domain')}
-              value={form.values.domain}
+              value={currentDomain.dkim_key_type}
               readOnly={true}
               variant='filled'
             />
@@ -124,9 +100,6 @@ export function DomainDetails() {
                 <Button leftSection={<IconTrash/>}
                         color="red"
                         onClick={() => confirmDeleteDomain(currentDomain)}>Delete</Button>
-              </Tooltip>
-              <Tooltip label='There is currently no property you are allowed to edit'>
-                <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>Save</Button>
               </Tooltip>
             </Group>
           </Stack>

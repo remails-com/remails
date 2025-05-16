@@ -2,6 +2,7 @@ use crate::models::{Error, OrganizationId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
+use sqlx::{Executor, Postgres};
 use uuid::Uuid;
 
 #[derive(
@@ -88,6 +89,29 @@ impl ProjectRepository {
         .await?)
     }
 
+    pub async fn update(
+        &self,
+        organization_id: OrganizationId,
+        project_id: ProjectId,
+        update: NewProject,
+    ) -> Result<Project, Error> {
+        Ok(sqlx::query_as!(
+            Project,
+            r#"
+            UPDATE projects 
+            SET name = $3 
+            WHERE id = $2
+              AND organization_id = $1
+            RETURNING *
+            "#,
+            *organization_id,
+            *project_id,
+            update.name,
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn remove(&self, id: ProjectId, org_id: OrganizationId) -> Result<ProjectId, Error> {
         Ok(sqlx::query_scalar!(
             r#"
@@ -103,4 +127,24 @@ impl ProjectRepository {
         .await?
         .into())
     }
+}
+
+pub async fn check_org_match<'e, E>(
+    org_id: OrganizationId,
+    proj_id: ProjectId,
+    executor: E,
+) -> Result<bool, Error>
+where
+    E: 'e + Executor<'e, Database = Postgres>,
+{
+    let pg_org_id = sqlx::query_scalar!(
+        r#"
+        SELECT organization_id FROM projects WHERE id = $1
+        "#,
+        *proj_id
+    )
+    .fetch_one(executor)
+    .await?;
+
+    Ok(pg_org_id == *org_id)
 }
