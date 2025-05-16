@@ -12,6 +12,7 @@ allow = [
     "NCSA",
     "Unicode-3.0",
     "Unicode-DFS-2016",
+    "CDLA-Permissive-2.0",
     # weak copyleft
     "MPL-2.0",
     # strong copyleft
