@@ -331,18 +331,24 @@ impl MessageRepository {
         message: &mut Message,
         status: MessageStatus,
         reason: Option<String>,
+        delivery_status: Vec<DeliveryStatus>,
     ) -> Result<(), Error> {
         message.status = status;
+        message.reason = reason.to_owned();
+        let delivery_status_serialized =
+            serde_json::to_value(&delivery_status).map_err(Error::Serialization)?;
+        message.delivery_status = delivery_status;
 
         sqlx::query!(
             r#"
             UPDATE messages
-            SET status = $2, reason = $3
+            SET status = $2, reason = $3, delivery_status = $4
             WHERE id = $1
             "#,
             *message.id,
             message.status as _,
-            reason
+            reason,
+            delivery_status_serialized
         )
         .execute(&self.pool)
         .await?;

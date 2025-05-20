@@ -1,4 +1,4 @@
-import {Route, RouteParams} from "./router.ts";
+import { Route, RouteParams } from "./router.ts";
 
 export type Role = { type: 'super_admin' } | { type: "organization_admin", id: string };
 
@@ -24,7 +24,7 @@ export interface MessageMetadata {
   delivery_status: {
     receiver: string,
     status: string,
-  }
+  }[]
 }
 
 export interface Message extends MessageMetadata {

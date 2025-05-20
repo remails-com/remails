@@ -1,6 +1,8 @@
 use crate::{
     dkim::PrivateKey,
-    models::{DomainRepository, Message, MessageRepository, MessageStatus, NewMessage},
+    models::{
+        DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
+    },
 };
 use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
 use email_address::EmailAddress;
@@ -427,7 +429,7 @@ impl Handler {
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
-        let mut had_failures = true;
+        let mut failures = 0u32;
 
         let order: &[Protection] = if self.config.allow_plain {
             &[Protection::Tls, Protection::Plaintext]
@@ -435,29 +437,52 @@ impl Handler {
             &[Protection::Tls]
         };
 
+        // I would prefer writing this as a map operation but there does not seem to be an easy
+        // way to do so in a way that it runs async closures sequentially
+        let mut delivery_status = Vec::with_capacity(message.recipients.len());
+
         'next_rcpt: for recipient in &message.recipients {
             for &protection in order {
                 // maybe we should take more interest in the content of these error messages?
-                if self
+                match self
                     .send_single_message(recipient, &message, protection)
                     .await
-                    .is_ok()
                 {
-                    continue 'next_rcpt;
+                    Ok(_) => {
+                        delivery_status.push(DeliveryStatus {
+                            receiver: recipient.clone(),
+                            status: "Success".to_string(),
+                        });
+                        continue 'next_rcpt;
+                    }
+                    Err(_) => {}
                 }
             }
-            had_failures = true;
+            failures += 1;
+
+            delivery_status.push(DeliveryStatus {
+                receiver: recipient.clone(),
+                status: "Failure".to_string(),
+            });
         }
 
         self.message_repository
             .update_message_status(
                 &mut message,
-                if had_failures {
+                if failures > 0 {
                     MessageStatus::Failed
                 } else {
                     MessageStatus::Delivered
                 },
-                None,
+                if failures > 0 {
+                    Some(format!(
+                        "failed to deliver to {failures} of {} recipients",
+                        delivery_status.len()
+                    ))
+                } else {
+                    None
+                },
+                delivery_status,
             )
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
