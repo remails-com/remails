@@ -52,6 +52,10 @@ export default function MessageDetails() {
       value: completeMessage.raw_size,
     },
     {
+      header: 'Status',
+      value: completeMessage.status + (completeMessage.reason ? ` (${completeMessage.reason})` : ''),
+    },
+    {
       header: 'Attachments',
       value: completeMessage.message_data.attachments.length === 0 ?
         <Text c="dimmed" fs="italic">Message has no attachments</Text>

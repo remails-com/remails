@@ -33,6 +33,7 @@ pub struct Message {
     pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
+    pub reason: Option<String>,
     pub delivery_status: Vec<DeliveryStatus>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
@@ -63,6 +64,7 @@ impl ApiMessage {
 pub struct ApiMessageMetadata {
     id: MessageId,
     status: MessageStatus,
+    reason: Option<String>,
     delivery_status: Vec<DeliveryStatus>,
     smtp_credential_id: Option<SmtpCredentialId>,
     from_email: EmailAddress,
@@ -167,6 +169,7 @@ struct PgMessage {
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
     status: MessageStatus,
+    reason: Option<String>,
     delivery_status: serde_json::Value,
     from_email: String,
     recipients: Vec<String>,
@@ -188,6 +191,7 @@ impl TryFrom<PgMessage> for Message {
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             status: m.status,
+            reason: m.reason,
             delivery_status: serde_json::from_value(m.delivery_status)?,
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
@@ -261,6 +265,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
         Ok(Self {
             id: m.id,
             status: m.status,
+            reason: m.reason,
             delivery_status: serde_json::from_value(m.delivery_status)?,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             from_email: EmailAddress::from_str(&m.from_email)?,
@@ -299,6 +304,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.reason,
                 m.delivery_status,
                 m.from_email,
                 m.recipients,
@@ -324,17 +330,19 @@ impl MessageRepository {
         &self,
         message: &mut Message,
         status: MessageStatus,
+        reason: Option<String>,
     ) -> Result<(), Error> {
         message.status = status;
 
         sqlx::query!(
             r#"
             UPDATE messages
-            SET status = $2
+            SET status = $2, reason = $3
             WHERE id = $1
             "#,
             *message.id,
-            message.status as _
+            message.status as _,
+            reason
         )
         .execute(&self.pool)
         .await?;
@@ -342,15 +350,18 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub async fn update_message_data(&self, message: &Message) -> Result<(), Error> {
+    pub async fn update_message_data_and_status(&self, message: &Message) -> Result<(), Error> {
+        tracing::debug!("updating message data and status");
         sqlx::query!(
             r#"
             UPDATE messages
-            SET message_data = $2
+            SET message_data = $2, status = $3, reason = $4
             WHERE id = $1
             "#,
             *message.id,
             message.message_data,
+            message.status as _,
+            message.reason
         )
         .execute(&self.pool)
         .await?;
@@ -375,6 +386,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.reason,
                 m.delivery_status,
                 m.from_email,
                 m.recipients,
@@ -423,6 +435,7 @@ impl MessageRepository {
                 m.stream_id,
                 m.smtp_credential_id,
                 m.status as "status: _",
+                m.reason,
                 m.delivery_status,
                 m.from_email,
                 m.recipients,
