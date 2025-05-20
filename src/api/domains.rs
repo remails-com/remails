@@ -19,7 +19,7 @@ fn has_write_access(
     _domain: Option<DomainId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().iter().any(|o| *o == org) {
+    if user.org_admin().contains(&org) {
         return Ok(());
     }
     Err(ApiError::Forbidden)
