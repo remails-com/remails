@@ -41,6 +41,7 @@ mod domains;
 mod error;
 mod messages;
 mod oauth;
+mod odoo;
 mod organizations;
 mod projects;
 mod smtp_credentials;

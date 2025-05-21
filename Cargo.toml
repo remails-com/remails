@@ -19,6 +19,7 @@ path = "src/bin/mta.rs"
 
 [features]
 load-fixtures = []
+live-odoo-tests = []
 
 [dependencies]
 anyhow = "1.0.98"
@@ -58,6 +59,9 @@ aws-lc-rs = "1.13.1"
 mail-auth = "0.7.0"
 rustls-pemfile = "2.2.0"
 humansize = "2.1.3"
+zeroize = { version = "1.8.1", features = ["derive"] }
+rust_decimal = "1.37.1"
+#validator = { version = "0.20.0" , features = ["derive"]}
 
 [dev-dependencies]
 reqwest = { version = "0.12.15", features = ["json"] }

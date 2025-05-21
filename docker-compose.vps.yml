@@ -19,9 +19,7 @@ services:
       SESSION_KEY: "${SESSION_KEY}"
       OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
       OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
-      ODOO_BASE_URL: "https://staging-remails.odoo.com/jsonrpc"
-      ODOO_DATABASE_NAME: "remails-16-0-sandbox-19290361"
-      ODOO_USER_ID: "21"
+      ODOO_BASE_URL: "https://staging-remails.odoo.com/remails"
       ODOO_API_KEY: "${ODOO_API_KEY}"
 
   caddy:

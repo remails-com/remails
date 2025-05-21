@@ -4,14 +4,21 @@ use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
 
-#[derive(From, derive_more::Debug, Deserialize)]
+#[derive(From, derive_more::Debug, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[debug("*****")]
 #[serde(transparent)]
 pub struct Password(String);
+
+impl Password {
+    pub fn reveal(&self) -> &str {
+        self.0.as_str()
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "type")]
@@ -137,7 +144,7 @@ impl ApiUserRepository {
     }
 
     pub async fn create(&self, user: NewApiUser) -> Result<ApiUser, Error> {
-        let password_hash = user.password.map(|pw| password_auth::generate_hash(pw.0));
+        let password_hash = user.password.map(|pw| password_auth::generate_hash(&pw.0));
 
         let mut tx = self.pool.begin().await?;
 
@@ -278,14 +285,14 @@ impl ApiUserRepository {
         .await?;
 
         if let Some(hash) = hash {
-            password_auth::verify_password(update.current_password.0, &hash)
+            password_auth::verify_password(&update.current_password.0, &hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
                 })
                 .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
         }
 
-        let hash = password_auth::generate_hash(update.new_password.0);
+        let hash = password_auth::generate_hash(&update.new_password.0);
         sqlx::query!(
             r#"
             UPDATE api_users SET password_hash = $2 WHERE id = $1 
@@ -314,7 +321,7 @@ impl ApiUserRepository {
         .await?;
 
         if let Some(hash) = hash {
-            password_auth::verify_password(current_password.0, &hash)
+            password_auth::verify_password(&current_password.0, &hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
                 })
@@ -402,7 +409,7 @@ impl ApiUserRepository {
         .flatten();
 
         if let Some(hash) = hash {
-            password_auth::verify_password(password.0, &hash)
+            password_auth::verify_password(&password.0, &hash)
                 .inspect_err(|err| tracing::trace!("wrong password for {}: {}", email, err))
                 .map_err(|_| Error::NotFound("User not found or wrong password"))?;
             return Ok(());
