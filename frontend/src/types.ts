@@ -19,6 +19,7 @@ export interface MessageMetadata {
   created_at: string;
   recipients: string[];
   status: string;
+  reason: string | undefined;
   raw_size: string;
   delivery_status: {
     receiver: string,

@@ -313,9 +313,10 @@ impl Handler {
             Ok(_) => MessageStatus::Accepted,
             Err(_) => MessageStatus::Held,
         };
+        message.reason = result.as_ref().err().cloned();
 
         self.message_repository
-            .update_message_data(&message)
+            .update_message_data_and_status(&message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
@@ -456,6 +457,7 @@ impl Handler {
                 } else {
                     MessageStatus::Delivered
                 },
+                None,
             )
             .await
             .map_err(HandlerError::MessageRepositoryError)?;

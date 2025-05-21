@@ -169,6 +169,7 @@ CREATE TABLE messages
     smtp_credential_id uuid                     REFERENCES smtp_credentials (id) ON DELETE SET NULL,
     delivery_status    jsonb                    NOT NULL default '[]',
     status             message_status           NOT NULL,
+    reason             varchar,
     from_email         varchar                  NOT NULL,
     recipients         varchar[]                NOT NULL,
     raw_data           bytea                    NOT NULL,
