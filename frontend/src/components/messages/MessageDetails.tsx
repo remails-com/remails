@@ -8,11 +8,10 @@ import { IconCheck, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 
 export default function MessageDetails() {
   const { currentMessage } = useMessages();
-  const [displayMode, setDisplayMode] = useState('text');
+  const [displayMode, setDisplayMode] = useState("text");
 
-
-  if (!currentMessage || !('message_data' in currentMessage && 'truncated_raw_data' in currentMessage)) {
-    return <Loader />
+  if (!currentMessage || !("message_data" in currentMessage && "truncated_raw_data" in currentMessage)) {
+    return <Loader />;
   }
 
   const completeMessage = currentMessage as unknown as Message;
@@ -21,77 +20,92 @@ export default function MessageDetails() {
   const text_body = completeMessage.message_data.text_body;
   const raw = completeMessage.truncated_raw_data;
 
-  const to = completeMessage.delivery_status.length > 0 ? completeMessage.delivery_status
-    .map((status) => <Badge
-      key={status.receiver}
-      color={status.status == "Success" ? "green" : "red"}
-      variant="light"
-      mr="sm"
-      rightSection={status.status == "Success" ? <IconCheck size={18} /> : <IconX size={18} />}
-    >
-      {status.receiver}
-    </Badge>) : completeMessage
-      .recipients
-      .map((recipient: string) => <Badge
-        key={recipient}
-        color="secondary"
-        variant="light"
-        mr="sm">
-        {recipient}
-      </Badge>);
+  const to =
+    completeMessage.delivery_status.length > 0
+      ? completeMessage.delivery_status.map((status) => (
+          <Badge
+            key={status.receiver}
+            color={status.status == "Success" ? "green" : "red"}
+            variant="light"
+            mr="sm"
+            rightSection={status.status == "Success" ? <IconCheck size={18} /> : <IconX size={18} />}
+          >
+            {status.receiver}
+          </Badge>
+        ))
+      : completeMessage.recipients.map((recipient: string) => (
+          <Badge key={recipient} color="secondary" variant="light" mr="sm">
+            {recipient}
+          </Badge>
+        ));
 
   const table_data = [
-    { header: 'From', value: completeMessage.from_email },
+    { header: "From", value: completeMessage.from_email },
     {
-      header: 'To',
-      value: to
+      header: "To",
+      value: to,
     },
     {
-      header: 'Date',
-      info: 'The time mentioned in the Date header of the message',
-      value: completeMessage.message_data.date ? formatDateTime(completeMessage.message_data.date) :
-        <Text c="dimmed" fs="italic">Message does not contain a Date header</Text>
+      header: "Date",
+      info: "The time mentioned in the Date header of the message",
+      value: completeMessage.message_data.date ? (
+        formatDateTime(completeMessage.message_data.date)
+      ) : (
+        <Text c="dimmed" fs="italic">
+          Message does not contain a Date header
+        </Text>
+      ),
     },
     {
-      header: 'Created',
-      info: 'The time that remails received this message',
-      value: formatDateTime(completeMessage.created_at)
+      header: "Created",
+      info: "The time that remails received this message",
+      value: formatDateTime(completeMessage.created_at),
     },
     {
-      header: 'Total size',
-      info: 'The size of the whole message',
+      header: "Total size",
+      info: "The size of the whole message",
       value: completeMessage.raw_size,
     },
     {
-      header: 'Status',
-      value: completeMessage.status + (completeMessage.reason ? ` (${completeMessage.reason})` : ''),
+      header: "Status",
+      value: completeMessage.status + (completeMessage.reason ? ` (${completeMessage.reason})` : ""),
     },
     {
-      header: 'Attachments',
-      value: completeMessage.message_data.attachments.length === 0 ?
-        <Text c="dimmed" fs="italic">Message has no attachments</Text>
-        : completeMessage.message_data.attachments.map((attachment, index) => (
-          <Badge key={`${attachment.filename}-${index}`}
-            radius="xs"
-            variant="light"
-            size="lg"
-            mr="xs"
-            leftSection={<IconPaperclip />}
-            rightSection={<Text fz="xs">{attachment.size}</Text>}
-          >
-            {attachment.filename}
-          </Badge>
-        ))
-    }
-  ]
-
+      header: "Attachments",
+      value:
+        completeMessage.message_data.attachments.length === 0 ? (
+          <Text c="dimmed" fs="italic">
+            Message has no attachments
+          </Text>
+        ) : (
+          completeMessage.message_data.attachments.map((attachment, index) => (
+            <Badge
+              key={`${attachment.filename}-${index}`}
+              radius="xs"
+              variant="light"
+              size="lg"
+              mr="xs"
+              leftSection={<IconPaperclip />}
+              rightSection={<Text fz="xs">{attachment.size}</Text>}
+            >
+              {attachment.filename}
+            </Badge>
+          ))
+        ),
+    },
+  ];
 
   return (
     <>
-      {subject ? <Title>{subject}</Title> :
-        <Title c="dimmed" fs="italic">No Subject</Title>}
+      {subject ? (
+        <Title>{subject}</Title>
+      ) : (
+        <Title c="dimmed" fs="italic">
+          No Subject
+        </Title>
+      )}
 
-      <Table variant="vertical" layout="fixed" withTableBorder mt='sm'>
+      <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>
           {table_data.map((row) => (
             <Table.Tr key={row.header}>
@@ -100,11 +114,11 @@ export default function MessageDetails() {
                   <Text span mr="sm">
                     {row.header}
                   </Text>
-                  {row.info &&
+                  {row.info && (
                     <Tooltip label={row.info} events={{ hover: true, touch: true, focus: false }}>
                       <IconHelp size={22} stroke={2} />
                     </Tooltip>
-                  }
+                  )}
                 </Group>
               </Table.Th>
               <Table.Td>{row.value}</Table.Td>
@@ -117,25 +131,37 @@ export default function MessageDetails() {
         value={displayMode}
         onChange={setDisplayMode}
         data={[
-          { label: 'Text', value: 'text' },
-          { label: 'Raw', value: 'raw' },
-        ]} />
-      <Paper shadow={"xl"} p='sm' withBorder>
-        {displayMode === 'text' && (
-          text_body ? <Text style={{ whiteSpace: 'pre-wrap' }}>{text_body}</Text> :
-            <Text c="dimmed" fs="italic">No plain text version provided</Text>
-        )
-        }
-        {displayMode === 'raw' && (
-          raw ? <><Text ff='monospace' fz="sm" style={{ whiteSpace: 'pre-wrap' }}>{raw}</Text>
-            {completeMessage.is_truncated &&
-              <Text c="dimmed" fs="italic">Message truncated</Text>
-            }
-          </> :
-            <Text c="dimmed" fs="italic">Failed to load raw message data</Text>
-        )
-        }
+          { label: "Text", value: "text" },
+          { label: "Raw", value: "raw" },
+        ]}
+      />
+      <Paper shadow={"xl"} p="sm" withBorder>
+        {displayMode === "text" &&
+          (text_body ? (
+            <Text style={{ whiteSpace: "pre-wrap" }}>{text_body}</Text>
+          ) : (
+            <Text c="dimmed" fs="italic">
+              No plain text version provided
+            </Text>
+          ))}
+        {displayMode === "raw" &&
+          (raw ? (
+            <>
+              <Text ff="monospace" fz="sm" style={{ whiteSpace: "pre-wrap" }}>
+                {raw}
+              </Text>
+              {completeMessage.is_truncated && (
+                <Text c="dimmed" fs="italic">
+                  Message truncated
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text c="dimmed" fs="italic">
+              Failed to load raw message data
+            </Text>
+          ))}
       </Paper>
     </>
-  )
+  );
 }

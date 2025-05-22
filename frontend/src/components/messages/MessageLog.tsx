@@ -1,16 +1,16 @@
-import {ActionIcon, Badge, Table, Text, Tooltip} from "@mantine/core";
-import {useMessages} from "../../hooks/useMessages.ts";
-import {Loader} from "../../Loader";
-import {formatDateTime} from "../../util";
-import {useRemails} from "../../hooks/useRemails.ts";
-import {IconEye} from "@tabler/icons-react";
+import { ActionIcon, Badge, Table, Text, Tooltip } from "@mantine/core";
+import { useMessages } from "../../hooks/useMessages.ts";
+import { Loader } from "../../Loader";
+import { formatDateTime } from "../../util";
+import { useRemails } from "../../hooks/useRemails.ts";
+import { IconEye } from "@tabler/icons-react";
 
 export function MessageLog() {
-  const {messages} = useMessages();
-  const {navigate} = useRemails();
+  const { messages } = useMessages();
+  const { navigate } = useRemails();
 
   if (!messages) {
-    return <Loader/>;
+    return <Loader />;
   }
 
   const rows = messages.map((message) => (
@@ -26,16 +26,20 @@ export function MessageLog() {
           {message.from_email}
         </Badge>
       </Table.Td>
-      <Table.Td>{message.recipients.map((recipient, index) => (
-        <Badge key={`${recipient}-${index}`} color="secondary" size="lg" variant="light" mr="sm" tt="none">
-          {recipient}
-        </Badge>
-      ))}</Table.Td>
+      <Table.Td>
+        {message.recipients.map((recipient, index) => (
+          <Badge key={`${recipient}-${index}`} color="secondary" size="lg" variant="light" mr="sm" tt="none">
+            {recipient}
+          </Badge>
+        ))}
+      </Table.Td>
       <Table.Td>{message.status}</Table.Td>
       <Table.Td>
-        <ActionIcon size="lg"
-                    onClick={() => navigate('projects.project.streams.stream.message-log.message', {message_id: message.id})}>
-          <IconEye/>
+        <ActionIcon
+          size="lg"
+          onClick={() => navigate("projects.project.streams.stream.message-log.message", { message_id: message.id })}
+        >
+          <IconEye />
         </ActionIcon>
       </Table.Td>
     </Table.Tr>
@@ -50,7 +54,7 @@ export function MessageLog() {
           <Table.Th>From</Table.Th>
           <Table.Th>Recipients</Table.Th>
           <Table.Th>Status</Table.Th>
-          <Table.Th/>
+          <Table.Th />
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>{rows}</Table.Tbody>

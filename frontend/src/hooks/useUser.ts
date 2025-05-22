@@ -1,20 +1,22 @@
-import {createContext, useContext, useEffect, useState} from "react";
-import {User, WhoamiResponse} from "../types";
+import { createContext, useContext, useEffect, useState } from "react";
+import { User, WhoamiResponse } from "../types";
 
-export const UserContext = createContext<{ user: WhoamiResponse, setUser: (user: WhoamiResponse) => void } | null>(null)
+export const UserContext = createContext<{ user: WhoamiResponse; setUser: (user: WhoamiResponse) => void } | null>(
+  null
+);
 
-export function useUser(): { user: User, setUser: (user: WhoamiResponse) => void } {
+export function useUser(): { user: User; setUser: (user: WhoamiResponse) => void } {
   const context = useContext(UserContext);
 
   if (!context) {
     throw new Error("useUser must be used within a UserProvider");
   }
 
-  if ('error' in context.user) {
+  if ("error" in context.user) {
     throw new Error(context.user.error);
   }
 
-  return {user: context.user, setUser: context.setUser};
+  return { user: context.user, setUser: context.setUser };
 }
 
 export function useLoadUser() {
@@ -34,5 +36,5 @@ export function useLoadUser() {
       });
   }, []);
 
-  return {user, loading, setUser}
+  return { user, loading, setUser };
 }
