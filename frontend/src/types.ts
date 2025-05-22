@@ -1,9 +1,9 @@
 import { Route, RouteParams } from "./router.ts";
 
-export type Role = { type: 'super_admin' } | { type: "organization_admin", id: string };
+export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
 
 export interface User {
-  id: string
+  id: string;
   roles: Role[];
   name: string;
   email: string;
@@ -11,7 +11,7 @@ export interface User {
   password_enabled: boolean;
 }
 
-export type WhoamiResponse = User | { error: string; }
+export type WhoamiResponse = User | { error: string };
 
 export interface MessageMetadata {
   id: string;
@@ -22,22 +22,22 @@ export interface MessageMetadata {
   reason: string | undefined;
   raw_size: string;
   delivery_status: {
-    receiver: string,
-    status: "Success" | "Failure",
-  }[]
+    receiver: string;
+    status: "Success" | "Failure";
+  }[];
 }
 
 export interface Message extends MessageMetadata {
   message_data: {
-    subject: string | null,
-    date: string | null,
-    text_body: string | null,
+    subject: string | null;
+    date: string | null;
+    text_body: string | null;
     attachments: {
-      filename: string,
-      mime: string,
+      filename: string;
+      mime: string;
       /** Human-readable size */
-      size: string,
-    }[]
+      size: string;
+    }[];
   };
   truncated_raw_data: string;
   is_truncated: boolean;
@@ -66,65 +66,83 @@ export interface BreadcrumbItem {
   params?: RouteParams;
 }
 
-export type Action = {
-  type: 'set_organizations';
-  organizations: Organization[] | null;
-} | {
-  type: 'add_organization';
-  organization: Organization;
-} | {
-  type: 'loading'
-} | {
-  type: 'set_projects';
-  projects: Project[] | null;
-} | {
-  type: 'add_project';
-  project: Project;
-} | {
-  type: 'remove_project';
-  projectId: string;
-} | {
-  type: 'set_streams';
-  streams: Stream[] | null;
-} | {
-  type: 'add_stream';
-  stream: Stream;
-} | {
-  type: 'remove_stream';
-  streamId: string;
-} | {
-  type: 'set_messages';
-  messages: MessageMetadata[] | null;
-} | {
-  type: 'set_domains';
-  domains: Domain[] | null;
-} | {
-  type: 'add_domain';
-  domain: Domain;
-} | {
-  type: 'remove_domain';
-  domainId: string;
-} | {
-  type: 'set_credentials';
-  credentials: SmtpCredential[] | null;
-} | {
-  type: 'add_credential';
-  credential: SmtpCredential;
-} | {
-  type: 'remove_credential';
-  credentialId: string;
-} | {
-  type: 'navigate';
-  route: string;
-  params?: RouteParams;
-} | {
-  type: 'set_route',
-  route: Route;
-  fullPath: string;
-  fullName: string;
-  pathParams: RouteParams;
-  queryParams: RouteParams;
-};
+export type Action =
+  | {
+      type: "set_organizations";
+      organizations: Organization[] | null;
+    }
+  | {
+      type: "add_organization";
+      organization: Organization;
+    }
+  | {
+      type: "loading";
+    }
+  | {
+      type: "set_projects";
+      projects: Project[] | null;
+    }
+  | {
+      type: "add_project";
+      project: Project;
+    }
+  | {
+      type: "remove_project";
+      projectId: string;
+    }
+  | {
+      type: "set_streams";
+      streams: Stream[] | null;
+    }
+  | {
+      type: "add_stream";
+      stream: Stream;
+    }
+  | {
+      type: "remove_stream";
+      streamId: string;
+    }
+  | {
+      type: "set_messages";
+      messages: MessageMetadata[] | null;
+    }
+  | {
+      type: "set_domains";
+      domains: Domain[] | null;
+    }
+  | {
+      type: "add_domain";
+      domain: Domain;
+    }
+  | {
+      type: "remove_domain";
+      domainId: string;
+    }
+  | {
+      type: "set_credentials";
+      credentials: SmtpCredential[] | null;
+    }
+  | {
+      type: "add_credential";
+      credential: SmtpCredential;
+    }
+  | {
+      type: "remove_credential";
+      credentialId: string;
+    }
+  | {
+      type: "navigate";
+      route: string;
+      params?: RouteParams;
+    }
+  | {
+      type: "set_route";
+      route: Route;
+      fullPath: string;
+      fullName: string;
+      pathParams: RouteParams;
+      queryParams: RouteParams;
+    };
 
 export interface Organization {
   id: string;
@@ -149,10 +167,10 @@ export interface Stream {
 
 export interface Domain {
   id: string;
-  parent_id: { organization: string } | { project: string }
+  parent_id: { organization: string } | { project: string };
   domain: string;
-  dkim_key_type: 'rsa_sha265' | 'ed25519';
-  dkim_public_key: string,
+  dkim_key_type: "rsa_sha265" | "ed25519";
+  dkim_public_key: string;
   created_at: string;
   updated_at: string;
 }
@@ -176,6 +194,6 @@ export interface PasswordLoginRequest {
 }
 
 export interface SignUpRequest extends PasswordLoginRequest {
-  name: string,
-  terms: boolean,
+  name: string;
+  terms: boolean;
 }

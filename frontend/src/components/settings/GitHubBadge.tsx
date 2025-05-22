@@ -1,5 +1,5 @@
-import {Avatar, Group, Paper, Stack, Text} from "@mantine/core";
-import {useEffect, useState} from "react";
+import { Avatar, Group, Paper, Stack, Text } from "@mantine/core";
+import { useEffect, useState } from "react";
 
 interface GitHubBadgeProps {
   user_id: string;
@@ -12,30 +12,29 @@ interface GitHubApi {
   html_url: string;
 }
 
-export default function GitHubBadge({user_id}: GitHubBadgeProps) {
+export default function GitHubBadge({ user_id }: GitHubBadgeProps) {
   const [user, setUser] = useState<GitHubApi | null>(null);
 
   useEffect(() => {
     fetch(`https://api.github.com/user/${user_id}`)
-      .then(res => res.json())
-      .then(data => setUser(data))
-      .catch(err => console.error(err))
+      .then((res) => res.json())
+      .then((data) => setUser(data))
+      .catch((err) => console.error(err));
   }, [user_id]);
 
-
   return (
-      <Paper component="a" href={user?.html_url} radius="xl" p="sm" style={{background: "var(--mantine-color-black)"}}>
-        <Group>
-          <Avatar src={user?.avatar_url} size="lg"/>
-          <Stack gap="xs">
-            <Text size="sm" c="white" fw={600}>
-              {user?.name}
-            </Text>
-            <Text c="white" size="xs">
-              {user?.login}
-            </Text>
-          </Stack>
-        </Group>
-      </Paper>
-  )
+    <Paper component="a" href={user?.html_url} radius="xl" p="sm" style={{ background: "var(--mantine-color-black)" }}>
+      <Group>
+        <Avatar src={user?.avatar_url} size="lg" />
+        <Stack gap="xs">
+          <Text size="sm" c="white" fw={600}>
+            {user?.name}
+          </Text>
+          <Text c="white" size="xs">
+            {user?.login}
+          </Text>
+        </Stack>
+      </Group>
+    </Paper>
+  );
 }

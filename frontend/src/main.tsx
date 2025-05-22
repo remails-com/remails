@@ -1,20 +1,19 @@
-import {StrictMode} from 'react'
-import {createRoot} from 'react-dom/client'
-import App from './App'
-import '@mantine/core/styles.css';
-import {createTheme, MantineProvider} from '@mantine/core';
-import '@mantine/notifications/styles.css';
-import {Notifications} from '@mantine/notifications';
-import {ModalsProvider} from "@mantine/modals";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+import "@mantine/core/styles.css";
+import { createTheme, MantineProvider } from "@mantine/core";
+import "@mantine/notifications/styles.css";
+import { Notifications } from "@mantine/notifications";
+import { ModalsProvider } from "@mantine/modals";
 
-const element = document.getElementById('root')!;
+const element = document.getElementById("root")!;
 const root = createRoot(element);
 
 const theme = createTheme({
-  primaryColor: 'bright-purple',
+  primaryColor: "bright-purple",
   colors: {
-
-    'bright-purple': [
+    "bright-purple": [
       "#f6e9ff",
       "#e6cfff",
       "#ca9cff",
@@ -24,7 +23,7 @@ const theme = createTheme({
       "#7c0cfe",
       "#6a00e3",
       "#5d00cb",
-      "#5000b3"
+      "#5000b3",
     ],
   },
 });
@@ -33,9 +32,9 @@ root.render(
   <StrictMode>
     <MantineProvider theme={theme}>
       <ModalsProvider>
-        <Notifications/>
-        <App/>
+        <Notifications />
+        <App />
       </ModalsProvider>
     </MantineProvider>
-  </StrictMode>,
+  </StrictMode>
 );

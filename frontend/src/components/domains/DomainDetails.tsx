@@ -1,39 +1,37 @@
-import {useOrganizations} from "../../hooks/useOrganizations.ts";
-import {useProjects} from "../../hooks/useProjects.ts";
-import {useRemails} from "../../hooks/useRemails.ts";
-import {useDomains} from "../../hooks/useDomains.ts";
-import {Loader} from "../../Loader.tsx";
-import {Domain} from "../../types.ts";
-import {modals} from "@mantine/modals";
-import {notifications} from "@mantine/notifications";
-import {IconTrash, IconX} from "@tabler/icons-react";
-import {Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip} from "@mantine/core";
-
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { useRemails } from "../../hooks/useRemails.ts";
+import { useDomains } from "../../hooks/useDomains.ts";
+import { Loader } from "../../Loader.tsx";
+import { Domain } from "../../types.ts";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
+import { IconTrash, IconX } from "@tabler/icons-react";
+import { Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 
 export function DomainDetails() {
-  const {currentOrganization} = useOrganizations();
-  const {currentProject} = useProjects();
-  const {currentDomain} = useDomains();
-  const {dispatch, navigate} = useRemails();
+  const { currentOrganization } = useOrganizations();
+  const { currentProject } = useProjects();
+  const { currentDomain } = useDomains();
+  const { dispatch, navigate } = useRemails();
 
   if (!currentDomain || !currentOrganization) {
-    return <Loader/>;
+    return <Loader />;
   }
 
   const confirmDeleteDomain = (domain: Domain) => {
     modals.openConfirmModal({
-      title: 'Please confirm your action',
+      title: "Please confirm your action",
       children: (
         <Text>
           Are you sure you want to delete the domain <strong>{domain.domain}</strong>? This action cannot be undone
         </Text>
       ),
-      labels: {confirm: 'Confirm', cancel: 'Cancel'},
-      onCancel: () => {
-      },
+      labels: { confirm: "Confirm", cancel: "Cancel" },
+      onCancel: () => {},
       onConfirm: () => deleteDomain(domain),
     });
-  }
+  };
 
   const deleteDomain = async (domain: Domain) => {
     let url = `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
@@ -42,69 +40,59 @@ export function DomainDetails() {
     }
 
     const res = await fetch(url, {
-      method: 'DELETE',
+      method: "DELETE",
     });
     if (res.status === 200) {
       notifications.show({
-        title: 'Domain deleted',
+        title: "Domain deleted",
         message: `Domain ${domain.domain} deleted`,
-        color: 'green',
+        color: "green",
       });
-      dispatch({type: "remove_domain", domainId: domain.id});
+      dispatch({ type: "remove_domain", domainId: domain.id });
       if (currentProject) {
-        navigate('projects.project');
+        navigate("projects.project");
       } else {
-        navigate('domains');
+        navigate("domains");
       }
     } else {
       notifications.show({
-        title: 'Error',
+        title: "Error",
         message: `Domain ${domain.domain} could not be deleted`,
-        color: 'red',
+        color: "red",
         autoClose: 20000,
-        icon: <IconX size={20}/>,
+        icon: <IconX size={20} />,
       });
       console.error(res);
     }
-  }
+  };
 
   return (
     <Grid gutter="xl">
-      <Grid.Col span={{base: 12, md: 6, lg: 3}}>
+      <Grid.Col span={{ base: 12, md: 6, lg: 3 }}>
         <h2>Domain Details</h2>
         <form>
           <Stack>
-            <TextInput
-              label="Domain"
-              value={currentDomain.dkim_key_type}
-              readOnly={true}
-              variant='filled'
-            />
-            <TextInput
-              variant='filled'
-              readOnly={true}
-              label='DKIM Key Type'
-              value={currentDomain.dkim_key_type}
-            />
+            <TextInput label="Domain" value={currentDomain.dkim_key_type} readOnly={true} variant="filled" />
+            <TextInput variant="filled" readOnly={true} label="DKIM Key Type" value={currentDomain.dkim_key_type} />
             <Textarea
-              style={{lineBreak: 'anywhere'}}
+              style={{ lineBreak: "anywhere" }}
               readOnly={true}
-              variant='filled'
+              variant="filled"
               autosize
               maxRows={15}
-              label='DKIM Key'
+              label="DKIM Key"
               value={currentDomain.dkim_public_key}
             />
             <Group>
-              <Tooltip label='Delete Domain'>
-                <Button leftSection={<IconTrash/>}
-                        color="red"
-                        onClick={() => confirmDeleteDomain(currentDomain)}>Delete</Button>
+              <Tooltip label="Delete Domain">
+                <Button leftSection={<IconTrash />} color="red" onClick={() => confirmDeleteDomain(currentDomain)}>
+                  Delete
+                </Button>
               </Tooltip>
             </Group>
           </Stack>
         </form>
       </Grid.Col>
     </Grid>
-  )
+  );
 }
