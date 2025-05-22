@@ -1,16 +1,41 @@
 use crate::models::Password;
 use derive_more::{Deref, Display, From};
-use http::{HeaderMap, HeaderValue, header};
+use email_address::EmailAddress;
+use http::{header, HeaderMap, HeaderValue};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::error;
 use url::Url;
+use uuid::Uuid;
 
 struct OdooClient {
     api_key: Password,
     base_url: Url,
     client: reqwest::Client,
+}
+
+// TODO make this configurable
+enum SubscriptionLevel {
+    Tiny,
+    Small,
+    Medium,
+    Large,
+}
+
+impl TryFrom<OdooProductId> for SubscriptionLevel {
+    type Error = OdooError;
+
+    fn try_from(product_id: OdooProductId) -> Result<Self, Self::Error> {
+        // TODO make this mapping configurable and find out all possible values
+        match product_id.0 {
+            31 => Ok(Self::Medium),
+            _ => Err(OdooError::InvalidMapping(format!(
+                "Cannot deduce subscription level from product id: {}",
+                product_id.0
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Deref, Display, From, PartialEq, Eq)]
@@ -21,28 +46,101 @@ pub struct OdooPartnerId(u32);
 #[serde(transparent)]
 pub struct OdooSaleOrderId(u32);
 
+#[derive(Debug, Serialize, Deserialize, Deref, Display, From, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct OdooOrderLineId(u32);
+
+#[derive(Debug, Serialize, Deserialize, Deref, Display, From, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct OdooProductId(u32);
+
 #[derive(Debug, Deserialize)]
 pub struct OdooPartner {
     id: OdooPartnerId,
     name: String,
+    email: EmailAddress,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct OdooSaleOrder {
+pub struct OdooSaleOrder<OrderLine = OdooOrderLine, PartnerId = OdooPartnerId> {
     id: OdooSaleOrderId,
-    partner_id: OdooPartnerId,
+    partner_id: PartnerId,
     date_order: String,
     amount_total: Decimal,
     access_url: String,
     is_subscription: bool,
     subscription_state: String,
+    order_line: Vec<OrderLine>,
+    #[serde(deserialize_with = "deserialize_false_as_none")]
+    access_token: Option<Password>,
+}
+
+fn deserialize_false_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum OrFalse<Tinner> {
+        T(Tinner),
+        F(bool),
+    }
+
+    let inner: OrFalse<T> = OrFalse::deserialize(deserializer)?;
+    match inner {
+        OrFalse::T(inner) => Ok(Some(inner)),
+        OrFalse::F(inner) => {
+            if inner {
+                Err(serde::de::Error::custom("Expected false but got true"))
+            } else {
+                Ok(None)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+pub struct OdooOrderLine {
+    id: OdooOrderLineId,
+    product_id: OdooProductId,
+}
+
+#[derive(Debug)]
 enum OdooResponse<T> {
     Success { data: T, success: bool },
     Error { detail: serde_json::Value },
+}
+
+impl<'de, T> Deserialize<'de> for OdooResponse<T>
+where
+    T: DeserializeOwned,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Debug, Deserialize)]
+        #[serde(untagged)]
+        enum OdooResponseInner {
+            Success {
+                data: serde_json::Value,
+                success: bool,
+            },
+            Error {
+                detail: serde_json::Value,
+            },
+        }
+
+        let inner = OdooResponseInner::deserialize(deserializer)?;
+        match inner {
+            OdooResponseInner::Success { data, success } => Ok(OdooResponse::Success {
+                data: serde_json::from_value(data).map_err(serde::de::Error::custom)?,
+                success,
+            }),
+            OdooResponseInner::Error { detail } => Ok(OdooResponse::Error { detail }),
+        }
+    }
 }
 
 impl<T> From<OdooResponse<T>> for Result<T, OdooError> {
@@ -70,6 +168,8 @@ pub enum OdooError {
     InvalidHeaderValue(#[from] header::InvalidHeaderValue),
     #[error("Odoo API Error: {0}")]
     OdooApiError(serde_json::Value),
+    #[error("Invalid Mapping: {0}")]
+    InvalidMapping(String),
 }
 
 impl OdooClient {
@@ -129,18 +229,63 @@ impl OdooClient {
                     "date_order",
                     "amount_total",
                     "access_url",
+                    "access_token",
                     "is_subscription",
                     "subscription_state",
                     "type_name",
                     "order_line.id",
                     "order_line.product_id",
-                    "order_line.price_unit",
-                    "order_line.product_uom_qty"
                 ]
             }))
             .send()
             .await?
             .json::<OdooResponse<Vec<OdooSaleOrder>>>()
+            .await?
+            .into()
+    }
+
+    async fn create_subscription(
+        &self,
+        partner_id: OdooPartnerId,
+    ) -> Result<OdooSaleOrder<OdooOrderLineId, (OdooPartnerId, String)>, OdooError> {
+        let access_token = Uuid::new_v4();
+
+        self.client
+            .post(format!("{}/sale.order", self.base_url))
+            .json(&serde_json::json!({
+                "partner_id": partner_id,
+                "order_line": [
+                  {
+                    "product_id": 31,
+                    "product_uom_qty": 1,
+                  }
+                ],
+                "access_token": access_token,
+                "plan_id": 4,
+                "subscription_state": "1_draft",
+                "state": "draft"
+            }))
+            .send()
+            .await?
+            .json::<OdooResponse<OdooSaleOrder<OdooOrderLineId, (OdooPartnerId, String)>>>()
+            .await?
+            .into()
+    }
+
+    async fn create_partner(
+        &self,
+        name: &str,
+        email: EmailAddress,
+    ) -> Result<OdooPartner, OdooError> {
+        self.client
+            .post(format!("{}/res.partner", self.base_url))
+            .json(&serde_json::json!({
+              "name": name,
+              "email": email,
+            }))
+            .send()
+            .await?
+            .json::<OdooResponse<OdooPartner>>()
             .await?
             .into()
     }
@@ -180,5 +325,27 @@ mod test {
             .unwrap();
 
         dbg!(&subscriptions);
+    }
+
+    #[tokio::test]
+    async fn create_partner_happy_flow() {
+        let client = OdooClient::from_env();
+        let partner = client
+            .create_partner(
+                "Odoo integration test",
+                "testing@remails.com".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        dbg!(&partner);
+    }
+
+    #[tokio::test]
+    async fn create_subscription_happy_flow() {
+        let client = OdooClient::from_env();
+        let subscription = client.create_subscription(199.into()).await.unwrap();
+
+        dbg!(&subscription);
     }
 }
