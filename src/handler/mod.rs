@@ -25,8 +25,8 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
-    #[error("message is being held: {0}")]
-    MessageHeld(String),
+    #[error("message is being {0:?}: {1}")]
+    MessageNotAccepted(MessageStatus, String),
 }
 
 #[derive(Debug, Error)]
@@ -164,18 +164,21 @@ impl Handler {
     ///
     /// # Returns
     /// * `Ok(Ok(dkim_header))` if all checks passed and we successfully signed the message
-    /// * `Ok(Err(reason))` when a message should be held in the database
+    /// * `Ok(Err((status, reason)))` when a message should be held or rejected for some reason
     /// * `Err(handler_error)` on critical internal server errors (mostly related to the database)
     async fn check_and_sign_message(
         &self,
         message: &Message,
         parsed_msg: &mail_parser::Message<'_>,
-    ) -> Result<Result<String, String>, HandlerError> {
+    ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
         // check SMTP credentials
         let Some(smtp_credential_id) = message.smtp_credential_id else {
-            return Ok(Err("missing SMTP credential".to_string()));
+            return Ok(Err((
+                MessageStatus::Rejected,
+                "missing SMTP credential".to_string(),
+            )));
         };
         let Some(domain_id) = self
             .domain_repository
@@ -183,8 +186,9 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?
         else {
-            return Ok(Err(format!(
-                "SMTP credential is not permitted to use domain {sender_domain}"
+            return Ok(Err((
+                MessageStatus::Rejected,
+                format!("SMTP credential is not permitted to use domain {sender_domain}"),
             )));
         };
 
@@ -196,9 +200,12 @@ impl Handler {
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {
-            return Ok(Err(format!(
-                "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
-                domain.domain
+            return Ok(Err((
+                MessageStatus::Rejected,
+                format!(
+                    "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
+                    domain.domain
+                ),
             )));
         }
 
@@ -207,10 +214,13 @@ impl Handler {
             for addr in from.iter() {
                 if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
                     if !Self::is_subdomain(addr.domain(), &domain.domain) {
-                        return Ok(Err(format!(
-                            "From domain ({}) is not a valid (sub-)domain of {}",
-                            addr.domain(),
-                            domain.domain
+                        return Ok(Err((
+                            MessageStatus::Rejected,
+                            format!(
+                                "From domain ({}) is not a valid (sub-)domain of {}",
+                                addr.domain(),
+                                domain.domain
+                            ),
                         )));
                     }
                 }
@@ -223,10 +233,13 @@ impl Handler {
             .map(|p| p.parse::<EmailAddress>())
         {
             if !Self::is_subdomain(return_path.domain(), &domain.domain) {
-                return Ok(Err(format!(
-                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
-                    return_path.domain(),
-                    domain.domain
+                return Ok(Err((
+                    MessageStatus::Rejected,
+                    format!(
+                        "Return-Path domain ({}) is not a valid (sub-)domain of {}",
+                        return_path.domain(),
+                        domain.domain
+                    ),
                 )));
             }
         };
@@ -236,7 +249,10 @@ impl Handler {
             Ok(key) => key,
             Err(e) => {
                 error!("error creating DKIM key: {e}");
-                return Ok(Err("internal error: could not create DKIM key".to_string()));
+                return Ok(Err((
+                    MessageStatus::Held,
+                    "internal error: could not create DKIM key".to_string(),
+                )));
             }
         };
         trace!(
@@ -249,14 +265,22 @@ impl Handler {
             .await
             .is_none()
         {
-            return Ok(Err(format!("invalid DKIM key found on {sender_domain}")));
+            return Ok(Err((
+                MessageStatus::Held,
+                format!("invalid DKIM key found on {sender_domain}"),
+            )));
         }
 
         trace!("signing with dkim");
         Ok(dkim_key
             .dkim_header(parsed_msg)
             .inspect_err(|e| error!("error creating DKIM header: {e}"))
-            .map_err(|_| "internal error: could not create DKIM header".to_string()))
+            .map_err(|_| {
+                (
+                    MessageStatus::Held,
+                    "internal error: could not create DKIM header".to_string(),
+                )
+            }))
     }
 
     pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -314,9 +338,9 @@ impl Handler {
         let result = self.check_and_sign_message(&message, &parsed_msg).await?;
         message.status = match result {
             Ok(_) => MessageStatus::Accepted,
-            Err(_) => MessageStatus::Held,
+            Err((ref status, _)) => status.clone(),
         };
-        message.reason = result.as_ref().err().cloned();
+        message.reason = result.as_ref().err().map(|e| e.1.clone());
 
         self.message_repository
             .update_message_data_and_status(&message)
@@ -325,7 +349,7 @@ impl Handler {
 
         let dkim_header = match result {
             Ok(dkim_header) => dkim_header,
-            Err(reason) => return Err(HandlerError::MessageHeld(reason)),
+            Err((status, reason)) => return Err(HandlerError::MessageNotAccepted(status, reason)),
         };
 
         // generate message headers
