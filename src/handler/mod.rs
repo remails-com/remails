@@ -444,18 +444,16 @@ impl Handler {
         'next_rcpt: for recipient in &message.recipients {
             for &protection in order {
                 // maybe we should take more interest in the content of these error messages?
-                match self
+                if self
                     .send_single_message(recipient, &message, protection)
                     .await
+                    .is_ok()
                 {
-                    Ok(_) => {
-                        delivery_status.push(DeliveryStatus {
-                            receiver: recipient.clone(),
-                            status: "Success".to_string(),
-                        });
-                        continue 'next_rcpt;
-                    }
-                    Err(_) => {}
+                    delivery_status.push(DeliveryStatus {
+                        receiver: recipient.clone(),
+                        status: "Success".to_string(),
+                    });
+                    continue 'next_rcpt;
                 }
             }
             failures += 1;
