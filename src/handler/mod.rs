@@ -1,7 +1,8 @@
 use crate::{
     dkim::PrivateKey,
     models::{
-        DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
+        DeliveryStatus, DeliveryStatusEntry, DomainRepository, Message, MessageRepository,
+        MessageStatus, NewMessage,
     },
 };
 use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
@@ -449,18 +450,18 @@ impl Handler {
                     .await
                     .is_ok()
                 {
-                    delivery_status.push(DeliveryStatus {
+                    delivery_status.push(DeliveryStatusEntry {
                         receiver: recipient.clone(),
-                        status: "Success".to_string(),
+                        status: DeliveryStatus::Success,
                     });
                     continue 'next_rcpt;
                 }
             }
             failures += 1;
 
-            delivery_status.push(DeliveryStatus {
+            delivery_status.push(DeliveryStatusEntry {
                 receiver: recipient.clone(),
-                status: "Failure".to_string(),
+                status: DeliveryStatus::Failure,
             });
         }
 

@@ -34,7 +34,7 @@ pub struct Message {
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
-    pub delivery_status: Vec<DeliveryStatus>,
+    pub delivery_status: Vec<DeliveryStatusEntry>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
@@ -65,7 +65,7 @@ pub struct ApiMessageMetadata {
     id: MessageId,
     status: MessageStatus,
     reason: Option<String>,
-    delivery_status: Vec<DeliveryStatus>,
+    delivery_status: Vec<DeliveryStatusEntry>,
     smtp_credential_id: Option<SmtpCredentialId>,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
@@ -93,10 +93,15 @@ pub struct Attachment {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DeliveryStatus {
+pub enum DeliveryStatus {
+    Success,
+    Failure,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DeliveryStatusEntry {
     pub receiver: EmailAddress,
-    // TODO create status enum
-    pub status: String,
+    pub status: DeliveryStatus,
 }
 
 #[derive(Debug)]
@@ -331,7 +336,7 @@ impl MessageRepository {
         message: &mut Message,
         status: MessageStatus,
         reason: Option<String>,
-        delivery_status: Vec<DeliveryStatus>,
+        delivery_status: Vec<DeliveryStatusEntry>,
     ) -> Result<(), Error> {
         message.status = status;
         message.reason = reason.to_owned();
