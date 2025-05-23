@@ -1,10 +1,10 @@
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
-import { useState } from "react";
+import { ReactElement, useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { Message } from "../../types.ts";
+import { Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime } from "../../util.ts";
-import { IconCheck, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
+import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 
 export default function MessageDetails() {
   const { currentMessage } = useMessages();
@@ -20,15 +20,23 @@ export default function MessageDetails() {
   const text_body = completeMessage.message_data.text_body;
   const raw = completeMessage.truncated_raw_data;
 
+  const deliveryStatus: {
+    [key in MessageMetadata["delivery_status"][0]["status"]]: { color: string; icon: ReactElement };
+  } = {
+    Success: { color: "green", icon: <IconCheck size={16} /> },
+    Reattempt: { color: "orange", icon: <IconClock size={16} /> },
+    Failure: { color: "red", icon: <IconX size={16} /> },
+  };
+
   const to =
     completeMessage.delivery_status.length > 0
       ? completeMessage.delivery_status.map((status) => (
           <Badge
             key={status.receiver}
-            color={status.status == "Success" ? "green" : "red"}
+            color={deliveryStatus[status.status].color}
             variant="light"
             mr="sm"
-            rightSection={status.status == "Success" ? <IconCheck size={18} /> : <IconX size={18} />}
+            rightSection={deliveryStatus[status.status].icon}
           >
             {status.receiver}
           </Badge>

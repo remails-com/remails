@@ -23,7 +23,7 @@ export interface MessageMetadata {
   raw_size: string;
   delivery_status: {
     receiver: string;
-    status: "Success" | "Failure";
+    status: "Success" | "Reattempt" | "Failure";
   }[];
 }
 

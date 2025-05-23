@@ -33,7 +33,9 @@ pub enum HandlerError {
 #[derive(Debug, Error)]
 enum SendError {
     #[error("could not find a working MX receiver")]
-    NoWorkingMx,
+    PermanentFailure,
+    #[error("no MX server accepted the message")]
+    TemporaryFailure,
 }
 
 //TODO: do we want to do anything with DNS errors?
@@ -70,8 +72,8 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
-            retry_delay: Duration::minutes(1),
-            max_retries: 10,
+            retry_delay: Duration::seconds(15),
+            max_retries: 3,
         }
     }
 
@@ -343,16 +345,15 @@ impl Handler {
 
         let result = self.check_and_sign_message(message, &parsed_msg).await?;
         message.status = match result {
-            Ok(_) => MessageStatus::Accepted,
+            Ok(_) => {
+                message.attempts = 0; // reset attempts before sending
+                MessageStatus::Accepted
+            }
             Err((ref status, _)) => status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
-        message.attempts += 1;
-        message.retry_after = if message.status == MessageStatus::Held {
-            Some(chrono::Utc::now() + self.config.retry_delay)
-        } else {
-            None
-        };
+
+        message.set_next_retry(&self.config);
 
         self.message_repository
             .update_message_data_and_status(message)
@@ -432,6 +433,8 @@ impl Handler {
             body: message.raw_data.as_slice().into(),
         };
 
+        let mut is_temporary_failure = false;
+
         while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
             let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
@@ -459,14 +462,41 @@ impl Handler {
             let Err(err) = result else { return Ok(()) };
 
             trace!("could not use server: {err}");
+
+            match err {
+                mail_send::Error::Io(_) => is_temporary_failure = true,
+                mail_send::Error::Tls(_) => is_temporary_failure = true,
+                mail_send::Error::Base64(_) => is_temporary_failure = true,
+                mail_send::Error::Auth(_) => is_temporary_failure = true,
+                mail_send::Error::UnparseableReply => is_temporary_failure = true,
+                mail_send::Error::UnexpectedReply(response)
+                | mail_send::Error::AuthenticationFailed(response) => {
+                    // SMTP 4XX errors are temporary failures
+                    if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
+                        is_temporary_failure = true
+                    }
+                }
+                mail_send::Error::InvalidTLSName => is_temporary_failure = true,
+                mail_send::Error::MissingCredentials => {}
+                mail_send::Error::MissingMailFrom => {}
+                mail_send::Error::MissingRcptTo => {}
+                mail_send::Error::UnsupportedAuthMechanism => {}
+                mail_send::Error::Timeout => is_temporary_failure = true,
+                mail_send::Error::MissingStartTls => {}
+            }
         }
 
-        Err(SendError::NoWorkingMx)
+        if is_temporary_failure {
+            Err(SendError::TemporaryFailure)
+        } else {
+            Err(SendError::PermanentFailure)
+        }
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
         let mut failures = 0u32;
+        let mut has_permanent_failures = false;
 
         let order: &[Protection] = if self.config.allow_plain {
             &[Protection::Tls, Protection::Plaintext]
@@ -479,46 +509,60 @@ impl Handler {
         let mut delivery_status = Vec::with_capacity(message.recipients.len());
 
         'next_rcpt: for recipient in &message.recipients {
+            let mut is_temporary_failure = false;
             for &protection in order {
                 // maybe we should take more interest in the content of these error messages?
-                if self
+                match self
                     .send_single_message(recipient, &message, protection)
                     .await
-                    .is_ok()
                 {
-                    delivery_status.push(DeliveryStatusEntry {
-                        receiver: recipient.clone(),
-                        status: DeliveryStatus::Success,
-                    });
-                    continue 'next_rcpt;
+                    Ok(()) => {
+                        delivery_status.push(DeliveryStatusEntry {
+                            receiver: recipient.clone(),
+                            status: DeliveryStatus::Success,
+                        });
+                        continue 'next_rcpt;
+                    }
+                    Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                    Err(SendError::PermanentFailure) => {}
                 }
             }
             failures += 1;
 
             delivery_status.push(DeliveryStatusEntry {
                 receiver: recipient.clone(),
-                status: DeliveryStatus::Failure,
+                status: if is_temporary_failure {
+                    DeliveryStatus::Reattempt
+                } else {
+                    has_permanent_failures = true;
+                    DeliveryStatus::Failed
+                },
             });
         }
 
+        message.status = if failures > 0 {
+            if has_permanent_failures {
+                MessageStatus::Failed
+            } else {
+                MessageStatus::Reattempt
+            }
+        } else {
+            MessageStatus::Delivered
+        };
+
+        message.reason = if failures > 0 {
+            Some(format!(
+                "failed to deliver to {failures} of {} recipients",
+                delivery_status.len()
+            ))
+        } else {
+            None
+        };
+
+        message.set_next_retry(&self.config);
+
         self.message_repository
-            .update_message_status(
-                &mut message,
-                if failures > 0 {
-                    MessageStatus::Failed
-                } else {
-                    MessageStatus::Delivered
-                },
-                if failures > 0 {
-                    Some(format!(
-                        "failed to deliver to {failures} of {} recipients",
-                        delivery_status.len()
-                    ))
-                } else {
-                    None
-                },
-                delivery_status,
-            )
+            .update_message_status(&mut message, delivery_status)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
@@ -590,6 +634,8 @@ impl Handler {
                 if let Err(e) = self.send_message(message).await {
                     error!(message_id, "failed to send message: {e:?}");
                 }
+            } else if message.status == MessageStatus::Reattempt {
+                error!("TODO: resend message to recipients with delivery status reattempt");
             }
         }
 

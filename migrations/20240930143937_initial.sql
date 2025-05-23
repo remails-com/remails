@@ -156,8 +156,9 @@ CREATE TYPE message_status AS ENUM (
     'accepted',
     'rejected',
     'delivered',
+    'reattempt',
     'failed'
-    );
+);
 
 CREATE TABLE messages
 (

@@ -1,5 +1,6 @@
-use crate::models::{
-    Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
+use crate::{
+    HandlerConfig,
+    models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -22,7 +23,22 @@ pub enum MessageStatus {
     Accepted,
     Rejected,
     Delivered,
+    Reattempt,
     Failed,
+}
+
+impl MessageStatus {
+    fn should_retry(&self) -> bool {
+        match self {
+            MessageStatus::Processing => false,
+            MessageStatus::Held => true,
+            MessageStatus::Accepted => false,
+            MessageStatus::Rejected => false,
+            MessageStatus::Delivered => false,
+            MessageStatus::Reattempt => true,
+            MessageStatus::Failed => false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -97,7 +113,8 @@ pub struct Attachment {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum DeliveryStatus {
     Success,
-    Failure,
+    Reattempt,
+    Failed,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -130,6 +147,37 @@ impl Message {
         self.raw_data.resize(msg_len + hdr_size, Default::default());
         self.raw_data.copy_within(..msg_len, hdr_size);
         self.raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
+    }
+
+    pub fn set_next_retry(&mut self, config: &HandlerConfig) {
+        self.attempts += 1;
+
+        if !self.status.should_retry() {
+            self.retry_after = None;
+            return;
+        }
+
+        if self.attempts < config.max_retries {
+            let timeout = config
+                .retry_delay
+                .checked_mul(self.attempts)
+                .unwrap_or(chrono::TimeDelta::days(1));
+            self.retry_after = Some(chrono::Utc::now() + timeout);
+        } else {
+            match &self.status {
+                MessageStatus::Held => self.status = MessageStatus::Rejected,
+                MessageStatus::Reattempt => self.status = MessageStatus::Failed,
+                _ => {}
+            };
+            self.reason = Some(
+                self.reason
+                    .take()
+                    .map_or("out of attempts".to_string(), |r| {
+                        format!("{r} - out of attempts")
+                    }),
+            );
+            self.retry_after = None;
+        }
     }
 }
 
@@ -342,12 +390,8 @@ impl MessageRepository {
     pub async fn update_message_status(
         &self,
         message: &mut Message,
-        status: MessageStatus,
-        reason: Option<String>,
         delivery_status: Vec<DeliveryStatusEntry>,
     ) -> Result<(), Error> {
-        message.status = status;
-        message.reason = reason.to_owned();
         let delivery_status_serialized =
             serde_json::to_value(&delivery_status).map_err(Error::Serialization)?;
         message.delivery_status = delivery_status;
@@ -355,13 +399,19 @@ impl MessageRepository {
         sqlx::query!(
             r#"
             UPDATE messages
-            SET status = $2, reason = $3, delivery_status = $4
+            SET status = $2,
+                reason = $3,
+                delivery_status = $4,
+                retry_after = $5,
+                attempts = $6
             WHERE id = $1
             "#,
             *message.id,
             message.status as _,
-            reason,
-            delivery_status_serialized
+            message.reason,
+            delivery_status_serialized,
+            message.retry_after,
+            message.attempts,
         )
         .execute(&self.pool)
         .await?;
@@ -517,7 +567,7 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts
             FROM messages m
-            WHERE m.status = 'held'
+            WHERE (m.status = 'held' OR m.status = 'reattempt')
               AND now() > m.retry_after
               AND m.attempts < $1
             "#,
