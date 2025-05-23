@@ -41,6 +41,8 @@ pub struct Message {
     pub message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    pub retry_after: Option<DateTime<Utc>>,
+    pub attempts: i32,
 }
 
 #[derive(Serialize)]
@@ -105,7 +107,7 @@ pub struct DeliveryStatusEntry {
 }
 
 #[derive(Debug)]
-pub(crate) struct NewMessage {
+pub struct NewMessage {
     pub smtp_credential_id: SmtpCredentialId,
     pub status: MessageStatus,
     pub from_email: EmailAddress,
@@ -183,6 +185,8 @@ struct PgMessage {
     message_data: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    retry_after: Option<DateTime<Utc>>,
+    attempts: i32,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -208,6 +212,8 @@ impl TryFrom<PgMessage> for Message {
             message_data: m.message_data,
             created_at: m.created_at,
             updated_at: m.updated_at,
+            retry_after: m.retry_after,
+            attempts: m.attempts,
         })
     }
 }
@@ -317,7 +323,9 @@ impl MessageRepository {
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.created_at,
-                m.updated_at
+                m.updated_at,
+                m.retry_after,
+                m.attempts
             "#,
             *message.smtp_credential_id,
             message.status as _,
@@ -366,13 +374,19 @@ impl MessageRepository {
         sqlx::query!(
             r#"
             UPDATE messages
-            SET message_data = $2, status = $3, reason = $4
+            SET message_data = $2, 
+                status = $3,
+                reason = $4,
+                retry_after = $5,
+                attempts = $6
             WHERE id = $1
             "#,
             *message.id,
             message.message_data,
             message.status as _,
-            message.reason
+            message.reason,
+            message.retry_after,
+            message.attempts,
         )
         .execute(&self.pool)
         .await?;
@@ -405,7 +419,9 @@ impl MessageRepository {
                 NULL::jsonb AS "message_data",
                 octet_length(m.raw_data) as "raw_size!",
                 m.created_at,
-                m.updated_at
+                m.updated_at,
+                m.retry_after,
+                m.attempts
             FROM messages m
             WHERE ($3::message_status IS NULL OR status = $3)
               AND m.organization_id = $4 
@@ -455,7 +471,9 @@ impl MessageRepository {
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.created_at,
-                m.updated_at
+                m.updated_at,
+                m.retry_after,
+                m.attempts
             FROM messages  m
             WHERE m.id = $1
               AND m.organization_id = $2 
@@ -471,6 +489,45 @@ impl MessageRepository {
         .fetch_one(&self.pool)
         .await?
         .try_into()
+    }
+
+    pub async fn find_messages_ready_for_retry(
+        &self,
+        max_attempts: i32,
+    ) -> Result<Vec<Message>, Error> {
+        sqlx::query_as!(
+            PgMessage,
+            r#"
+            SELECT
+                m.id,
+                m.organization_id,
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
+                m.status as "status: _",
+                m.reason,
+                m.delivery_status,
+                m.from_email,
+                m.recipients,
+                m.raw_data,
+                octet_length(m.raw_data) as "raw_size!",
+                m.message_data,
+                m.created_at,
+                m.updated_at,
+                m.retry_after,
+                m.attempts
+            FROM messages m
+            WHERE m.status = 'held'
+              AND now() > m.retry_after
+              AND m.attempts < $1
+            "#,
+            max_attempts
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<Result<Vec<_>, Error>>()
     }
 }
 

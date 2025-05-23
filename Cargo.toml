@@ -17,6 +17,10 @@ path = "src/bin/management.rs"
 name = "mta"
 path = "src/bin/mta.rs"
 
+[[bin]]
+name = "retry"
+path = "src/bin/retry.rs"
+
 [features]
 load-fixtures = []
 
