@@ -1,16 +1,15 @@
 use anyhow::Context;
-use remails::{HandlerConfig, SmtpConfig, run_api_server, run_mta, shutdown_signal};
+use remails::{
+    HandlerConfig, SmtpConfig, handler::Handler, run_api_server, run_mta, shutdown_signal,
+};
 use sqlx::postgres::PgPoolOptions;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-#[cfg(feature = "load-fixtures")]
-use tracing::error;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,8 +42,26 @@ async fn main() -> anyhow::Result<()> {
     let handler_config = HandlerConfig::new("remails.tweedegolf-test.nl");
     let shutdown = CancellationToken::new();
 
-    run_mta(pool.clone(), smtp_config, handler_config, shutdown.clone()).await;
-    run_api_server(pool, http_socket, shutdown.clone(), true).await;
+    run_mta(
+        pool.clone(),
+        smtp_config,
+        handler_config.clone(),
+        shutdown.clone(),
+    )
+    .await;
+    run_api_server(pool.clone(), http_socket, shutdown.clone(), true).await;
+
+    // Run retry service
+    let message_handler = Handler::new(pool.clone(), handler_config.into(), shutdown.clone());
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if let Err(e) = message_handler.retry_all().await {
+                error!("Error retrying: {e}")
+            };
+        }
+    });
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
