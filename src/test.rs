@@ -60,6 +60,8 @@ async fn integration_test(pool: PgPool) {
         allow_plain: true,
         domain: "test".to_string(),
         resolver: crate::handler::mock::Resolver("localhost", mailcrab_random_port),
+        retry_delay: chrono::Duration::minutes(5),
+        max_retries: 1,
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;

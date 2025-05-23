@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 pub mod api;
 mod dkim;
-mod handler;
+pub mod handler;
 mod smtp;
 pub use crate::handler::HandlerConfig;
 pub use smtp::SmtpConfig;

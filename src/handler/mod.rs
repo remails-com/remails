@@ -6,13 +6,14 @@ use crate::{
     },
 };
 use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
+use chrono::Duration;
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc, time::Duration};
+use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -55,6 +56,8 @@ pub struct HandlerConfig {
     pub(crate) resolver: mock::Resolver,
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
+    pub(crate) retry_delay: Duration,
+    pub(crate) max_retries: i32,
 }
 
 #[cfg(not(test))]
@@ -66,6 +69,8 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
+            retry_delay: Duration::minutes(5),
+            max_retries: 10,
         }
     }
 
@@ -187,7 +192,7 @@ impl Handler {
             .map_err(HandlerError::MessageRepositoryError)?
         else {
             return Ok(Err((
-                MessageStatus::Rejected,
+                MessageStatus::Held,
                 format!("SMTP credential is not permitted to use domain {sender_domain}"),
             )));
         };
@@ -283,15 +288,15 @@ impl Handler {
             }))
     }
 
-    pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        let mut message: Message = self
-            .message_repository
+    pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
+        self.message_repository
             .create(&message)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .inspect(|m| trace!("stored message {}", m.id()))
+            .map_err(HandlerError::MessageRepositoryError)
+    }
 
-        trace!("stored message {}", message.id());
-
+    pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
         // parse and save message contents
         let mut parsed_msg: mail_parser::Message = MessageParser::default()
             .parse(&message.raw_data)
@@ -335,15 +340,21 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        let result = self.check_and_sign_message(&message, &parsed_msg).await?;
+        let result = self.check_and_sign_message(message, &parsed_msg).await?;
         message.status = match result {
             Ok(_) => MessageStatus::Accepted,
             Err((ref status, _)) => status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
+        message.attempts += 1;
+        message.retry_after = if message.status == MessageStatus::Held {
+            Some(chrono::Utc::now() + self.config.retry_delay)
+        } else {
+            None
+        };
 
         self.message_repository
-            .update_message_data_and_status(&message)
+            .update_message_data_and_status(message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
@@ -359,7 +370,7 @@ impl Handler {
 
         message.prepend_headers(&dkim_header);
 
-        Ok(message)
+        Ok(())
     }
 
     async fn resolve_mail_domain(
@@ -425,7 +436,7 @@ impl Handler {
                 .implicit_tls(false)
                 .say_ehlo(true)
                 .helo_host(&self.config.domain)
-                .timeout(Duration::from_secs(60));
+                .timeout(std::time::Duration::from_secs(60));
 
             let result = match security {
                 Protection::Tls => match smtp.connect().await {
@@ -528,21 +539,58 @@ impl Handler {
                             return
                         };
 
-                        let parsed_message = match self.handle_message(message).await {
+                        let mut message = match self.create_message(message).await {
                             Ok(message) => message,
                             Err(e) => {
-                                error!("failed to handle message: {e:?}");
+                                error!("failed to create message: {e:?}");
                                 continue
-                            }
+                            },
                         };
 
-                        if let Err(e) = self.send_message(parsed_message).await {
+                        if let Err(e) = self.handle_message(&mut message).await {
+                            error!("failed to handle message: {e:?}");
+                            continue
+                        };
+
+                        if let Err(e) = self.send_message(message).await {
                             error!("failed to send message: {e:?}");
                         }
                     }
                 }
             }
         });
+    }
+
+    pub async fn retry_all(&self) -> Result<(), HandlerError> {
+        let messages = self
+            .message_repository
+            .find_messages_ready_for_retry(self.config.max_retries)
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?;
+
+        if messages.is_empty() {
+            debug!("There are no messages to retry right now");
+        }
+
+        for mut message in messages {
+            info!(
+                "Retrying message from {} (status: {:?})",
+                message.from_email, message.status
+            );
+
+            if message.status == MessageStatus::Held {
+                if let Err(e) = self.handle_message(&mut message).await {
+                    error!("failed to handle message: {e:?}");
+                    continue;
+                };
+
+                if let Err(e) = self.send_message(message).await {
+                    error!("failed to send message: {e:?}");
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -606,10 +654,13 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: super::mock::Resolver("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(5),
+            max_retries: 1,
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
-        let message = handler.handle_message(message).await.unwrap();
+        let mut message = handler.create_message(message).await.unwrap();
+        handler.handle_message(&mut message).await.unwrap();
         handler.send_message(message).await.unwrap();
     }
 
@@ -665,10 +716,13 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: super::mock::Resolver("localhost", mailcrab_port),
+                retry_delay: Duration::minutes(5),
+                max_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(handler.handle_message(message).await.is_err());
+            let mut message = handler.create_message(message).await.unwrap();
+            assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
@@ -733,10 +787,13 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: super::mock::Resolver("localhost", mailcrab_port),
+                retry_delay: Duration::minutes(5),
+                max_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(handler.handle_message(message).await.is_err());
+            let mut message = handler.create_message(message).await.unwrap();
+            assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
