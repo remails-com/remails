@@ -49,6 +49,7 @@ enum Protection {
     Tls,
 }
 
+#[derive(Clone)]
 pub struct HandlerConfig {
     #[cfg(not(test))]
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
@@ -69,7 +70,7 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
-            retry_delay: Duration::minutes(5),
+            retry_delay: Duration::minutes(1),
             max_retries: 10,
         }
     }
@@ -547,13 +548,14 @@ impl Handler {
                             },
                         };
 
+                        let message_id = message.id().to_string();
                         if let Err(e) = self.handle_message(&mut message).await {
-                            error!("failed to handle message: {e:?}");
+                            error!(message_id, "failed to handle message: {e:?}");
                             continue
                         };
 
                         if let Err(e) = self.send_message(message).await {
-                            error!("failed to send message: {e:?}");
+                            error!(message_id, "failed to send message: {e:?}");
                         }
                     }
                 }
@@ -573,19 +575,20 @@ impl Handler {
         }
 
         for mut message in messages {
+            let message_id = message.id().to_string();
             info!(
-                "Retrying message from {} (status: {:?})",
-                message.from_email, message.status
+                message_id,
+                "Retrying message from {} (status: {:?})", message.from_email, message.status
             );
 
             if message.status == MessageStatus::Held {
                 if let Err(e) = self.handle_message(&mut message).await {
-                    error!("failed to handle message: {e:?}");
+                    error!(message_id, "failed to handle message: {e:?}");
                     continue;
                 };
 
                 if let Err(e) = self.send_message(message).await {
-                    error!("failed to send message: {e:?}");
+                    error!(message_id, "failed to send message: {e:?}");
                 }
             }
         }
