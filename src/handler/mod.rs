@@ -72,7 +72,7 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
-            retry_delay: Duration::seconds(15),
+            retry_delay: Duration::seconds(60),
             max_retries: 3,
         }
     }

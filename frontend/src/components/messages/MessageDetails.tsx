@@ -28,7 +28,7 @@ export default function MessageDetails() {
     Failure: { color: "red", icon: <IconX size={16} /> },
   };
 
-  const to =
+  const recipients =
     completeMessage.delivery_status.length > 0
       ? completeMessage.delivery_status.map((status) => (
           <Badge
@@ -50,8 +50,9 @@ export default function MessageDetails() {
   const table_data = [
     { header: "From", value: completeMessage.from_email },
     {
-      header: "To",
-      value: to,
+      header: "Recipients",
+      info: 'The recipients who will receive this message based on the "RCPT TO" SMTP header',
+      value: recipients,
     },
     {
       header: "Date",
@@ -76,7 +77,11 @@ export default function MessageDetails() {
     },
     {
       header: "Status",
-      value: completeMessage.status + (completeMessage.reason ? ` (${completeMessage.reason})` : ""),
+      value:
+        completeMessage.status +
+        (completeMessage.reason ? `: ${completeMessage.reason}` : "") +
+        (completeMessage.retry_after ? `, retrying after ${formatDateTime(completeMessage.retry_after)}` : "") +
+        (completeMessage.attempts > 1 ? ` (${completeMessage.attempts} attempts)` : ""),
     },
     {
       header: "Attachments",

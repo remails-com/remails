@@ -25,6 +25,8 @@ export interface MessageMetadata {
     receiver: string;
     status: "Success" | "Reattempt" | "Failure";
   }[];
+  retry_after: string | undefined;
+  attempts: number;
 }
 
 export interface Message extends MessageMetadata {

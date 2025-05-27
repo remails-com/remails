@@ -91,6 +91,8 @@ pub struct ApiMessageMetadata {
     raw_size: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    retry_after: Option<DateTime<Utc>>,
+    attempts: i32,
 }
 
 #[derive(Serialize, Default)]
@@ -336,6 +338,8 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             raw_size: humansize::format_size(m.raw_size.unsigned_abs(), humansize::DECIMAL),
             created_at: m.created_at,
             updated_at: m.updated_at,
+            retry_after: m.retry_after,
+            attempts: m.attempts,
         })
     }
 }
