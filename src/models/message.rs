@@ -7,7 +7,7 @@ use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use std::{mem, str::FromStr};
+use std::{collections::HashMap, mem, str::FromStr};
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -50,7 +50,7 @@ pub struct Message {
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
-    pub delivery_status: Vec<DeliveryStatusEntry>,
+    pub delivery_status: HashMap<EmailAddress, DeliveryStatus>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
@@ -83,7 +83,7 @@ pub struct ApiMessageMetadata {
     id: MessageId,
     status: MessageStatus,
     reason: Option<String>,
-    delivery_status: Vec<DeliveryStatusEntry>,
+    delivery_status: HashMap<EmailAddress, DeliveryStatus>,
     smtp_credential_id: Option<SmtpCredentialId>,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
@@ -117,12 +117,6 @@ pub enum DeliveryStatus {
     Success,
     Reattempt,
     Failed,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DeliveryStatusEntry {
-    pub receiver: EmailAddress,
-    pub status: DeliveryStatus,
 }
 
 #[derive(Debug)]
@@ -171,13 +165,13 @@ impl Message {
                 MessageStatus::Reattempt => self.status = MessageStatus::Failed,
                 _ => {}
             };
-            self.reason = Some(
-                self.reason
-                    .take()
-                    .map_or("out of attempts".to_string(), |r| {
-                        format!("{r} - out of attempts")
-                    }),
-            );
+            self.reason = Some(self.reason.take().map_or(
+                "out of attempts".to_string(),
+                |mut reason| {
+                    reason.push_str(" - out of attempts");
+                    reason
+                },
+            ));
             self.retry_after = None;
         }
     }
@@ -391,14 +385,9 @@ impl MessageRepository {
             .try_into()
     }
 
-    pub async fn update_message_status(
-        &self,
-        message: &mut Message,
-        delivery_status: Vec<DeliveryStatusEntry>,
-    ) -> Result<(), Error> {
+    pub async fn update_message_status(&self, message: &mut Message) -> Result<(), Error> {
         let delivery_status_serialized =
-            serde_json::to_value(&delivery_status).map_err(Error::Serialization)?;
-        message.delivery_status = delivery_status;
+            serde_json::to_value(&message.delivery_status).map_err(Error::Serialization)?;
 
         sqlx::query!(
             r#"

@@ -13,6 +13,8 @@ export interface User {
 
 export type WhoamiResponse = User | { error: string };
 
+export type DeliveryStatus = "NotSent" | "Success" | "Reattempt" | "Failure";
+
 export interface MessageMetadata {
   id: string;
   from_email: string;
@@ -21,10 +23,7 @@ export interface MessageMetadata {
   status: string;
   reason: string | undefined;
   raw_size: string;
-  delivery_status: {
-    receiver: string;
-    status: "Success" | "Reattempt" | "Failure";
-  }[];
+  delivery_status: { [receiver: string]: DeliveryStatus };
   retry_after: string | undefined;
   attempts: number;
 }
