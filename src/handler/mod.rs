@@ -71,8 +71,8 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
-            retry_delay: Duration::seconds(60),
-            max_retries: 3,
+            retry_delay: Duration::minutes(5),
+            max_retries: 5,
         }
     }
 
@@ -659,7 +659,7 @@ pub mod mock;
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
+    use crate::models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -860,5 +860,89 @@ mod test {
                 .await
                 .unwrap();
         }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    #[traced_test]
+    #[serial]
+    async fn retry_sending_messages(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let message_repo = MessageRepository::new(pool.clone());
+
+        let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
+        let message_reattempt_id = "c1e03226-8aad-42a9-8c43-380a5b25cb79".parse().unwrap();
+        let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
+        let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+        let get_message_status = async |id: MessageId| {
+            message_repo
+                .find_by_id(org_id, Some(project_id), Some(stream_id), id)
+                .await
+                .unwrap()
+                .status()
+                .to_owned()
+        };
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Held
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
+
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: super::mock::Resolver("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(60),
+            max_retries: 3,
+        };
+        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        handler.retry_all().await.unwrap();
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
     }
 }

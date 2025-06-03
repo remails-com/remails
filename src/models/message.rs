@@ -70,10 +70,14 @@ pub struct ApiMessage {
     message_data: ApiMessageData,
 }
 
+#[cfg(test)]
 impl ApiMessage {
-    #[cfg(test)]
     pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
         self.metadata.smtp_credential_id
+    }
+
+    pub fn status(&self) -> &MessageStatus {
+        &self.metadata.status
     }
 }
 
