@@ -48,7 +48,7 @@ ingress-nginx:
       type: ClusterIP
 
 github_oauth:
-  client_id: Something
+  client_id: Ov23livRESUJK4twobxj
   client_secret: Secret
 
 imagePullSecrets:
