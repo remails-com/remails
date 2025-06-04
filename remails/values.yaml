@@ -1,0 +1,55 @@
+images:
+  mta:
+    tag:
+    repository: ghcr.io/tweedegolf/remails/mta
+    pullPolicy: Always
+  management:
+    tag:
+    repository: ghcr.io/tweedegolf/remails/management
+    pullPolicy: Always
+
+database_url: ""
+# TODO this should be a secret, random value
+session_key: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
+
+smtp:
+  replicas: 3
+  load_balancer_plan: "essentials"
+  server_name: "upcloud.tweedegolf-test.nl"
+  # Possible values "staging" and "production".
+  # Influences which type of Let's Encrypt certificate should be used
+  certificate_type: "staging"
+
+management:
+  replicas: 3
+  # possible values are "essentials", "development", "production-small", and TODO
+  load_balancer_plan: "essentials"
+  server_name: "mgmt.upcloud.tweedegolf-test.nl"
+  certificate_bundle_name: "0d734c00-a60d-4db0-8aa3-eb653d3a46f6-default-remails-management"
+  certificate_bundle_uuid: "0a59886c-743d-43ce-be19-d8e6c3213da1"
+
+scaleway-certmanager-webhook:
+  secret:
+    # expires 28-06-2025
+    accessKey: SCWW3JYHP6HCRCFY1RR4
+    secretKey: 4c498b69-05f4-4723-951e-3ef673719bf8
+
+  certManager:
+    namespace: cert-manager
+    serviceAccountName: remails-cert-manager
+
+cert-manager:
+  namespace: cert-manager
+  installCRDs: false
+
+ingress-nginx:
+  controller:
+    service:
+      type: ClusterIP
+
+github_oauth:
+  client_id: Something
+  client_secret: Secret
+
+imagePullSecrets:
+  - name: "regcred"

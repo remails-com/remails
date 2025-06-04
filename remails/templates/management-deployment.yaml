@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remails-management
+  labels:
+    app: remails-management
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.management.replicas }}
+  selector:
+    matchLabels:
+      app: remails-management
+      version: {{ .Chart.AppVersion }}
+  template:
+    metadata:
+      labels:
+        app: remails-management
+        version: {{ .Chart.AppVersion }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: management
+          image: "{{ .Values.images.management.repository }}:{{ .Values.images.management.tag | default .Chart.AppVersion  }}"
+          imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: database_url
+            - name: RUST_LOG
+              value: remails=trace,info
+            - name: OAUTH_CLIENT_ID
+              value: {{ .Values.github_oauth.client_id }}
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: github_client_secret
+            - name: GITHUB_OAUTH_REDIRECT_URL
+              value: "https://{{ .Values.management.server_name }}/api/oauth/authorize/github"
+            - name: SESSION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: session_key
+
+          ports:
+            - containerPort: 3000
+              name: http

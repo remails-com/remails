@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: smtp-cert
+spec:
+  commonName: {{ .Values.smtp.server_name | quote }}
+  dnsNames:
+    - {{ .Values.smtp.server_name | quote }}
+  issuerRef:
+    name: letsencrypt-{{ .Values.smtp.certificate_type }}-scaleway-dns
+    kind: ClusterIssuer
+  secretName: smtp-cert
