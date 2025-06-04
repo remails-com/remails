@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE messages\n            SET status = $2, reason = $3, delivery_status = $4\n            WHERE id = $1\n            ",
+  "query": "\n            UPDATE messages\n            SET status = $2,\n                reason = $3,\n                delivery_status = $4,\n                retry_after = $5,\n                attempts = $6\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -16,16 +16,19 @@
                 "accepted",
                 "rejected",
                 "delivered",
+                "reattempt",
                 "failed"
               ]
             }
           }
         },
         "Varchar",
-        "Jsonb"
+        "Jsonb",
+        "Timestamptz",
+        "Int4"
       ]
     },
     "nullable": []
   },
-  "hash": "d6a6bc4f64b32f611682cfa2f70dd7c915740b2286c0ebcf865d8a486c0cde2e"
+  "hash": "d848960cb63fce086de425e7f0934b8f498fb32b30dbcce6ad51cb058ecea382"
 }

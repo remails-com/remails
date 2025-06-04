@@ -1,18 +1,18 @@
 use crate::{
     dkim::PrivateKey,
     models::{
-        DeliveryStatus, DeliveryStatusEntry, DomainRepository, Message, MessageRepository,
-        MessageStatus, NewMessage,
+        DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
     },
 };
 use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
+use chrono::Duration;
 use email_address::EmailAddress;
 #[cfg_attr(test, allow(unused_imports))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc, time::Duration};
+use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
@@ -25,14 +25,16 @@ pub enum HandlerError {
     MessageRepositoryError(crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
-    #[error("message is being held: {0}")]
-    MessageHeld(String),
+    #[error("message is being {0:?}: {1}")]
+    MessageNotAccepted(MessageStatus, String),
 }
 
 #[derive(Debug, Error)]
 enum SendError {
     #[error("could not find a working MX receiver")]
-    NoWorkingMx,
+    PermanentFailure,
+    #[error("no MX server accepted the message")]
+    TemporaryFailure,
 }
 
 //TODO: do we want to do anything with DNS errors?
@@ -48,6 +50,7 @@ enum Protection {
     Tls,
 }
 
+#[derive(Clone)]
 pub struct HandlerConfig {
     #[cfg(not(test))]
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
@@ -55,6 +58,8 @@ pub struct HandlerConfig {
     pub(crate) resolver: mock::Resolver,
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
+    pub(crate) retry_delay: Duration,
+    pub(crate) max_retries: i32,
 }
 
 #[cfg(not(test))]
@@ -66,6 +71,8 @@ impl HandlerConfig {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
+            retry_delay: Duration::minutes(5),
+            max_retries: 5,
         }
     }
 
@@ -164,18 +171,21 @@ impl Handler {
     ///
     /// # Returns
     /// * `Ok(Ok(dkim_header))` if all checks passed and we successfully signed the message
-    /// * `Ok(Err(reason))` when a message should be held in the database
+    /// * `Ok(Err((status, reason)))` when a message should be held or rejected for some reason
     /// * `Err(handler_error)` on critical internal server errors (mostly related to the database)
     async fn check_and_sign_message(
         &self,
         message: &Message,
         parsed_msg: &mail_parser::Message<'_>,
-    ) -> Result<Result<String, String>, HandlerError> {
+    ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
         // check SMTP credentials
         let Some(smtp_credential_id) = message.smtp_credential_id else {
-            return Ok(Err("missing SMTP credential".to_string()));
+            return Ok(Err((
+                MessageStatus::Rejected,
+                "missing SMTP credential".to_string(),
+            )));
         };
         let Some(domain_id) = self
             .domain_repository
@@ -183,8 +193,9 @@ impl Handler {
             .await
             .map_err(HandlerError::MessageRepositoryError)?
         else {
-            return Ok(Err(format!(
-                "SMTP credential is not permitted to use domain {sender_domain}"
+            return Ok(Err((
+                MessageStatus::Held,
+                format!("SMTP credential is not permitted to use domain {sender_domain}"),
             )));
         };
 
@@ -196,9 +207,12 @@ impl Handler {
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {
-            return Ok(Err(format!(
-                "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
-                domain.domain
+            return Ok(Err((
+                MessageStatus::Rejected,
+                format!(
+                    "MAIL FROM domain ({sender_domain}) is not a valid (sub-)domain of {}",
+                    domain.domain
+                ),
             )));
         }
 
@@ -207,10 +221,13 @@ impl Handler {
             for addr in from.iter() {
                 if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
                     if !Self::is_subdomain(addr.domain(), &domain.domain) {
-                        return Ok(Err(format!(
-                            "From domain ({}) is not a valid (sub-)domain of {}",
-                            addr.domain(),
-                            domain.domain
+                        return Ok(Err((
+                            MessageStatus::Rejected,
+                            format!(
+                                "From domain ({}) is not a valid (sub-)domain of {}",
+                                addr.domain(),
+                                domain.domain
+                            ),
                         )));
                     }
                 }
@@ -223,10 +240,13 @@ impl Handler {
             .map(|p| p.parse::<EmailAddress>())
         {
             if !Self::is_subdomain(return_path.domain(), &domain.domain) {
-                return Ok(Err(format!(
-                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
-                    return_path.domain(),
-                    domain.domain
+                return Ok(Err((
+                    MessageStatus::Rejected,
+                    format!(
+                        "Return-Path domain ({}) is not a valid (sub-)domain of {}",
+                        return_path.domain(),
+                        domain.domain
+                    ),
                 )));
             }
         };
@@ -236,7 +256,10 @@ impl Handler {
             Ok(key) => key,
             Err(e) => {
                 error!("error creating DKIM key: {e}");
-                return Ok(Err("internal error: could not create DKIM key".to_string()));
+                return Ok(Err((
+                    MessageStatus::Held,
+                    "internal error: could not create DKIM key".to_string(),
+                )));
             }
         };
         trace!(
@@ -249,25 +272,33 @@ impl Handler {
             .await
             .is_none()
         {
-            return Ok(Err(format!("invalid DKIM key found on {sender_domain}")));
+            return Ok(Err((
+                MessageStatus::Held,
+                format!("invalid DKIM key found on {sender_domain}"),
+            )));
         }
 
         trace!("signing with dkim");
         Ok(dkim_key
             .dkim_header(parsed_msg)
             .inspect_err(|e| error!("error creating DKIM header: {e}"))
-            .map_err(|_| "internal error: could not create DKIM header".to_string()))
+            .map_err(|_| {
+                (
+                    MessageStatus::Held,
+                    "internal error: could not create DKIM header".to_string(),
+                )
+            }))
     }
 
-    pub async fn handle_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        let mut message: Message = self
-            .message_repository
+    pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
+        self.message_repository
             .create(&message)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .inspect(|m| trace!("stored message {}", m.id()))
+            .map_err(HandlerError::MessageRepositoryError)
+    }
 
-        trace!("stored message {}", message.id());
-
+    pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
         // parse and save message contents
         let mut parsed_msg: mail_parser::Message = MessageParser::default()
             .parse(&message.raw_data)
@@ -311,21 +342,23 @@ impl Handler {
 
         message.message_data = json_message_data;
 
-        let result = self.check_and_sign_message(&message, &parsed_msg).await?;
+        let result = self.check_and_sign_message(message, &parsed_msg).await?;
         message.status = match result {
             Ok(_) => MessageStatus::Accepted,
-            Err(_) => MessageStatus::Held,
+            Err((ref status, _)) => status.clone(),
         };
-        message.reason = result.as_ref().err().cloned();
+        message.reason = result.as_ref().err().map(|e| e.1.clone());
+
+        message.set_next_retry(&self.config);
 
         self.message_repository
-            .update_message_data_and_status(&message)
+            .update_message_data_and_status(message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
         let dkim_header = match result {
             Ok(dkim_header) => dkim_header,
-            Err(reason) => return Err(HandlerError::MessageHeld(reason)),
+            Err((status, reason)) => return Err(HandlerError::MessageNotAccepted(status, reason)),
         };
 
         // generate message headers
@@ -335,7 +368,7 @@ impl Handler {
 
         message.prepend_headers(&dkim_header);
 
-        Ok(message)
+        Ok(())
     }
 
     async fn resolve_mail_domain(
@@ -396,12 +429,14 @@ impl Handler {
             body: message.raw_data.as_slice().into(),
         };
 
+        let mut is_temporary_failure = false;
+
         while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
             let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
                 .say_ehlo(true)
                 .helo_host(&self.config.domain)
-                .timeout(Duration::from_secs(60));
+                .timeout(std::time::Duration::from_secs(60));
 
             let result = match security {
                 Protection::Tls => match smtp.connect().await {
@@ -423,14 +458,41 @@ impl Handler {
             let Err(err) = result else { return Ok(()) };
 
             trace!("could not use server: {err}");
+
+            match err {
+                mail_send::Error::Io(_) => is_temporary_failure = true,
+                mail_send::Error::Tls(_) => is_temporary_failure = true,
+                mail_send::Error::Base64(_) => is_temporary_failure = true,
+                mail_send::Error::Auth(_) => is_temporary_failure = true,
+                mail_send::Error::UnparseableReply => is_temporary_failure = true,
+                mail_send::Error::UnexpectedReply(response)
+                | mail_send::Error::AuthenticationFailed(response) => {
+                    // SMTP 4XX errors are temporary failures
+                    if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
+                        is_temporary_failure = true
+                    }
+                }
+                mail_send::Error::InvalidTLSName => is_temporary_failure = true,
+                mail_send::Error::MissingCredentials => {}
+                mail_send::Error::MissingMailFrom => {}
+                mail_send::Error::MissingRcptTo => {}
+                mail_send::Error::UnsupportedAuthMechanism => {}
+                mail_send::Error::Timeout => is_temporary_failure = true,
+                mail_send::Error::MissingStartTls => {}
+            }
         }
 
-        Err(SendError::NoWorkingMx)
+        if is_temporary_failure {
+            Err(SendError::TemporaryFailure)
+        } else {
+            Err(SendError::PermanentFailure)
+        }
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
         let mut failures = 0u32;
+        let mut should_reattempt = false;
 
         let order: &[Protection] = if self.config.allow_plain {
             &[Protection::Tls, Protection::Plaintext]
@@ -438,51 +500,67 @@ impl Handler {
             &[Protection::Tls]
         };
 
-        // I would prefer writing this as a map operation but there does not seem to be an easy
-        // way to do so in a way that it runs async closures sequentially
-        let mut delivery_status = Vec::with_capacity(message.recipients.len());
-
         'next_rcpt: for recipient in &message.recipients {
+            match message.delivery_status.get(recipient) {
+                None | Some(DeliveryStatus::Reattempt) => {} // attempt to (re-)send
+                Some(DeliveryStatus::Success) => continue,
+                Some(DeliveryStatus::Failed) => {
+                    failures += 1;
+                    continue;
+                }
+            }
+
+            let mut is_temporary_failure = false;
+
             for &protection in order {
-                // maybe we should take more interest in the content of these error messages?
-                if self
+                match self
                     .send_single_message(recipient, &message, protection)
                     .await
-                    .is_ok()
                 {
-                    delivery_status.push(DeliveryStatusEntry {
-                        receiver: recipient.clone(),
-                        status: DeliveryStatus::Success,
-                    });
-                    continue 'next_rcpt;
+                    Ok(()) => {
+                        message
+                            .delivery_status
+                            .insert(recipient.clone(), DeliveryStatus::Success);
+                        continue 'next_rcpt;
+                    }
+                    Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                    Err(SendError::PermanentFailure) => {}
                 }
             }
             failures += 1;
 
-            delivery_status.push(DeliveryStatusEntry {
-                receiver: recipient.clone(),
-                status: DeliveryStatus::Failure,
-            });
+            message.delivery_status.insert(
+                recipient.clone(),
+                if is_temporary_failure {
+                    should_reattempt = true;
+                    DeliveryStatus::Reattempt
+                } else {
+                    DeliveryStatus::Failed
+                },
+            );
         }
 
+        message.status = if failures == 0 {
+            MessageStatus::Delivered
+        } else if should_reattempt {
+            MessageStatus::Reattempt
+        } else {
+            MessageStatus::Failed
+        };
+
+        message.reason = if failures > 0 {
+            Some(format!(
+                "failed to deliver to {failures} of {} recipients",
+                message.delivery_status.len()
+            ))
+        } else {
+            None
+        };
+
+        message.set_next_retry(&self.config);
+
         self.message_repository
-            .update_message_status(
-                &mut message,
-                if failures > 0 {
-                    MessageStatus::Failed
-                } else {
-                    MessageStatus::Delivered
-                },
-                if failures > 0 {
-                    Some(format!(
-                        "failed to deliver to {failures} of {} recipients",
-                        delivery_status.len()
-                    ))
-                } else {
-                    None
-                },
-                delivery_status,
-            )
+            .update_message_status(&mut message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
@@ -504,21 +582,75 @@ impl Handler {
                             return
                         };
 
-                        let parsed_message = match self.handle_message(message).await {
+                        let mut message = match self.create_message(message).await {
                             Ok(message) => message,
                             Err(e) => {
-                                error!("failed to handle message: {e:?}");
+                                error!("failed to create message: {e:?}");
                                 continue
-                            }
+                            },
                         };
 
-                        if let Err(e) = self.send_message(parsed_message).await {
-                            error!("failed to send message: {e:?}");
+                        let message_id = message.id().to_string();
+                        if let Err(e) = self.handle_message(&mut message).await {
+                            error!(message_id, "failed to handle message: {e:?}");
+                            continue
+                        };
+
+                        message.attempts = 0; // reset attempts before sending
+                        if let Err(e) = self.send_message(message).await {
+                            error!(message_id, "failed to send message: {e:?}");
                         }
                     }
                 }
             }
         });
+    }
+
+    pub async fn retry_all(&self) -> Result<(), HandlerError> {
+        let messages = self
+            .message_repository
+            .find_messages_ready_for_retry(self.config.max_retries)
+            .await
+            .map_err(HandlerError::MessageRepositoryError)?;
+
+        if messages.is_empty() {
+            debug!("There are no messages to retry right now");
+        }
+
+        for mut message in messages {
+            let message_id = message.id().to_string();
+            info!(
+                message_id,
+                "Retrying message from {} (status: {:?})", message.from_email, message.status
+            );
+
+            match message.status {
+                MessageStatus::Held => {
+                    if let Err(e) = self.handle_message(&mut message).await {
+                        error!(message_id, "failed to handle message: {e:?}");
+                        continue;
+                    };
+
+                    message.attempts = 0; // reset attempts before sending
+                    if let Err(e) = self.send_message(message).await {
+                        error!(message_id, "failed to send message: {e:?}");
+                    }
+                }
+                MessageStatus::Reattempt => {
+                    if let Err(e) = self.handle_message(&mut message).await {
+                        error!(message_id, "failed to handle reattempted message: {e:?}");
+                        continue;
+                    };
+
+                    if let Err(e) = self.send_message(message).await {
+                        error!(message_id, "failed to resend message: {e:?}");
+                    }
+                }
+                status => error!("Can't retry message with status {status:?}"),
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -527,7 +659,7 @@ pub mod mock;
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
+    use crate::models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -582,10 +714,13 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: super::mock::Resolver("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(5),
+            max_retries: 1,
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
-        let message = handler.handle_message(message).await.unwrap();
+        let mut message = handler.create_message(message).await.unwrap();
+        handler.handle_message(&mut message).await.unwrap();
         handler.send_message(message).await.unwrap();
     }
 
@@ -641,10 +776,13 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: super::mock::Resolver("localhost", mailcrab_port),
+                retry_delay: Duration::minutes(5),
+                max_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(handler.handle_message(message).await.is_err());
+            let mut message = handler.create_message(message).await.unwrap();
+            assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
@@ -709,15 +847,102 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: super::mock::Resolver("localhost", mailcrab_port),
+                retry_delay: Duration::minutes(5),
+                max_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
-            assert!(handler.handle_message(message).await.is_err());
+            let mut message = handler.create_message(message).await.unwrap();
+            assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
                 .remove(org_id, project_id, stream_id, credential.id())
                 .await
                 .unwrap();
         }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    #[traced_test]
+    #[serial]
+    async fn retry_sending_messages(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let message_repo = MessageRepository::new(pool.clone());
+
+        let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
+        let message_reattempt_id = "c1e03226-8aad-42a9-8c43-380a5b25cb79".parse().unwrap();
+        let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
+        let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+        let get_message_status = async |id: MessageId| {
+            message_repo
+                .find_by_id(org_id, Some(project_id), Some(stream_id), id)
+                .await
+                .unwrap()
+                .status()
+                .to_owned()
+        };
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Held
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
+
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: super::mock::Resolver("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(60),
+            max_retries: 3,
+        };
+        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        handler.retry_all().await.unwrap();
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)\n            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6\n            FROM smtp_credentials s\n                JOIN streams ON s.stream_id = streams.id\n                JOIN projects p ON p.id = streams.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $1\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts\n            FROM messages  m\n            WHERE m.id = $1\n              AND m.organization_id = $2 \n              AND ($3::uuid IS NULL OR m.project_id = $3) \n              AND ($4::uuid IS NULL OR m.stream_id = $4)\n            ",
   "describe": {
     "columns": [
       {
@@ -41,6 +41,7 @@
                 "accepted",
                 "rejected",
                 "delivered",
+                "reattempt",
                 "failed"
               ]
             }
@@ -69,7 +70,7 @@
       },
       {
         "ordinal": 10,
-        "name": "raw_data",
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
@@ -91,30 +92,25 @@
         "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "retry_after",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "attempts",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
-        {
-          "Custom": {
-            "name": "message_status",
-            "kind": {
-              "Enum": [
-                "processing",
-                "held",
-                "accepted",
-                "rejected",
-                "delivered",
-                "failed"
-              ]
-            }
-          }
-        },
-        "Varchar",
-        "VarcharArray",
-        "Bytea",
-        "Jsonb"
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -128,12 +124,14 @@
       false,
       false,
       false,
-      false,
+      null,
       null,
       true,
       false,
+      false,
+      true,
       false
     ]
   },
-  "hash": "757273966a1ef9be6127142bec44289ef46c451c9b8d72f95573416bf851b9bf"
+  "hash": "a3448c81aff228e5ebcf4f5885c22453bede195b94b535098665fd535b7f72e3"
 }

@@ -156,8 +156,9 @@ CREATE TYPE message_status AS ENUM (
     'accepted',
     'rejected',
     'delivered',
+    'reattempt',
     'failed'
-    );
+);
 
 CREATE TABLE messages
 (
@@ -167,7 +168,7 @@ CREATE TABLE messages
     project_id         uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     stream_id          uuid                     NOT NULL REFERENCES streams (id) ON DELETE CASCADE,
     smtp_credential_id uuid                     REFERENCES smtp_credentials (id) ON DELETE SET NULL,
-    delivery_status    jsonb                    NOT NULL default '[]',
+    delivery_status    jsonb                    NOT NULL DEFAULT '{}',
     status             message_status           NOT NULL,
     reason             varchar,
     from_email         varchar                  NOT NULL,
@@ -175,7 +176,9 @@ CREATE TABLE messages
     raw_data           bytea                    NOT NULL,
     message_data       jsonb,
     created_at         timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at         timestamp with time zone NOT NULL DEFAULT now()
+    updated_at         timestamp with time zone NOT NULL DEFAULT now(),
+    retry_after        timestamp with time zone,
+    attempts           integer                  NOT NULL DEFAULT 0
 );
 
 CREATE TRIGGER update_messages_updated_at
