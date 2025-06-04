@@ -1,12 +1,13 @@
-use crate::models::{
-    Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
+use crate::{
+    HandlerConfig,
+    models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use std::{mem, str::FromStr};
+use std::{collections::HashMap, mem, str::FromStr};
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -22,7 +23,22 @@ pub enum MessageStatus {
     Accepted,
     Rejected,
     Delivered,
+    Reattempt,
     Failed,
+}
+
+impl MessageStatus {
+    fn should_retry(&self) -> bool {
+        match self {
+            MessageStatus::Processing => false,
+            MessageStatus::Held => true,
+            MessageStatus::Accepted => false,
+            MessageStatus::Rejected => false,
+            MessageStatus::Delivered => false,
+            MessageStatus::Reattempt => true,
+            MessageStatus::Failed => false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -34,7 +50,7 @@ pub struct Message {
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
-    pub delivery_status: Vec<DeliveryStatusEntry>,
+    pub delivery_status: HashMap<EmailAddress, DeliveryStatus>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
@@ -54,10 +70,14 @@ pub struct ApiMessage {
     message_data: ApiMessageData,
 }
 
+#[cfg(test)]
 impl ApiMessage {
-    #[cfg(test)]
     pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
         self.metadata.smtp_credential_id
+    }
+
+    pub fn status(&self) -> &MessageStatus {
+        &self.metadata.status
     }
 }
 
@@ -67,7 +87,7 @@ pub struct ApiMessageMetadata {
     id: MessageId,
     status: MessageStatus,
     reason: Option<String>,
-    delivery_status: Vec<DeliveryStatusEntry>,
+    delivery_status: HashMap<EmailAddress, DeliveryStatus>,
     smtp_credential_id: Option<SmtpCredentialId>,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
@@ -75,6 +95,8 @@ pub struct ApiMessageMetadata {
     raw_size: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    retry_after: Option<DateTime<Utc>>,
+    attempts: i32,
 }
 
 #[derive(Serialize, Default)]
@@ -97,13 +119,8 @@ pub struct Attachment {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum DeliveryStatus {
     Success,
-    Failure,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DeliveryStatusEntry {
-    pub receiver: EmailAddress,
-    pub status: DeliveryStatus,
+    Reattempt,
+    Failed,
 }
 
 #[derive(Debug)]
@@ -130,6 +147,37 @@ impl Message {
         self.raw_data.resize(msg_len + hdr_size, Default::default());
         self.raw_data.copy_within(..msg_len, hdr_size);
         self.raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
+    }
+
+    pub fn set_next_retry(&mut self, config: &HandlerConfig) {
+        self.attempts += 1;
+
+        if !self.status.should_retry() {
+            self.retry_after = None;
+            return;
+        }
+
+        if self.attempts < config.max_retries {
+            let timeout = config
+                .retry_delay
+                .checked_mul(self.attempts)
+                .unwrap_or(chrono::TimeDelta::days(1));
+            self.retry_after = Some(chrono::Utc::now() + timeout);
+        } else {
+            match &self.status {
+                MessageStatus::Held => self.status = MessageStatus::Rejected,
+                MessageStatus::Reattempt => self.status = MessageStatus::Failed,
+                _ => {}
+            };
+            self.reason = Some(self.reason.take().map_or(
+                "out of attempts".to_string(),
+                |mut reason| {
+                    reason.push_str(" - out of attempts");
+                    reason
+                },
+            ));
+            self.retry_after = None;
+        }
     }
 }
 
@@ -288,6 +336,8 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             raw_size: humansize::format_size(m.raw_size.unsigned_abs(), humansize::DECIMAL),
             created_at: m.created_at,
             updated_at: m.updated_at,
+            retry_after: m.retry_after,
+            attempts: m.attempts,
         })
     }
 }
@@ -339,29 +389,26 @@ impl MessageRepository {
             .try_into()
     }
 
-    pub async fn update_message_status(
-        &self,
-        message: &mut Message,
-        status: MessageStatus,
-        reason: Option<String>,
-        delivery_status: Vec<DeliveryStatusEntry>,
-    ) -> Result<(), Error> {
-        message.status = status;
-        message.reason = reason.to_owned();
+    pub async fn update_message_status(&self, message: &mut Message) -> Result<(), Error> {
         let delivery_status_serialized =
-            serde_json::to_value(&delivery_status).map_err(Error::Serialization)?;
-        message.delivery_status = delivery_status;
+            serde_json::to_value(&message.delivery_status).map_err(Error::Serialization)?;
 
         sqlx::query!(
             r#"
             UPDATE messages
-            SET status = $2, reason = $3, delivery_status = $4
+            SET status = $2,
+                reason = $3,
+                delivery_status = $4,
+                retry_after = $5,
+                attempts = $6
             WHERE id = $1
             "#,
             *message.id,
             message.status as _,
-            reason,
-            delivery_status_serialized
+            message.reason,
+            delivery_status_serialized,
+            message.retry_after,
+            message.attempts,
         )
         .execute(&self.pool)
         .await?;
@@ -517,7 +564,7 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts
             FROM messages m
-            WHERE m.status = 'held'
+            WHERE (m.status = 'held' OR m.status = 'reattempt')
               AND now() > m.retry_after
               AND m.attempts < $1
             "#,

@@ -156,8 +156,9 @@ CREATE TYPE message_status AS ENUM (
     'accepted',
     'rejected',
     'delivered',
+    'reattempt',
     'failed'
-    );
+);
 
 CREATE TABLE messages
 (
@@ -167,7 +168,7 @@ CREATE TABLE messages
     project_id         uuid                     NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     stream_id          uuid                     NOT NULL REFERENCES streams (id) ON DELETE CASCADE,
     smtp_credential_id uuid                     REFERENCES smtp_credentials (id) ON DELETE SET NULL,
-    delivery_status    jsonb                    NOT NULL DEFAULT '[]',
+    delivery_status    jsonb                    NOT NULL DEFAULT '{}',
     status             message_status           NOT NULL,
     reason             varchar,
     from_email         varchar                  NOT NULL,

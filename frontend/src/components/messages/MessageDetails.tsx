@@ -1,10 +1,10 @@
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
-import { useState } from "react";
+import { ReactElement, useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { Message } from "../../types.ts";
+import { DeliveryStatus, Message } from "../../types.ts";
 import { formatDateTime } from "../../util.ts";
-import { IconCheck, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
+import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 
 export default function MessageDetails() {
   const { currentMessage } = useMessages();
@@ -20,30 +20,36 @@ export default function MessageDetails() {
   const text_body = completeMessage.message_data.text_body;
   const raw = completeMessage.truncated_raw_data;
 
-  const to =
-    completeMessage.delivery_status.length > 0
-      ? completeMessage.delivery_status.map((status) => (
-          <Badge
-            key={status.receiver}
-            color={status.status == "Success" ? "green" : "red"}
-            variant="light"
-            mr="sm"
-            rightSection={status.status == "Success" ? <IconCheck size={18} /> : <IconX size={18} />}
-          >
-            {status.receiver}
-          </Badge>
-        ))
-      : completeMessage.recipients.map((recipient: string) => (
-          <Badge key={recipient} color="secondary" variant="light" mr="sm">
-            {recipient}
-          </Badge>
-        ));
+  const deliveryStatus: {
+    [key in DeliveryStatus]: { color: string; icon?: ReactElement };
+  } = {
+    NotSent: { color: "secondary", icon: undefined },
+    Success: { color: "green", icon: <IconCheck size={16} /> },
+    Reattempt: { color: "orange", icon: <IconClock size={16} /> },
+    Failure: { color: "red", icon: <IconX size={16} /> },
+  };
+
+  const recipients = completeMessage.recipients.map((recipient: string) => {
+    const status = completeMessage.delivery_status[recipient] ?? "NotSent";
+    return (
+      <Badge
+        key={recipient}
+        color={deliveryStatus[status].color}
+        variant="light"
+        mr="sm"
+        rightSection={deliveryStatus[status].icon}
+      >
+        {recipient}
+      </Badge>
+    );
+  });
 
   const table_data = [
     { header: "From", value: completeMessage.from_email },
     {
-      header: "To",
-      value: to,
+      header: "Recipients",
+      info: 'The recipients who will receive this message based on the "RCPT TO" SMTP header',
+      value: recipients,
     },
     {
       header: "Date",
@@ -68,7 +74,11 @@ export default function MessageDetails() {
     },
     {
       header: "Status",
-      value: completeMessage.status + (completeMessage.reason ? ` (${completeMessage.reason})` : ""),
+      value:
+        completeMessage.status +
+        (completeMessage.reason ? `: ${completeMessage.reason}` : "") +
+        (completeMessage.retry_after ? `, retrying after ${formatDateTime(completeMessage.retry_after)}` : "") +
+        (completeMessage.attempts > 1 ? ` (${completeMessage.attempts} attempts)` : ""),
     },
     {
       header: "Attachments",

@@ -1,8 +1,7 @@
 use crate::{
     dkim::PrivateKey,
     models::{
-        DeliveryStatus, DeliveryStatusEntry, DomainRepository, Message, MessageRepository,
-        MessageStatus, NewMessage,
+        DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
     },
 };
 use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
@@ -33,7 +32,9 @@ pub enum HandlerError {
 #[derive(Debug, Error)]
 enum SendError {
     #[error("could not find a working MX receiver")]
-    NoWorkingMx,
+    PermanentFailure,
+    #[error("no MX server accepted the message")]
+    TemporaryFailure,
 }
 
 //TODO: do we want to do anything with DNS errors?
@@ -49,6 +50,7 @@ enum Protection {
     Tls,
 }
 
+#[derive(Clone)]
 pub struct HandlerConfig {
     #[cfg(not(test))]
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
@@ -70,7 +72,7 @@ impl HandlerConfig {
                 .expect("could not build Resolver")
                 .build(),
             retry_delay: Duration::minutes(5),
-            max_retries: 10,
+            max_retries: 5,
         }
     }
 
@@ -346,12 +348,8 @@ impl Handler {
             Err((ref status, _)) => status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
-        message.attempts += 1;
-        message.retry_after = if message.status == MessageStatus::Held {
-            Some(chrono::Utc::now() + self.config.retry_delay)
-        } else {
-            None
-        };
+
+        message.set_next_retry(&self.config);
 
         self.message_repository
             .update_message_data_and_status(message)
@@ -431,6 +429,8 @@ impl Handler {
             body: message.raw_data.as_slice().into(),
         };
 
+        let mut is_temporary_failure = false;
+
         while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
             let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
@@ -458,14 +458,41 @@ impl Handler {
             let Err(err) = result else { return Ok(()) };
 
             trace!("could not use server: {err}");
+
+            match err {
+                mail_send::Error::Io(_) => is_temporary_failure = true,
+                mail_send::Error::Tls(_) => is_temporary_failure = true,
+                mail_send::Error::Base64(_) => is_temporary_failure = true,
+                mail_send::Error::Auth(_) => is_temporary_failure = true,
+                mail_send::Error::UnparseableReply => is_temporary_failure = true,
+                mail_send::Error::UnexpectedReply(response)
+                | mail_send::Error::AuthenticationFailed(response) => {
+                    // SMTP 4XX errors are temporary failures
+                    if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
+                        is_temporary_failure = true
+                    }
+                }
+                mail_send::Error::InvalidTLSName => is_temporary_failure = true,
+                mail_send::Error::MissingCredentials => {}
+                mail_send::Error::MissingMailFrom => {}
+                mail_send::Error::MissingRcptTo => {}
+                mail_send::Error::UnsupportedAuthMechanism => {}
+                mail_send::Error::Timeout => is_temporary_failure = true,
+                mail_send::Error::MissingStartTls => {}
+            }
         }
 
-        Err(SendError::NoWorkingMx)
+        if is_temporary_failure {
+            Err(SendError::TemporaryFailure)
+        } else {
+            Err(SendError::PermanentFailure)
+        }
     }
 
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message {}", message.id());
         let mut failures = 0u32;
+        let mut should_reattempt = false;
 
         let order: &[Protection] = if self.config.allow_plain {
             &[Protection::Tls, Protection::Plaintext]
@@ -473,51 +500,67 @@ impl Handler {
             &[Protection::Tls]
         };
 
-        // I would prefer writing this as a map operation but there does not seem to be an easy
-        // way to do so in a way that it runs async closures sequentially
-        let mut delivery_status = Vec::with_capacity(message.recipients.len());
-
         'next_rcpt: for recipient in &message.recipients {
+            match message.delivery_status.get(recipient) {
+                None | Some(DeliveryStatus::Reattempt) => {} // attempt to (re-)send
+                Some(DeliveryStatus::Success) => continue,
+                Some(DeliveryStatus::Failed) => {
+                    failures += 1;
+                    continue;
+                }
+            }
+
+            let mut is_temporary_failure = false;
+
             for &protection in order {
-                // maybe we should take more interest in the content of these error messages?
-                if self
+                match self
                     .send_single_message(recipient, &message, protection)
                     .await
-                    .is_ok()
                 {
-                    delivery_status.push(DeliveryStatusEntry {
-                        receiver: recipient.clone(),
-                        status: DeliveryStatus::Success,
-                    });
-                    continue 'next_rcpt;
+                    Ok(()) => {
+                        message
+                            .delivery_status
+                            .insert(recipient.clone(), DeliveryStatus::Success);
+                        continue 'next_rcpt;
+                    }
+                    Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                    Err(SendError::PermanentFailure) => {}
                 }
             }
             failures += 1;
 
-            delivery_status.push(DeliveryStatusEntry {
-                receiver: recipient.clone(),
-                status: DeliveryStatus::Failure,
-            });
+            message.delivery_status.insert(
+                recipient.clone(),
+                if is_temporary_failure {
+                    should_reattempt = true;
+                    DeliveryStatus::Reattempt
+                } else {
+                    DeliveryStatus::Failed
+                },
+            );
         }
 
+        message.status = if failures == 0 {
+            MessageStatus::Delivered
+        } else if should_reattempt {
+            MessageStatus::Reattempt
+        } else {
+            MessageStatus::Failed
+        };
+
+        message.reason = if failures > 0 {
+            Some(format!(
+                "failed to deliver to {failures} of {} recipients",
+                message.delivery_status.len()
+            ))
+        } else {
+            None
+        };
+
+        message.set_next_retry(&self.config);
+
         self.message_repository
-            .update_message_status(
-                &mut message,
-                if failures > 0 {
-                    MessageStatus::Failed
-                } else {
-                    MessageStatus::Delivered
-                },
-                if failures > 0 {
-                    Some(format!(
-                        "failed to deliver to {failures} of {} recipients",
-                        delivery_status.len()
-                    ))
-                } else {
-                    None
-                },
-                delivery_status,
-            )
+            .update_message_status(&mut message)
             .await
             .map_err(HandlerError::MessageRepositoryError)?;
 
@@ -547,13 +590,15 @@ impl Handler {
                             },
                         };
 
+                        let message_id = message.id().to_string();
                         if let Err(e) = self.handle_message(&mut message).await {
-                            error!("failed to handle message: {e:?}");
+                            error!(message_id, "failed to handle message: {e:?}");
                             continue
                         };
 
+                        message.attempts = 0; // reset attempts before sending
                         if let Err(e) = self.send_message(message).await {
-                            error!("failed to send message: {e:?}");
+                            error!(message_id, "failed to send message: {e:?}");
                         }
                     }
                 }
@@ -573,20 +618,35 @@ impl Handler {
         }
 
         for mut message in messages {
+            let message_id = message.id().to_string();
             info!(
-                "Retrying message from {} (status: {:?})",
-                message.from_email, message.status
+                message_id,
+                "Retrying message from {} (status: {:?})", message.from_email, message.status
             );
 
-            if message.status == MessageStatus::Held {
-                if let Err(e) = self.handle_message(&mut message).await {
-                    error!("failed to handle message: {e:?}");
-                    continue;
-                };
+            match message.status {
+                MessageStatus::Held => {
+                    if let Err(e) = self.handle_message(&mut message).await {
+                        error!(message_id, "failed to handle message: {e:?}");
+                        continue;
+                    };
 
-                if let Err(e) = self.send_message(message).await {
-                    error!("failed to send message: {e:?}");
+                    message.attempts = 0; // reset attempts before sending
+                    if let Err(e) = self.send_message(message).await {
+                        error!(message_id, "failed to send message: {e:?}");
+                    }
                 }
+                MessageStatus::Reattempt => {
+                    if let Err(e) = self.handle_message(&mut message).await {
+                        error!(message_id, "failed to handle reattempted message: {e:?}");
+                        continue;
+                    };
+
+                    if let Err(e) = self.send_message(message).await {
+                        error!(message_id, "failed to resend message: {e:?}");
+                    }
+                }
+                status => error!("Can't retry message with status {status:?}"),
             }
         }
 
@@ -599,7 +659,7 @@ pub mod mock;
 
 #[cfg(test)]
 mod test {
-    use crate::models::{SmtpCredentialRepository, SmtpCredentialRequest};
+    use crate::models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest};
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -800,5 +860,89 @@ mod test {
                 .await
                 .unwrap();
         }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    #[traced_test]
+    #[serial]
+    async fn retry_sending_messages(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let message_repo = MessageRepository::new(pool.clone());
+
+        let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
+        let message_reattempt_id = "c1e03226-8aad-42a9-8c43-380a5b25cb79".parse().unwrap();
+        let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
+        let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+
+        let get_message_status = async |id: MessageId| {
+            message_repo
+                .find_by_id(org_id, Some(project_id), Some(stream_id), id)
+                .await
+                .unwrap()
+                .status()
+                .to_owned()
+        };
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Held
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
+
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: super::mock::Resolver("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(60),
+            max_retries: 3,
+        };
+        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        handler.retry_all().await.unwrap();
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
     }
 }

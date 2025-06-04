@@ -17,6 +17,7 @@
                 "accepted",
                 "rejected",
                 "delivered",
+                "reattempt",
                 "failed"
               ]
             }
