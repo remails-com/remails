@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mta-service
+  labels:
+    app: remails-mta
+  annotations:
+    service.beta.kubernetes.io/upcloud-load-balancer-config: |
+      {
+        "plan": {{ .Values.smtp.load_balancer_plan | quote }},
+        "frontends": [{
+          "mode": "tcp"
+        }]
+      }
+spec:
+  ipFamilyPolicy: PreferDualStack
+  selector:
+    app: remails-mta
+  ports:
+    - name: smtp
+      protocol: TCP
+      port: 465
+      targetPort: smtp
+  type: LoadBalancer
+  

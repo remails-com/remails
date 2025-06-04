@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remails-mta
+  labels:
+    app: remails-mta
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.smtp.replicas }}
+  selector:
+    matchLabels:
+      app: remails-mta
+      version: {{ .Chart.AppVersion }}
+  template:
+    metadata:
+      labels:
+        app: remails-mta
+        version: {{ .Chart.AppVersion }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: smtp-cert
+          secret:
+            secretName: smtp-cert
+      containers:
+        - name: mta
+          image: "{{ .Values.images.mta.repository }}:{{ .Values.images.mta.tag | .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          volumeMounts:
+            - mountPath: "/etc/smtp-cert"
+              name: smtp-cert
+              readOnly: true
+          env:
+            - name: RUST_LOG
+              value: remails=trace,info
+            - name: SMTP_LISTEN_ADDR
+              value: "0.0.0.0:3025"
+            - name: SMTP_SERVER_NAME
+              value: {{ .Values.smtp.server_name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: database_url
+            - name: SMTP_CERT_FILE
+              value: /etc/smtp-cert/tls.crt
+            - name: SMTP_KEY_FILE
+              value: /etc/smtp-cert/tls.key
+          ports:
+            - containerPort: 3025
+              name: smtp

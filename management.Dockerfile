@@ -16,10 +16,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY build.rs build.rs ./
 COPY src/ src/
 COPY .sqlx .sqlx/
-COPY migrations migrations/
 
 # Don't depend on live sqlx during build use cached .sqlx
-RUN SQLX_OFFLINE=true cargo build --release --bin app --features load-fixtures
+RUN SQLX_OFFLINE=true cargo build --release --bin management
 
 FROM debian:bookworm-slim AS final
 RUN apt-get update && apt-get install libssl3 -y && apt-get upgrade -y
@@ -33,9 +32,9 @@ RUN addgroup --gid ${gid} ${group} && adduser --uid ${uid} --gid ${gid} --system
 EXPOSE 3000
 WORKDIR /home/nonroot
 # get the pre-built binary from rust-builder
-COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/app ./app
-RUN chmod 777 app
+COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/management ./management
+RUN chmod 777 management
 
 USER $user
 
-ENTRYPOINT ["./app"]
+ENTRYPOINT ["./management"]

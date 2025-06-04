@@ -1,0 +1,31 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging-scaleway-dns
+spec:
+  acme:
+    email: support@remails.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-scaleway-dns
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    solvers:
+      - dns01:
+          webhook:
+            groupName: acme.scaleway.com
+            solverName: scaleway
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production-scaleway-dns
+spec:
+  acme:
+    email: support@remails.com
+    privateKeySecretRef:
+      name: letsencrypt-production-scaleway-dns
+    server: https://acme-v02.api.letsencrypt.org/directory
+    solvers:
+      - dns01:
+          webhook:
+            groupName: acme.scaleway.com
+            solverName: scaleway

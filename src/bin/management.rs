@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
 
     let shutdown = CancellationToken::new();
-    run_api_server(pool, http_socket, shutdown.clone(), false).await;
+    run_api_server(pool, http_socket, shutdown.clone(), true).await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
