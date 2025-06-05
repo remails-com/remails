@@ -9,7 +9,7 @@ images:
     pullPolicy: Always
 
 database_url: ""
-# TODO this should be a secret, random value
+# Only use this value for development, use a secret for production
 session_key: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
 
 smtp:
