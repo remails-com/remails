@@ -2,13 +2,11 @@ use crate::models::NewMessage;
 use api::ApiServer;
 use handler::Handler;
 use models::SmtpCredentialRepository;
-use notify::{Event, RecursiveMode, Watcher};
 use smtp::server::SmtpServer;
 use sqlx::PgPool;
-use std::{net::SocketAddrV4, path::Path, sync::Arc};
-use tokio::{signal, sync::mpsc, task::spawn_blocking};
+use std::{net::SocketAddrV4, sync::Arc};
+use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
 
 pub mod api;
 mod dkim;

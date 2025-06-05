@@ -3,6 +3,7 @@ kind: Service
 metadata:
   name: management
   annotations:
+    helm.sh/resource-policy: keep
     service.beta.kubernetes.io/upcloud-load-balancer-config: |
       {
         "plan": {{ .Values.management.load_balancer_plan | quote }},

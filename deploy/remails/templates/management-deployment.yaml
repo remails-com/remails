@@ -4,18 +4,18 @@ metadata:
   name: management
   labels:
     app: management
-    version: {{ .Chart.AppVersion }}
+    version: {{ include "management.tag" . }}
 spec:
   replicas: {{ .Values.management.replicas }}
   selector:
     matchLabels:
       app: management
-      version: {{ .Chart.AppVersion }}
+      version: {{ include "management.tag" . }}
   template:
     metadata:
       labels:
         app: management
-        version: {{ .Chart.AppVersion }}
+        version: {{ include "management.tag" . }}
     spec:
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -23,8 +23,20 @@ spec:
     {{- end }}
       containers:
         - name: management
-          image: "{{ .Values.images.management.repository }}:{{ .Values.images.management.tag | default .Chart.AppVersion  }}"
+          image: "{{ .Values.images.management.repository }}:{{ include "management.tag" . }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          readinessProbe:
+            httpGet:
+              path: /healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
           env:
             - name: DATABASE_URL
               valueFrom:

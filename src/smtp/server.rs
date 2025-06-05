@@ -1,5 +1,5 @@
-use std::{fs::File, io, sync::Arc};
-use std::time::Duration;
+use std::{fs::File, io, sync::Arc, time::Duration};
+use rand::random_range;
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
@@ -10,8 +10,7 @@ use tokio_rustls::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
-
+use tracing::{debug, error, info};
 use crate::{
     models::{NewMessage, SmtpCredentialRepository},
     smtp::{
@@ -75,7 +74,7 @@ impl SmtpServer {
 
         Ok((certs, key))
     }
-    
+
     async fn build_tls_acceptor(&self) -> Result<TlsAcceptor, SmtpServerError> {
         let (certs, key) = self.load_tls_config().await?;
 
@@ -85,17 +84,20 @@ impl SmtpServer {
             .map_err(SmtpServerError::Tls)?;
 
         Ok(TlsAcceptor::from(Arc::new(config)))
-
     }
 
     pub async fn serve(self) -> Result<(), SmtpServerError> {
         let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
-        
+
         let mut acceptor = self.build_tls_acceptor().await?;
-        
+
         info!("smtp server on {}", self.config.listen_addr);
+
+        // let certificate_reload_interval = Duration::from_secs(60 * 60 * 23 + random_range(0..(60*60)));
+        let certificate_reload_interval = Duration::from_secs(100 + random_range(0..(2*10)));
+        debug!("Automatically reloading the SMTP certificate every {:?}", certificate_reload_interval);
         loop {
             select! {
                 _ = self.shutdown.cancelled() => {
@@ -103,7 +105,7 @@ impl SmtpServer {
 
                     return Ok(());
                 }
-                _ = tokio::time::sleep(Duration::from_secs(100)) => {
+                _ = tokio::time::sleep(certificate_reload_interval) => {
                     info!("Reloading TLS config");
                     acceptor = self.build_tls_acceptor().await?;
                 }

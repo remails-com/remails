@@ -1,10 +1,10 @@
 images:
   mta:
-    tag:
+    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/mta
     pullPolicy: Always
   management:
-    tag:
+    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/management
     pullPolicy: Always
 

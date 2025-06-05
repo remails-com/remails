@@ -5,6 +5,7 @@ metadata:
   labels:
     app: mta
   annotations:
+    helm.sh/resource-policy: keep
     service.beta.kubernetes.io/upcloud-load-balancer-config: |
       {
         "plan": {{ .Values.smtp.load_balancer_plan | quote }},
