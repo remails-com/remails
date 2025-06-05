@@ -18,8 +18,9 @@ spec:
         spec:
         {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
-              {{- toYaml . | nindent 8 }}
+              {{- toYaml . | nindent 12 }}
         {{- end }}
+          restartPolicy: OnFailure
           containers:
             - name: retry
               image: "{{ .Values.images.retry.repository }}:{{ include "retry.tag" . }}"
@@ -32,4 +33,3 @@ spec:
                 - name: RUST_LOG
                   value: remails=trace,info
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}
-              restartPolicy: OnFailure

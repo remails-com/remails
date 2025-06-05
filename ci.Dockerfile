@@ -18,9 +18,9 @@ COPY src/ src/
 COPY .sqlx .sqlx/
 
 # Don't depend on live sqlx during build use cached .sqlx
-RUN SQLX_OFFLINE=true cargo build --release --bin management
+RUN SQLX_OFFLINE=true cargo build --release --bins
 
-FROM debian:bookworm-slim AS final
+FROM debian:bookworm-slim AS final-base
 RUN apt-get update && apt-get install libssl3 -y && apt-get upgrade -y
 
 # create a non root user to run the binary
@@ -29,12 +29,32 @@ ARG group=nonroot
 ARG uid=2000
 ARG gid=2000
 RUN addgroup --gid ${gid} ${group} && adduser --uid ${uid} --gid ${gid} --system --disabled-login --disabled-password ${user}
-EXPOSE 3000
+
 WORKDIR /home/nonroot
+USER $user
+
+FROM final-base as management
+
 # get the pre-built binary from rust-builder
 COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/management ./management
 RUN chmod 777 management
 
-USER $user
-
+EXPOSE 3000
 ENTRYPOINT ["./management"]
+
+FROM final-base as mta
+
+# get the pre-built binary from rust-builder
+COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/mta ./mta
+RUN chmod 777 mta
+
+EXPOSE 3025
+ENTRYPOINT ["./mta"]
+
+FROM final-base as retry
+
+# get the pre-built binary from rust-builder
+COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/retry ./retry
+RUN chmod 777 retry
+
+ENTRYPOINT ["./retry"]

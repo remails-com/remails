@@ -39,7 +39,8 @@ jobs:
       - name: Build and push MTA image
         uses: docker/build-push-action@v6
         with:
-          file: mta.Dockerfile
+          file: ci.Dockerfile
+          target: mta
           push: true
           tags: "ghcr.io/tweedegolf/remails/mta:${{ env.tag }}"
           cache-from: type=gha
@@ -47,7 +48,8 @@ jobs:
       - name: Build and push management image
         uses: docker/build-push-action@v6
         with:
-          file: mta.Dockerfile
+          file: ci.Dockerfile
+          target: management
           push: true
           tags: "ghcr.io/tweedegolf/remails/management:${{ env.tag }}"
           cache-from: type=gha
@@ -55,7 +57,8 @@ jobs:
       - name: Build and push retry image
         uses: docker/build-push-action@v6
         with:
-          file: retry.Dockerfile
+          file: ci.Dockerfile
+          target: retry
           push: true
           tags: "ghcr.io/tweedegolf/remails/retry:${{ env.tag }}"
           cache-from: type=gha
