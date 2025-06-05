@@ -29,8 +29,8 @@ management:
   # possible values are "essentials", "development", "production-small", and TODO
   load_balancer_plan: "essentials"
   server_name: "mgmt.upcloud.tweedegolf-test.nl"
-  certificate_bundle_name: "0d734c00-a60d-4db0-8aa3-eb653d3a46f6-default-remails-management"
-  certificate_bundle_uuid: "0a59886c-743d-43ce-be19-d8e6c3213da1"
+  certificate_bundle_name: "remails-management"
+  certificate_bundle_uuid: "0a7a685a-ae71-4e2f-95f2-8538711fb11b"
 
 retry:
   schedule: "*/10 * * * *"

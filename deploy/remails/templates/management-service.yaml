@@ -43,7 +43,7 @@ metadata:
             "name": "http",
             "properties": {
               "health_check_type": "http",
-              "health_check_url": "/api/health",
+              "health_check_url": "/api/healthy",
               "health_check_expected_status": 200
             }
           },
@@ -51,7 +51,7 @@ metadata:
             "name": "https",
             "properties": {
               "health_check_type": "http",
-              "health_check_url": "/api/health",
+              "health_check_url": "/api/healthy",
               "health_check_expected_status": 200
             }
           }
