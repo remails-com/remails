@@ -1,23 +1,24 @@
 use crate::{
     dkim::PrivateKey,
+    handler::dns::DnsResolver,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
     },
 };
-use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64, Base64UrlUnpadded, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
-#[cfg_attr(test, allow(unused_imports))]
-use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, ops::Range, sync::Arc};
+use std::{borrow::Cow::Borrowed, sync::Arc};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
+
+pub mod dns;
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -37,13 +38,6 @@ enum SendError {
     TemporaryFailure,
 }
 
-//TODO: do we want to do anything with DNS errors?
-enum ResolveError {
-    #[allow(dead_code)]
-    Dns(hickory_resolver::ResolveError),
-    AllServersExhausted,
-}
-
 #[derive(Clone, Copy)]
 enum Protection {
     Plaintext,
@@ -52,10 +46,7 @@ enum Protection {
 
 #[derive(Clone)]
 pub struct HandlerConfig {
-    #[cfg(not(test))]
-    pub(crate) resolver: Resolver<TokioConnectionProvider>,
-    #[cfg(test)]
-    pub(crate) resolver: mock::Resolver,
+    pub(crate) resolver: DnsResolver,
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
     pub(crate) retry_delay: Duration,
@@ -68,9 +59,7 @@ impl HandlerConfig {
         Self {
             allow_plain: false,
             domain: domain.into(),
-            resolver: Resolver::builder_tokio()
-                .expect("could not build Resolver")
-                .build(),
+            resolver: DnsResolver::new(),
             retry_delay: Duration::minutes(5),
             max_retries: 5,
         }
@@ -100,48 +89,6 @@ impl Handler {
             domain_repository: DomainRepository::new(pool),
             shutdown,
             config,
-        }
-    }
-
-    async fn check_dkim_key(&self, public_dkim_key: &[u8], sender_domain: &str) -> Option<()> {
-        let domain = sender_domain.trim_matches('.');
-
-        let record = format!(
-            "remails._domainkey.{domain}{}",
-            if domain.ends_with('.') { "" } else { "." }
-        );
-
-        trace!("requesting DKIM key {record}");
-
-        let dkim_record = self.config.resolver.txt_lookup(record).await.ok()?;
-
-        let dkim_record = String::from_utf8(
-            dkim_record
-                .into_iter()
-                .next()?
-                .txt_data()
-                .iter()
-                .flatten()
-                .copied()
-                .collect::<Vec<_>>(),
-        )
-        .ok()?;
-
-        trace!("dkim record: {dkim_record}");
-
-        let dns_key = dkim_record
-            .split(';')
-            .filter_map(|field| field.trim().split_once('='))
-            .find(|(key, _value)| *key == "p")?
-            .1;
-
-        let dns_key = Base64Unpadded::decode_vec(dns_key).ok()?;
-
-        if dns_key.iter().eq(public_dkim_key) {
-            Some(())
-        } else {
-            trace!("dkim keys are not equal!");
-            None
         }
     }
 
@@ -267,14 +214,15 @@ impl Handler {
             domain.domain,
             Base64::encode_string(dkim_key.public_key())
         );
-        if self
-            .check_dkim_key(dkim_key.public_key(), sender_domain)
+        if let Err(reason) = self
+            .config
+            .resolver
+            .verify_dkim(sender_domain, dkim_key.public_key())
             .await
-            .is_none()
         {
             return Ok(Err((
                 MessageStatus::Held,
-                format!("invalid DKIM key found on {sender_domain}"),
+                format!("invalid DKIM on {sender_domain}: {reason}"),
             )));
         }
 
@@ -371,47 +319,6 @@ impl Handler {
         Ok(())
     }
 
-    async fn resolve_mail_domain(
-        &self,
-        domain: &str,
-        prio: &mut Range<u32>,
-    ) -> Result<(String, u16), ResolveError> {
-        let smtp_port = 25;
-
-        // from https://docs.rs/hickory-resolver/latest/hickory_resolver/struct.Resolver.html#method.mx_lookup:
-        // "hint queries that end with a ‘.’ are fully qualified names and are cheaper lookups"
-        let domain = format!("{domain}{}", if domain.ends_with('.') { "" } else { "." });
-
-        let lookup = self
-            .config
-            .resolver
-            .mx_lookup(&domain)
-            .await
-            .map_err(ResolveError::Dns)?;
-
-        let Some(destination) = lookup
-            .iter()
-            .filter(|mx| prio.contains(&u32::from(mx.preference())))
-            .min_by_key(|mx| mx.preference())
-        else {
-            return if prio.contains(&0) {
-                prio.start = u32::MAX;
-                Ok((domain, smtp_port))
-            } else {
-                Err(ResolveError::AllServersExhausted)
-            };
-        };
-
-        #[cfg(test)]
-        let smtp_port = destination.port();
-
-        // make sure we don't accept this SMTP server again if it fails us
-        prio.start = u32::from(destination.preference()) + 1;
-
-        debug!("trying mail server: {destination:?}");
-        Ok((destination.exchange().to_utf8(), smtp_port))
-    }
-
     async fn send_single_message(
         &self,
         recipient: &EmailAddress,
@@ -431,7 +338,12 @@ impl Handler {
 
         let mut is_temporary_failure = false;
 
-        while let Ok((hostname, port)) = self.resolve_mail_domain(domain, &mut priority).await {
+        while let Ok((hostname, port)) = self
+            .config
+            .resolver
+            .resolve_mail_domain(domain, &mut priority)
+            .await
+        {
             let smtp = SmtpClientBuilder::new(hostname, port)
                 .implicit_tls(false)
                 .say_ehlo(true)
@@ -659,7 +571,10 @@ pub mod mock;
 
 #[cfg(test)]
 mod test {
-    use crate::models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest};
+    use crate::{
+        handler::dns::DnsResolver,
+        models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest},
+    };
     use std::net::Ipv4Addr;
 
     use super::*;
@@ -713,7 +628,7 @@ mod test {
         let config = HandlerConfig {
             allow_plain: true,
             domain: "test".to_string(),
-            resolver: super::mock::Resolver("localhost", mailcrab_port),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry_delay: Duration::minutes(5),
             max_retries: 1,
         };
@@ -775,7 +690,7 @@ mod test {
             let config = HandlerConfig {
                 allow_plain: true,
                 domain: "test".to_string(),
-                resolver: super::mock::Resolver("localhost", mailcrab_port),
+                resolver: DnsResolver::mock("localhost", mailcrab_port),
                 retry_delay: Duration::minutes(5),
                 max_retries: 1,
             };
@@ -846,7 +761,7 @@ mod test {
             let config = HandlerConfig {
                 allow_plain: true,
                 domain: "test".to_string(),
-                resolver: super::mock::Resolver("localhost", mailcrab_port),
+                resolver: DnsResolver::mock("localhost", mailcrab_port),
                 retry_delay: Duration::minutes(5),
                 max_retries: 1,
             };
@@ -921,7 +836,7 @@ mod test {
         let config = HandlerConfig {
             allow_plain: true,
             domain: "test".to_string(),
-            resolver: super::mock::Resolver("localhost", mailcrab_port),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry_delay: Duration::minutes(60),
             max_retries: 3,
         };
