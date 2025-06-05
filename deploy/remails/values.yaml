@@ -18,7 +18,7 @@ smtp:
   server_name: "upcloud.tweedegolf-test.nl"
   # Possible values "staging" and "production".
   # Influences which type of Let's Encrypt certificate should be used
-  certificate_type: "staging"
+  certificate_type: "production"
 
 management:
   replicas: 3

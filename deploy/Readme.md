@@ -16,8 +16,13 @@ kubectl create ns remails-staging
 ```shell
 kubectl create secret generic regcred \
     --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
-    --type=kubernetes.io/dockerconfigjson
+    --type=kubernetes.io/dockerconfigjson \
     --namespace remails-staging
+```
+
+4. Create certificate issuers
+```shell
+kubectl apply -f cert-issuers.yaml -n cert-manager
 ```
 
 # Install Remails
