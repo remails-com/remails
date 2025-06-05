@@ -37,7 +37,25 @@ metadata:
                "certificate_bundle_uuid": {{ .Values.management.certificate_bundle_uuid | quote }}
             }
           ]
-        }]
+        }],
+        "backends": [
+          {
+            "name": "http",
+            "properties": {
+              "health_check_type": "http",
+              "health_check_url": "/api/health",
+              "health_check_expected_status": 200
+            }
+          },
+          {
+            "name": "https",
+            "properties": {
+              "health_check_type": "http",
+              "health_check_url": "/api/health",
+              "health_check_expected_status": 200
+            }
+          }
+        ]
       }
 spec:
   ipFamilyPolicy: PreferDualStack

@@ -26,13 +26,13 @@ spec:
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           readinessProbe:
             httpGet:
-              path: /healthy
+              path: /api/healthy
               port: http
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /healthy
+              path: /api/healthy
               port: http
             initialDelaySeconds: 15
             periodSeconds: 10

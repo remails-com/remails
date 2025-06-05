@@ -86,6 +86,7 @@ jobs:
           helm upgrade --install remails ./remails \
             --set images.mta.tag=${{ needs.build-docker.outputs.tag }} \
             --set images.management.tag=${{ needs.build-docker.outputs.tag }} \
+            --set images.retry.tag=${{ needs.build-docker.outputs.tag }} \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set scaleway-certmanager-webhook.secret.accessKey="${{ secrets.SCW_ACCESS_KEY }}" \
