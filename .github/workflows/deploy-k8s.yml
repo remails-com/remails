@@ -64,7 +64,11 @@ jobs:
         run: "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
       - name: Create kubeconfig file
         run: echo "${{ secrets.KUBECONFIG }}" > ${{ github.workspace }}/kubeconfig
+      - name: Fetch Helm dependencies
+        working-directory: deploy/remails
+        run: helm dependency build
       - name: Deploy to Kubernetes using Helm
+        working-directory: deploy
         env:
           KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |

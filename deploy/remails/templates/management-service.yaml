@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: remails-management
+  name: management
   annotations:
     service.beta.kubernetes.io/upcloud-load-balancer-config: |
       {
@@ -41,7 +41,7 @@ metadata:
 spec:
   ipFamilyPolicy: PreferDualStack
   selector:
-    app: remails-management
+    app: management
   ports:
     - name: http
       protocol: TCP

@@ -34,18 +34,6 @@ scaleway-certmanager-webhook:
     accessKey: SCWW3JYHP6HCRCFY1RR4
     secretKey: 4c498b69-05f4-4723-951e-3ef673719bf8
 
-  certManager:
-    namespace: cert-manager
-    serviceAccountName: remails-cert-manager
-
-cert-manager:
-  namespace: cert-manager
-  installCRDs: false
-
-ingress-nginx:
-  controller:
-    service:
-      type: ClusterIP
 
 github_oauth:
   client_id: Ov23livRESUJK4twobxj

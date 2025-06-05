@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: remails-management
+  name: management
   labels:
-    app: remails-management
+    app: management
     version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.management.replicas }}
   selector:
     matchLabels:
-      app: remails-management
+      app: management
       version: {{ .Chart.AppVersion }}
   template:
     metadata:
       labels:
-        app: remails-management
+        app: management
         version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}

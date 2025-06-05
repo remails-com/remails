@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mta-service
+  name: mta
   labels:
-    app: remails-mta
+    app: mta
   annotations:
     service.beta.kubernetes.io/upcloud-load-balancer-config: |
       {
@@ -15,7 +15,7 @@ metadata:
 spec:
   ipFamilyPolicy: PreferDualStack
   selector:
-    app: remails-mta
+    app: mta
   ports:
     - name: smtp
       protocol: TCP
