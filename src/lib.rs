@@ -34,7 +34,6 @@ pub async fn run_mta(
     shutdown: CancellationToken,
 ) {
     let smtp_config = Arc::new(smtp_config);
-    let cert_path = smtp_config.cert_file.clone();
     let handler_config = Arc::new(handler_config);
     let user_repository = SmtpCredentialRepository::new(pool.clone());
 
@@ -46,35 +45,6 @@ pub async fn run_mta(
 
     smtp_server.spawn();
     message_handler.spawn(queue_receiver);
-
-    spawn_blocking(move || shutdown_on_file_change(cert_path.as_path(), shutdown))
-        .await
-        .unwrap();
-}
-
-fn shutdown_on_file_change(path: &Path, shutdown: CancellationToken) {
-    // TODO remove unwraps
-    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<Event>>();
-
-    // Use recommended_watcher() to automatically select the best implementation
-    // for your platform. The `EventHandler` passed to this constructor can be a
-    // closure, a `std::sync::mpsc::Sender`, a `crossbeam_channel::Sender`, or
-    // another type the trait is implemented for.
-    let mut watcher = notify::recommended_watcher(tx).unwrap();
-
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
-    // Block forever, printing out events as they come in
-    for res in rx {
-        match res {
-            Ok(event) => {
-                info!("shutting down because of file change: {:?}", event);
-                shutdown.cancel()
-            }
-            Err(e) => println!("watch error: {:?}", e),
-        }
-    }
 }
 
 pub async fn run_api_server(

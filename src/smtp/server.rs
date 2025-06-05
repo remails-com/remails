@@ -1,4 +1,5 @@
 use std::{fs::File, io, sync::Arc};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
 use tokio_rustls::{
@@ -74,8 +75,8 @@ impl SmtpServer {
 
         Ok((certs, key))
     }
-
-    pub async fn serve(self) -> Result<(), SmtpServerError> {
+    
+    async fn build_tls_acceptor(&self) -> Result<TlsAcceptor, SmtpServerError> {
         let (certs, key) = self.load_tls_config().await?;
 
         let config = rustls::ServerConfig::builder()
@@ -83,20 +84,28 @@ impl SmtpServer {
             .with_single_cert(certs, key)
             .map_err(SmtpServerError::Tls)?;
 
+        Ok(TlsAcceptor::from(Arc::new(config)))
+
+    }
+
+    pub async fn serve(self) -> Result<(), SmtpServerError> {
         let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
-
-        let acceptor = TlsAcceptor::from(Arc::new(config));
-
+        
+        let mut acceptor = self.build_tls_acceptor().await?;
+        
         info!("smtp server on {}", self.config.listen_addr);
-
         loop {
             select! {
                 _ = self.shutdown.cancelled() => {
                     info!("shutting down smtp server");
 
                     return Ok(());
+                }
+                _ = tokio::time::sleep(Duration::from_secs(100)) => {
+                    info!("Reloading TLS config");
+                    acceptor = self.build_tls_acceptor().await?;
                 }
                 result = listener.accept() => match result {
                     Ok((stream, peer_addr)) => {
