@@ -1,7 +1,19 @@
-use std::{fs::File, io, sync::Arc, time::Duration};
+use crate::{
+    models::{NewMessage, SmtpCredentialRepository},
+    smtp::{
+        SmtpConfig,
+        connection::{self, ConnectionError},
+    },
+};
 use rand::random_range;
+use std::{fs::File, io, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpListener,
+    select,
+    sync::{RwLock, mpsc::Sender},
+};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
@@ -10,14 +22,7 @@ use tokio_rustls::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
-use crate::{
-    models::{NewMessage, SmtpCredentialRepository},
-    smtp::{
-        SmtpConfig,
-        connection::{self, ConnectionError},
-    },
-};
+use tracing::{debug, error, info, trace};
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -91,34 +96,49 @@ impl SmtpServer {
             .await
             .map_err(SmtpServerError::Listen)?;
 
-        let mut acceptor = self.build_tls_acceptor().await?;
+        let acceptor = Arc::new(RwLock::new(self.build_tls_acceptor().await?));
 
         info!("smtp server on {}", self.config.listen_addr);
 
         // let certificate_reload_interval = Duration::from_secs(60 * 60 * 23 + random_range(0..(60*60)));
-        let certificate_reload_interval = Duration::from_secs(100 + random_range(0..(2*10)));
-        debug!("Automatically reloading the SMTP certificate every {:?}", certificate_reload_interval);
+        let certificate_reload_interval = Duration::from_secs(100 + random_range(0..(2 * 10)));
+        debug!(
+            "Automatically reloading the SMTP certificate every {:?}",
+            certificate_reload_interval
+        );
+
+        let server_name = self.config.server_name.clone();
+        let queue = self.queue.clone();
+        let user_repository = self.user_repository.clone();
+        let shutdown = self.shutdown.clone();
+
+        let acceptor_clone = acceptor.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(certificate_reload_interval);
+            loop {
+                interval.tick().await;
+                let mut a = acceptor_clone.write().await;
+                *a = self.build_tls_acceptor().await.unwrap();
+            }
+        });
+
         loop {
             select! {
-                _ = self.shutdown.cancelled() => {
+                _ = shutdown.cancelled() => {
                     info!("shutting down smtp server");
 
                     return Ok(());
-                }
-                _ = tokio::time::sleep(certificate_reload_interval) => {
-                    info!("Reloading TLS config");
-                    acceptor = self.build_tls_acceptor().await?;
                 }
                 result = listener.accept() => match result {
                     Ok((stream, peer_addr)) => {
                         info!("connection from {}", peer_addr);
                         let acceptor = acceptor.clone();
-                        let user_repository = self.user_repository.clone();
-                        let queue = self.queue.clone();
-                        let server_name = self.config.server_name.clone();
+                        let server_name = server_name.clone();
+                        let queue = queue.clone();
+                        let user_repository = user_repository.clone();
 
                         let task = async move || {
-                            let mut tls_stream = acceptor
+                            let mut tls_stream = acceptor.read().await
                                 .accept(stream)
                                 .await
                                 .map_err(ConnectionError::Accept)?;
@@ -137,7 +157,14 @@ impl SmtpServer {
 
                         tokio::spawn(async {
                             if let Err(err) = task().await {
-                                info!("{err}");
+                                let error_string = err.to_string();
+                                if let ConnectionError::Accept(e) = err {
+                                    if e.kind() == io::ErrorKind::UnexpectedEof {
+                                        trace!("failed to handle connection: {error_string}");
+                                        return
+                                    }
+                                }
+                                error!("failed to handle connection: {error_string}");
                             }
                         });
                     }
