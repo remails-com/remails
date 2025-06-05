@@ -10,7 +10,6 @@ spec:
   selector:
     matchLabels:
       app: mta
-      version: {{ include "mta.tag" . }}
   template:
     metadata:
       labels:

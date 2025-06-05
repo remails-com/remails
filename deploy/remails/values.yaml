@@ -7,6 +7,10 @@ images:
     # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/management
     pullPolicy: Always
+  retry:
+    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
+    repository: ghcr.io/tweedegolf/remails/retry
+    pullPolicy: Always
 
 database_url: ""
 # Only use this value for development, use a secret for production
@@ -27,6 +31,9 @@ management:
   server_name: "mgmt.upcloud.tweedegolf-test.nl"
   certificate_bundle_name: "0d734c00-a60d-4db0-8aa3-eb653d3a46f6-default-remails-management"
   certificate_bundle_uuid: "0a59886c-743d-43ce-be19-d8e6c3213da1"
+
+retry:
+  schedule: "*/10 * * * *"
 
 scaleway-certmanager-webhook:
   secret:

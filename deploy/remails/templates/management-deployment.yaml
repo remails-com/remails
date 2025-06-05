@@ -10,7 +10,6 @@ spec:
   selector:
     matchLabels:
       app: management
-      version: {{ include "management.tag" . }}
   template:
     metadata:
       labels:

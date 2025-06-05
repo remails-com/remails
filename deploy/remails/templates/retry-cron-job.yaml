@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retry-failed
+  labels:
+    app: retry
+    version: {{ include "retry.tag" . }}
+spec:
+  schedule: {{ .Values.retry.schedule | quote }}
+  concurrencyPolicy: Replace
+  jobTemplate:
+    metadata:
+      labels:
+        app: retry
+        version: {{ include "retry.tag" . }}
+    spec:
+      template:
+        spec:
+        {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+              {{- toYaml . | nindent 8 }}
+        {{- end }}
+          containers:
+            - name: retry
+              image: "{{ .Values.images.retry.repository }}:{{ include "retry.tag" . }}"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: database_url
+                - name: RUST_LOG
+                  value: remails=trace,info
+              imagePullPolicy: {{ .Values.images.retry.pullPolicy }}
+              restartPolicy: OnFailure
