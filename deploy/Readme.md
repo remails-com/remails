@@ -14,10 +14,11 @@ kubectl create ns remails-staging
 
 3. Create image pull secret (one for each namespace)
 ```shell
-kubectl create secret generic regcred \
-    --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
-    --type=kubernetes.io/dockerconfigjson \
-    --namespace remails-staging
+kubectl create secret docker-registry regcred \
+  --docker-server=ghcr.io \
+  --docker-username=<usename> \
+  --docker-password=<access token> \
+  --namespace remails-production
 ```
 
 4. Create certificate issuers
