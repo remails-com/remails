@@ -100,8 +100,7 @@ impl SmtpServer {
 
         info!("smtp server on {}", self.config.listen_addr);
 
-        // let certificate_reload_interval = Duration::from_secs(60 * 60 * 23 + random_range(0..(60*60)));
-        let certificate_reload_interval = Duration::from_secs(100 + random_range(0..(2 * 10)));
+        let certificate_reload_interval = Duration::from_secs(60 * 60 * 23 + random_range(0..(60*60)));
         debug!(
             "Automatically reloading the SMTP certificate every {:?}",
             certificate_reload_interval
@@ -118,6 +117,7 @@ impl SmtpServer {
             loop {
                 interval.tick().await;
                 let mut a = acceptor_clone.write().await;
+                info!("Reloading the SMTP TLS certificate");
                 *a = self.build_tls_acceptor().await.unwrap();
             }
         });
@@ -131,7 +131,14 @@ impl SmtpServer {
                 }
                 result = listener.accept() => match result {
                     Ok((stream, peer_addr)) => {
-                        info!("connection from {}", peer_addr);
+                        // TODO consider lifting the log level to info again later
+                        //  For now, it's on trace level,
+                        //  as it constantly logs the health checks from the LoadBalancer
+                        //  and thus spams the logs.
+                        //  Additionally, due to the fact the the LoadBalancer proxies the TCP connection,
+                        //  we only get to see the local IP address anyway.
+                        //  #16 should make sure, we log the real sender IP
+                        trace!("connection from {}", peer_addr);
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
                         let queue = queue.clone();
