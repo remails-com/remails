@@ -198,3 +198,17 @@ export interface SignUpRequest extends PasswordLoginRequest {
   name: string;
   terms: boolean;
 }
+
+export interface VerifyResult {
+  status: "Success" | "Warning" | "Error";
+  reason: string;
+  value: string | null;
+}
+
+export interface DomainVerificationResult {
+  dkim: VerifyResult;
+  spf: VerifyResult;
+  dmarc: VerifyResult;
+}
+
+export type DomainVerificationStatus = "verified" | "failed" | "loading";

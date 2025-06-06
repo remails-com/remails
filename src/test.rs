@@ -1,5 +1,5 @@
 use crate::{
-    handler::HandlerConfig,
+    handler::{HandlerConfig, dns::DnsResolver},
     models::{ApiMessageMetadata, SmtpCredential, SmtpCredentialResponse},
     run_api_server, run_mta,
     smtp::SmtpConfig,
@@ -59,7 +59,7 @@ async fn integration_test(pool: PgPool) {
     let handler_config = HandlerConfig {
         allow_plain: true,
         domain: "test".to_string(),
-        resolver: crate::handler::mock::Resolver("localhost", mailcrab_random_port),
+        resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         retry_delay: chrono::Duration::minutes(5),
         max_retries: 1,
     };

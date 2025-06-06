@@ -1,5 +1,7 @@
 use crate::{
     api::error::{ApiError, ApiResult},
+    dkim::PrivateKey,
+    handler::dns::DnsResolver,
     models::{
         ApiDomain, ApiUser, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId,
     },
@@ -10,7 +12,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 fn has_write_access(
@@ -139,4 +141,87 @@ pub async fn delete_domain(
     );
 
     Ok(Json(domain_id))
+}
+
+#[derive(Deserialize, Serialize)]
+pub(crate) enum VerifyResultStatus {
+    Success,
+    Warning,
+    Error,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct VerifyResult {
+    pub(crate) status: VerifyResultStatus,
+    pub(crate) reason: String,
+    pub(crate) value: Option<String>,
+}
+
+impl VerifyResult {
+    pub fn error(reason: impl Into<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Error,
+            reason: reason.into(),
+            value: None,
+        }
+    }
+    pub fn warning(reason: impl Into<String>, value: Option<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Warning,
+            reason: reason.into(),
+            value,
+        }
+    }
+    pub fn success(reason: impl Into<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Success,
+            reason: reason.into(),
+            value: None,
+        }
+    }
+}
+
+impl From<Result<&'static str, &'static str>> for VerifyResult {
+    fn from(value: Result<&'static str, &'static str>) -> Self {
+        VerifyResult {
+            status: value
+                .map(|_| VerifyResultStatus::Success)
+                .unwrap_or(VerifyResultStatus::Error),
+            reason: value.unwrap_or_else(|e| e).to_string(),
+            value: None,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct DomainVerificationResult {
+    dkim: VerifyResult,
+    spf: VerifyResult,
+    dmarc: VerifyResult,
+}
+
+pub(super) async fn verify_domain(
+    State((repo, resolver)): State<(DomainRepository, DnsResolver)>,
+    user: ApiUser,
+    Path(SpecificDomainPath {
+        org_id,
+        project_id,
+        domain_id,
+    }): Path<SpecificDomainPath>,
+) -> ApiResult<DomainVerificationResult> {
+    has_write_access(org_id, project_id, Some(domain_id), &user)?;
+
+    let domain = repo.get(org_id, project_id, domain_id).await?;
+
+    let domain_name = domain.domain.clone();
+    let db_key = PrivateKey::new(&domain, "remails")?;
+
+    Ok(Json(DomainVerificationResult {
+        dkim: resolver
+            .verify_dkim(&domain_name, db_key.public_key())
+            .await
+            .into(),
+        spf: resolver.verify_spf(&domain_name).await,
+        dmarc: resolver.verify_dmarc(&domain_name).await,
+    }))
 }
