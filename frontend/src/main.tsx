@@ -11,19 +11,19 @@ const element = document.getElementById("root")!;
 const root = createRoot(element);
 
 const theme = createTheme({
-  primaryColor: "bright-purple",
+  primaryColor: "remails-red",
   colors: {
-    "bright-purple": [
-      "#f6e9ff",
-      "#e6cfff",
-      "#ca9cff",
-      "#ac65fe",
-      "#9337fd",
-      "#831bfd",
-      "#7c0cfe",
-      "#6a00e3",
-      "#5d00cb",
-      "#5000b3",
+    "remails-red": [
+      "#ffb7a7",
+      "#ffa592",
+      "#ff937c",
+      "#ff8166",
+      "#ff6f50",
+      "#ff5d3a",
+      "#ff4b24",
+      "#cc3c1d",
+      "#992d16",
+      "#661e0e",
     ],
   },
 });
