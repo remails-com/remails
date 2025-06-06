@@ -89,7 +89,7 @@ jobs:
             --set images.retry.tag=${{ needs.build-docker.outputs.tag }} \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
-            --set scaleway-certmanager-webhook.secret.accessKey="${{ secrets.SCW_ACCESS_KEY }}" \
+            --set scaleway-certmanager-webhook.secret.accessKey="${{ vars.SCW_ACCESS_KEY }}" \
             --set scaleway-certmanager-webhook.secret.secretKey="${{ secrets.SCW_SECRET_KEY }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
             --namespace ${{ vars.namespace }}

@@ -100,7 +100,8 @@ impl SmtpServer {
 
         info!("smtp server on {}", self.config.listen_addr);
 
-        let certificate_reload_interval = Duration::from_secs(60 * 60 * 23 + random_range(0..(60*60)));
+        let certificate_reload_interval =
+            Duration::from_secs(60 * 60 * 23 + random_range(0..(60 * 60)));
         debug!(
             "Automatically reloading the SMTP certificate every {:?}",
             certificate_reload_interval
