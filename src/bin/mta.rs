@@ -1,6 +1,9 @@
 use anyhow::Context;
 use remails::{HandlerConfig, SmtpConfig, run_mta, shutdown_signal};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{
+    ConnectOptions,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -18,11 +21,16 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
-    let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL must be set")?
+        .parse()
+        .expect("DATABASE_URL must be a valid URL");
+
+    let db_options = PgConnectOptions::from_url(&database_url)?.application_name("remails-mta");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_url)
+        .connect_with(db_options)
         .await
         .context("failed to connect to database")?;
 
