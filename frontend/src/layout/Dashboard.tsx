@@ -1,6 +1,7 @@
-import { AppShell, Burger, Button, Flex, Group, Menu, Text } from "@mantine/core";
+import { AppShell, Burger, Button, Flex, Group, Menu, Text, useComputedColorScheme } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import logo from "../img/logo.png";
+import logoBlack from "../img/remails-logo-black.svg";
+import logoWhite from "../img/remails-logo-white.svg";
 import ColorTheme from "./ColorTheme";
 import { IconChevronDown, IconLogout, IconUser } from "@tabler/icons-react";
 import { useUser } from "../hooks/useUser";
@@ -23,6 +24,7 @@ export function Dashboard({ children }: DashboardProps) {
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
+  const computedColorScheme = useComputedColorScheme();
 
   return (
     <AppShell
@@ -34,7 +36,7 @@ export function Dashboard({ children }: DashboardProps) {
         <Flex align="center" h="100%" justify="space-between">
           <Group h="100%" px="lg">
             <Burger opened={navbarOpened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <img src={logo} alt="Logo" style={{ height: 40 }} />
+            <img src={computedColorScheme == "light" ? logoBlack : logoWhite} alt="Logo" style={{ height: 40 }} />
           </Group>
           <Group h="100%" px="lg">
             <ColorTheme />
