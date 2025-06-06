@@ -1,7 +1,7 @@
 use crate::{
     api::{
         auth::{logout, password_login, password_register},
-        domains::{create_domain, delete_domain, get_domain, list_domains},
+        domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         messages::{get_message, list_messages},
         oauth::GithubOauthService,
         organizations::{
@@ -14,6 +14,7 @@ use crate::{
         },
         streams::{create_stream, list_streams, remove_stream, update_stream},
     },
+    handler::dns::DnsResolver,
     models::{
         ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
         ProjectRepository, SmtpCredentialRepository, StreamRepository,
@@ -37,7 +38,7 @@ use tracing::{error, info, log::warn};
 
 mod api_users;
 mod auth;
-mod domains;
+pub mod domains;
 mod error;
 mod messages;
 mod oauth;
@@ -68,6 +69,7 @@ pub struct ApiState {
     pool: PgPool,
     config: ApiConfig,
     gh_oauth_service: GithubOauthService,
+    resolver: DnsResolver,
 }
 
 impl FromRef<ApiState> for PgPool {
@@ -109,6 +111,15 @@ impl FromRef<ApiState> for StreamRepository {
 impl FromRef<ApiState> for DomainRepository {
     fn from_ref(state: &ApiState) -> Self {
         DomainRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for (DomainRepository, DnsResolver) {
+    fn from_ref(state: &ApiState) -> Self {
+        (
+            DomainRepository::new(state.pool.clone()),
+            state.resolver.clone(),
+        )
     }
 }
 
@@ -158,6 +169,10 @@ impl ApiServer {
             pool,
             config: ApiConfig { session_key },
             gh_oauth_service: github_oauth,
+            #[cfg(not(test))]
+            resolver: DnsResolver::new(),
+            #[cfg(test)]
+            resolver: DnsResolver::mock("localhost", 0),
         };
 
         let router = Router::new()
@@ -230,12 +245,20 @@ impl ApiServer {
                 get(get_domain).delete(delete_domain),
             )
             .route(
+                "/organizations/{org_id}/domains/{domain_id}/verify",
+                post(verify_domain),
+            )
+            .route(
                 "/organizations/{org_id}/projects/{project_id}/domains",
                 get(list_domains).post(create_domain),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
                 get(get_domain).delete(delete_domain),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
+                post(verify_domain),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))

@@ -1,12 +1,15 @@
-import { Button, Group, Loader, Modal, Stack, Stepper, Text, TextInput } from "@mantine/core";
+import { Button, Group, Modal, Stack, Stepper, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconCheck, IconX } from "@tabler/icons-react";
+import { IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { Domain } from "../../types.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
+import { DnsRecords } from "./DnsRecords.tsx";
+import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
+import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
 
 interface FormValues {
   domain: string;
@@ -33,8 +36,13 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const [newDomain, setNewDomain] = useState<Domain | null>(null);
-  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
   const { navigate, dispatch } = useRemails();
+
+  const domainsApi = projectId
+    ? `/api/organizations/${currentOrganization?.id}/projects/${projectId}/domains`
+    : `/api/organizations/${currentOrganization?.id}/domains`;
+
+  const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -47,11 +55,9 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
 
   useEffect(() => {
     if (activeStep === 2) {
-      setTimeout(() => setDomainVerified(true), 1000);
-    } else {
-      setDomainVerified(null);
+      verifyDomain(newDomain);
     }
-  }, [activeStep]);
+  }, [activeStep, newDomain, verifyDomain]);
 
   if (!currentOrganization) {
     console.error("Cannot create domain without a selected organization");
@@ -59,12 +65,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
   }
 
   const save = (values: FormValues) => {
-    let url = `/api/organizations/${currentOrganization.id}/domains`;
-    if (projectId) {
-      url = `/api/organizations/${currentOrganization.id}/projects/${projectId}/domains`;
-    }
-
-    fetch(url, {
+    fetch(domainsApi, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -96,11 +97,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
     if (!domain) {
       return;
     }
-    let url = `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
-    if (currentProject) {
-      url = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`;
-    }
-    fetch(url, {
+    fetch(`${domainsApi}/${domain.id}`, {
       method: "DELETE",
     }).then((r) => {
       dispatch({ type: "remove_domain", domainId: domain.id });
@@ -118,7 +115,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
 
   return (
     <>
-      <Modal opened={opened} onClose={close} title="Create New Domain" size="lg">
+      <Modal opened={opened} onClose={close} title={<Title order={2}>Create New Domain</Title>} size="lg" padding="xl">
         <Stepper active={activeStep} onStepClick={setActiveStep}>
           <Stepper.Step label="Create" allowStepSelect={false}>
             <form onSubmit={form.onSubmit(save)}>
@@ -144,10 +141,8 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
             </form>
           </Stepper.Step>
           <Stepper.Step label="Configure DNS" allowStepSelect={activeStep >= 1}>
-            Please make sure to configure the following DNS records: TODO format DNS record correctly
-            <Text>{newDomain?.dkim_key_type}</Text>
-            <Text>{newDomain?.dkim_public_key}</Text>
-            <Group justify="space-between">
+            <DnsRecords domain={newDomain} title_order={3}></DnsRecords>
+            <Group justify="space-between" mt="md">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -171,13 +166,17 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
             </Group>
           </Stepper.Step>
           <Stepper.Step label="Verify" allowStepSelect={activeStep >= 1}>
-            TODO verify the DNS is configured correctly
-            {domainVerified === null && <Loader />}
-            {domainVerified === true && <IconCheck />}
-            {domainVerified === false && <IconX />}
-            <Group justify="flex-end">
+            <DnsVerificationResult
+              domainVerified={domainVerified}
+              verificationResult={verificationResult}
+              domain={newDomain?.domain}
+            ></DnsVerificationResult>
+            <Group justify="space-between" mt="md">
+              <Button disabled={domainVerified === "loading"} variant="outline" onClick={() => verifyDomain(newDomain)}>
+                Retry verification
+              </Button>
               <Button
-                disabled={domainVerified === null}
+                disabled={domainVerified === "loading"}
                 onClick={() => {
                   setActiveStep(0);
                   close();

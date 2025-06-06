@@ -1,0 +1,91 @@
+import { Code, Title, Box, LoadingOverlay, Flex, List, Text, ThemeIcon } from "@mantine/core";
+import { IconAlertTriangle, IconCheck, IconX } from "@tabler/icons-react";
+import { DomainVerificationResult, DomainVerificationStatus, VerifyResult } from "../../types";
+import { ReactElement } from "react";
+
+export function DnsVerificationResult({
+  domain,
+  domainVerified,
+  verificationResult,
+}: {
+  domain: string | undefined;
+  domainVerified: DomainVerificationStatus;
+  verificationResult: DomainVerificationResult | null;
+}) {
+  const icons: { [key in VerifyResult["status"]]: ReactElement } = {
+    Success: (
+      <ThemeIcon color="teal" size={24} radius="xl">
+        <IconCheck size={16} />
+      </ThemeIcon>
+    ),
+    Warning: (
+      <ThemeIcon color="orange" size={24} radius="xl" style={{ verticalAlign: "top" }}>
+        <IconAlertTriangle size={16} />
+      </ThemeIcon>
+    ),
+    Error: (
+      <ThemeIcon color="red" size={24} radius="xl">
+        <IconX size={16} />
+      </ThemeIcon>
+    ),
+  };
+
+  return (
+    <>
+      We will verify for you if the DNS of <Code>{domain}</Code> has been configured correctly.
+      <Title order={3} mt="md">
+        DNS verification results
+      </Title>
+      <Box pos="relative">
+        <LoadingOverlay visible={domainVerified === "loading"} overlayProps={{ backgroundOpacity: 1 }} />
+        <LoadingOverlay
+          visible={domainVerified === "failed"}
+          overlayProps={{ backgroundOpacity: 1 }}
+          loaderProps={{
+            children: (
+              <Flex gap="md" justify="center" align="center">
+                {icons["Error"]}
+                <Text>DNS verification failed</Text>
+              </Flex>
+            ),
+          }}
+        />
+        <List m="sm" spacing="md">
+          <List.Item icon={icons[verificationResult?.dkim.status ?? "Warning"]}>
+            DKIM: {verificationResult?.dkim.reason}
+          </List.Item>
+          <List.Item icon={icons[verificationResult?.spf.status ?? "Warning"]}>
+            SPF: {verificationResult?.spf.reason}
+            {verificationResult?.spf?.value && (
+              <>
+                <Code block style={{ "white-space": "pre-wrap" }} my="xs">
+                  {verificationResult?.spf?.value}
+                </Code>
+                <Text span fs="italic" c="dimmed">
+                  Please verify this is configured as intended
+                </Text>
+              </>
+            )}
+          </List.Item>
+          <List.Item icon={icons[verificationResult?.dmarc.status ?? "Warning"]}>
+            DMARC: {verificationResult?.dmarc.reason}
+            {verificationResult?.dmarc?.value && (
+              <>
+                <Code block style={{ "white-space": "pre-wrap" }} my="xs">
+                  {verificationResult?.dmarc?.value}
+                </Code>
+                <Text span fs="italic" c="dimmed">
+                  Please verify this is configured as intended
+                </Text>
+              </>
+            )}
+          </List.Item>
+        </List>
+      </Box>
+      <Text>
+        Note that changes to DNS records may take some time to propagate. If verification fails, try again in a few
+        minutes.
+      </Text>
+    </>
+  );
+}

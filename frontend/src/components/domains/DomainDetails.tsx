@@ -7,13 +7,23 @@ import { Domain } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconTrash, IconX } from "@tabler/icons-react";
-import { Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { Button, Container, Group, Modal, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { DnsRecords } from "./DnsRecords.tsx";
+import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
+import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
+import { useDisclosure } from "@mantine/hooks";
 
 export function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentDomain } = useDomains();
   const { dispatch, navigate } = useRemails();
+  const [opened, { open, close }] = useDisclosure(false);
+
+  const domainsApi = currentProject
+    ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
+    : `/api/organizations/${currentOrganization?.id}/domains`;
+  const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
 
   if (!currentDomain || !currentOrganization) {
     return <Loader />;
@@ -67,32 +77,64 @@ export function DomainDetails() {
   };
 
   return (
-    <Grid gutter="xl">
-      <Grid.Col span={{ base: 12, md: 6, lg: 3 }}>
-        <h2>Domain Details</h2>
-        <form>
-          <Stack>
-            <TextInput label="Domain" value={currentDomain.dkim_key_type} readOnly={true} variant="filled" />
-            <TextInput variant="filled" readOnly={true} label="DKIM Key Type" value={currentDomain.dkim_key_type} />
-            <Textarea
-              style={{ lineBreak: "anywhere" }}
-              readOnly={true}
-              variant="filled"
-              autosize
-              maxRows={15}
-              label="DKIM Key"
-              value={currentDomain.dkim_public_key}
-            />
-            <Group>
-              <Tooltip label="Delete Domain">
-                <Button leftSection={<IconTrash />} color="red" onClick={() => confirmDeleteDomain(currentDomain)}>
-                  Delete
-                </Button>
-              </Tooltip>
-            </Group>
-          </Stack>
-        </form>
-      </Grid.Col>
-    </Grid>
+    <Container size="sm">
+      <h2>Domain Details</h2>
+      <Stack>
+        <TextInput label="Domain" value={currentDomain.domain} readOnly={true} variant="filled" />
+      </Stack>
+
+      <Group mt="xl">
+        <Tooltip label="Delete Domain">
+          <Button leftSection={<IconTrash />} color="red" onClick={() => confirmDeleteDomain(currentDomain)}>
+            Delete domain
+          </Button>
+        </Tooltip>
+      </Group>
+
+      <Title order={3} mt="xl">
+        DNS configuration
+      </Title>
+      <DnsRecords domain={currentDomain} title_order={4}></DnsRecords>
+
+      <Group mt="xl">
+        <Tooltip label="Verify DNS records">
+          <Button
+            onClick={() => {
+              verifyDomain(currentDomain);
+              open();
+            }}
+          >
+            Verify DNS
+          </Button>
+        </Tooltip>
+      </Group>
+
+      <Modal
+        opened={opened}
+        onClose={close}
+        title={<Title order={2}>Verify DNS records</Title>}
+        size="lg"
+        padding="xl"
+        centered
+      >
+        <DnsVerificationResult
+          domain={currentDomain.domain}
+          domainVerified={domainVerified}
+          verificationResult={verificationResult}
+        />
+        <Group mt="md" justify="space-between">
+          <Button
+            disabled={domainVerified === "loading"}
+            variant="outline"
+            onClick={() => {
+              verifyDomain(currentDomain);
+            }}
+          >
+            Retry verification
+          </Button>
+          <Button onClick={close}>Done</Button>
+        </Group>
+      </Modal>
+    </Container>
   );
 }
