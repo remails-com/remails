@@ -39,7 +39,7 @@ pub async fn run_mta(
 
     let smtp_server = SmtpServer::new(smtp_config, user_repository, queue_sender, shutdown.clone());
 
-    let message_handler = Handler::new(pool.clone(), handler_config, shutdown.clone());
+    let message_handler = Handler::new(pool.clone(), handler_config, shutdown);
 
     smtp_server.spawn();
     message_handler.spawn(queue_receiver);

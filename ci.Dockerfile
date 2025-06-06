@@ -33,7 +33,7 @@ RUN addgroup --gid ${gid} ${group} && adduser --uid ${uid} --gid ${gid} --system
 WORKDIR /home/nonroot
 USER $user
 
-FROM final-base as management
+FROM final-base AS management
 
 # get the pre-built binary from rust-builder
 COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/management ./management
@@ -42,7 +42,7 @@ RUN chmod 777 management
 EXPOSE 3000
 ENTRYPOINT ["./management"]
 
-FROM final-base as mta
+FROM final-base AS mta
 
 # get the pre-built binary from rust-builder
 COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/mta ./mta
@@ -51,7 +51,7 @@ RUN chmod 777 mta
 EXPOSE 3025
 ENTRYPOINT ["./mta"]
 
-FROM final-base as retry
+FROM final-base AS retry
 
 # get the pre-built binary from rust-builder
 COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/retry ./retry
