@@ -25,6 +25,19 @@ kubectl create secret generic regcred \
 kubectl apply -f cert-issuers.yaml -n cert-manager
 ```
 
+5. Setup Database
+```postgresql
+CREATE USER remails_staging WITH PASSWORD 'super-secret';
+CREATE DATABASE "remails_staging" OWNER "remails_staging";
+
+CREATE USER remails_production WITH PASSWORD 'super-secret';
+CREATE DATABASE "remails_production" OWNER "remails_production";
+```
+
+```shell
+cargo sqlx migrate run --database-url=postgres://...
+```
+
 # Install Remails
 
 ```shell
