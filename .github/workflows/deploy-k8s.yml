@@ -53,8 +53,6 @@ jobs:
           target: management
           push: true
           tags: "ghcr.io/tweedegolf/remails/management:${{ env.tag }}"
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - name: Build and push retry image
         uses: docker/build-push-action@v6
         with:
@@ -62,8 +60,13 @@ jobs:
           target: retry
           push: true
           tags: "ghcr.io/tweedegolf/remails/retry:${{ env.tag }}"
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build and push retry image
+        uses: docker/build-push-action@v6
+        with:
+          file: ci.Dockerfile
+          target: migrate_db
+          push: true
+          tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ env.tag }}"
 
   helm-install:
     name: Helm install
@@ -77,6 +80,10 @@ jobs:
         run: "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
       - name: Create kubeconfig file
         run: echo "${{ secrets.KUBECONFIG }}" > ${{ github.workspace }}/kubeconfig
+      - name: Set the current version in the Helm chart
+        uses: mikefarah/yq@master
+        with:
+          cmd: yq -i '.version = "${{ needs.build-docker.outputs.tag }}" | .appVersion = "${{ needs.build-docker.outputs.tag }}' deploy/remails/Chart.yaml
       - name: Fetch Helm dependencies
         working-directory: deploy/remails
         run: helm dependency build
@@ -86,9 +93,6 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
           helm upgrade --install remails ./remails \
-            --set images.mta.tag=${{ needs.build-docker.outputs.tag }} \
-            --set images.management.tag=${{ needs.build-docker.outputs.tag }} \
-            --set images.retry.tag=${{ needs.build-docker.outputs.tag }} \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \

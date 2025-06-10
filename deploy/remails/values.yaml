@@ -1,16 +1,17 @@
 images:
   mta:
-    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/mta
     pullPolicy: Always
   management:
-    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/management
     pullPolicy: Always
   retry:
-    # tag: set the correct tag here. By default, we use the `appVersion` of the chart
     repository: ghcr.io/tweedegolf/remails/retry
     pullPolicy: Always
+  migrate_db:
+    repository: ghcr.io/tweedegolf/remails/migrate_db
+    pullPolicy: Always
+    
 
 database_url: ""
 # Only use this value for development, use a secret for production

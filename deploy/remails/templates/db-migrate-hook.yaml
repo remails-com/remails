@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-db
+  labels:
+    app: migrate-db
+    version: {{ .Chart.AppVersion }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        app: migrate-db
+        version: {{ .Chart.AppVersion }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: migrate-db
+          imagePullPolicy: {{ .Values.images.migrate_db.pullPolicy }}
+          image: "{{ .Values.images.migrate_db.repository }}:{{ .Chart.AppVersion }}"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: database_url
+            - name: RUST_LOG
+              value: info

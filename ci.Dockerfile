@@ -58,3 +58,11 @@ COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/retry ./ret
 RUN chmod 777 retry
 
 ENTRYPOINT ["./retry"]
+
+FROM final-base AS migrate-db
+
+# get the pre-built binary from rust-builder
+COPY --from=rust-builder --chown=nonroot:nonroot /app/target/release/migrate_db ./migrate_db
+RUN chmod 777 migrate_db
+
+ENTRYPOINT ["./migrate_db"]

@@ -4,7 +4,7 @@ metadata:
   name: retry-failed
   labels:
     app: retry
-    version: {{ include "retry.tag" . }}
+    version: {{ .Chart.AppVersion }}
 spec:
   schedule: {{ .Values.retry.schedule | quote }}
   concurrencyPolicy: Replace
@@ -12,7 +12,7 @@ spec:
     metadata:
       labels:
         app: retry
-        version: {{ include "retry.tag" . }}
+        version: {{ .Chart.AppVersion }}
     spec:
       template:
         spec:
@@ -23,8 +23,10 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: retry
-              image: "{{ .Values.images.retry.repository }}:{{ include "retry.tag" . }}"
+              image: "{{ .Values.images.retry.repository }}:{{ .Chart.AppVersion }}"
               env:
+                - name: VERSION
+                  value: {{ .Chart.AppVersion }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:

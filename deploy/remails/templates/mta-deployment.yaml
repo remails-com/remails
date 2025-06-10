@@ -4,7 +4,7 @@ metadata:
   name: mta
   labels:
     app: mta
-    version: {{ include "mta.tag" . }}
+    version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.smtp.replicas }}
   selector:
@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: mta
-        version: {{ include "mta.tag" . }}
+        version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -26,7 +26,7 @@ spec:
             secretName: smtp-cert
       containers:
         - name: mta
-          image: "{{ .Values.images.mta.repository }}:{{ include "mta.tag" . }}"
+          image: "{{ .Values.images.mta.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           volumeMounts:
             - mountPath: "/etc/smtp-cert"
@@ -38,6 +38,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           env:
+            - name: VERSION
+              value: {{ .Chart.AppVersion }}
             - name: RUST_LOG
               value: remails=trace,info
             - name: SMTP_LISTEN_ADDR

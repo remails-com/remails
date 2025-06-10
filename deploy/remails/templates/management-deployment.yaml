@@ -4,7 +4,7 @@ metadata:
   name: management
   labels:
     app: management
-    version: {{ include "management.tag" . }}
+    version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.management.replicas }}
   selector:
@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: management
-        version: {{ include "management.tag" . }}
+        version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -22,7 +22,7 @@ spec:
     {{- end }}
       containers:
         - name: management
-          image: "{{ .Values.images.management.repository }}:{{ include "management.tag" . }}"
+          image: "{{ .Values.images.management.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           livenessProbe:
             httpGet:
@@ -31,6 +31,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           env:
+            - name: VERSION
+              value: {{ .Chart.AppVersion }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
