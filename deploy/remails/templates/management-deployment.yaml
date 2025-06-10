@@ -24,12 +24,6 @@ spec:
         - name: management
           image: "{{ .Values.images.management.repository }}:{{ include "management.tag" . }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
-          readinessProbe:
-            httpGet:
-              path: /api/healthy
-              port: http
-            initialDelaySeconds: 15
-            periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /api/healthy

@@ -32,11 +32,6 @@ spec:
             - mountPath: "/etc/smtp-cert"
               name: smtp-cert
               readOnly: true
-          readinessProbe:
-            tcpSocket:
-              port: smtp
-            initialDelaySeconds: 15
-            periodSeconds: 10
           livenessProbe:
             tcpSocket:
               port: smtp
