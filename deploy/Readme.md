@@ -7,6 +7,21 @@ The following commands are all executed in the `deploy` folder
 helm upgrade --install -f cert-manager-values.yaml -n cert-manager --create-namespace cert-manager jetstack/cert-manager
 ```
 
+2. Create certificate issuers
+```shell
+kubectl apply -f cert-issuers.yaml -n cert-manager
+```
+
+3. Install the scaleway-certmanager-webhook to allow creating Let's Encrypt certificates using the `DNS-01` ACME challenge.
+This is required for generating certificates for the SMTP interface.
+
+```shell
+helm repo add scaleway https://helm.scw.cloud/
+helm upgrade --install -f scaleway-certmanager-webhook-values.yaml -n cert-manager scaleway-certmanager-webhook scaleway/scaleway-certmanager-webhook \
+  --set secret.accessKey=$SCW_ACCESS_KEY \
+  --set secret.secretKey=$SCW_SECRET_KEY
+```
+
 2. Create a namespace for remails (or possible multiple for different environments)
 ```shell
 kubectl create ns remails-staging
@@ -21,10 +36,6 @@ kubectl create secret docker-registry regcred \
   --namespace remails-production
 ```
 
-4. Create certificate issuers
-```shell
-kubectl apply -f cert-issuers.yaml -n cert-manager
-```
 
 5. Setup Database
 ```postgresql
@@ -47,8 +58,6 @@ helm upgrade --install remails ./remails \
             --set images.management.tag=<defaults to 'dev'> \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key=<has a default for development> \
-            --set scaleway-certmanager-webhook.secret.accessKey="${{ secrets.SCW_ACCESS_KEY }}" \
-            --set scaleway-certmanager-webhook.secret.secretKey="${{ secrets.SCW_SECRET_KEY }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
             --namespace ${{ vars.namespace }}
 ```

@@ -35,12 +35,6 @@ management:
 retry:
   schedule: "*/10 * * * *"
 
-scaleway-certmanager-webhook:
-  secret:
-    accessKey:
-    secretKey:
-
-
 github_oauth:
   client_id: Ov23livRESUJK4twobxj
   client_secret: Secret
