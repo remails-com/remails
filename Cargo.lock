@@ -1711,7 +1711,6 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -2655,7 +2654,6 @@ dependencies = [
  "serial_test",
  "smtp-proto",
  "sqlx",
- "sqlx-paginated",
  "thiserror 2.0.12",
  "tokio",
  "tokio-rustls",
@@ -3282,19 +3280,6 @@ dependencies = [
  "tracing",
  "uuid",
  "whoami",
-]
-
-[[package]]
-name = "sqlx-paginated"
-version = "0.2.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f28f5897a273e33964ce7cc7571f66efd2697ce390203d7c168434b1a9501ff"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "sqlx",
- "tracing",
 ]
 
 [[package]]

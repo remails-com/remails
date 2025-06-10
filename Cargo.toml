@@ -53,7 +53,6 @@ base64ct = "1.7.1"
 reqwest = { version = "0.12.18", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
 cookie = "0.18.1"
 email_address = "0.2.9"
-sqlx-paginated = "0.2.31"
 memory-serve = "1.2.1"
 derive_more = { version = "2.0.1" , default-features = false, features = ["from", "display", "deref", "debug", "from_str"]}
 rand = "0.9.1"
