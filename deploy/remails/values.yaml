@@ -11,7 +11,8 @@ images:
   migrate_db:
     repository: ghcr.io/tweedegolf/remails/migrate_db
     pullPolicy: Always
-    
+
+environment: development
 
 database_url: ""
 # Only use this value for development, use a secret for production

@@ -1,4 +1,5 @@
 use crate::{
+    Environment,
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
@@ -22,11 +23,12 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{FromRef, State},
+    extract::{FromRef, Request, State},
+    middleware,
     routing::{delete, get, post, put},
 };
 use base64ct::Encoding;
-use http::StatusCode;
+use http::{HeaderName, HeaderValue, StatusCode};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, time::Duration};
@@ -34,7 +36,10 @@ use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
-use tracing::{error, info, log::warn};
+use tracing::{
+    error, info,
+    log::{trace, warn},
+};
 
 mod api_users;
 mod auth;
@@ -62,6 +67,8 @@ pub enum ApiServerError {
 pub struct ApiConfig {
     #[debug("****")]
     pub session_key: cookie::Key,
+    pub version: String,
+    pub environment: Environment,
 }
 
 #[derive(Clone)]
@@ -149,7 +156,12 @@ pub struct ApiServer {
 }
 
 impl ApiServer {
-    pub async fn new(socket: SocketAddr, pool: PgPool, shutdown: CancellationToken) -> ApiServer {
+    pub async fn new(
+        socket: SocketAddr,
+        pool: PgPool,
+        shutdown: CancellationToken,
+        with_frontend: bool,
+    ) -> ApiServer {
         let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
         let oauth_router = github_oauth.router();
 
@@ -165,9 +177,19 @@ impl ApiServer {
             }
         };
 
+        let version = env::var("VERSION").unwrap_or("dev".to_string());
+        let environment: Environment = env::var("ENVIRONMENT")
+            .map(|s| s.parse())
+            .unwrap_or(Ok(Environment::Development))
+            .unwrap_or(Environment::Development);
+
         let state = ApiState {
             pool,
-            config: ApiConfig { session_key },
+            config: ApiConfig {
+                session_key,
+                version,
+                environment,
+            },
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
             resolver: DnsResolver::new(),
@@ -175,7 +197,7 @@ impl ApiServer {
             resolver: DnsResolver::mock("localhost", 0),
         };
 
-        let router = Router::new()
+        let mut router = Router::new()
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/api_user/{user_id}", put(api_users::update_user))
@@ -269,28 +291,28 @@ impl ApiServer {
                 TraceLayer::new_for_http(),
                 TimeoutLayer::new(Duration::from_secs(10)),
             ))
-            .with_state(state);
+            .with_state(state.clone());
+
+        router = Router::new().nest("/api", router);
+
+        if with_frontend {
+            let memory_router = memory_serve::from_local_build!()
+                .index_file(Some("/index.html"))
+                .fallback(Some("/index.html"))
+                .into_router();
+
+            router = router.merge(memory_router);
+        }
+
+        router = router.layer(middleware::from_fn_with_state(
+            state.config.clone(),
+            append_default_headers,
+        ));
 
         ApiServer {
             socket,
-            router: Router::new().nest("/api", router),
-            shutdown,
-        }
-    }
-
-    /// Serve the frontend from the `frontend/dist` directory
-    pub async fn serve_frontend(self) -> Self {
-        let memory_router = memory_serve::from_local_build!()
-            .index_file(Some("/index.html"))
-            .fallback(Some("/index.html"))
-            .into_router();
-
-        let router = self.router.merge(memory_router);
-
-        ApiServer {
-            socket: self.socket,
             router,
-            shutdown: self.shutdown,
+            shutdown,
         }
     }
 
@@ -348,4 +370,30 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
             })
         }
     }
+}
+
+async fn append_default_headers(
+    State(config): State<ApiConfig>,
+    req: Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let mut res = next.run(req).await;
+
+    if !matches!(config.environment, Environment::Production) {
+        res.headers_mut().insert(
+            HeaderName::from_static("x-robots-tag"),
+            HeaderValue::from_static("noindex, nofollow"),
+        );
+    }
+
+    if let Ok(version_header_value) = HeaderValue::from_str(&config.version) {
+        res.headers_mut().insert(
+            HeaderName::from_static("x-app-version"),
+            version_header_value,
+        );
+    } else {
+        trace!("Failed to append version header")
+    }
+
+    res
 }

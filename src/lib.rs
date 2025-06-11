@@ -1,5 +1,6 @@
 use crate::models::NewMessage;
 use api::ApiServer;
+use derive_more::FromStr;
 use handler::Handler;
 use models::SmtpCredentialRepository;
 use smtp::server::SmtpServer;
@@ -24,6 +25,14 @@ mod test;
 
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
+
+#[derive(Debug, Default, Clone, Copy, FromStr)]
+pub enum Environment {
+    Staging,
+    Production,
+    #[default]
+    Development,
+}
 
 pub async fn run_mta(
     pool: PgPool,
@@ -51,11 +60,8 @@ pub async fn run_api_server(
     shutdown: CancellationToken,
     with_frontend: bool,
 ) {
-    let mut api_server = ApiServer::new(http_socket.into(), pool.clone(), shutdown).await;
-
-    if with_frontend {
-        api_server = api_server.serve_frontend().await;
-    }
+    let api_server =
+        ApiServer::new(http_socket.into(), pool.clone(), shutdown, with_frontend).await;
 
     api_server.spawn();
 }

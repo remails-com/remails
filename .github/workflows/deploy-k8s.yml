@@ -110,6 +110,7 @@ jobs:
           file: ci.Dockerfile
           target: mta
           push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/mta:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push management image
@@ -118,6 +119,7 @@ jobs:
           file: ci.Dockerfile
           target: management
           push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/management:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push retry image
@@ -126,6 +128,7 @@ jobs:
           file: ci.Dockerfile
           target: retry
           push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/retry:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push migrate_db image
@@ -134,6 +137,7 @@ jobs:
           file: ci.Dockerfile
           target: migrate-db
           push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
 
@@ -163,6 +167,7 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
           helm upgrade --install remails ./remails \
+            --set environment="${{ vars.environment }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \

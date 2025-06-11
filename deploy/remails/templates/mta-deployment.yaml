@@ -38,8 +38,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           env:
-            - name: VERSION
-              value: {{ .Chart.AppVersion }}
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
             - name: RUST_LOG
               value: remails=trace,info
             - name: SMTP_LISTEN_ADDR

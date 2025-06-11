@@ -31,8 +31,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           env:
-            - name: VERSION
-              value: {{ .Chart.AppVersion }}
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
