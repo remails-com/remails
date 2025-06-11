@@ -1,4 +1,6 @@
 name: Deploy to Kubernetes
+run-name: "Deploy \"${{ github.ref_name }}\" to Kubernetes"
+
 on:
   workflow_dispatch:
     inputs:
