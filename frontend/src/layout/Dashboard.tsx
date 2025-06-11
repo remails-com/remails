@@ -26,6 +26,48 @@ export function Dashboard({ children }: DashboardProps) {
   const { currentOrganization } = useOrganizations();
   const computedColorScheme = useComputedColorScheme();
 
+  const org_switching = (
+    <>
+      <Menu
+        width={260}
+        position="bottom-start"
+        transitionProps={{ transition: "fade-down" }}
+        onClose={() => setUserMenuOpened(false)}
+        onOpen={() => setUserMenuOpened(true)}
+        withinPortal
+      >
+        <Menu.Target>
+          <Button
+            leftSection={<IconUser />}
+            rightSection={<IconChevronDown size={20} stroke={1.8} />}
+            color="#666"
+            variant="outline"
+          >
+            {user.name}
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          {organizations
+            ?.filter((all_org) => {
+              return (
+                user.roles.find((role) => {
+                  return role.type === "organization_admin" && role.id === all_org.id;
+                }) || all_org.id === currentOrganization?.id
+              );
+            })
+            .map((org) => (
+              <Menu.Item key={org.id} value={org.id} onClick={() => navigate("projects", { org_id: org.id })}>
+                <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
+              </Menu.Item>
+            ))}
+        </Menu.Dropdown>
+      </Menu>
+      <Button leftSection={<IconLogout />} variant="light" component="a" href="/api/logout">
+        Logout
+      </Button>
+    </>
+  );
+
   return (
     <AppShell
       header={{ height: 70 }}
@@ -34,53 +76,22 @@ export function Dashboard({ children }: DashboardProps) {
     >
       <AppShell.Header>
         <Flex align="center" h="100%" justify="space-between">
-          <Group h="100%" px="lg">
+          <Group h="100%" px="lg" wrap="nowrap">
             <Burger opened={navbarOpened} onClick={toggle} hiddenFrom="sm" size="sm" />
             <img src={computedColorScheme == "light" ? logoBlack : logoWhite} alt="Logo" style={{ height: 40 }} />
           </Group>
           <Group h="100%" px="lg">
             <ColorTheme />
-            <Menu
-              width={260}
-              position="bottom-start"
-              transitionProps={{ transition: "fade-down" }}
-              onClose={() => setUserMenuOpened(false)}
-              onOpen={() => setUserMenuOpened(true)}
-              withinPortal
-            >
-              <Menu.Target>
-                <Button
-                  leftSection={<IconUser />}
-                  rightSection={<IconChevronDown size={20} stroke={1.8} />}
-                  color="#666"
-                  variant="outline"
-                >
-                  {user.name}
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {organizations
-                  ?.filter((all_org) => {
-                    return (
-                      user.roles.find((role) => {
-                        return role.type === "organization_admin" && role.id === all_org.id;
-                      }) || all_org.id === currentOrganization?.id
-                    );
-                  })
-                  .map((org) => (
-                    <Menu.Item key={org.id} value={org.id} onClick={() => navigate("projects", { org_id: org.id })}>
-                      <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
-                    </Menu.Item>
-                  ))}
-              </Menu.Dropdown>
-            </Menu>
-            <Button leftSection={<IconLogout />} variant="light" component="a" href="/api/logout">
-              Logout
-            </Button>
+            <Group h="100%" visibleFrom="sm">
+              {org_switching}
+            </Group>
           </Group>
         </Flex>
       </AppShell.Header>
       <AppShell.Navbar p="md">
+        <Group hiddenFrom="sm" pb="lg">
+          {org_switching}
+        </Group>
         <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main>
