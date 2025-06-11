@@ -273,9 +273,15 @@ impl SmtpSession {
 
         let mut parts = decoded.split(|&b| b == 0);
 
-        let Some(b"") = parts.next() else {
+        let Some(authcid) = parts.next() else {
             return Err(AttemptedAuthError::SyntaxError);
         };
+        if authcid != b"" {
+            trace!(
+                "Ignoring received authentication identity (authcid): {}",
+                String::from_utf8_lossy(authcid)
+            );
+        }
         let username = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
         let password = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
         if parts.count() != 0 {
