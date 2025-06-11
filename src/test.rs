@@ -24,7 +24,14 @@ pub fn random_port() -> u16 {
     rng.random_range(10_000..30_000)
 }
 
-#[sqlx::test(fixtures("organizations", "api_users", "projects", "domains", "streams"))]
+#[sqlx::test(fixtures(
+    "organizations",
+    "api_users",
+    "projects",
+    "org_domains",
+    "proj_domains",
+    "streams"
+))]
 #[traced_test]
 #[serial]
 async fn integration_test(pool: PgPool) {

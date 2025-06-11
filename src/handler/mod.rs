@@ -587,7 +587,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     #[traced_test]
     #[serial]
@@ -641,7 +641,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     #[traced_test]
     #[serial]
@@ -708,7 +708,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     #[traced_test]
     #[serial]
@@ -783,7 +783,8 @@ mod test {
             "organizations",
             "projects",
             "streams",
-            "domains",
+            "org_domains",
+            "proj_domains",
             "smtp_credentials",
             "messages"
         )
