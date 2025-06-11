@@ -1,5 +1,5 @@
 use crate::{
-    Environment,
+    Environment, SmtpConfig,
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
@@ -43,6 +43,7 @@ use tracing::{
 
 mod api_users;
 mod auth;
+mod config;
 pub mod domains;
 mod error;
 mod messages;
@@ -75,6 +76,7 @@ pub struct ApiConfig {
 pub struct ApiState {
     pool: PgPool,
     config: ApiConfig,
+    smtp_config: SmtpConfig,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
 }
@@ -142,6 +144,12 @@ impl FromRef<ApiState> for GithubOauthService {
     }
 }
 
+impl FromRef<ApiState> for SmtpConfig {
+    fn from_ref(state: &ApiState) -> Self {
+        state.smtp_config.clone()
+    }
+}
+
 async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
@@ -190,6 +198,7 @@ impl ApiServer {
                 version,
                 environment,
             },
+            smtp_config: SmtpConfig::default(),
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
             resolver: DnsResolver::new(),
@@ -198,6 +207,7 @@ impl ApiServer {
         };
 
         let mut router = Router::new()
+            .route("/config", get(config::config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/api_user/{user_id}", put(api_users::update_user))

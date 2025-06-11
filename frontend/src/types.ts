@@ -212,3 +212,9 @@ export interface DomainVerificationResult {
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";
+
+export interface SmtpConfig {
+  server_name: string;
+  address: string;
+  port: number;
+}

@@ -3,7 +3,7 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { SmtpCredentialResponse } from "../../types.ts";
+import { SmtpConfig, SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
 import { Alert, Button, Code, Group, Modal, Stack, Text, Stepper, Textarea, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -22,6 +22,7 @@ interface NewCredentialProps {
 
 export function NewCredential({ opened, close }: NewCredentialProps) {
   const [activeStep, setActiveStep] = useState(0);
+  const [config, setConfig] = useState<SmtpConfig | null>(null);
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentStream } = useStreams();
@@ -77,6 +78,19 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
     setNewCredential(newCredential);
     dispatch({ type: "add_credential", credential: { ...newCredential, cleartext_password: undefined } });
     setActiveStep(1);
+
+    const config = await fetch("/api/config");
+    if (config.status !== 200) {
+      notifications.show({
+        title: "Error",
+        message: "Something went wrong",
+        color: "red",
+        autoClose: 20000,
+        icon: <IconX size={20} />,
+      });
+    }
+
+    setConfig(await config.json());
   };
 
   return (
@@ -127,6 +141,10 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
                 This password will only be shown once. After you closed this window, we cannot show it again. If you
                 lose it, you can simply create a new credential and delete the old one, if necessary.
               </Alert>
+              <Text>
+                This credential can be used to send emails using your configured domains to the SMTP server
+                hosted at <Code>{config?.address}</Code> on port <Code>{config?.port}</Code>.
+              </Text>
               <Group justify="flex-end">
                 <Button
                   onClick={() => {
