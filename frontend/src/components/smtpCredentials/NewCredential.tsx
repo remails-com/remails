@@ -5,7 +5,7 @@ import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
-import { Alert, Button, Group, Modal, Stack, Stepper, Textarea, TextInput } from "@mantine/core";
+import { Alert, Button, Code, Group, Modal, Stack, Text, Stepper, Textarea, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconX } from "@tabler/icons-react";
 import { CopyableCode } from "../CopyableCode.tsx";
@@ -84,7 +84,7 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
       <Modal
         opened={opened}
         onClose={activeStep === 0 ? close : () => { }}
-        title="Create New SMTP credential"
+        title="Create new SMTP credential"
         size="lg"
         withCloseButton={activeStep === 0}
       >
@@ -121,7 +121,7 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
           </Stepper.Step>
           <Stepper.Step label="Configure" allowStepSelect={false}>
             <Stack>
-              <TextInput label="Username" variant="filled" readOnly value={newCredential?.username} />
+              <CopyableCode label="Username">{newCredential?.username ?? ""}</CopyableCode>
               <CopyableCode label="Password">{newCredential?.cleartext_password ?? ""}</CopyableCode>
               <Alert variant="light" color="red" title="Save this password somewhere safe!" icon={<IconInfoCircle />}>
                 This password will only be shown once. After you closed this window, we cannot show it again. If you

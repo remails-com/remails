@@ -21,12 +21,14 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
     "word-wrap": "anywhere",
     "white-space": "pre-wrap",
     "word-break": "break-all",
+
+    "cursor": 'pointer',
   };
 
   return (
     <Input.Wrapper mt={mt} label={label}>
-      <Code block style={style}>
-        <Tooltip label={clipboard.copied ? "Copied" : "Copy"}>
+      <Tooltip label={clipboard.copied ? "Copied!" : "Click to copy"} position="bottom" offset={-6}>
+        <Code block style={style} onClick={() => clipboard.copy(children)}>
           <ActionIcon
             variant="light"
             color={clipboard.copied ? "teal" : "blue"}
@@ -37,9 +39,9 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
           >
             {clipboard.copied ? <IconCheck></IconCheck> : <IconCopy></IconCopy>}
           </ActionIcon>
-        </Tooltip>
-        {children}
-      </Code>
+          {children}
+        </Code>
+      </Tooltip>
     </Input.Wrapper>
   );
 }
