@@ -4,7 +4,7 @@ import { useUser } from "../hooks/useUser.ts";
 import { is_global_admin } from "../util.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 
-export function NavBar() {
+export function NavBar({ close }: { close: () => void }) {
   const {
     state: { route, fullName },
     navigate,
@@ -20,32 +20,47 @@ export function NavBar() {
           label="Organizations"
           active={route.name === "organizations"}
           leftSection={<IconBuildings size={20} stroke={1.8} />}
-          onClick={() => navigate("organizations")}
+          onClick={() => {
+            navigate("organizations");
+            close();
+          }}
         />
       )}
       <NavLink
         label="Projects"
         active={fullName.startsWith("projects")}
         leftSection={<IconServer size={20} stroke={1.8} />}
-        onClick={() => navigate("projects")}
+        onClick={() => {
+          navigate("projects");
+          close();
+        }}
       />
       <NavLink
         label="Domains"
         active={fullName.startsWith("domains")}
         leftSection={<IconWorldWww size={20} stroke={1.8} />}
-        onClick={() => navigate("domains")}
+        onClick={() => {
+          navigate("domains");
+          close();
+        }}
       />
       <NavLink
         label="Statistics"
         active={route.name === "statistics"}
         leftSection={<IconChartBar size={20} stroke={1.8} />}
-        onClick={() => navigate("statistics")}
+        onClick={() => {
+          navigate("statistics");
+          close();
+        }}
       />
       <NavLink
         label="Settings"
         active={route.name === "settings"}
         leftSection={<IconSettings size={20} stroke={1.8} />}
-        onClick={() => navigate("settings")}
+        onClick={() => {
+          navigate("settings");
+          close();
+        }}
       />
     </>
   );

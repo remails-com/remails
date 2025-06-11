@@ -115,11 +115,17 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
 
   return (
     <>
-      <Modal opened={opened} onClose={() => {
-        setActiveStep(0)
-        form.reset()
-        close()
-      }} title={<Title order={2}>Create New Domain</Title>} size="lg" padding="xl">
+      <Modal
+        opened={opened}
+        onClose={() => {
+          setActiveStep(0);
+          form.reset();
+          close();
+        }}
+        title={<Title order={2}>Create New Domain</Title>}
+        size="lg"
+        padding="xl"
+      >
         <Stepper active={activeStep} onStepClick={setActiveStep}>
           <Stepper.Step label="Create" allowStepSelect={false}>
             <form onSubmit={form.onSubmit(save)}>
@@ -158,11 +164,15 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
                 Cancel
               </Button>
               <Group>
-                <Button onClick={() => {
-                  setActiveStep(0)
-                  form.reset()
-                  close()
-                }}>Configure later</Button>
+                <Button
+                  onClick={() => {
+                    setActiveStep(0);
+                    form.reset();
+                    close();
+                  }}
+                >
+                  Configure later
+                </Button>
                 <Button
                   onClick={() => {
                     setActiveStep(2);

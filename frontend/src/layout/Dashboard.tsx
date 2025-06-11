@@ -16,7 +16,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ children }: DashboardProps) {
-  const [navbarOpened, { toggle }] = useDisclosure();
+  const [navbarOpened, { toggle, close }] = useDisclosure();
   const [_, setUserMenuOpened] = useState(false);
   const { user } = useUser();
   const {
@@ -81,7 +81,7 @@ export function Dashboard({ children }: DashboardProps) {
         </Flex>
       </AppShell.Header>
       <AppShell.Navbar p="md">
-        <NavBar />
+        <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main>
         <Breadcrumbs />

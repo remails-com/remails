@@ -36,13 +36,6 @@ pub struct SmtpCredentialUpdateRequest {
     pub(crate) description: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct SmtpCredentialUpdateResponse {
-    pub(crate) id: SmtpCredentialId,
-    pub(crate) description: String,
-    pub(crate) username: String,
-}
-
 #[derive(Serialize, derive_more::Debug)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredentialResponse {
@@ -74,6 +67,10 @@ impl SmtpCredential {
     pub fn id(&self) -> SmtpCredentialId {
         self.id
     }
+
+    pub fn username(&self) -> &str {
+        &self.username
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,11 +92,11 @@ impl SmtpCredentialRepository {
     ) -> Result<SmtpCredentialResponse, Error> {
         sqlx::query_scalar!(
             r#"
-            SELECT s.id FROM streams s 
+            SELECT s.id FROM streams s
                 JOIN projects p ON s.project_id = p.id
                 JOIN organizations o ON p.organization_id = o.id
-            WHERE o.id = $1 
-              AND p.id = $2 
+            WHERE o.id = $1
+              AND p.id = $2
               AND s.id = $3
             "#,
             *org_id,
@@ -172,8 +169,8 @@ impl SmtpCredentialRepository {
             SELECT c.* FROM smtp_credentials c
                 JOIN streams s ON c.stream_id = s.id
                 JOIN projects p ON s.project_id = p.id
-            WHERE p.organization_id = $1 
-              AND p.id = $2 
+            WHERE p.organization_id = $1
+              AND p.id = $2
               AND s.id = $3
             ORDER BY c.created_at DESC
             "#,
@@ -194,21 +191,25 @@ impl SmtpCredentialRepository {
         stream_id: StreamId,
         credential_id: SmtpCredentialId,
         update: &SmtpCredentialUpdateRequest,
-    ) -> Result<SmtpCredentialUpdateResponse, Error> {
+    ) -> Result<SmtpCredential, Error> {
         Ok(sqlx::query_as!(
-            SmtpCredentialUpdateResponse,
+            SmtpCredential,
             r#"
             UPDATE smtp_credentials cred
             SET description = $1
-            FROM streams s 
+            FROM streams s
                 JOIN projects p ON s.project_id = p.id
             WHERE cred.id = $2
-              AND cred.stream_id = s.id 
+              AND cred.stream_id = s.id
               AND cred.stream_id = $3
               AND s.project_id = $4
               AND p.organization_id = $5
-            RETURNING 
+            RETURNING
                 cred.id,
+                cred.stream_id,
+                cred.updated_at,
+                cred.created_at,
+                '' AS "password_hash!",
                 cred.description,
                 cred.username
             "#,
@@ -231,13 +232,13 @@ impl SmtpCredentialRepository {
     ) -> Result<SmtpCredentialId, Error> {
         Ok(sqlx::query_scalar!(
             r#"
-            DELETE FROM smtp_credentials c 
-                   USING streams s 
-                       JOIN projects p ON s.project_id = p.id 
-                   WHERE c.stream_id = s.id 
+            DELETE FROM smtp_credentials c
+                   USING streams s
+                       JOIN projects p ON s.project_id = p.id
+                   WHERE c.stream_id = s.id
                      AND p.organization_id = $1
                      AND p.id = $2
-                     AND s.id = $3 
+                     AND s.id = $3
                      AND c.id = $4
             RETURNING c.id
             "#,

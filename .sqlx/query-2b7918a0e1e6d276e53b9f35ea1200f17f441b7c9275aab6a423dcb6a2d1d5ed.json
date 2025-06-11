@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.id FROM streams s\n                JOIN projects p ON s.project_id = p.id\n                JOIN organizations o ON p.organization_id = o.id\n            WHERE o.id = $1\n              AND p.id = $2\n              AND s.id = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2b7918a0e1e6d276e53b9f35ea1200f17f441b7c9275aab6a423dcb6a2d1d5ed"
+}
