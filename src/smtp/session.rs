@@ -103,7 +103,17 @@ impl SmtpSession {
             }
         };
 
-        trace!("received request: {request:?} from {}", self.peer_addr);
+        if let Request::Auth { mechanism, .. } = request {
+            // This is a workaround as we are not in control of the `Debug` implementation of `Request`.
+            // Without this if statement, we would print the user password as base64 string in the logs
+            // which we want to avoid
+            trace!(
+                "received AUTH with mechanism {mechanism} request from {}",
+                self.peer_addr
+            );
+        } else {
+            trace!("received request: {request:?} from {}", self.peer_addr);
+        }
 
         match request {
             Request::Ehlo { host } => {
@@ -273,9 +283,15 @@ impl SmtpSession {
 
         let mut parts = decoded.split(|&b| b == 0);
 
-        let Some(b"") = parts.next() else {
+        if let Some(authcid) = parts.next() {
+            trace!(
+                "Ignoring received authentication identity (authcid): {}",
+                String::from_utf8_lossy(authcid)
+            );
+        } else {
             return Err(AttemptedAuthError::SyntaxError);
         };
+
         let username = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
         let password = parts.next().ok_or(AttemptedAuthError::SyntaxError)?;
         if parts.count() != 0 {
