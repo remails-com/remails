@@ -1,27 +1,5 @@
-#FROM node:22-bookworm AS frontend-builder
-#
-#WORKDIR /app
-#
-#COPY frontend/package.json frontend/package-lock.json ./
-#RUN npm install
-#
-#COPY frontend/ ./
-#RUN npm run build
-#
-#FROM rust:1.87-bookworm AS rust-builder
-#
-#WORKDIR /app
-#COPY --from=frontend-builder /app/dist/ /app/frontend/dist/
-#COPY Cargo.toml Cargo.lock ./
-#COPY build.rs build.rs ./
-#COPY src/ src/
-#COPY .sqlx .sqlx/
-#
-## Don't depend on live sqlx during build use cached .sqlx
-#RUN SQLX_OFFLINE=true cargo build --release --bins
-
-FROM debian:bookworm-slim AS final-base
-RUN apt-get update && apt-get install libssl3 -y && apt-get upgrade -y
+FROM ubuntu:24.04 AS final-base
+RUN apt-get update && apt-get install libssl3 adduser -y && apt-get upgrade -y
 
 # create a non root user to run the binary
 ARG user=nonroot
