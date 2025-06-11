@@ -62,6 +62,7 @@ jobs:
         uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1
         with:
           toolchain: stable
+          targets: x86_64-unknown-linux-musl
 
       - name: Rust cache
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
@@ -69,17 +70,17 @@ jobs:
           shared-key: "stable"
 
       - name: Build backend
-        run: SQLX_OFFLINE=true cargo build --release --bins
+        run: SQLX_OFFLINE=true cargo build --release --bins --target=x86_64-unknown-linux-musl
 
       - name: upload backend binaries
         uses: actions/upload-artifact@v4
         with:
           name: backend_target
           path: |
-            target/release/management
-            target/release/migrate_db
-            target/release/mta
-            target/release/retry
+            target/x86_64-unknown-linux-musl/release/management
+            target/x86_64-unknown-linux-musl/release/migrate_db
+            target/x86_64-unknown-linux-musl/release/mta
+            target/x86_64-unknown-linux-musl/release/retry
 
   build-docker:
     name: Build and push Docker containers
