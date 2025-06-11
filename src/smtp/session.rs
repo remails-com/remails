@@ -103,7 +103,17 @@ impl SmtpSession {
             }
         };
 
-        trace!("received request: {request:?} from {}", self.peer_addr);
+        if let Request::Auth { mechanism, .. } = request {
+            // This is a workaround as we are not in control of the `Debug` implementation of `Request`
+            // Without this if statement, we would print the user password as base64 string in the logs
+            // which we want to avoid
+            trace!(
+                "received AUTH with mechanism {mechanism} request from {}",
+                self.peer_addr
+            );
+        } else {
+            trace!("received request: {request:?} from {}", self.peer_addr);
+        }
 
         match request {
             Request::Ehlo { host } => {
