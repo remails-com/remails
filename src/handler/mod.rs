@@ -469,7 +469,17 @@ impl Handler {
                 message.delivery_status.len()
             ))
         } else {
-            None
+            let delivery_time = chrono::Utc::now() - message.created_at;
+            let hours = delivery_time.num_hours();
+            let minutes = delivery_time.num_minutes() % 60;
+            let seconds = delivery_time.as_seconds_f64() % 60.0;
+            if hours > 0 {
+                Some(format!("in {}:{:02}:{:.2}s", hours, minutes, seconds))
+            } else if minutes > 0 {
+                Some(format!("in {}:{:02.2}s", minutes, seconds))
+            } else {
+                Some(format!("in {:.2}s", seconds))
+            }
         };
 
         message.set_next_retry(&self.config);

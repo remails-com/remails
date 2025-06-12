@@ -18,12 +18,16 @@ import { formatDateTime } from "../../util.ts";
 import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 
 export function getFullStatusDescription(message: MessageMetadata) {
-  return (
-    message.status +
-    (message.reason ? `: ${message.reason}` : "") +
-    (message.retry_after ? `, retrying after ${formatDateTime(message.retry_after)}` : "") +
-    (message.attempts > 1 ? ` (${message.attempts} attempts)` : "")
-  );
+  if (message.status == "Delivered") {
+    return `Delivered ${message.reason}`;
+  } else {
+    return (
+      message.status +
+      (message.reason ? `: ${message.reason}` : "") +
+      (message.retry_after ? `, retrying after ${formatDateTime(message.retry_after)}` : "") +
+      (message.attempts > 1 ? ` (${message.attempts} attempts)` : "")
+    );
+  }
 }
 
 const deliveryStatus: {
