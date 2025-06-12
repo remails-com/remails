@@ -202,7 +202,7 @@ export function Settings() {
               <Button
                 onClick={disconnectGithub}
                 leftSection={<IconPlugConnectedX />}
-                color="red"
+                variant="outline"
                 disabled={!user.password_enabled}
               >
                 Disconnect
@@ -267,7 +267,7 @@ export function Settings() {
                       disabled={!user.github_id}
                       fullWidth={true}
                       onClick={() => removePassword(passwordForm.values)}
-                      color="red"
+                      variant="outline"
                       leftSection={<IconTrash />}
                     >
                       Delete Password

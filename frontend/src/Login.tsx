@@ -146,11 +146,7 @@ export function Login({ setUser }: LoginProps) {
               />
             )}
 
-            {globalError && (
-              <Alert icon={xIcon} color="red">
-                {globalError}
-              </Alert>
-            )}
+            {globalError && <Alert icon={xIcon}>{globalError}</Alert>}
           </Stack>
 
           <Group justify="space-between" mt="xl">

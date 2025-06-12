@@ -85,7 +85,7 @@ export function DomainDetails() {
 
       <Group mt="xl">
         <Tooltip label="Delete Domain">
-          <Button leftSection={<IconTrash />} color="red" onClick={() => confirmDeleteDomain(currentDomain)}>
+          <Button leftSection={<IconTrash />} variant="outline" onClick={() => confirmDeleteDomain(currentDomain)}>
             Delete domain
           </Button>
         </Tooltip>

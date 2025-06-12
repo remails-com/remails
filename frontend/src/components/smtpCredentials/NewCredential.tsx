@@ -97,7 +97,7 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
     <>
       <Modal
         opened={opened}
-        onClose={activeStep === 0 ? close : () => { }}
+        onClose={activeStep === 0 ? close : () => {}}
         title="Create new SMTP credential"
         size="lg"
         withCloseButton={activeStep === 0}
@@ -137,13 +137,13 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
             <Stack>
               <CopyableCode label="Username">{newCredential?.username ?? ""}</CopyableCode>
               <CopyableCode label="Password">{newCredential?.cleartext_password ?? ""}</CopyableCode>
-              <Alert variant="light" color="red" title="Save this password somewhere safe!" icon={<IconInfoCircle />}>
+              <Alert variant="light" title="Save this password somewhere safe!" icon={<IconInfoCircle />}>
                 This password will only be shown once. After you closed this window, we cannot show it again. If you
                 lose it, you can simply create a new credential and delete the old one, if necessary.
               </Alert>
               <Text>
-                This credential can be used to send emails using your configured domains to the SMTP server
-                hosted at <Code>{config?.address}</Code> on port <Code>{config?.port}</Code>.
+                This credential can be used to send emails using your configured domains to the SMTP server hosted at{" "}
+                <Code>{config?.address}</Code> on port <Code>{config?.port}</Code>.
               </Text>
               <Group justify="flex-end">
                 <Button
