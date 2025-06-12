@@ -17,14 +17,16 @@ import { upperFirst, useToggle } from "@mantine/hooks";
 import { IconBrandGithub, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { SignUpRequest, WhoamiResponse } from "./types.ts";
+import { RemailsLogo } from "./components/RemailsLogo.tsx";
 
 interface LoginProps {
   setUser: (user: WhoamiResponse) => void;
 }
 
 export function Login({ setUser }: LoginProps) {
-  const [type, toggle] = useToggle(["login", "register"]);
+  const [type, toggle] = useToggle(["Login", "Register"]);
   const [globalError, setGlobalError] = useState<string | null>(null);
+
   const xIcon = <IconX size={20} />;
 
   const form = useForm({
@@ -35,16 +37,16 @@ export function Login({ setUser }: LoginProps) {
       terms: false,
     },
     validate: {
-      name: (val) => (type === "register" && val.trim().length === 0 ? "Name cannot be empty" : null),
+      name: (val) => (type === "Register" && val.trim().length === 0 ? "Name cannot be empty" : null),
       email: (val) => (/^\S+@\S+$/.test(val) ? null : "Invalid email"),
       password: (val) => (val.length <= 6 ? "Password should include at least 6 characters" : null),
-      terms: (val) => type === "register" && !val,
+      terms: (val) => type === "Register" && !val,
     },
   });
 
   const submit = ({ email, name, password, terms }: SignUpRequest) => {
     setGlobalError(null);
-    if (type === "login") {
+    if (type === "Login") {
       fetch("/api/login/password", {
         method: "POST",
         headers: {
@@ -62,7 +64,7 @@ export function Login({ setUser }: LoginProps) {
       });
     }
 
-    if (type === "register") {
+    if (type === "Register") {
       fetch("/api/register/password", {
         method: "POST",
         headers: {
@@ -84,9 +86,8 @@ export function Login({ setUser }: LoginProps) {
   return (
     <Center mih="100vh">
       <Paper radius="md" p="xl" withBorder>
-        <Text size="lg" fw={500}>
-          Welcome to Rem@ils, {type} with
-        </Text>
+        <RemailsLogo />
+        <Text size="md">Welcome! {type} with:</Text>
 
         <Group grow mb="md" mt="md">
           <Button
@@ -102,11 +103,11 @@ export function Login({ setUser }: LoginProps) {
           </Button>
         </Group>
 
-        <Divider label="Or continue with email" labelPosition="center" my="lg" />
+        <Divider label="Or continue with email:" labelPosition="center" my="lg" />
 
         <form onSubmit={form.onSubmit(submit)}>
           <Stack>
-            {type === "register" && (
+            {type === "Register" && (
               <TextInput
                 label="Name"
                 placeholder="Your name"
@@ -137,7 +138,7 @@ export function Login({ setUser }: LoginProps) {
               radius="md"
             />
 
-            {type === "register" && (
+            {type === "Register" && (
               <Checkbox
                 label="I accept terms and conditions"
                 checked={form.values.terms}
@@ -151,7 +152,7 @@ export function Login({ setUser }: LoginProps) {
 
           <Group justify="space-between" mt="xl">
             <Anchor component="button" type="button" c="dimmed" onClick={() => toggle()} size="xs">
-              {type === "register" ? "Already have an account? Login" : "Don't have an account? Register"}
+              {type === "Register" ? "Already have an account? Login" : "Don't have an account? Register"}
             </Anchor>
             <Button type="submit" radius="xl">
               {upperFirst(type)}
