@@ -1,36 +1,47 @@
 import { useMessages } from "../../hooks/useMessages.ts";
-import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
+import {
+  Badge,
+  Group,
+  MantineSpacing,
+  Paper,
+  SegmentedControl,
+  StyleProp,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
 import { ReactElement, useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { DeliveryStatus, Message } from "../../types.ts";
+import { DeliveryStatus, Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime } from "../../util.ts";
 import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 
-export default function MessageDetails() {
-  const { currentMessage } = useMessages();
-  const [displayMode, setDisplayMode] = useState("text");
+export function getFullStatusDescription(message: MessageMetadata) {
+  return (
+    message.status +
+    (message.reason ? `: ${message.reason}` : "") +
+    (message.retry_after ? `, retrying after ${formatDateTime(message.retry_after)}` : "") +
+    (message.attempts > 1 ? ` (${message.attempts} attempts)` : "")
+  );
+}
 
-  if (!currentMessage || !("message_data" in currentMessage && "truncated_raw_data" in currentMessage)) {
-    return <Loader />;
-  }
+const deliveryStatus: {
+  [key in DeliveryStatus["type"]]: { color: string; icon?: ReactElement };
+} = {
+  NotSent: { color: "secondary", icon: undefined },
+  Success: { color: "green", icon: <IconCheck size={16} /> },
+  Reattempt: { color: "orange", icon: <IconClock size={16} /> },
+  Failure: { color: "red", icon: <IconX size={16} /> },
+};
 
-  const completeMessage = currentMessage as unknown as Message;
-
-  const subject = completeMessage.message_data.subject;
-  const text_body = completeMessage.message_data.text_body;
-  const raw = completeMessage.truncated_raw_data;
-
-  const deliveryStatus: {
-    [key in DeliveryStatus["type"]]: { color: string; icon?: ReactElement };
-  } = {
-    NotSent: { color: "secondary", icon: undefined },
-    Success: { color: "green", icon: <IconCheck size={16} /> },
-    Reattempt: { color: "orange", icon: <IconClock size={16} /> },
-    Failure: { color: "red", icon: <IconX size={16} /> },
-  };
-
-  const recipients = completeMessage.recipients.map((recipient: string) => {
-    const status = completeMessage.delivery_status[recipient] ?? { type: "NotSent" };
+export function renderRecipients(
+  message: MessageMetadata,
+  ml?: StyleProp<MantineSpacing>,
+  mr?: StyleProp<MantineSpacing>
+) {
+  return message.recipients.map((recipient: string) => {
+    const status = message.delivery_status[recipient] ?? { type: "NotSent" };
 
     let tooltip = "Message not (yet) sent";
     if (status.type == "Failure") {
@@ -46,14 +57,34 @@ export default function MessageDetails() {
         <Badge
           color={deliveryStatus[status.type].color}
           variant="light"
-          mr="sm"
+          ml={ml}
+          mr={mr}
           rightSection={deliveryStatus[status.type].icon}
+          tt="none"
+          size="lg"
         >
           {recipient}
         </Badge>
       </Tooltip>
     );
   });
+}
+
+export default function MessageDetails() {
+  const { currentMessage } = useMessages();
+  const [displayMode, setDisplayMode] = useState("text");
+
+  if (!currentMessage || !("message_data" in currentMessage && "truncated_raw_data" in currentMessage)) {
+    return <Loader />;
+  }
+
+  const completeMessage = currentMessage as unknown as Message;
+
+  const subject = completeMessage.message_data.subject;
+  const text_body = completeMessage.message_data.text_body;
+  const raw = completeMessage.truncated_raw_data;
+
+  const recipients = renderRecipients(completeMessage, undefined, "sm");
 
   const table_data = [
     { header: "From", value: completeMessage.from_email },
@@ -85,11 +116,7 @@ export default function MessageDetails() {
     },
     {
       header: "Status",
-      value:
-        completeMessage.status +
-        (completeMessage.reason ? `: ${completeMessage.reason}` : "") +
-        (completeMessage.retry_after ? `, retrying after ${formatDateTime(completeMessage.retry_after)}` : "") +
-        (completeMessage.attempts > 1 ? ` (${completeMessage.attempts} attempts)` : ""),
+      value: getFullStatusDescription(completeMessage),
     },
     {
       header: "Attachments",
