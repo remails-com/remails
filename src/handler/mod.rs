@@ -415,7 +415,7 @@ impl Handler {
         'next_rcpt: for recipient in &message.recipients {
             match message.delivery_status.get(recipient) {
                 None | Some(DeliveryStatus::Reattempt) => {} // attempt to (re-)send
-                Some(DeliveryStatus::Success) => continue,
+                Some(DeliveryStatus::Success { .. }) => continue,
                 Some(DeliveryStatus::Failed) => {
                     failures += 1;
                     continue;
@@ -430,9 +430,12 @@ impl Handler {
                     .await
                 {
                     Ok(()) => {
-                        message
-                            .delivery_status
-                            .insert(recipient.clone(), DeliveryStatus::Success);
+                        message.delivery_status.insert(
+                            recipient.clone(),
+                            DeliveryStatus::Success {
+                                delivered: chrono::Utc::now(),
+                            },
+                        );
                         continue 'next_rcpt;
                     }
                     Err(SendError::TemporaryFailure) => is_temporary_failure = true,

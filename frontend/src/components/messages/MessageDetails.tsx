@@ -21,7 +21,7 @@ export default function MessageDetails() {
   const raw = completeMessage.truncated_raw_data;
 
   const deliveryStatus: {
-    [key in DeliveryStatus]: { color: string; icon?: ReactElement };
+    [key in DeliveryStatus["type"]]: { color: string; icon?: ReactElement };
   } = {
     NotSent: { color: "secondary", icon: undefined },
     Success: { color: "green", icon: <IconCheck size={16} /> },
@@ -30,17 +30,28 @@ export default function MessageDetails() {
   };
 
   const recipients = completeMessage.recipients.map((recipient: string) => {
-    const status = completeMessage.delivery_status[recipient] ?? "NotSent";
+    const status = completeMessage.delivery_status[recipient] ?? { type: "NotSent" };
+
+    let tooltip = "Message not (yet) sent";
+    if (status.type == "Failure") {
+      tooltip = "Permanent failure";
+    } else if (status.type == "Reattempt") {
+      tooltip = "Temporary failure";
+    } else if (status.type == "Success") {
+      tooltip = `Delivered on ${status.delivered && formatDateTime(status.delivered)}`;
+    }
+
     return (
-      <Badge
-        key={recipient}
-        color={deliveryStatus[status].color}
-        variant="light"
-        mr="sm"
-        rightSection={deliveryStatus[status].icon}
-      >
-        {recipient}
-      </Badge>
+      <Tooltip label={tooltip} key={recipient}>
+        <Badge
+          color={deliveryStatus[status.type].color}
+          variant="light"
+          mr="sm"
+          rightSection={deliveryStatus[status.type].icon}
+        >
+          {recipient}
+        </Badge>
+      </Tooltip>
     );
   });
 

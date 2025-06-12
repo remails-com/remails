@@ -13,7 +13,10 @@ export interface User {
 
 export type WhoamiResponse = User | { error: string };
 
-export type DeliveryStatus = "NotSent" | "Success" | "Reattempt" | "Failure";
+export type DeliveryStatus = {
+  type: "NotSent" | "Success" | "Reattempt" | "Failure";
+  delivered?: string;
+};
 
 export interface MessageMetadata {
   id: string;

@@ -117,8 +117,9 @@ pub struct Attachment {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type")]
 pub enum DeliveryStatus {
-    Success,
+    Success { delivered: DateTime<Utc> },
     Reattempt,
     Failed,
 }
