@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT c.* FROM smtp_credentials c\n                JOIN streams s ON c.stream_id = s.id\n                JOIN projects p ON s.project_id = p.id\n            WHERE p.organization_id = $1 \n              AND p.id = $2 \n              AND s.id = $3\n            ORDER BY c.created_at DESC\n            ",
+  "query": "\n            SELECT c.* FROM smtp_credentials c\n                JOIN streams s ON c.stream_id = s.id\n                JOIN projects p ON s.project_id = p.id\n            WHERE p.organization_id = $1\n              AND p.id = $2\n              AND s.id = $3\n            ORDER BY c.created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -56,5 +56,5 @@
       false
     ]
   },
-  "hash": "442e6b7ba60b482f83552ef1e533ccfd75ba19316d64fba36839571c26e20b05"
+  "hash": "2ac7e4fdf23fa9bc6bfdc298592983e5039b41c61ae71947c7feeb025a1d8794"
 }

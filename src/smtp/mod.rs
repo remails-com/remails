@@ -112,7 +112,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     #[traced_test]
     async fn test_smtp(pool: PgPool) {
@@ -157,7 +157,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {

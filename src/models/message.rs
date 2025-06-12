@@ -619,7 +619,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());

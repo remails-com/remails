@@ -1,7 +1,7 @@
 use super::error::{ApiError, ApiResult};
 use crate::models::{
     ApiUser, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-    SmtpCredentialRequest, SmtpCredentialUpdateRequest, SmtpCredentialUpdateResponse, StreamId,
+    SmtpCredentialRequest, SmtpCredentialUpdateRequest, StreamId,
 };
 use axum::{
     Json,
@@ -67,7 +67,7 @@ pub async fn update_smtp_credential(
         SmtpCredentialId,
     )>,
     Json(request): Json<SmtpCredentialUpdateRequest>,
-) -> ApiResult<SmtpCredentialUpdateResponse> {
+) -> ApiResult<SmtpCredential> {
     has_write_access(org_id, proj_id, stream_id, None, &user)?;
 
     let update = repo
@@ -79,8 +79,8 @@ pub async fn update_smtp_credential(
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),
-        credential_id = update.id.to_string(),
-        credential_username = update.username,
+        credential_id = update.id().to_string(),
+        credential_username = update.username(),
         "updated SMTP credential"
     );
 

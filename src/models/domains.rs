@@ -260,7 +260,7 @@ impl DomainRepository {
             r#"
             INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der)
             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-            RETURNING id 
+            RETURNING id
             "#,
             new.domain,
             org_id,
@@ -287,7 +287,7 @@ impl DomainRepository {
                    dkim_key_type as "dkim_key_type: DkimKeyType",
                    dkim_pkcs8_der,
                    created_at,
-                   updated_at                
+                   updated_at
             FROM domains
             WHERE id = $1
             "#,
@@ -314,12 +314,12 @@ impl DomainRepository {
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
                    d.created_at,
-                   d.updated_at                
-            FROM domains d 
+                   d.updated_at
+            FROM domains d
                 LEFT JOIN projects p ON d.project_id = p.id
             WHERE d.id = $3
               AND (
-                  ($2::uuid IS NULL AND d.organization_id = $1) 
+                  ($2::uuid IS NULL AND d.organization_id = $1)
                       OR
                   ($2 IS NOT NULL AND d.project_id = $2 AND p.organization_id = $1)
                   )
@@ -385,7 +385,7 @@ impl DomainRepository {
                    d.dkim_pkcs8_der,
                    d.created_at,
                    d.updated_at
-            FROM domains d 
+            FROM domains d
                 LEFT JOIN projects p ON p.id = d.project_id
             WHERE (d.organization_id = $1 AND $2::uuid IS NULL)
                OR ($2 IS NOT NULL
@@ -411,21 +411,23 @@ impl DomainRepository {
         let id = sqlx::query_scalar!(
             r#"
             DELETE
-            FROM domains d
-                USING projects p
-            WHERE (d.project_id IS NULL OR
-                   (
-                       d.project_id = p.id
-                           AND d.project_id = $2
-                           AND p.organization_id = $1
-                       )
-                )
-              AND (d.organization_id IS NULL OR
-                   (d.organization_id = $1
-                        AND $2::uuid IS NULL)
-                  )
-              AND (d.id = $3)
-            RETURNING d.id
+            FROM domains
+            WHERE domains.id = (SELECT d.id
+                                FROM domains d
+                                         LEFT JOIN projects p on p.id = d.project_id
+                                WHERE (d.project_id IS NULL OR
+                                       (
+                                           d.project_id = p.id
+                                               AND d.project_id = $2
+                                               AND p.organization_id = $1
+                                           )
+                                    )
+                                  AND (d.organization_id IS NULL OR
+                                       (d.organization_id = $1
+                                           AND $2::uuid IS NULL)
+                                    )
+                                  AND (d.id = $3))
+            RETURNING domains.id
             "#,
             *org_id,
             proj_id.map(|p| p.as_uuid()),
@@ -478,7 +480,8 @@ mod test {
             "organizations",
             "projects",
             "api_users",
-            "domains",
+            "org_domains",
+            "proj_domains",
             "streams",
             "smtp_credentials",
         )
@@ -624,7 +627,13 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "api_users", "domains")
+        scripts(
+            "organizations",
+            "projects",
+            "api_users",
+            "org_domains",
+            "proj_domains"
+        )
     ))]
     async fn create_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
@@ -645,7 +654,10 @@ mod test {
         assert!(matches!(bad_request, Error::BadRequest(_)))
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn create_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -687,7 +699,10 @@ mod test {
         );
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn create_conflicting_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -707,7 +722,10 @@ mod test {
         assert!(matches!(conflict, Error::Conflict))
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn get_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -738,7 +756,10 @@ mod test {
         assert!(matches!(not_found, Error::NotFound(_)));
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn get_with_proj_id_from_org_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -756,7 +777,10 @@ mod test {
         assert!(matches!(not_found, Error::NotFound(_)));
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn get_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -788,7 +812,10 @@ mod test {
         assert_eq!(domain.domain, "test-org-1.com")
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn list_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -804,7 +831,10 @@ mod test {
         assert!(matches!(err, Error::BadRequest(_)));
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn list_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -832,7 +862,10 @@ mod test {
         assert_eq!(domains[0].domain, "test-org-1-project-1.com");
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn remove_with_project_id_that_does_not_match_org_id(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -876,7 +909,10 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn remove_with_org_id_that_does_not_match_proj_id(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -921,7 +957,10 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn remove_with_proj_id_from_org_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -965,7 +1004,10 @@ mod test {
             .unwrap();
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects", "domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
+    ))]
     async fn remove_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -1007,6 +1049,47 @@ mod test {
             .unwrap_err();
 
         assert!(matches!(not_found, Error::NotFound(_)));
+
+        let domain_org = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(domain_org.domain, "test-org-1.com");
+
+        repo.remove(
+            // test org 2
+            "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+            None,
+            // test-org-1.com
+            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let not_found = repo
+            .get(
+                // test org 1
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                None,
+                // test-org-1.com
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(not_found, Error::NotFound(_)))
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "org_domains")))]
+    async fn remove_happy_flow_without_projects(db: PgPool) {
+        let repo = DomainRepository::new(db);
 
         let domain_org = repo
             .get(

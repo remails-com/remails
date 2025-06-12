@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   domain,\n                   organization_id,\n                   project_id,\n                   dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   dkim_pkcs8_der,\n                   created_at,\n                   updated_at                \n            FROM domains\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at\n            FROM domains d\n                LEFT JOIN projects p ON p.id = d.project_id\n            WHERE (d.organization_id = $1 AND $2::uuid IS NULL)\n               OR ($2 IS NOT NULL\n                       AND (d.project_id = $2 AND p.organization_id = $1)\n                  )\n            ",
   "describe": {
     "columns": [
       {
@@ -56,6 +56,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -70,5 +71,5 @@
       false
     ]
   },
-  "hash": "d718082866b0211ed728db73b15130b0e2d6cf31e5375a7b6c725486e643abae"
+  "hash": "aa25426698bf628ddc9371942a3aed7a4dba9bfebf697ed18a3f90ca72b6f02a"
 }
