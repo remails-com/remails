@@ -1,7 +1,0 @@
-remails-dev.tweedegolf-test.nl {
-    reverse_proxy remails:3000
-}
-
-mailcrab.remails-dev.tweedegolf-test.nl {
-    reverse_proxy mailcrab:1080
-}

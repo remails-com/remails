@@ -1,6 +1,19 @@
-use std::{fs::File, io, sync::Arc};
+use crate::{
+    models::{NewMessage, SmtpCredentialRepository},
+    smtp::{
+        SmtpConfig,
+        connection::{self, ConnectionError},
+    },
+};
+use rand::random_range;
+use std::{fs::File, io, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::mpsc::Sender};
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpListener,
+    select,
+    sync::{RwLock, mpsc::Sender},
+};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
@@ -9,15 +22,7 @@ use tokio_rustls::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
-
-use crate::{
-    models::{NewMessage, SmtpCredentialRepository},
-    smtp::{
-        SmtpConfig,
-        connection::{self, ConnectionError},
-    },
-};
+use tracing::{debug, error, info, trace};
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -75,7 +80,7 @@ impl SmtpServer {
         Ok((certs, key))
     }
 
-    pub async fn serve(self) -> Result<(), SmtpServerError> {
+    async fn build_tls_acceptor(&self) -> Result<TlsAcceptor, SmtpServerError> {
         let (certs, key) = self.load_tls_config().await?;
 
         let config = rustls::ServerConfig::builder()
@@ -83,31 +88,65 @@ impl SmtpServer {
             .with_single_cert(certs, key)
             .map_err(SmtpServerError::Tls)?;
 
+        Ok(TlsAcceptor::from(Arc::new(config)))
+    }
+
+    pub async fn serve(self) -> Result<(), SmtpServerError> {
         let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
 
-        let acceptor = TlsAcceptor::from(Arc::new(config));
+        let acceptor = Arc::new(RwLock::new(self.build_tls_acceptor().await?));
 
         info!("smtp server on {}", self.config.listen_addr);
 
+        let certificate_reload_interval =
+            Duration::from_secs(60 * 60 * 23 + random_range(0..(60 * 60)));
+        debug!(
+            "Automatically reloading the SMTP certificate every {:?}",
+            certificate_reload_interval
+        );
+
+        let server_name = self.config.server_name.clone();
+        let queue = self.queue.clone();
+        let user_repository = self.user_repository.clone();
+        let shutdown = self.shutdown.clone();
+
+        let acceptor_clone = acceptor.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(certificate_reload_interval);
+            loop {
+                interval.tick().await;
+                let mut a = acceptor_clone.write().await;
+                info!("Reloading the SMTP TLS certificate");
+                *a = self.build_tls_acceptor().await.unwrap();
+            }
+        });
+
         loop {
             select! {
-                _ = self.shutdown.cancelled() => {
+                _ = shutdown.cancelled() => {
                     info!("shutting down smtp server");
 
                     return Ok(());
                 }
                 result = listener.accept() => match result {
                     Ok((stream, peer_addr)) => {
-                        info!("connection from {}", peer_addr);
+                        // TODO consider lifting the log level to info again later
+                        //  For now, it's on trace level,
+                        //  as it constantly logs the health checks from the LoadBalancer
+                        //  and thus spams the logs.
+                        //  Additionally, due to the fact the the LoadBalancer proxies the TCP connection,
+                        //  we only get to see the local IP address anyway.
+                        //  #16 should make sure, we log the real sender IP
+                        trace!("connection from {}", peer_addr);
                         let acceptor = acceptor.clone();
-                        let user_repository = self.user_repository.clone();
-                        let queue = self.queue.clone();
-                        let server_name = self.config.server_name.clone();
+                        let server_name = server_name.clone();
+                        let queue = queue.clone();
+                        let user_repository = user_repository.clone();
 
                         let task = async move || {
-                            let mut tls_stream = acceptor
+                            let mut tls_stream = acceptor.read().await
                                 .accept(stream)
                                 .await
                                 .map_err(ConnectionError::Accept)?;
@@ -126,7 +165,14 @@ impl SmtpServer {
 
                         tokio::spawn(async {
                             if let Err(err) = task().await {
-                                info!("{err}");
+                                let error_string = err.to_string();
+                                if let ConnectionError::Accept(e) = err {
+                                    if e.kind() == io::ErrorKind::UnexpectedEof {
+                                        trace!("failed to handle connection: {error_string}");
+                                        return
+                                    }
+                                }
+                                error!("failed to handle connection: {error_string}");
                             }
                         });
                     }

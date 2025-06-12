@@ -1,0 +1,45 @@
+images:
+  mta:
+    repository: ghcr.io/tweedegolf/remails/mta
+    pullPolicy: Always
+  management:
+    repository: ghcr.io/tweedegolf/remails/management
+    pullPolicy: Always
+  retry:
+    repository: ghcr.io/tweedegolf/remails/retry
+    pullPolicy: Always
+  migrate_db:
+    repository: ghcr.io/tweedegolf/remails/migrate_db
+    pullPolicy: Always
+
+environment: development
+
+database_url: ""
+# Only use this value for development, use a secret for production
+session_key: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
+
+smtp:
+  replicas: 3
+  load_balancer_plan: "essentials"
+  server_name: "smtp.remails.net"
+  # Possible values "staging" and "production".
+  # Influences which type of Let's Encrypt certificate should be used
+  certificate_type: "production"
+
+management:
+  replicas: 3
+  # possible values are "essentials", "development", "production-small", and TODO
+  load_balancer_plan: "essentials"
+  server_name: "remails.net"
+  certificate_bundle_name: "remails-management"
+  certificate_bundle_uuid: "0a7a685a-ae71-4e2f-95f2-8538711fb11b"
+
+retry:
+  schedule: "*/10 * * * *"
+
+github_oauth:
+  client_id: Ov23livRESUJK4twobxj
+  client_secret: Secret
+
+imagePullSecrets:
+  - name: "regcred"

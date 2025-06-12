@@ -3,6 +3,9 @@ kind: Certificate
 metadata:
   name: smtp-cert
 spec:
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
   commonName: {{ .Values.smtp.server_name | quote }}
   dnsNames:
     - {{ .Values.smtp.server_name | quote }}

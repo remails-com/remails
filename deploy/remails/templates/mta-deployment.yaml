@@ -1,20 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: remails-mta
+  name: mta
   labels:
-    app: remails-mta
+    app: mta
     version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.smtp.replicas }}
   selector:
     matchLabels:
-      app: remails-mta
-      version: {{ .Chart.AppVersion }}
+      app: mta
   template:
     metadata:
       labels:
-        app: remails-mta
+        app: mta
         version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}
@@ -27,13 +26,20 @@ spec:
             secretName: smtp-cert
       containers:
         - name: mta
-          image: "{{ .Values.images.mta.repository }}:{{ .Values.images.mta.tag | .Chart.AppVersion }}"
+          image: "{{ .Values.images.mta.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           volumeMounts:
             - mountPath: "/etc/smtp-cert"
               name: smtp-cert
               readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 15
+            periodSeconds: 10
           env:
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
             - name: RUST_LOG
               value: remails=trace,info
             - name: SMTP_LISTEN_ADDR

@@ -1,20 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: remails-management
+  name: management
   labels:
-    app: remails-management
+    app: management
     version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.management.replicas }}
   selector:
     matchLabels:
-      app: remails-management
-      version: {{ .Chart.AppVersion }}
+      app: management
   template:
     metadata:
       labels:
-        app: remails-management
+        app: management
         version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}
@@ -23,9 +22,17 @@ spec:
     {{- end }}
       containers:
         - name: management
-          image: "{{ .Values.images.management.repository }}:{{ .Values.images.management.tag | default .Chart.AppVersion  }}"
+          image: "{{ .Values.images.management.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          livenessProbe:
+            httpGet:
+              path: /api/healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
           env:
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

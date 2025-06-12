@@ -1,8 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: remails-management
+  name: management
   annotations:
+    helm.sh/resource-policy: keep
     service.beta.kubernetes.io/upcloud-load-balancer-config: |
       {
         "plan": {{ .Values.management.load_balancer_plan | quote }},
@@ -36,12 +37,30 @@ metadata:
                "certificate_bundle_uuid": {{ .Values.management.certificate_bundle_uuid | quote }}
             }
           ]
-        }]
+        }],
+        "backends": [
+          {
+            "name": "http",
+            "properties": {
+              "health_check_type": "http",
+              "health_check_url": "/api/healthy",
+              "health_check_expected_status": 200
+            }
+          },
+          {
+            "name": "https",
+            "properties": {
+              "health_check_type": "http",
+              "health_check_url": "/api/healthy",
+              "health_check_expected_status": 200
+            }
+          }
+        ]
       }
 spec:
   ipFamilyPolicy: PreferDualStack
   selector:
-    app: remails-management
+    app: management
   ports:
     - name: http
       protocol: TCP
