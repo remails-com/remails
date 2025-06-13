@@ -1,9 +1,12 @@
 use crate::{
     models::{NewMessage, SmtpCredentialRepository},
     smtp::{
-        SmtpConfig,
         connection::{self, ConnectionError},
+        proxy_protocol,
+        proxy_protocol::handle_proxy_protocol,
+        SmtpConfig,
     },
+    Environment,
 };
 use rand::random_range;
 use std::{fs::File, io, sync::Arc, time::Duration};
@@ -12,14 +15,14 @@ use tokio::{
     io::AsyncWriteExt,
     net::TcpListener,
     select,
-    sync::{RwLock, mpsc::Sender},
+    sync::{mpsc::Sender, RwLock},
 };
 use tokio_rustls::{
-    TlsAcceptor,
     rustls::{
         self,
         pki_types::{CertificateDer, PrivateKeyDer},
     },
+    TlsAcceptor,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
@@ -36,6 +39,8 @@ pub enum SmtpServerError {
     Listen(io::Error),
     #[error("failed to configure TLS: {0}")]
     Tls(rustls::Error),
+    #[error("{0}")]
+    ProxyProtocol(#[from] proxy_protocol::Error),
 }
 
 pub struct SmtpServer {
@@ -92,6 +97,7 @@ impl SmtpServer {
     }
 
     pub async fn serve(self) -> Result<(), SmtpServerError> {
+        let environment = self.config.environment;
         let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
@@ -131,15 +137,28 @@ impl SmtpServer {
                     return Ok(());
                 }
                 result = listener.accept() => match result {
-                    Ok((stream, peer_addr)) => {
-                        // TODO consider lifting the log level to info again later
-                        //  For now, it's on trace level,
-                        //  as it constantly logs the health checks from the LoadBalancer
-                        //  and thus spams the logs.
-                        //  Additionally, due to the fact the the LoadBalancer proxies the TCP connection,
-                        //  we only get to see the local IP address anyway.
-                        //  #16 should make sure, we log the real sender IP
-                        trace!("connection from {}", peer_addr);
+                    Ok((mut stream, peer_addr)) => {
+
+                        let mut connection_info = None;
+                        if !matches!(environment, Environment::Development) {
+                            (stream, connection_info) = handle_proxy_protocol(stream).await?;
+                        }
+
+                        if let Some(connection_info) = connection_info{
+                            info!(
+                                source_ip=connection_info.source_ip.to_string(),
+                                source_port=connection_info.source_port,
+                                destination_ip=connection_info.destination_ip.to_string(),
+                                destination_port=connection_info.destination_port,
+                                "new TCP connection"
+                            )
+                        } else {
+                            trace!(
+                                source_ip=peer_addr.ip().to_string(),
+                                source_port=peer_addr.port(),
+                                "new TCP connection"
+                            );
+                        }
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
                         let queue = queue.clone();
