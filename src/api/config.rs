@@ -3,27 +3,9 @@ use axum::{
     extract::State,
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 
-use crate::SmtpConfig;
+use crate::api::RemailsConfig;
 
-#[derive(Debug, Serialize)]
-pub struct ConfigResponse {
-    pub server_name: String,
-    pub address: String,
-    pub port: u16,
-}
-
-impl From<SmtpConfig> for ConfigResponse {
-    fn from(config: SmtpConfig) -> Self {
-        ConfigResponse {
-            server_name: config.server_name,
-            address: config.listen_addr.ip().to_string(),
-            port: config.listen_addr.port(),
-        }
-    }
-}
-
-pub async fn config(State(smtp_config): State<SmtpConfig>) -> Response {
-    Json(ConfigResponse::from(smtp_config)).into_response()
+pub async fn config(State(config): State<RemailsConfig>) -> Response {
+    Json(config).into_response()
 }

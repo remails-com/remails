@@ -47,6 +47,13 @@ export interface Message extends MessageMetadata {
   is_truncated: boolean;
 }
 
+export interface RemailsConfig {
+  version: string;
+  environment: string;
+  smtp_domain_name: string;
+  smtp_port: number;
+}
+
 export interface State {
   organizations: Organization[] | null;
   projects: Project[] | null;
@@ -55,6 +62,7 @@ export interface State {
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   loading: boolean;
+  config: RemailsConfig | null;
 
   // routing related state
   route: Route;
@@ -135,17 +143,16 @@ export type Action =
       credentialId: string;
     }
   | {
-      type: "navigate";
-      route: string;
-      params?: RouteParams;
-    }
-  | {
       type: "set_route";
       route: Route;
       fullPath: string;
       fullName: string;
       pathParams: RouteParams;
       queryParams: RouteParams;
+    }
+  | {
+      type: "set_config";
+      config: RemailsConfig;
     };
 
 export interface Organization {
@@ -215,9 +222,3 @@ export interface DomainVerificationResult {
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";
-
-export interface SmtpConfig {
-  server_name: string;
-  address: string;
-  port: number;
-}
