@@ -1,32 +1,31 @@
 use crate::{
+    Environment,
     models::{NewMessage, SmtpCredentialRepository},
     smtp::{
+        SmtpConfig,
         connection::{self, ConnectionError},
         proxy_protocol,
-        proxy_protocol::{handle_proxy_protocol, Error},
-        SmtpConfig,
+        proxy_protocol::{Error, handle_proxy_protocol},
     },
-    Environment,
 };
 use rand::random_range;
-use std::{fs::File, io, io::ErrorKind, sync::Arc, time::Duration};
+use std::{fs::File, io, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
     net::TcpListener,
     select,
-    sync::{mpsc::Sender, RwLock},
+    sync::{RwLock, mpsc::Sender},
 };
 use tokio_rustls::{
+    TlsAcceptor,
     rustls::{
         self,
         pki_types::{CertificateDer, PrivateKeyDer},
     },
-    TlsAcceptor,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
-use crate::smtp::proxy_protocol::ConnectionInfo;
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {

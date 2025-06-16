@@ -30,17 +30,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Invalid Proxy Protocol header")]
     InvalidProxyProtocolHeader,
-    #[error("Invalid Command")]
-    InvalidCommand,
     #[error("Unsupported: {0}")]
     Unsupported(&'static str),
     #[error["Parse error: {0}"]]
-    ParseError(ParseError),
-}
-
-enum Command {
-    Local,
-    Proxy,
+    Parse(ParseError),
 }
 
 pub(super) async fn handle_proxy_protocol<IO>(
@@ -83,7 +76,7 @@ where
             }
             v2::Addresses::Unspecified => None,
         },
-        HeaderResult::V2(Err(err)) => return Err(Error::ParseError(err)),
+        HeaderResult::V2(Err(err)) => return Err(Error::Parse(err)),
     };
 
     Ok((stream, connection_info))

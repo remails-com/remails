@@ -50,10 +50,10 @@ impl Default for SmtpConfig {
 mod test {
     use crate::{
         models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
-        smtp::{server::SmtpServer, SmtpConfig},
+        smtp::{SmtpConfig, server::SmtpServer},
         test::random_port,
     };
-    use mail_send::{mail_builder::MessageBuilder, SmtpClientBuilder};
+    use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use std::{
         default,
