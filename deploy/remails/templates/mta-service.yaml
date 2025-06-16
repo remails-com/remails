@@ -15,7 +15,7 @@ metadata:
         "backends": [{
           "name": "smtp",
           "properties": {
-            "outbound_proxy_protocol": "v2",
+            "outbound_proxy_protocol": "v2"
           }
         }]
       }

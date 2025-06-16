@@ -61,6 +61,7 @@ async fn integration_test(pool: PgPool) {
         server_name: "localhost".to_string(),
         cert_file: "cert.pem".into(),
         key_file: "key.pem".into(),
+        environment: Default::default(),
     };
 
     let handler_config = HandlerConfig {

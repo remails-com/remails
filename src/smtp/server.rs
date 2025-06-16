@@ -196,7 +196,7 @@ impl SmtpServer {
                             if let Err(err) = task().await {
                                 let error_string = err.to_string();
                                 if let ConnectionError::Accept(e) = err {
-                                    if e.kind() == io::ErrorKind::UnexpectedEof {
+                                    if e.kind() == io::ErrorKind::UnexpectedEof || e.kind() == io::ErrorKind::ConnectionReset {
                                         trace!("failed to handle connection: {error_string}");
                                         return
                                     }

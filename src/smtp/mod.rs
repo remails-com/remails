@@ -56,7 +56,6 @@ mod test {
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use std::{
-        default,
         net::{Ipv4Addr, SocketAddrV4},
         sync::Arc,
     };

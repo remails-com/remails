@@ -29,13 +29,13 @@ spec:
               path: /api/healthy
               port: http
             initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /api/healthy
               port: http
             initialDelaySeconds: 15
-            periodSeconds: 100
+            periodSeconds: 30
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
