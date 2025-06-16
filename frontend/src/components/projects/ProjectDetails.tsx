@@ -135,7 +135,7 @@ export default function ProjectDetails() {
               >
                 <Button
                   leftSection={<IconTrash />}
-                  color="red"
+                  variant="outline"
                   disabled={!canDelete}
                   onClick={() => confirmDeleteProject(currentProject)}
                 >

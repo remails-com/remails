@@ -2,74 +2,58 @@ import { ActionDispatch, createContext, useCallback, useContext, useEffect, useR
 import { Action, State, WhoamiResponse } from "../types.ts";
 import { initRouter, matchName, Navigate, RouteName, RouteParams, routerNavigate, routes } from "../router.ts";
 
-function reducer(state: State, action: Action): State {
-  console.log("fired action", action);
-
-  if (action.type === "set_organizations") {
+const action_handler: {
+  [action in Action["type"]]: (state: State, action: Extract<Action, { type: action }>) => State;
+} = {
+  set_organizations: function (state, action) {
     return { ...state, organizations: action.organizations, loading: false };
-  }
-
-  if (action.type === "add_organization") {
+  },
+  add_organization: function (state, action) {
     return { ...state, organizations: [...(state.organizations || []), action.organization], loading: false };
-  }
-
-  if (action.type === "loading") {
+  },
+  loading: function (state, _action) {
     return { ...state, loading: true };
-  }
-
-  if (action.type === "set_projects") {
+  },
+  set_projects: function (state, action) {
     return { ...state, projects: action.projects, loading: false };
-  }
-
-  if (action.type === "add_project") {
+  },
+  add_project: function (state, action) {
     return { ...state, projects: [...(state.projects || []), action.project], loading: false };
-  }
-
-  if (action.type === "remove_project") {
+  },
+  remove_project: function (state, action) {
     return { ...state, projects: state.projects?.filter((p) => p.id !== action.projectId) || [] };
-  }
-
-  if (action.type === "set_streams") {
+  },
+  set_streams: function (state, action) {
     return { ...state, streams: action.streams, loading: false };
-  }
-
-  if (action.type === "add_stream") {
+  },
+  add_stream: function (state, action) {
     return { ...state, streams: [...(state.streams || []), action.stream], loading: false };
-  }
-
-  if (action.type === "remove_stream") {
+  },
+  remove_stream: function (state, action) {
     return { ...state, streams: state.streams?.filter((p) => p.id !== action.streamId) || [] };
-  }
-
-  if (action.type === "set_messages") {
+  },
+  set_messages: function (state, action) {
     return { ...state, messages: action.messages, loading: false };
-  }
-
-  if (action.type === "set_domains") {
+  },
+  set_domains: function (state, action) {
     return { ...state, domains: action.domains, loading: false };
-  }
-
-  if (action.type === "add_domain") {
+  },
+  add_domain: function (state, action) {
     return { ...state, domains: [...(state.domains || []), action.domain], loading: false };
-  }
-
-  if (action.type === "remove_domain") {
+  },
+  remove_domain: function (state, action) {
     return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
-  }
-
-  if (action.type === "set_credentials") {
+  },
+  set_credentials: function (state, action) {
     return { ...state, credentials: action.credentials, loading: false };
-  }
-
-  if (action.type === "add_credential") {
+  },
+  add_credential: function (state, action) {
     return { ...state, credentials: [...(state.credentials || []), action.credential], loading: false };
-  }
-
-  if (action.type === "remove_credential") {
+  },
+  remove_credential: function (state, action) {
     return { ...state, credentials: state.credentials?.filter((d) => d.id !== action.credentialId) || [] };
-  }
-
-  if (action.type === "set_route") {
+  },
+  set_route: function (state, action) {
     return {
       ...state,
       route: action.route,
@@ -78,10 +62,23 @@ function reducer(state: State, action: Action): State {
       pathParams: action.pathParams,
       queryParams: action.queryParams,
     };
-  }
+  },
+  set_config: function (state, action) {
+    return { ...state, config: action.config };
+  },
+};
 
-  console.error("unknown action", action);
-  return state;
+// helper function to make TypeScript recognize the proper types
+function getActionHandler<T extends Action["type"]>(
+  action: Extract<Action, { type: T }>
+): (state: State, action: Extract<Action, { type: T }>) => State {
+  return action_handler[action.type];
+}
+
+function reducer(state: State, action: Action): State {
+  console.log("fired action", action);
+  const handler = getActionHandler(action);
+  return handler(state, action);
 }
 
 export const RemailsContext = createContext<{ state: State; dispatch: ActionDispatch<[Action]>; navigate: Navigate }>({
@@ -92,6 +89,7 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     messages: null,
     domains: null,
     credentials: null,
+    config: null,
     loading: true,
     route: routes[0],
     fullPath: "",
@@ -121,6 +119,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     messages: null,
     domains: null,
     credentials: null,
+    config: null,
     loading: true,
     ...initialRoute,
   });
@@ -268,6 +267,12 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       return;
     }
   }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data) => dispatch({ type: "set_config", config: data }));
+  }, []);
 
   return {
     state,

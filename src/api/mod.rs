@@ -43,6 +43,7 @@ use tracing::{
 
 mod api_users;
 mod auth;
+mod config;
 pub mod domains;
 mod error;
 mod messages;
@@ -63,12 +64,41 @@ pub enum ApiServerError {
     Serve(std::io::Error),
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct RemailsConfig {
+    pub version: String,
+    pub environment: Environment,
+    pub smtp_domain_name: String,
+    pub smtp_port: u16,
+}
+
+impl Default for RemailsConfig {
+    fn default() -> Self {
+        let version = env::var("VERSION").unwrap_or("dev".to_string());
+        let environment: Environment = env::var("ENVIRONMENT")
+            .map(|s| s.parse())
+            .unwrap_or(Ok(Environment::Development))
+            .unwrap_or(Environment::Development);
+        let smtp_domain_name = env::var("SMTP_SERVER_NAME").unwrap_or("remails.net".to_string());
+        let smtp_port = env::var("SMTP_PORT")
+            .map(|s| s.parse())
+            .unwrap_or(Ok(465))
+            .unwrap_or(465);
+
+        Self {
+            version,
+            environment,
+            smtp_domain_name,
+            smtp_port,
+        }
+    }
+}
+
 #[derive(Clone, derive_more::Debug)]
 pub struct ApiConfig {
     #[debug("****")]
-    pub session_key: cookie::Key,
-    pub version: String,
-    pub environment: Environment,
+    session_key: cookie::Key,
+    pub remails_config: RemailsConfig,
 }
 
 #[derive(Clone)]
@@ -142,6 +172,12 @@ impl FromRef<ApiState> for GithubOauthService {
     }
 }
 
+impl FromRef<ApiState> for RemailsConfig {
+    fn from_ref(state: &ApiState) -> Self {
+        state.config.remails_config.clone()
+    }
+}
+
 async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
@@ -177,18 +213,11 @@ impl ApiServer {
             }
         };
 
-        let version = env::var("VERSION").unwrap_or("dev".to_string());
-        let environment: Environment = env::var("ENVIRONMENT")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(Environment::Development))
-            .unwrap_or(Environment::Development);
-
         let state = ApiState {
             pool,
             config: ApiConfig {
                 session_key,
-                version,
-                environment,
+                remails_config: Default::default(),
             },
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
@@ -198,6 +227,7 @@ impl ApiServer {
         };
 
         let mut router = Router::new()
+            .route("/config", get(config::config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/api_user/{user_id}", put(api_users::update_user))
@@ -379,14 +409,14 @@ async fn append_default_headers(
 ) -> axum::response::Response {
     let mut res = next.run(req).await;
 
-    if !matches!(config.environment, Environment::Production) {
+    if !matches!(config.remails_config.environment, Environment::Production) {
         res.headers_mut().insert(
             HeaderName::from_static("x-robots-tag"),
             HeaderValue::from_static("noindex, nofollow"),
         );
     }
 
-    if let Ok(version_header_value) = HeaderValue::from_str(&config.version) {
+    if let Ok(version_header_value) = HeaderValue::from_str(&config.remails_config.version) {
         res.headers_mut().insert(
             HeaderName::from_static("x-app-version"),
             version_header_value,

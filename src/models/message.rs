@@ -55,7 +55,7 @@ pub struct Message {
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
-    created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
     pub attempts: i32,
@@ -117,8 +117,9 @@ pub struct Attachment {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type")]
 pub enum DeliveryStatus {
-    Success,
+    Success { delivered: DateTime<Utc> },
     Reattempt,
     Failed,
 }

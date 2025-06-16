@@ -3,6 +3,7 @@ use api::ApiServer;
 use derive_more::FromStr;
 use handler::Handler;
 use models::SmtpCredentialRepository;
+use serde::Serialize;
 use smtp::server::SmtpServer;
 use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
@@ -26,7 +27,7 @@ mod test;
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
 
-#[derive(Debug, Default, Clone, Copy, FromStr)]
+#[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
 pub enum Environment {
     Staging,
     Production,

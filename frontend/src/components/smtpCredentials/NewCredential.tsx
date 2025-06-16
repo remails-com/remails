@@ -5,10 +5,10 @@ import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
-import { Alert, Button, Group, Modal, PasswordInput, Stack, Stepper, Textarea, TextInput } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { Alert, Button, Code, Group, Modal, Stack, Text, Stepper, Textarea, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconX } from "@tabler/icons-react";
+import { CopyableCode } from "../CopyableCode.tsx";
 
 interface FormValues {
   username: string;
@@ -22,12 +22,14 @@ interface NewCredentialProps {
 
 export function NewCredential({ opened, close }: NewCredentialProps) {
   const [activeStep, setActiveStep] = useState(0);
-  const [visible, { toggle: toggleVisible }] = useDisclosure(false);
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentStream } = useStreams();
   const [newCredential, setNewCredential] = useState<SmtpCredentialResponse | null>(null);
-  const { dispatch } = useRemails();
+  const {
+    dispatch,
+    state: { config },
+  } = useRemails();
 
   const form = useForm<FormValues>({
     validateInputOnBlur: true,
@@ -85,7 +87,7 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
       <Modal
         opened={opened}
         onClose={activeStep === 0 ? close : () => {}}
-        title="Create New SMTP credential"
+        title="Create new SMTP credential"
         size="lg"
         withCloseButton={activeStep === 0}
       >
@@ -122,19 +124,16 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
           </Stepper.Step>
           <Stepper.Step label="Configure" allowStepSelect={false}>
             <Stack>
-              <TextInput label="Username" variant="filled" readOnly value={newCredential?.username} />
-              <Alert variant="light" color="red" title="Save this password somewhere safe!" icon={<IconInfoCircle />}>
+              <CopyableCode label="Username">{newCredential?.username ?? ""}</CopyableCode>
+              <CopyableCode label="Password">{newCredential?.cleartext_password ?? ""}</CopyableCode>
+              <Alert variant="light" title="Save this password somewhere safe!" icon={<IconInfoCircle />}>
                 This password will only be shown once. After you closed this window, we cannot show it again. If you
                 lose it, you can simply create a new credential and delete the old one, if necessary.
               </Alert>
-              <PasswordInput
-                label="Password"
-                variant="filled"
-                readOnly
-                visible={visible}
-                onVisibilityChange={toggleVisible}
-                value={newCredential?.cleartext_password}
-              />
+              <Text>
+                This credential can be used to send emails using your configured domains to the SMTP server hosted at{" "}
+                <Code>{config?.smtp_domain_name}</Code> on port <Code>{config?.smtp_port}</Code>.
+              </Text>
               <Group justify="flex-end">
                 <Button
                   onClick={() => {

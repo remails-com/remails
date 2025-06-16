@@ -138,7 +138,7 @@ export function CredentialDetails() {
               <Tooltip label="Delete SMTP credential">
                 <Button
                   leftSection={<IconTrash />}
-                  color="red"
+                  variant="outline"
                   onClick={() => confirmDeleteCredential(currentCredential)}
                 >
                   Delete
