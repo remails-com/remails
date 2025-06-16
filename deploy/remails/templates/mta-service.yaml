@@ -20,7 +20,7 @@ spec:
   ports:
     - name: smtp
       protocol: TCP
-      port: 465
+      port: {{ .Values.smtp.port }}
       targetPort: smtp
   type: LoadBalancer
   

@@ -33,6 +33,10 @@ spec:
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
+            - name: SMTP_SERVER_NAME
+              value: {{ .Values.smtp.server_name }}
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
