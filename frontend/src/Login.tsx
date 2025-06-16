@@ -86,7 +86,7 @@ export function Login({ setUser }: LoginProps) {
   return (
     <Center mih="100vh">
       <Paper radius="md" p="xl" withBorder>
-        <RemailsLogo />
+        <RemailsLogo style={{ height: 45 }} />
         <Text size="md">Welcome! {type} with:</Text>
 
         <Group grow mb="md" mt="md">
