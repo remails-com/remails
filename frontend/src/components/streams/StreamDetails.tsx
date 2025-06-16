@@ -143,7 +143,7 @@ export default function StreamDetails() {
               >
                 <Button
                   leftSection={<IconTrash />}
-                  color="red"
+                  variant="outline"
                   disabled={!canDelete}
                   onClick={() => confirmDeleteStream(currentStream)}
                 >

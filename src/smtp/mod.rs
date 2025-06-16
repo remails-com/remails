@@ -6,6 +6,7 @@ mod proxy_protocol;
 pub mod server;
 mod session;
 
+#[derive(Clone)]
 pub struct SmtpConfig {
     pub listen_addr: core::net::SocketAddr,
     pub server_name: String,

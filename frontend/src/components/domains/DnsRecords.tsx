@@ -1,6 +1,6 @@
 import { Code, Title, TitleOrder } from "@mantine/core";
 import { Domain } from "../../types";
-import { DnsRecord } from "./DnsRecord";
+import { CopyableCode } from "../CopyableCode";
 
 export function DnsRecords({
   domain,
@@ -19,17 +19,17 @@ export function DnsRecords({
         1. DKIM Public Key
       </Title>
       Set a TXT record for <Code>remails._domainkey.{domain?.domain}</Code> to:
-      <DnsRecord>{dkim_entry}</DnsRecord>
+      <CopyableCode mt="xs">{dkim_entry}</CopyableCode>
       <Title order={title_order} mt="md">
         2. Remails SPF
       </Title>
       Set a TXT record for <Code>{domain?.domain}</Code> to:
-      <DnsRecord>v=spf1 include:remails.net -all</DnsRecord>
+      <CopyableCode mt="xs">v=spf1 include:remails.net -all</CopyableCode>
       <Title order={title_order} mt="md">
         3. DMARC Configuration
       </Title>
       Set a TXT record for <Code>_dmarc.{domain?.domain}</Code> to:
-      <DnsRecord>v=DMARC1; p=reject</DnsRecord>
+      <CopyableCode mt="xs">v=DMARC1; p=reject</CopyableCode>
     </>
   );
 }

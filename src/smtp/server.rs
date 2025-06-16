@@ -3,13 +3,13 @@ use crate::{
     smtp::{
         connection::{self, ConnectionError},
         proxy_protocol,
-        proxy_protocol::handle_proxy_protocol,
+        proxy_protocol::{handle_proxy_protocol, Error},
         SmtpConfig,
     },
     Environment,
 };
 use rand::random_range;
-use std::{fs::File, io, sync::Arc, time::Duration};
+use std::{fs::File, io, io::ErrorKind, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
@@ -26,6 +26,7 @@ use tokio_rustls::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
+use crate::smtp::proxy_protocol::ConnectionInfo;
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -141,7 +142,17 @@ impl SmtpServer {
 
                         let mut connection_info = None;
                         if !matches!(environment, Environment::Development) {
-                            (stream, connection_info) = handle_proxy_protocol(stream).await?;
+                            (stream, connection_info) = match handle_proxy_protocol(stream).await {
+                                Ok((stream, connection_info)) => {(stream, connection_info)}
+                                Err(err) => {
+                                    if matches!(err, Error::Io(_)) {
+                                        trace!("failed to read the proxy protocol: {err}")
+                                    } else {
+                                        error!("failed to read the proxy protocol: {err}")
+                                    }
+                                    continue;
+                                }
+                            }
                         }
 
                         if let Some(connection_info) = connection_info{

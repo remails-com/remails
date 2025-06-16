@@ -37,6 +37,11 @@ spec:
               port: smtp
             initialDelaySeconds: 15
             periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 15
+            periodSeconds: 100
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
