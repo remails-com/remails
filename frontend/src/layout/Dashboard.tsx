@@ -1,4 +1,4 @@
-import { AppShell, Box, Burger, Button, Code, Flex, Group, Menu, Text } from "@mantine/core";
+import { AppShell, Box, Burger, Button, Flex, Group, Menu, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import ColorTheme from "./ColorTheme";
 import { IconChevronDown, IconLogout, IconUser } from "@tabler/icons-react";
@@ -9,6 +9,7 @@ import { useRemails } from "../hooks/useRemails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { RemailsLogo } from "../components/RemailsLogo.tsx";
+import { VersionInfo } from "./VersionInfo.tsx";
 
 interface DashboardProps {
   children: ReactNode;
@@ -19,7 +20,7 @@ export function Dashboard({ children }: DashboardProps) {
   const [_, setUserMenuOpened] = useState(false);
   const { user } = useUser();
   const {
-    state: { organizations, config },
+    state: { organizations },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
@@ -99,9 +100,7 @@ export function Dashboard({ children }: DashboardProps) {
         </Box>
 
         <Group mt="xl" justify="right">
-          <Text c="dimmed" size="sm">
-            {config?.environment} (<Code px={0}>{config?.version}</Code>)
-          </Text>
+          <VersionInfo />
         </Group>
       </AppShell.Main>
     </AppShell>
