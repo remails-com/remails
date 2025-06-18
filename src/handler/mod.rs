@@ -10,7 +10,7 @@ use base64ct::{Base64, Base64UrlUnpadded, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use mail_parser::{HeaderName, MessageParser};
-use mail_send::{smtp, SmtpClientBuilder};
+use mail_send::{SmtpClientBuilder, smtp};
 use sqlx::PgPool;
 use std::{borrow::Cow::Borrowed, sync::Arc};
 use thiserror::Error;
@@ -72,6 +72,7 @@ impl HandlerConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
@@ -206,7 +207,7 @@ impl Handler {
             .quota_status(message.organization_id)
             .await?
         {
-            return Ok(Err((MessageStatus::Rejected, "Quota exceeded".to_string())));
+            return Ok(Err((MessageStatus::Held, "Quota exceeded".to_string())));
         }
 
         // check dkim key
@@ -303,7 +304,22 @@ impl Handler {
 
         let result = self.check_and_sign_message(message, &parsed_msg).await?;
         message.status = match result {
-            Ok(_) => MessageStatus::Accepted,
+            Ok(_) => match &message.status {
+                // For messages being sent for the first time, update message status
+                MessageStatus::Processing | MessageStatus::Held => MessageStatus::Accepted,
+                // For messages that have been processes before, keep the status
+                status @ (MessageStatus::Reattempt
+                | MessageStatus::Failed
+                | MessageStatus::Accepted) => status.clone(),
+                status @ (MessageStatus::Rejected | MessageStatus::Delivered) => {
+                    error!(
+                        message_id = message.id().to_string(),
+                        message_status = status.to_string(),
+                        "message should not be processed"
+                    );
+                    status.clone()
+                }
+            },
             Err((ref status, _)) => status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
@@ -512,30 +528,34 @@ impl Handler {
                         return;
                     }
                     queue_result = queue_receiver.recv() => {
-                        let Some(message) = queue_result else {
-                            error!("queue error, shutting down");
-                            self.shutdown.cancel();
-                            return
-                        };
+                        let self_clone = self.clone();
+                        // FIXME This might create overly many tasks
+                        tokio::spawn(async move {
+                            let Some(message) = queue_result else {
+                                error!("queue error, shutting down");
+                                self_clone.shutdown.cancel();
+                                return
+                            };
 
-                        let mut message = match self.create_message(message).await {
-                            Ok(message) => message,
-                            Err(e) => {
-                                error!("failed to create message: {e:?}");
-                                continue
-                            },
-                        };
+                            let mut message = match self_clone.create_message(message).await {
+                                Ok(message) => message,
+                                Err(e) => {
+                                    error!("failed to create message: {e:?}");
+                                    return
+                                },
+                            };
 
-                        let message_id = message.id().to_string();
-                        if let Err(e) = self.handle_message(&mut message).await {
-                            error!(message_id, "failed to handle message: {e:?}");
-                            continue
-                        };
+                            let message_id = message.id().to_string();
+                            if let Err(e) = self_clone.handle_message(&mut message).await {
+                                error!(message_id, "failed to handle message: {e:?}");
+                                return
+                            };
 
-                        message.attempts = 0; // reset attempts before sending
-                        if let Err(e) = self.send_message(message).await {
-                            error!(message_id, "failed to send message: {e:?}");
-                        }
+                            message.attempts = 0; // reset attempts before sending
+                            if let Err(e) = self_clone.send_message(message).await {
+                                error!(message_id, "failed to send message: {e:?}");
+                            }
+                        });
                     }
                 }
             }

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT remaining_message_quota, quota_reset\n            FROM organizations\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "remaining_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "quota_reset",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "d847ba646feb09e16de2eca50ae48642a78a8980759cdff773cccd2822191431"
+}

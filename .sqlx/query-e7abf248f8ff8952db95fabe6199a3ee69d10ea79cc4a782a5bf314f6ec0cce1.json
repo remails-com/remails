@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO organizations (id, name)\n            VALUES (gen_random_uuid(), $1)\n            RETURNING *\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)\n            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -15,11 +15,21 @@
       },
       {
         "ordinal": 2,
+        "name": "remaining_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "quota_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -33,8 +43,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "5dfc6a8fc5e250dd3e0e584f456e3f76cfa8c546b24bf6dd6b513b6401c9fe9d"
+  "hash": "e7abf248f8ff8952db95fabe6199a3ee69d10ea79cc4a782a5bf314f6ec0cce1"
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE organizations o\n                        SET remaining_message_quota = remaining_message_quota - 1\n                        WHERE o.id = $1\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5b39ae7ecd3542976ec480b802a9934c6a4786fe0c982ca040ac5c5875aec0b0"
+}

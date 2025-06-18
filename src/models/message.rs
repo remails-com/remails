@@ -8,6 +8,7 @@ use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, mem, str::FromStr};
+use tracing::trace;
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -15,7 +16,7 @@ const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,
@@ -394,15 +395,18 @@ impl MessageRepository {
         let delivery_status_serialized =
             serde_json::to_value(&message.delivery_status).map_err(Error::Serialization)?;
 
-        sqlx::query!(
+        let old_status: MessageStatus = sqlx::query_scalar!(
             r#"
-            UPDATE messages
+            UPDATE messages m
             SET status = $2,
                 reason = $3,
                 delivery_status = $4,
                 retry_after = $5,
                 attempts = $6
-            WHERE id = $1
+            FROM   messages m_old
+            WHERE  m.id = m_old.id
+            AND    m.id = $1
+            RETURNING m_old.status::message_status AS "status!: MessageStatus"
             "#,
             *message.id,
             message.status as _,
@@ -411,8 +415,41 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
+
+        // For the relevant status chances, deduce one from the organization quota
+        match old_status {
+            MessageStatus::Processing
+            | MessageStatus::Held
+            | MessageStatus::Accepted
+            | MessageStatus::Rejected => match message.status {
+                MessageStatus::Processing
+                | MessageStatus::Held
+                | MessageStatus::Accepted
+                | MessageStatus::Rejected => {}
+                MessageStatus::Delivered | MessageStatus::Reattempt | MessageStatus::Failed => {
+                    trace!(
+                        organization_id = message.organization_id.as_uuid().to_string(),
+                        message_id = (*message.id).to_string(),
+                        old_status = old_status.to_string(),
+                        new_status = message.status.to_string(),
+                        "deducing 1 from organization quota"
+                    );
+                    sqlx::query!(
+                        r#"
+                        UPDATE organizations o
+                        SET remaining_message_quota = remaining_message_quota - 1
+                        WHERE o.id = $1
+                        "#,
+                        *message.organization_id
+                    )
+                    .execute(&self.pool)
+                    .await?;
+                }
+            },
+            MessageStatus::Delivered | MessageStatus::Reattempt | MessageStatus::Failed => {}
+        }
 
         Ok(())
     }

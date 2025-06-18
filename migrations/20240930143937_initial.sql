@@ -11,10 +11,12 @@ $$ language 'plpgsql';
 
 CREATE TABLE organizations
 (
-    id         uuid PRIMARY KEY,
-    name       varchar                  NOT NULL,
-    created_at timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at timestamp with time zone NOT NULL DEFAULT now()
+    id                      uuid PRIMARY KEY,
+    name                    varchar                  NOT NULL,
+    remaining_message_quota bigint                   NOT NULL,
+    quota_reset             timestamp with time zone NOT NULL,
+    created_at              timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at              timestamp with time zone NOT NULL DEFAULT now()
 );
 CREATE TRIGGER update_organizations_updated_at
     BEFORE UPDATE
@@ -158,7 +160,7 @@ CREATE TYPE message_status AS ENUM (
     'delivered',
     'reattempt',
     'failed'
-);
+    );
 
 CREATE TABLE messages
 (

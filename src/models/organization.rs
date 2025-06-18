@@ -33,6 +33,8 @@ impl OrganizationId {
 pub struct Organization {
     id: OrganizationId,
     pub name: String,
+    remaining_message_quota: i64,
+    quota_reset: DateTime<Utc>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -77,28 +79,49 @@ impl OrganizationRepository {
         Self { pool }
     }
 
-    pub async fn quota_status(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
-        let messages_sent = sqlx::query_scalar!(
+    async fn reset_quota(&self, id: OrganizationId) -> Result<(), Error> {
+        sqlx::query!(
             r#"
-            SELECT count(*) AS "count!"
-            FROM messages
-            WHERE organization_id = $1
-              AND created_at > date_trunc('month', current_date)
-              AND status = 'delivered' OR status = 'processing'
+            UPDATE organizations
+            SET quota_reset = quota_reset + '10 min', --TODO align the start/end date with the subscription period
+                remaining_message_quota = 3 -- TODO make quota subscription dependent
+            WHERE id = $1
+            "#,
+            *id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn quota_status(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
+        struct Quota {
+            remaining_message_quota: i64,
+            quota_reset: DateTime<Utc>,
+        }
+
+        let quota = sqlx::query_as!(
+            Quota,
+            r#"
+            SELECT remaining_message_quota, quota_reset
+            FROM organizations
+            WHERE id = $1
             "#,
             *id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        // TODO make quota dependent on subscription
-        let quota = 2_000_000;
-        let remaining = quota - messages_sent;
+        if quota.quota_reset < Utc::now() {
+            self.reset_quota(id).await?;
+            // Redo the check with the refilled quota
+            return Box::pin(self.quota_status(id)).await;
+        }
 
-        if remaining < 0 {
+        if quota.remaining_message_quota <= 0 {
             Ok(QuotaStatus::Exceeded)
         } else {
-            Ok(QuotaStatus::Below(remaining as u64))
+            Ok(QuotaStatus::Below(quota.remaining_message_quota as u64))
         }
     }
 
@@ -106,8 +129,8 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name)
-            VALUES (gen_random_uuid(), $1)
+            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)
+            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')
             RETURNING *
             "#,
             organization.name,
@@ -234,157 +257,5 @@ mod test {
     ))]
     async fn quota(db: PgPool) {
         let repo = OrganizationRepository::new(db.clone());
-
-        let status = repo
-            .quota_status("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-            .await
-            .unwrap();
-
-        assert!(matches!(status, QuotaStatus::Below(_)));
-
-        sqlx::query!(
-            r#"
-            INSERT INTO messages (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, reason, from_email, recipients, raw_data, message_data, retry_after) 
-            SELECT
-                gen_random_uuid(),
-                '44729d9f-a7dc-4226-b412-36a7537f5176'::uuid,
-                'ed28baa5-57f7-413f-8c77-7797ba6a8780'::uuid,
-                '3ba14adf-4de1-4fb6-8c20-50cc2ded5462'::uuid,
-                '85785f4c-9167-4393-bbf2-3c3e21067e4a'::uuid,
-                '9442cbbf-9897-4af7-9766-4ac9c1bf49cf'::uuid,
-                'delivered',
-                null,
-                'test@remail.com',
-                '{"asdf@example.com"}',
-                ''::bytea,
-                '{}'::jsonb,
-                null
-            FROM generate_series(1, 1_000_000);
-            "#
-        ).execute(&db).await.unwrap();
-
-        let start_time = Utc::now().time();
-        let status = repo
-            .quota_status("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-            .await
-            .unwrap();
-
-        let end_time = Utc::now().time();
-        let diff = end_time - start_time;
-        println!("milliseconds to count 1 million matching messages {}", diff.num_milliseconds());
-
-        assert!(matches!(status, QuotaStatus::Below(_)));
-
-        sqlx::query!(
-            r#"
-            INSERT INTO messages (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, reason, from_email, recipients, raw_data, message_data, retry_after) 
-            SELECT
-                gen_random_uuid(),
-                '44729d9f-a7dc-4226-b412-36a7537f5176'::uuid,
-                'ed28baa5-57f7-413f-8c77-7797ba6a8780'::uuid,
-                '3ba14adf-4de1-4fb6-8c20-50cc2ded5462'::uuid,
-                '85785f4c-9167-4393-bbf2-3c3e21067e4a'::uuid,
-                '9442cbbf-9897-4af7-9766-4ac9c1bf49cf'::uuid,
-                'delivered',
-                null,
-                'test@remail.com',
-                '{"asdf@example.com"}',
-                ''::bytea,
-                '{}'::jsonb,
-                null
-            FROM generate_series(1, 1_000_000);
-            "#
-        ).execute(&db).await.unwrap();
-
-        let start_time = Utc::now().time();
-        let status = repo
-            .quota_status("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-            .await
-            .unwrap();
-
-        let end_time = Utc::now().time();
-        let diff = end_time - start_time;
-        println!("milliseconds to count 2 million matching messages {}", diff.num_milliseconds());
-
-        assert!(matches!(status, QuotaStatus::Below(0)));
-
-        sqlx::query!(
-            r#"
-            INSERT INTO messages (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, reason, from_email, recipients, raw_data, message_data, retry_after) 
-            VALUES (
-                gen_random_uuid(),
-                '44729d9f-a7dc-4226-b412-36a7537f5176'::uuid,
-                'ed28baa5-57f7-413f-8c77-7797ba6a8780'::uuid,
-                '3ba14adf-4de1-4fb6-8c20-50cc2ded5462'::uuid,
-                '85785f4c-9167-4393-bbf2-3c3e21067e4a'::uuid,
-                '9442cbbf-9897-4af7-9766-4ac9c1bf49cf'::uuid,
-                'delivered',
-                null,
-                'test@remail.com',
-                '{"asdf@example.com"}',
-                ''::bytea,
-                '{}'::jsonb,
-                null
-                )
-            "#
-        ).execute(&db).await.unwrap();
-
-        let status = repo
-            .quota_status("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-            .await
-            .unwrap();
-
-        assert!(matches!(status, QuotaStatus::Exceeded));
-
-        sqlx::query!(
-            r#"
-            INSERT INTO messages (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, reason, from_email, recipients, raw_data, message_data, retry_after) 
-            SELECT
-                gen_random_uuid(),
-                '5d55aec5-136a-407c-952f-5348d4398204'::uuid,
-                'ed28baa5-57f7-413f-8c77-7797ba6a8780'::uuid,
-                '3ba14adf-4de1-4fb6-8c20-50cc2ded5462'::uuid,
-                '85785f4c-9167-4393-bbf2-3c3e21067e4a'::uuid,
-                '9442cbbf-9897-4af7-9766-4ac9c1bf49cf'::uuid,
-                'delivered',
-                null,
-                'test@remail.com',
-                '{"asdf@example.com"}',
-                ''::bytea,
-                '{}'::jsonb,
-                null
-            FROM generate_series(1, 3_000_000);
-            "#
-        ).execute(&db).await.unwrap();
-        sqlx::query!(
-            r#"
-            INSERT INTO messages (id, organization_id, domain_id, project_id, stream_id, smtp_credential_id, status, reason, from_email, recipients, raw_data, message_data, retry_after) 
-            SELECT
-                gen_random_uuid(),
-                '44729d9f-a7dc-4226-b412-36a7537f5176'::uuid,
-                'ed28baa5-57f7-413f-8c77-7797ba6a8780'::uuid,
-                '3ba14adf-4de1-4fb6-8c20-50cc2ded5462'::uuid,
-                '85785f4c-9167-4393-bbf2-3c3e21067e4a'::uuid,
-                '9442cbbf-9897-4af7-9766-4ac9c1bf49cf'::uuid,
-                'held',
-                null,
-                'test@remail.com',
-                '{"asdf@example.com"}',
-                ''::bytea,
-                '{}'::jsonb,
-                null
-            FROM generate_series(1, 1_000_000);
-            "#
-        ).execute(&db).await.unwrap();
-
-        let start_time = Utc::now().time();
-        let status = repo
-            .quota_status("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-            .await
-            .unwrap();
-
-        let end_time = Utc::now().time();
-        let diff = end_time - start_time;
-        println!("milliseconds to count 6 million messages (2 million matching) {}", diff.num_milliseconds());
     }
 }
