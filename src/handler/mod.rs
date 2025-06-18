@@ -3,13 +3,14 @@ use crate::{
     handler::dns::DnsResolver,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
+        OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use mail_parser::{HeaderName, MessageParser};
-use mail_send::{SmtpClientBuilder, smtp};
+use mail_send::{smtp, SmtpClientBuilder};
 use sqlx::PgPool;
 use std::{borrow::Cow::Borrowed, sync::Arc};
 use thiserror::Error;
@@ -22,8 +23,8 @@ pub mod dns;
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
-    #[error("failed to persist message: {0}")]
-    MessageRepositoryError(crate::models::Error),
+    #[error("DB interaction failed: {0}")]
+    RepositoryError(#[from] crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
     #[error("message is being {0:?}: {1}")]
@@ -74,6 +75,7 @@ impl HandlerConfig {
 pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
+    organization_repository: OrganizationRepository,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -86,7 +88,8 @@ impl Handler {
         }
         Self {
             message_repository: MessageRepository::new(pool.clone()),
-            domain_repository: DomainRepository::new(pool),
+            domain_repository: DomainRepository::new(pool.clone()),
+            organization_repository: OrganizationRepository::new(pool),
             shutdown,
             config,
         }
@@ -138,7 +141,7 @@ impl Handler {
             .domain_repository
             .get_domain_id_associated_with_credential(sender_domain, smtp_credential_id)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?
+            .map_err(HandlerError::RepositoryError)?
         else {
             return Ok(Err((
                 MessageStatus::Held,
@@ -150,7 +153,7 @@ impl Handler {
             .domain_repository
             .get_domain_by_id(message.organization_id, domain_id)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .map_err(HandlerError::RepositoryError)?;
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {
@@ -198,6 +201,14 @@ impl Handler {
             }
         };
 
+        if let QuotaStatus::Exceeded = self
+            .organization_repository
+            .quota_status(message.organization_id)
+            .await?
+        {
+            return Ok(Err((MessageStatus::Rejected, "Quota exceeded".to_string())));
+        }
+
         // check dkim key
         let dkim_key = match PrivateKey::new(&domain, "remails") {
             Ok(key) => key,
@@ -243,7 +254,7 @@ impl Handler {
             .create(&message)
             .await
             .inspect(|m| trace!("stored message {}", m.id()))
-            .map_err(HandlerError::MessageRepositoryError)
+            .map_err(HandlerError::RepositoryError)
     }
 
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
@@ -302,7 +313,7 @@ impl Handler {
         self.message_repository
             .update_message_data_and_status(message)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .map_err(HandlerError::RepositoryError)?;
 
         let dkim_header = match result {
             Ok(dkim_header) => dkim_header,
@@ -487,7 +498,7 @@ impl Handler {
         self.message_repository
             .update_message_status(&mut message)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .map_err(HandlerError::RepositoryError)?;
 
         Ok(())
     }
@@ -536,7 +547,7 @@ impl Handler {
             .message_repository
             .find_messages_ready_for_retry(self.config.max_retries)
             .await
-            .map_err(HandlerError::MessageRepositoryError)?;
+            .map_err(HandlerError::RepositoryError)?;
 
         if messages.is_empty() {
             debug!("There are no messages to retry right now");
