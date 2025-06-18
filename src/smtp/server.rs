@@ -1,8 +1,11 @@
 use crate::{
+    Environment,
     models::{NewMessage, SmtpCredentialRepository},
     smtp::{
         SmtpConfig,
         connection::{self, ConnectionError},
+        proxy_protocol,
+        proxy_protocol::{Error, handle_proxy_protocol},
     },
 };
 use rand::random_range;
@@ -36,6 +39,8 @@ pub enum SmtpServerError {
     Listen(io::Error),
     #[error("failed to configure TLS: {0}")]
     Tls(rustls::Error),
+    #[error("{0}")]
+    ProxyProtocol(#[from] proxy_protocol::Error),
 }
 
 pub struct SmtpServer {
@@ -92,6 +97,7 @@ impl SmtpServer {
     }
 
     pub async fn serve(self) -> Result<(), SmtpServerError> {
+        let environment = self.config.environment;
         let listener = TcpListener::bind(&self.config.listen_addr)
             .await
             .map_err(SmtpServerError::Listen)?;
@@ -131,15 +137,38 @@ impl SmtpServer {
                     return Ok(());
                 }
                 result = listener.accept() => match result {
-                    Ok((stream, peer_addr)) => {
-                        // TODO consider lifting the log level to info again later
-                        //  For now, it's on trace level,
-                        //  as it constantly logs the health checks from the LoadBalancer
-                        //  and thus spams the logs.
-                        //  Additionally, due to the fact the the LoadBalancer proxies the TCP connection,
-                        //  we only get to see the local IP address anyway.
-                        //  #16 should make sure, we log the real sender IP
-                        trace!("connection from {}", peer_addr);
+                    Ok((mut stream, peer_addr)) => {
+
+                        let mut connection_info = None;
+                        if !matches!(environment, Environment::Development) {
+                            (stream, connection_info) = match handle_proxy_protocol(stream).await {
+                                Ok((stream, connection_info)) => {(stream, connection_info)}
+                                Err(err) => {
+                                    if matches!(err, Error::Io(_)) {
+                                        trace!("failed to read the proxy protocol: {err}")
+                                    } else {
+                                        error!("failed to read the proxy protocol: {err}")
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if let Some(connection_info) = connection_info{
+                            info!(
+                                source_ip=connection_info.source_ip.to_string(),
+                                source_port=connection_info.source_port,
+                                destination_ip=connection_info.destination_ip.to_string(),
+                                destination_port=connection_info.destination_port,
+                                "new TCP connection"
+                            )
+                        } else {
+                            trace!(
+                                source_ip=peer_addr.ip().to_string(),
+                                source_port=peer_addr.port(),
+                                "new TCP connection"
+                            );
+                        }
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
                         let queue = queue.clone();
@@ -167,7 +196,7 @@ impl SmtpServer {
                             if let Err(err) = task().await {
                                 let error_string = err.to_string();
                                 if let ConnectionError::Accept(e) = err {
-                                    if e.kind() == io::ErrorKind::UnexpectedEof {
+                                    if e.kind() == io::ErrorKind::UnexpectedEof || e.kind() == io::ErrorKind::ConnectionReset {
                                         trace!("failed to handle connection: {error_string}");
                                         return
                                     }
