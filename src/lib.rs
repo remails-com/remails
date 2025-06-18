@@ -26,6 +26,7 @@ mod test;
 
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
+mod moneybird;
 
 #[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
 pub enum Environment {
