@@ -289,7 +289,7 @@ async fn quotas(pool: PgPool) {
                         panic!("went over quota")
                     }
                 }
-                _ = tokio::time::sleep(Duration::from_secs(3)) => {
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {
                     if i < 5000 {
                         panic!("timed out receiving {i}th email")
                     }

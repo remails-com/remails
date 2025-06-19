@@ -1871,7 +1871,6 @@ checksum = "187a2b93c4c8c32f552ee06c2d99915e575de2fc7e04b07891c9edfee5b8edd6"
 dependencies = [
  "encoding_rs",
  "hashify",
- "serde",
 ]
 
 [[package]]
@@ -1882,6 +1881,7 @@ checksum = "a3e3a04056838aad1ad3f66ef4f7b72a3f33d8c3a8f2664b9363de5383bccaf1"
 dependencies = [
  "encoding_rs",
  "hashify",
+ "serde",
 ]
 
 [[package]]
@@ -2688,7 +2688,7 @@ dependencies = [
  "http",
  "humansize",
  "mail-auth",
- "mail-parser 0.10.2",
+ "mail-parser 0.11.0",
  "mail-send",
  "mailcrab",
  "memory-serve",

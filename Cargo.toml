@@ -30,7 +30,7 @@ axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["cookie-private", "typed-header"] }
 chrono = { version = "0.4.41", features = ["serde"] }
 dotenvy = "0.15.7"
-mail-parser = { version = "0.10.2", features = ["serde_support"] }
+mail-parser = { version = "0.11.0", features = ["serde"] }
 mail-send = { version = "0.5.1", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
 password-auth = "1.0.0"
 serde = { version = "1.0.219", features = ["derive"] }
