@@ -53,7 +53,7 @@ impl SmtpResponse {
 
     const OK: ConstResponse = (250, "2.0.0 Ok");
     const SYNTAX_ERROR: ConstResponse = (501, "5.5.2 Syntax error");
-    const AUTH_SUCCCESS: ConstResponse = (235, "2.7.0 Authentication succeeded.");
+    const AUTH_SUCCESS: ConstResponse = (235, "2.7.0 Authentication succeeded.");
     const START_DATA: ConstResponse = (354, "3.5.4 Start mail input; end with <CRLF>.<CRLF>");
     const BYE: ConstResponse = (221, "2.0.0 Goodbye");
     const MESSAGE_ACCEPTED: ConstResponse = (250, "2.6.0 Message queued for delivery");
@@ -73,6 +73,7 @@ impl SmtpResponse {
     const MUST_USE_ESMTP: ConstResponse = (502, "5.5.1 Must use EHLO");
     const NO_VRFY: ConstResponse = (502, "5.5.1 VRFY command is disabled");
     const INGEST_AUTH: ConstResponse = (334, "Tell me your secret.");
+    const RATE_LIMIT: ConstResponse = (450, "4.3.2 Sent too many messages, try again later");
 }
 
 pub enum SessionReply {
@@ -104,11 +105,11 @@ impl SmtpSession {
     pub fn new(
         peer_addr: SocketAddr,
         queue: Sender<NewMessage>,
-        user_repository: SmtpCredentialRepository,
+        smtp_credentials: SmtpCredentialRepository,
     ) -> Self {
         Self {
             queue,
-            smtp_credentials: user_repository,
+            smtp_credentials,
             peer_addr,
             peer_name: None,
             current_message: None,
@@ -180,22 +181,25 @@ impl SmtpSession {
                     );
                 }
 
-                if mechanism == AUTH_PLAIN {
-                    debug!("Received AUTH PLAIN");
-
-                    if initial_response.is_empty() {
-                        return SessionReply::IngestAuth(SmtpResponse::INGEST_AUTH.into());
-                    }
-
-                    let response = self
-                        .handle_plain_auth(&mut initial_response.into_bytes())
-                        .await;
-
-                    SessionReply::ReplyAndContinue(response)
-                } else {
-                    // other authentication methods
+                if mechanism != AUTH_PLAIN {
                     debug!("Received unsupported AUTH request");
-                    SessionReply::ReplyAndContinue(SmtpResponse::AUTH_ERROR.into())
+                    return SessionReply::ReplyAndContinue(SmtpResponse::AUTH_ERROR.into());
+                }
+
+                debug!("Received AUTH PLAIN");
+
+                if initial_response.is_empty() {
+                    return SessionReply::IngestAuth(SmtpResponse::INGEST_AUTH.into());
+                }
+
+                let (response, stop) = self
+                    .handle_plain_auth(&mut initial_response.into_bytes())
+                    .await;
+
+                if stop {
+                    SessionReply::ReplyAndStop(response)
+                } else {
+                    SessionReply::ReplyAndContinue(response)
                 }
             }
             Request::Quit => {
@@ -320,9 +324,10 @@ impl SmtpSession {
         Ok(AttemptedAuth { username, password })
     }
 
-    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> SmtpResponse {
+    /// Returns a response and whether or not the session should stop
+    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> (SmtpResponse, bool) {
         let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
-            return SmtpResponse::SYNTAX_ERROR.into();
+            return (SmtpResponse::SYNTAX_ERROR.into(), false);
         };
 
         trace!(
@@ -330,13 +335,24 @@ impl SmtpSession {
             password.len()
         );
 
-        match self.smtp_credentials.find_by_username(username).await {
-            Ok(Some(credential)) if credential.verify_password(password) => {
-                self.authenticated_credential = Some(credential);
-                SmtpResponse::AUTH_SUCCCESS.into()
-            }
-            _ => SmtpResponse::AUTH_ERROR.into(),
+        let Ok(Some((credential, ratelimit))) = self
+            .smtp_credentials
+            .find_by_username_rate_limited(username)
+            .await
+        else {
+            return (SmtpResponse::AUTH_ERROR.into(), false);
+        };
+
+        if ratelimit <= 0 {
+            return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
         }
+
+        if !credential.verify_password(password) {
+            return (SmtpResponse::AUTH_ERROR.into(), false);
+        }
+
+        self.authenticated_credential = Some(credential);
+        (SmtpResponse::AUTH_SUCCESS.into(), false)
     }
 
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {

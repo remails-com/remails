@@ -143,18 +143,75 @@ impl SmtpCredentialRepository {
         })
     }
 
-    pub async fn find_by_username(&self, username: &str) -> Result<Option<SmtpCredential>, Error> {
+    pub async fn find_by_username_rate_limited(
+        &self,
+        username: &str,
+    ) -> Result<Option<(SmtpCredential, i64)>, Error> {
+        struct SmtpCredentialAndRateLimit {
+            id: SmtpCredentialId,
+            description: String,
+            username: String,
+            password_hash: String,
+            stream_id: StreamId,
+            created_at: DateTime<Utc>,
+            updated_at: DateTime<Utc>,
+            remaining_rate_limit: i64,
+        }
+
+        let messages_per_minute = 20; // TODO: make this configurable
+
         let credential = sqlx::query_as!(
-            SmtpCredential,
+            SmtpCredentialAndRateLimit,
             r#"
-            SELECT * FROM smtp_credentials WHERE username = $1
+            UPDATE organizations
+            SET
+                remaining_rate_limit = CASE
+                    WHEN rate_limit_reset < now()
+                    THEN $2
+                    ELSE CASE
+                        WHEN remaining_rate_limit - 1 > 0
+                        THEN remaining_rate_limit - 1
+                        ELSE 0
+                    END
+                END,
+                rate_limit_reset = CASE
+                    WHEN rate_limit_reset < now()
+                    THEN now() + '1 min'
+                    ELSE rate_limit_reset
+                END
+            FROM (
+                SELECT c.*, o.id AS org_id
+                FROM smtp_credentials c
+                JOIN streams s ON s.id = c.stream_id
+                JOIN projects p ON p.id = s.project_id
+                JOIN organizations o ON o.id = p.organization_id
+                WHERE username = $1
+            ) AS cred_and_org_id
+            WHERE organizations.id = cred_and_org_id.org_id
+            RETURNING remaining_rate_limit, 
+                cred_and_org_id.id, cred_and_org_id.description, cred_and_org_id.username, cred_and_org_id.password_hash,
+                cred_and_org_id.stream_id, cred_and_org_id.created_at, cred_and_org_id.updated_at
             "#,
-            username
+            username,
+            messages_per_minute
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(credential)
+        Ok(credential.map(|c| {
+            (
+                SmtpCredential {
+                    id: c.id,
+                    description: c.description,
+                    username: c.username,
+                    password_hash: c.password_hash,
+                    stream_id: c.stream_id,
+                    created_at: c.created_at,
+                    updated_at: c.updated_at,
+                },
+                c.remaining_rate_limit,
+            )
+        }))
     }
 
     pub async fn list(
@@ -289,8 +346,8 @@ mod test {
                 .ends_with(credential_request.username.as_str())
         );
 
-        let get_credential = credential_repo
-            .find_by_username(&credential.username)
+        let (get_credential, _ratelimit) = credential_repo
+            .find_by_username_rate_limited(&credential.username)
             .await
             .unwrap()
             .unwrap();
@@ -316,7 +373,10 @@ mod test {
             .unwrap();
         assert_eq!(credential_id, rm_cred);
 
-        let not_found = credential_repo.find_by_username("marc").await.unwrap();
+        let not_found = credential_repo
+            .find_by_username_rate_limited("marc")
+            .await
+            .unwrap();
         assert!(not_found.is_none())
     }
 
@@ -338,7 +398,10 @@ mod test {
             .unwrap_err();
         assert!(matches!(not_found, Error::NotFound(_)));
 
-        let still_there = credential_repo.find_by_username("marc").await.unwrap();
+        let still_there = credential_repo
+            .find_by_username_rate_limited("marc")
+            .await
+            .unwrap();
         assert!(still_there.is_some())
     }
 
@@ -368,7 +431,10 @@ mod test {
             .unwrap_err();
         assert!(matches!(not_found, Error::NotFound(_)));
 
-        let still_there = credential_repo.find_by_username("marc").await.unwrap();
+        let still_there = credential_repo
+            .find_by_username_rate_limited("marc")
+            .await
+            .unwrap();
         assert!(still_there.is_some())
     }
 
@@ -403,7 +469,10 @@ mod test {
         assert_eq!(credential_id, rm_cred);
 
         // Making sure the credential is actually gone
-        let not_found = credential_repo.find_by_username("marc").await.unwrap();
+        let not_found = credential_repo
+            .find_by_username_rate_limited("marc")
+            .await
+            .unwrap();
         assert!(not_found.is_none());
 
         // Making sure the message is still there

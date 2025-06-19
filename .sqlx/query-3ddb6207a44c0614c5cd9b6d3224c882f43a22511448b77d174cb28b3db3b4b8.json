@@ -25,11 +25,21 @@
       },
       {
         "ordinal": 4,
+        "name": "remaining_rate_limit",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "rate_limit_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -41,6 +51,8 @@
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,
