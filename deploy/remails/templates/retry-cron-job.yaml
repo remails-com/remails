@@ -27,6 +27,8 @@ spec:
               env:
                 - name: VERSION
                   value: {{ .Chart.AppVersion }}
+                - name: SMTP_EHLO_DOMAIN
+                  value: {{ .Values.smtp.ehlo_domain }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:

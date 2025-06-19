@@ -59,10 +59,11 @@ pub struct HandlerConfig {
 
 #[cfg(not(test))]
 impl HandlerConfig {
-    pub fn new(domain: impl Into<String>) -> Self {
+    pub fn new() -> Self {
         Self {
             allow_plain: false,
-            domain: domain.into(),
+            domain: std::env::var("SMTP_EHLO_DOMAIN")
+                .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
             retry_delay: Duration::minutes(5),
             max_retries: 5,
@@ -72,6 +73,13 @@ impl HandlerConfig {
     pub fn allow_plain_smtp(mut self, value: bool) -> Self {
         self.allow_plain = value;
         self
+    }
+}
+
+#[cfg(not(test))]
+impl Default for HandlerConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
