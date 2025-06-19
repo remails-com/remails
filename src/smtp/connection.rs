@@ -10,7 +10,7 @@ use tracing::{debug, info, trace};
 
 use crate::{
     models::{NewMessage, SmtpCredentialRepository},
-    smtp::session::{DataReply, SessionReply, SmtpSession},
+    smtp::session::{DataReply, SessionReply, SmtpResponse, SmtpSession},
 };
 
 #[derive(Debug, Error)]
@@ -32,7 +32,7 @@ const CODE_READY: u16 = 220;
 
 pub async fn handle(
     stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
-    server_name: &str,
+    server_name: String,
     peer_addr: SocketAddr,
     queue: Sender<NewMessage>,
     user_repository: SmtpCredentialRepository,
@@ -47,7 +47,7 @@ pub async fn handle(
 
     trace!("handling connection with {}", &session.peer());
 
-    write_reply(CODE_READY, server_name, &mut sink).await?;
+    write_reply((CODE_READY, server_name).into(), &mut sink).await?;
 
     'session: loop {
         read_line(&mut reader, &mut buffer).await?;
@@ -57,39 +57,39 @@ pub async fn handle(
         trace!("received request: {:?}", request);
 
         match session.handle(request).await {
-            SessionReply::ReplyAndContinue(code, message) => {
-                write_reply(code, &message, &mut sink).await?;
+            SessionReply::ReplyAndContinue(response) => {
+                write_reply(response, &mut sink).await?;
                 continue;
             }
-            SessionReply::ReplyAndStop(code, message) => {
-                write_reply(code, &message, &mut sink).await?;
+            SessionReply::ReplyAndStop(response) => {
+                write_reply(response, &mut sink).await?;
                 break;
             }
             SessionReply::RawReply(buf) => {
                 sink.write(&buf).await.map_err(ConnectionError::Write)?;
                 continue;
             }
-            SessionReply::IngestData(code, message) => {
-                write_reply(code, &message, &mut sink).await?;
+            SessionReply::IngestData(response) => {
+                write_reply(response, &mut sink).await?;
 
                 'data: loop {
                     read_buf(&mut reader, &mut buffer).await?;
 
                     match session.handle_data(&buffer).await {
                         DataReply::ContinueIngest => continue 'data,
-                        DataReply::ReplyAndContinue(code, message) => {
-                            write_reply(code, &message, &mut sink).await?;
+                        DataReply::ReplyAndContinue(response) => {
+                            write_reply(response, &mut sink).await?;
                             continue 'session;
                         }
                     }
                 }
             }
-            SessionReply::IngestAuth(code, message) => {
-                write_reply(code, &message, &mut sink).await?;
+            SessionReply::IngestAuth(response) => {
+                write_reply(response, &mut sink).await?;
                 read_line(&mut reader, &mut buffer).await?;
 
-                let (code, message) = session.handle_plain_auth(&mut buffer).await;
-                write_reply(code, &message, &mut sink).await?;
+                let response = session.handle_plain_auth(&mut buffer).await;
+                write_reply(response, &mut sink).await?;
             }
         }
     }
@@ -144,17 +144,16 @@ async fn read_line(
 }
 
 async fn write_reply(
-    code: u16,
-    message: &str,
+    response: SmtpResponse,
     mut sink: impl AsyncWriteExt + Unpin,
 ) -> Result<(), ConnectionError> {
     let n = sink
-        .write(format!("{code} {message}\r\n").as_bytes())
+        .write(format!("{}\r\n", response).as_bytes())
         .await
         .map_err(ConnectionError::Write)?;
 
     if n < 256 {
-        debug!("sent: {} {}", code, message);
+        debug!("sent: {}", response);
     } else {
         trace!("sent {} bytes", n);
     }

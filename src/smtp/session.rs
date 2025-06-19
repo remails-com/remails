@@ -4,7 +4,7 @@ use smtp_proto::{
     AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8, EhloResponse,
     Request,
 };
-use std::net::SocketAddr;
+use std::{fmt::Display, net::SocketAddr};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
@@ -20,16 +20,71 @@ pub struct SmtpSession {
     current_message: Option<NewMessage>,
 }
 
+pub struct SmtpResponse(u16, String);
+
+impl Display for SmtpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.0, self.1)
+    }
+}
+
+type ConstResponse = (u16, &'static str);
+
+impl From<ConstResponse> for SmtpResponse {
+    fn from(response: ConstResponse) -> Self {
+        Self(response.0, response.1.into())
+    }
+}
+
+impl From<(u16, String)> for SmtpResponse {
+    fn from(response: (u16, String)) -> Self {
+        Self(response.0, response.1)
+    }
+}
+
+impl SmtpResponse {
+    fn from_ok(email: String) -> Self {
+        SmtpResponse(250, format!("2.1.0 Originator <{email}> ok"))
+    }
+
+    fn to_ok(email: String) -> Self {
+        SmtpResponse(250, format!("2.1.5 Recipient <{email}> ok"))
+    }
+
+    const OK: ConstResponse = (250, "2.0.0 Ok");
+    const SYNTAX_ERROR: ConstResponse = (501, "5.5.2 Syntax error");
+    const AUTH_SUCCCESS: ConstResponse = (235, "2.7.0 Authentication succeeded.");
+    const START_DATA: ConstResponse = (354, "3.5.4 Start mail input; end with <CRLF>.<CRLF>");
+    const BYE: ConstResponse = (221, "2.0.0 Goodbye");
+    const MESSAGE_ACCEPTED: ConstResponse = (250, "2.6.0 Message queued for delivery");
+    const MESSAGE_REJECTED: ConstResponse = (554, "5.6.0 Message rejected");
+    const BAD_SEQUENCE: ConstResponse = (503, "5.5.1 Bad sequence of commands");
+    const MAIL_FIRST: ConstResponse = (503, "5.5.1 Use MAIL first");
+    const HELLO_FIRST: ConstResponse = (503, "5.5.1 Be nice and say EHLO first");
+    const NOVALID_RECIPIENTS: ConstResponse = (554, "5.5.1 No valid recipients");
+    const INVALID_SENDER: ConstResponse = (553, "5.1.7 This sender address is not valid");
+    const INVALID_EMAIL: ConstResponse = (553, "5.1.3 This email address is not valid");
+    const NESTED_MAIL: ConstResponse = (503, "5.5.1 Error: nested MAIL command");
+    const ALREADY_AUTHENTICATED: ConstResponse = (503, "5.5.1 Already authenticated");
+    const AUTH_ERROR: ConstResponse = (535, "5.7.8 Authentication credentials invalid");
+    const AUTHENTICATION_REQUIRED: ConstResponse = (530, "5.7.1 Authentication required");
+    const ALREADY_TLS: ConstResponse = (504, "5.7.4 Already in TLS mode");
+    const COMMAND_NOT_IMPLEMENTED: ConstResponse = (502, "5.5.1 Command not implemented");
+    const MUST_USE_ESMTP: ConstResponse = (502, "5.5.1 Must use EHLO");
+    const NO_VRFY: ConstResponse = (502, "5.5.1 VRFY command is disabled");
+    const INGEST_AUTH: ConstResponse = (334, "Tell me your secret.");
+}
+
 pub enum SessionReply {
-    ReplyAndContinue(u16, String),
-    ReplyAndStop(u16, String),
+    ReplyAndContinue(SmtpResponse),
+    ReplyAndStop(SmtpResponse),
     RawReply(Vec<u8>),
-    IngestData(u16, String),
-    IngestAuth(u16, String),
+    IngestData(SmtpResponse),
+    IngestAuth(SmtpResponse),
 }
 
 pub enum DataReply {
-    ReplyAndContinue(u16, String),
+    ReplyAndContinue(SmtpResponse),
     ContinueIngest,
 }
 
@@ -45,30 +100,6 @@ enum AttemptedAuthError {
 
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
-
-    const RESPONSE_OK: &str = "2.0.0 Ok";
-    const RESPONSE_FROM_OK: &str = "2.1.0 Originator <[email]> ok";
-    const RESPONSE_TO_OK: &str = "2.1.5 Recipient <[email]> ok";
-    const RESPONSE_SYNTAX_ERROR: &str = "5.5.2 Syntax error";
-    const RESPONSE_AUTH_SUCCCESS: &str = "2.7.0 Authentication succeeded.";
-    const RESPONSE_START_DATA: &str = "3.5.4 Start mail input; end with <CRLF>.<CRLF>";
-    const RESPONSE_BYE: &str = "2.0.0 Goodbye";
-    const RESPONSE_MESSAGE_ACCEPTED: &str = "2.6.0 Message queued for delivery";
-    const RESPONSE_MESSAGE_REJECTED: &str = "5.6.0 Message rejected";
-    const RESPONSE_BAD_SEQUENCE: &str = "5.5.1 Bad sequence of commands";
-    const RESPONSE_MAIL_FIRST: &str = "5.5.1 Use MAIL first";
-    const RESPONSE_HELLO_FIRST: &str = "5.5.1 Be nice and say EHLO first";
-    const RESPONSE_NOVALID_RECIPIENTS: &str = "5.5.1 No valid recipients";
-    const RESPONSE_INVALID_SENDER: &str = "5.1.7 This sender address is not valid";
-    const RESPONSE_INVALID_EMAIL: &str = "5.1.3 This email address is not valid";
-    const RESPONSE_NESTED_MAIL: &str = "5.5.1 Error: nested MAIL command";
-    const RESPONSE_ALREADY_AUTHENTICATED: &str = "5.5.1 Already authenticated";
-    const RESPONSE_AUTH_ERROR: &str = "5.7.8 Authentication credentials invalid";
-    const RESPONSE_AUTHENTICATION_REQUIRED: &str = "5.7.1 Authentication required";
-    const RESPONSE_ALREADY_TLS: &str = "5.7.4 Already in TLS mode";
-    const RESPONSE_COMMAND_NOT_IMPLEMENTED: &str = "5.5.1 Command not implemented";
-    const RESPONSE_MUST_USE_ESMTP: &str = "5.5.1 Must use EHLO";
-    const RESPONSE_NO_VRFY: &str = "5.5.1 VRFY command is disabled";
 
     pub fn new(
         peer_addr: SocketAddr,
@@ -99,7 +130,7 @@ impl SmtpSession {
                 debug!("failed to parse request: {e}");
 
                 // RFC 4409, 4.1
-                return SessionReply::ReplyAndContinue(554, e.to_string());
+                return SessionReply::ReplyAndContinue(SmtpResponse(554, e.to_string()));
             }
         };
 
@@ -133,10 +164,10 @@ impl SmtpSession {
             }
             Request::Lhlo { host: _ } => {
                 // we do not currently support LMTP
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Helo { host: _ } => {
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_MUST_USE_ESMTP.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::MUST_USE_ESMTP.into())
             }
             Request::Auth {
                 mechanism,
@@ -145,8 +176,7 @@ impl SmtpSession {
                 // RFC 4954
                 if self.authenticated_credential.is_some() {
                     return SessionReply::ReplyAndContinue(
-                        503,
-                        Self::RESPONSE_ALREADY_AUTHENTICATED.into(),
+                        SmtpResponse::ALREADY_AUTHENTICATED.into(),
                     );
                 }
 
@@ -154,120 +184,106 @@ impl SmtpSession {
                     debug!("Received AUTH PLAIN");
 
                     if initial_response.is_empty() {
-                        return SessionReply::IngestAuth(334, "Tell me your secret.".into());
+                        return SessionReply::IngestAuth(SmtpResponse::INGEST_AUTH.into());
                     }
 
-                    let (code, message) = self
+                    let response = self
                         .handle_plain_auth(&mut initial_response.into_bytes())
                         .await;
 
-                    SessionReply::ReplyAndContinue(code, message)
+                    SessionReply::ReplyAndContinue(response)
                 } else {
                     // other authentication methods
                     debug!("Received unsupported AUTH request");
-                    SessionReply::ReplyAndContinue(535, Self::RESPONSE_AUTH_ERROR.into())
+                    SessionReply::ReplyAndContinue(SmtpResponse::AUTH_ERROR.into())
                 }
             }
             Request::Quit => {
                 // RFC5321, 4.1.1.10
-                SessionReply::ReplyAndStop(221, Self::RESPONSE_BYE.into())
+                SessionReply::ReplyAndStop(SmtpResponse::BYE.into())
             }
             // if the client did not say EHLO, we want to ask for that first instead of processing any of the below commands
             _ignored_command if self.peer_name.is_none() => {
-                SessionReply::ReplyAndContinue(503, Self::RESPONSE_HELLO_FIRST.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::HELLO_FIRST.into())
             }
             Request::Mail { from } => {
                 // RFC5231, 4.1.1.2
                 debug!("received MAIL FROM: {}", from.address);
 
                 let Ok(from_address) = from.address.parse::<EmailAddress>() else {
-                    return SessionReply::ReplyAndContinue(
-                        553,
-                        Self::RESPONSE_INVALID_SENDER.into(),
-                    );
+                    return SessionReply::ReplyAndContinue(SmtpResponse::INVALID_SENDER.into());
                 };
 
                 let Some(credential) = self.authenticated_credential.as_ref() else {
                     return SessionReply::ReplyAndContinue(
-                        530,
-                        Self::RESPONSE_AUTHENTICATION_REQUIRED.into(),
+                        SmtpResponse::AUTHENTICATION_REQUIRED.into(),
                     );
                 };
 
                 if self.current_message.is_some() {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_NESTED_MAIL.into());
+                    return SessionReply::ReplyAndContinue(SmtpResponse::NESTED_MAIL.into());
                 }
 
                 self.current_message = Some(NewMessage::new(credential.id(), from_address));
 
-                let response_message = Self::RESPONSE_FROM_OK.replace("[email]", &from.address);
-                SessionReply::ReplyAndContinue(250, response_message)
+                SessionReply::ReplyAndContinue(SmtpResponse::from_ok(from.address))
             }
             Request::Rcpt { to } => {
                 // RFC5231, 4.1.1.3
                 debug!("received RCPT TO: {}", to.address);
 
                 let Ok(to_address) = to.address.parse::<EmailAddress>() else {
-                    return SessionReply::ReplyAndContinue(
-                        553,
-                        Self::RESPONSE_INVALID_EMAIL.into(),
-                    );
+                    return SessionReply::ReplyAndContinue(SmtpResponse::INVALID_EMAIL.into());
                 };
 
                 let Some(message) = self.current_message.as_mut() else {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_MAIL_FIRST.into());
+                    return SessionReply::ReplyAndContinue(SmtpResponse::MAIL_FIRST.into());
                 };
 
                 message.recipients.push(to_address);
 
-                let response_message = Self::RESPONSE_TO_OK.replace("[email]", &to.address);
-                SessionReply::ReplyAndContinue(250, response_message)
+                SessionReply::ReplyAndContinue(SmtpResponse::to_ok(to.address))
             }
             Request::Bdat {
                 chunk_size: _,
                 is_last: _,
-            } => SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into()),
+            } => SessionReply::ReplyAndContinue(SmtpResponse::COMMAND_NOT_IMPLEMENTED.into()),
             Request::Noop { value: _ } => {
                 // RFC5321, 4.1.1.9
-                SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::OK.into())
             }
-            Request::StartTls => {
-                SessionReply::ReplyAndContinue(504, Self::RESPONSE_ALREADY_TLS.into())
-            }
+            Request::StartTls => SessionReply::ReplyAndContinue(SmtpResponse::ALREADY_TLS.into()),
             Request::Data => {
                 // RFC5231, 4.1.1.4
                 let Some(NewMessage { recipients, .. }) = self.current_message.as_ref() else {
-                    return SessionReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                    return SessionReply::ReplyAndContinue(SmtpResponse::BAD_SEQUENCE.into());
                 };
 
                 if recipients.is_empty() {
-                    return SessionReply::ReplyAndContinue(
-                        554,
-                        Self::RESPONSE_NOVALID_RECIPIENTS.into(),
-                    );
+                    return SessionReply::ReplyAndContinue(SmtpResponse::NOVALID_RECIPIENTS.into());
                 }
 
-                SessionReply::IngestData(354, Self::RESPONSE_START_DATA.into())
+                SessionReply::IngestData(SmtpResponse::START_DATA.into())
             }
             Request::Rset => {
                 // RFC5321, 4.1.1.5. Comments about this:
                 // - this does not need to clear AUTH status
                 // - this does not clear the EHLO status
                 self.current_message = None;
-                SessionReply::ReplyAndContinue(250, Self::RESPONSE_OK.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::OK.into())
             }
             Request::Vrfy { value: _ } => {
                 // RFC5321, 4.1.1.6
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_NO_VRFY.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::NO_VRFY.into())
             }
             Request::Expn { value: _ } => {
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Help { value: _ } => {
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::COMMAND_NOT_IMPLEMENTED.into())
             }
             Request::Etrn { .. } | Request::Atrn { .. } | Request::Burl { .. } => {
-                SessionReply::ReplyAndContinue(502, Self::RESPONSE_COMMAND_NOT_IMPLEMENTED.into())
+                SessionReply::ReplyAndContinue(SmtpResponse::COMMAND_NOT_IMPLEMENTED.into())
             }
         }
     }
@@ -304,9 +320,9 @@ impl SmtpSession {
         Ok(AttemptedAuth { username, password })
     }
 
-    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> (u16, String) {
+    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> SmtpResponse {
         let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
-            return (501, Self::RESPONSE_SYNTAX_ERROR.into());
+            return SmtpResponse::SYNTAX_ERROR.into();
         };
 
         trace!(
@@ -317,10 +333,9 @@ impl SmtpSession {
         match self.smtp_credentials.find_by_username(username).await {
             Ok(Some(credential)) if credential.verify_password(password) => {
                 self.authenticated_credential = Some(credential);
-
-                (235, Self::RESPONSE_AUTH_SUCCCESS.into())
+                SmtpResponse::AUTH_SUCCCESS.into()
             }
-            _ => (535, Self::RESPONSE_AUTH_ERROR.into()),
+            _ => SmtpResponse::AUTH_ERROR.into(),
         }
     }
 
@@ -329,7 +344,7 @@ impl SmtpSession {
             raw_data: buffer, ..
         }) = self.current_message.as_mut()
         else {
-            return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+            return DataReply::ReplyAndContinue(SmtpResponse::BAD_SEQUENCE.into());
         };
 
         buffer.extend_from_slice(data);
@@ -337,7 +352,7 @@ impl SmtpSession {
         if buffer.len() > Self::MAX_BODY_SIZE as usize {
             debug!("failed to read message: message too big");
 
-            return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+            return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_REJECTED.into());
         }
 
         const DATA_END: &[u8] = b"\r\n.\r\n";
@@ -346,7 +361,7 @@ impl SmtpSession {
             buffer.truncate(buffer.len() - DATA_END.len());
 
             let Some(message) = self.current_message.take() else {
-                return DataReply::ReplyAndContinue(503, Self::RESPONSE_BAD_SEQUENCE.into());
+                return DataReply::ReplyAndContinue(SmtpResponse::BAD_SEQUENCE.into());
             };
 
             trace!("received message ({} bytes)", message.raw_data.len());
@@ -354,10 +369,10 @@ impl SmtpSession {
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");
 
-                return DataReply::ReplyAndContinue(554, Self::RESPONSE_MESSAGE_REJECTED.into());
+                return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_REJECTED.into());
             }
 
-            return DataReply::ReplyAndContinue(250, Self::RESPONSE_MESSAGE_ACCEPTED.into());
+            return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_ACCEPTED.into());
         }
 
         DataReply::ContinueIngest
