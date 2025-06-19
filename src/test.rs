@@ -242,7 +242,7 @@ async fn integration_test(pool: PgPool) {
     "proj_domains",
     "streams"
 ))]
-async fn quotas(pool: PgPool) {
+async fn quotas_count_atomically(pool: PgPool) {
     let pool = PgPoolOptions::new()
         .max_connections(70)
         .connect_with((*pool.connect_options()).clone())

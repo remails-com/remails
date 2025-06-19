@@ -666,17 +666,17 @@ pub mod mock;
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::{
         handler::dns::DnsResolver,
         models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest},
     };
-    use std::net::Ipv4Addr;
+    use std::{collections::HashSet, net::Ipv4Addr};
 
-    use super::*;
-
-    use crate::test::random_port;
+    use crate::{models::OrganizationId, test::random_port};
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
+    use tokio::select;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -945,5 +945,67 @@ mod test {
             get_message_status(message_on_timeout).await,
             MessageStatus::Reattempt
         );
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "org_domains",
+            "proj_domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn quotas_retries(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle {
+            token,
+            rx: mut mailcrab_rx,
+        } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
+            retry_delay: Duration::minutes(60),
+            max_retries: 3,
+        };
+        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        handler.retry_all().await.unwrap();
+
+        let mut senders = HashSet::new();
+
+        loop {
+            select! {
+                Ok(recv) = mailcrab_rx.recv() => {
+                    senders.insert(recv.envelope_from.as_str().to_string());
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                    break
+                },
+            }
+        }
+
+        assert!(senders.contains("email-held@test-org-1-project-1.com"));
+        assert!(senders.contains("email-reattempt-2@test-org-1-project-1.com"));
+        assert_eq!(senders.len(), 2);
+
+        let remaining = sqlx::query_scalar!(
+            r#"
+            SELECT remaining_message_quota FROM organizations WHERE id = $1
+            "#,
+            *org_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(remaining, 4999);
     }
 }
