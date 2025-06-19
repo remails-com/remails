@@ -62,7 +62,6 @@ mod test {
     use tokio::{sync::mpsc, task::JoinHandle};
     use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
-    use tracing_test::traced_test;
 
     async fn setup_server(
         pool: PgPool,
@@ -124,7 +123,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
     async fn test_smtp(pool: PgPool) {
         if crypto::CryptoProvider::get_default().is_none() {
             crypto::aws_lc_rs::default_provider()
@@ -169,7 +167,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, _, port, username, _) = setup_server(pool).await;
 

@@ -215,6 +215,7 @@ pub struct NewDomain {
     dkim_key_type: DkimKeyType,
 }
 
+#[derive(Clone)]
 pub struct DomainRepository {
     pool: sqlx::PgPool,
 }

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations\n            SET remaining_message_quota = \n                CASE WHEN remaining_message_quota - 1 > 0 \n                    THEN remaining_message_quota - 1\n                    ELSE 0\n                END\n            WHERE id = $1\n            RETURNING remaining_message_quota, quota_reset\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "remaining_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "quota_reset",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9bb5a75b0ee3ade1128585122337f683330262e2379215d8ac302f8fc4a7d59c"
+}
