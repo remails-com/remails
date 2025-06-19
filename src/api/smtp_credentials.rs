@@ -28,7 +28,7 @@ fn has_write_access(
     _smtp_cred: Option<SmtpCredentialId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) {
+    if user.org_admin().contains(&org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
