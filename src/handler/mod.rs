@@ -10,14 +10,17 @@ use base64ct::{Base64, Base64UrlUnpadded, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use mail_parser::{HeaderName, MessageParser};
-use mail_send::{SmtpClientBuilder, smtp};
+use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, sync::Arc};
+use std::{borrow::Cow::Borrowed, fmt::Display, sync::Arc};
 use thiserror::Error;
-use tokio::sync::mpsc::Receiver;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::{Semaphore, mpsc::Receiver},
+};
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 pub mod dns;
 
@@ -77,6 +80,7 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    workers: Arc<Semaphore>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -90,7 +94,8 @@ impl Handler {
         Self {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
-            organization_repository: OrganizationRepository::new(pool),
+            organization_repository: OrganizationRepository::new(pool.clone()),
+            workers: Arc::new(Semaphore::new(100)),
             shutdown,
             config,
         }
@@ -202,14 +207,6 @@ impl Handler {
             }
         };
 
-        if let QuotaStatus::Exceeded = self
-            .organization_repository
-            .quota_status(message.organization_id)
-            .await?
-        {
-            return Ok(Err((MessageStatus::Held, "Quota exceeded".to_string())));
-        }
-
         // check dkim key
         let dkim_key = match PrivateKey::new(&domain, "remails") {
             Ok(key) => key,
@@ -239,15 +236,39 @@ impl Handler {
         }
 
         trace!("signing with dkim");
-        Ok(dkim_key
-            .dkim_header(parsed_msg)
-            .inspect_err(|e| error!("error creating DKIM header: {e}"))
-            .map_err(|_| {
-                (
+        let dkim_header = match dkim_key.dkim_header(parsed_msg) {
+            Ok(header) => header,
+            Err(e) => {
+                error!("error creating DKIM header: {e}");
+                return Ok(Err((
                     MessageStatus::Held,
                     "internal error: could not create DKIM header".to_string(),
-                )
-            }))
+                )));
+            }
+        };
+
+        // The quota check needs to be the very last check,
+        // as otherwise we might count messages that are held towards the quota.
+        // Additionally,
+        // we should only deduce the quota for messages
+        // that are new and have not been counted to the quota before,
+        // i.e., only messages in "Processing" and "Held" state.
+        #[allow(clippy::collapsible_if)]
+        if matches!(
+            message.status,
+            MessageStatus::Processing | MessageStatus::Held
+        ) {
+            if QuotaStatus::Exceeded
+                == self
+                    .organization_repository
+                    .reduce_quota(message.organization_id)
+                    .await?
+            {
+                return Ok(Err((MessageStatus::Held, "Quota exceeded".to_string())));
+            }
+        }
+
+        Ok(Ok(dkim_header))
     }
 
     pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
@@ -307,7 +328,7 @@ impl Handler {
             Ok(_) => match &message.status {
                 // For messages being sent for the first time, update message status
                 MessageStatus::Processing | MessageStatus::Held => MessageStatus::Accepted,
-                // For messages that have been processes before, keep the status
+                // For messages that have been processed before, keep the status
                 status @ (MessageStatus::Reattempt
                 | MessageStatus::Failed
                 | MessageStatus::Accepted) => status.clone(),
@@ -346,6 +367,23 @@ impl Handler {
         Ok(())
     }
 
+    async fn quit_smtp<T, D>(client: SmtpClient<T>, hostname: D)
+    where
+        D: Display,
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        client
+            .quit()
+            .await
+            .inspect_err(|err| {
+                warn!(
+                    "failed to close upstream SMTP connection with {}: {err}",
+                    hostname
+                );
+            })
+            .ok();
+    }
+
     async fn send_single_message(
         &self,
         recipient: &EmailAddress,
@@ -371,7 +409,7 @@ impl Handler {
             .resolve_mail_domain(domain, &mut priority)
             .await
         {
-            let smtp = SmtpClientBuilder::new(hostname, port)
+            let smtp = SmtpClientBuilder::new(&hostname, port)
                 .implicit_tls(false)
                 .say_ehlo(true)
                 .helo_host(&self.config.domain)
@@ -382,14 +420,18 @@ impl Handler {
                     Err(err) => Err(err),
                     Ok(mut client) => {
                         trace!("securely connected to upstream server");
-                        client.send(message.clone()).await
+                        let result = client.send(message.clone()).await;
+                        Self::quit_smtp(client, &hostname).await;
+                        result
                     }
                 },
                 Protection::Plaintext => match smtp.connect_plain().await {
                     Err(err) => Err(err),
                     Ok(mut client) => {
                         trace!("INSECURELY connected to upstream server");
-                        client.send(message.clone()).await
+                        let result = client.send(message.clone()).await;
+                        Self::quit_smtp(client, &hostname).await;
+                        result
                     }
                 },
             };
@@ -528,14 +570,19 @@ impl Handler {
                         return;
                     }
                     queue_result = queue_receiver.recv() => {
+                       let Some(message) = queue_result else {
+                            error!("queue error, shutting down");
+                            self.shutdown.cancel();
+                            return
+                        };
+                        let Ok(permit) = self.workers.clone().acquire_owned().await else {
+                            error!("failed to acquire worker semaphore permit, shutting down");
+                            self.shutdown.cancel();
+                            return
+                        };
                         let self_clone = self.clone();
-                        // FIXME This might create overly many tasks
                         tokio::spawn(async move {
-                            let Some(message) = queue_result else {
-                                error!("queue error, shutting down");
-                                self_clone.shutdown.cancel();
-                                return
-                            };
+                            let _p = permit;
 
                             let mut message = match self_clone.create_message(message).await {
                                 Ok(message) => message,
@@ -547,7 +594,11 @@ impl Handler {
 
                             let message_id = message.id().to_string();
                             if let Err(e) = self_clone.handle_message(&mut message).await {
-                                error!(message_id, "failed to handle message: {e:?}");
+                                if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
+                                    warn!(message_id, "Message held: {reason}")
+                                } else {
+                                    error!(message_id, "failed to handle message: {e:?}");
+                                }
                                 return
                             };
 
@@ -626,15 +677,11 @@ mod test {
     use crate::test::random_port;
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
-    use serial_test::serial;
-    use tracing_test::traced_test;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
-    #[serial]
     async fn test_handle_message(pool: PgPool) {
         let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =
@@ -687,8 +734,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
-    #[serial]
     async fn test_handle_invalid_mail_from(pool: PgPool) {
         let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =
@@ -754,8 +799,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
-    #[serial]
     async fn test_handle_invalid_from(pool: PgPool) {
         let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =
@@ -833,8 +876,6 @@ mod test {
             "messages"
         )
     ))]
-    #[traced_test]
-    #[serial]
     async fn retry_sending_messages(pool: PgPool) {
         let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =

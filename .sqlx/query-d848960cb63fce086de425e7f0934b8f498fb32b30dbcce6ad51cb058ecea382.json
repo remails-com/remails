@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE messages\n            SET status = $2,\n                reason = $3,\n                delivery_status = $4,\n                retry_after = $5,\n                attempts = $6\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "reattempt",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Varchar",
+        "Jsonb",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d848960cb63fce086de425e7f0934b8f498fb32b30dbcce6ad51cb058ecea382"
+}

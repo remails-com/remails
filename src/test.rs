@@ -9,13 +9,12 @@ use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
 use rand::Rng;
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
-use tokio::select;
-use tracing_test::traced_test;
+use tokio::{select, task::JoinSet};
 
 pub fn random_port() -> u16 {
     let mut rng = rand::rng();
@@ -50,7 +49,7 @@ async fn setup(
 
     let TestMailServerHandle {
         token,
-        rx: mut mailcrab_rx,
+        rx: mailcrab_rx,
     } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_random_port).await;
 
     let smtp_config = SmtpConfig {
@@ -66,7 +65,7 @@ async fn setup(
         domain: "test".to_string(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         retry_delay: chrono::Duration::minutes(5),
-        max_retries: 1,
+        max_retries: 2,
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;
@@ -84,7 +83,6 @@ async fn setup(
     "proj_domains",
     "streams"
 ))]
-#[traced_test]
 async fn integration_test(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
@@ -245,7 +243,12 @@ async fn integration_test(pool: PgPool) {
     "streams"
 ))]
 async fn quotas(pool: PgPool) {
-    console_subscriber::init();
+    let pool = PgPoolOptions::new()
+        .max_connections(70)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
     // test org 1
@@ -270,8 +273,34 @@ async fn quotas(pool: PgPool) {
         .await
         .unwrap();
 
-    // Spawn 50 tasks to throw 100 messages each to remails
-    for i in 0..50 {
+    let mut join_set = JoinSet::new();
+
+    join_set.spawn(async move {
+        for i in 1.. {
+            select! {
+                Ok(recv) = mailcrab_rx.recv() => {
+                    assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
+                    assert_eq!(recv.envelope_recipients.len(), 1);
+                    assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
+                    if i % 100 == 0 {
+                        println!("received {i}th messages");
+                    }
+                    if i > 5000 {
+                        panic!("went over quota")
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(3)) => {
+                    if i < 5000 {
+                        panic!("timed out receiving {i}th email")
+                    }
+                    return
+                },
+            }
+        }
+    });
+
+    // Spawn 51 tasks to throw 100 messages each to remails
+    for i in 0..51 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
             .implicit_tls(true)
             .allow_invalid_certs()
@@ -283,37 +312,21 @@ async fn quotas(pool: PgPool) {
             .await
             .unwrap();
 
-        tokio::spawn(async move {
+        join_set.spawn(async move {
             for j in 1..=100 {
                 let message = MessageBuilder::new()
                     .from(("John", "john@test-org-1-project-1.com"))
                     .to(vec![("Eddy", "eddy@test-org-2-project-1.com")])
                     .subject("TPS reports")
                     .text_body(format!(
-                        "Have you finished the TPS reports yet? This is the {j}th reminder!!!"
+                        "Have you finished the TPS reports yet? This is the {}th reminder!!!",
+                        i * 50 + j
                     ));
                 john_smtp_client.send(message).await.unwrap();
             }
             john_smtp_client.quit().await.unwrap();
         });
-        if i % 5 == 0 {
-            println!("created SMTP spammer {i}")
-        }
     }
 
-    for i in 1..=5000 {
-        select! {
-            Ok(recv) = mailcrab_rx.recv() => {
-                assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
-                assert_eq!(recv.envelope_recipients.len(), 1);
-                assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
-                if i % 50 == 0 {
-                    println!("received {i} messages");
-                }
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving {i}th email"),
-        }
-    }
-
-    panic!()
+    join_set.join_all().await;
 }

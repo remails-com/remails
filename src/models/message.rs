@@ -8,7 +8,6 @@ use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, mem, str::FromStr};
-use tracing::trace;
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -395,18 +394,15 @@ impl MessageRepository {
         let delivery_status_serialized =
             serde_json::to_value(&message.delivery_status).map_err(Error::Serialization)?;
 
-        let old_status: MessageStatus = sqlx::query_scalar!(
+        sqlx::query!(
             r#"
-            UPDATE messages m
+            UPDATE messages
             SET status = $2,
                 reason = $3,
                 delivery_status = $4,
                 retry_after = $5,
                 attempts = $6
-            FROM   messages m_old
-            WHERE  m.id = m_old.id
-            AND    m.id = $1
-            RETURNING m_old.status::message_status AS "status!: MessageStatus"
+            WHERE id = $1
             "#,
             *message.id,
             message.status as _,
@@ -415,41 +411,8 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
         )
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-
-        // For the relevant status chances, deduce one from the organization quota
-        match old_status {
-            MessageStatus::Processing
-            | MessageStatus::Held
-            | MessageStatus::Accepted
-            | MessageStatus::Rejected => match message.status {
-                MessageStatus::Processing
-                | MessageStatus::Held
-                | MessageStatus::Accepted
-                | MessageStatus::Rejected => {}
-                MessageStatus::Delivered | MessageStatus::Reattempt | MessageStatus::Failed => {
-                    trace!(
-                        organization_id = message.organization_id.as_uuid().to_string(),
-                        message_id = (*message.id).to_string(),
-                        old_status = old_status.to_string(),
-                        new_status = message.status.to_string(),
-                        "deducing 1 from organization quota"
-                    );
-                    sqlx::query!(
-                        r#"
-                        UPDATE organizations o
-                        SET remaining_message_quota = remaining_message_quota - 1
-                        WHERE o.id = $1
-                        "#,
-                        *message.organization_id
-                    )
-                    .execute(&self.pool)
-                    .await?;
-                }
-            },
-            MessageStatus::Delivered | MessageStatus::Reattempt | MessageStatus::Failed => {}
-        }
 
         Ok(())
     }
@@ -459,7 +422,7 @@ impl MessageRepository {
         sqlx::query!(
             r#"
             UPDATE messages
-            SET message_data = $2, 
+            SET message_data = $2,
                 status = $3,
                 reason = $4,
                 retry_after = $5,
@@ -509,8 +472,8 @@ impl MessageRepository {
                 m.attempts
             FROM messages m
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND m.organization_id = $4 
-              AND ($5::uuid IS NULL OR m.project_id = $5) 
+              AND m.organization_id = $4
+              AND ($5::uuid IS NULL OR m.project_id = $5)
               AND ($6::uuid IS NULL OR m.stream_id = $6)
             ORDER BY created_at DESC
             OFFSET $1
@@ -561,8 +524,8 @@ impl MessageRepository {
                 m.attempts
             FROM messages  m
             WHERE m.id = $1
-              AND m.organization_id = $2 
-              AND ($3::uuid IS NULL OR m.project_id = $3) 
+              AND m.organization_id = $2
+              AND ($3::uuid IS NULL OR m.project_id = $3)
               AND ($4::uuid IS NULL OR m.stream_id = $4)
             "#,
             *message_id,
