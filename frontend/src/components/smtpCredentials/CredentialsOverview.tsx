@@ -3,7 +3,7 @@ import { Loader } from "../../Loader.tsx";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { Button, Flex, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconEdit, IconPencilPlus } from "@tabler/icons-react";
+import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewCredential } from "./NewCredential.tsx";
 
@@ -62,7 +62,7 @@ export function CredentialsOverview() {
     <>
       <NewCredential opened={opened} close={close} />
       <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Credential
         </Button>
       </Flex>

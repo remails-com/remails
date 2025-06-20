@@ -4,7 +4,7 @@ import { formatDateTime } from "../../util";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPencilPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 
 export function OrganizationsOverview() {
@@ -50,7 +50,7 @@ export function OrganizationsOverview() {
         done={(newOrg) => navigate("organizations", { org_id: newOrg.id })}
       />
       <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Organization
         </Button>
       </Flex>

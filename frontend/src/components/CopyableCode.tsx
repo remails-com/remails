@@ -18,11 +18,11 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
     backgroundColor: computedColorScheme == "light" ? "var(--mantine-color-gray-1)" : "var(--mantine-color-dark-5)",
 
     // wrap long codes anywhere
-    "word-wrap": "anywhere",
-    "white-space": "pre-wrap",
-    "word-break": "break-all",
+    wordWrap: "anywhere",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
 
-    "cursor": 'pointer',
+    cursor: 'pointer',
   };
 
   return (

@@ -25,6 +25,15 @@ export function Breadcrumbs() {
   }
 
   const items: BreadcrumbItem[] = [];
+
+  if (fullName === "settings") {
+    items.push({ title: "Settings", route: "settings" });
+  }
+
+  if (fullName === "statistics") {
+    items.push({ title: "Statistics", route: "statistics" });
+  }
+
   if (projects && fullName.startsWith("projects")) {
     items.push({ title: "Projects", route: "projects" });
   }
