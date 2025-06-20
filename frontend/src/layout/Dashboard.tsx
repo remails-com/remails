@@ -1,7 +1,7 @@
 import { AppShell, Box, Burger, Button, Flex, Group, Menu, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import ColorTheme from "./ColorTheme";
-import { IconChevronDown, IconLogout, IconUser } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconUser, IconUserBolt } from "@tabler/icons-react";
 import { useUser } from "../hooks/useUser";
 import { NavBar } from "./NavBar.tsx";
 import { ReactNode, useState } from "react";
@@ -25,6 +25,10 @@ export function Dashboard({ children }: DashboardProps) {
   } = useRemails();
   const { currentOrganization } = useOrganizations();
 
+  const isAdmin = user.roles.some(
+    (role) => role.type == "super_admin" || (role.type == "organization_admin" && role.id == currentOrganization?.id)
+  );
+
   const org_switching = (
     <>
       <Menu
@@ -37,7 +41,7 @@ export function Dashboard({ children }: DashboardProps) {
       >
         <Menu.Target>
           <Button
-            leftSection={<IconUser />}
+            leftSection={isAdmin ? <IconUserBolt /> : <IconUser />}
             rightSection={<IconChevronDown size={20} stroke={1.8} />}
             color="#666"
             variant="outline"
