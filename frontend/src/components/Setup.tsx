@@ -2,6 +2,7 @@ import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 import { saveNewOrganization } from "./organizations/NewOrganizationForm.tsx";
 import { useForm } from "@mantine/form";
 import { useRemails } from "../hooks/useRemails.ts";
+import { RemailsLogo } from "./RemailsLogo.tsx";
 
 interface SetupProps {
   opened: boolean;
@@ -42,12 +43,15 @@ export function Setup({ opened, close }: SetupProps) {
       centered
       overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
     >
-      <Text size="lg" fw={500}>
-        Welcome to Rem@ils
+      <Text size="xl" fw="bold">
+        Welcome to
       </Text>
+      <Group justify="center">
+        <RemailsLogo />
+      </Group>
       <form onSubmit={form.onSubmit(save)}>
         <Stack mt="lg">
-          <Text>To get started with Remails, please create a new Organization</Text>
+          <Text>To get started, please create a new organization:</Text>
           <TextInput
             label="Name"
             key={form.key("name")}
