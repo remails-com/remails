@@ -1,4 +1,4 @@
-import { ActionIcon, Code, Input, MantineSpacing, StyleProp, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { ActionIcon, Code, CSSProperties, Input, MantineSpacing, StyleProp, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 
@@ -13,12 +13,12 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
 
   const computedColorScheme = useComputedColorScheme();
 
-  const style = {
+  const style: CSSProperties = {
     // match background color of other input elements
     backgroundColor: computedColorScheme == "light" ? "var(--mantine-color-gray-1)" : "var(--mantine-color-dark-5)",
 
     // wrap long codes anywhere
-    wordWrap: "anywhere",
+    wordWrap: "break-word",
     whiteSpace: "pre-wrap",
     wordBreak: "break-all",
 
