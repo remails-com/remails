@@ -1,4 +1,3 @@
-import { useProjects } from "../../hooks/useProjects.ts";
 import { useForm } from "@mantine/form";
 import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import { Organization, Project } from "../../types.ts";

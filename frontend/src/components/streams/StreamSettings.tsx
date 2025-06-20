@@ -1,5 +1,3 @@
-import { Loader } from "../../Loader.tsx";
-import { useStreams } from "../../hooks/useStreams.ts";
 import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconTrash, IconX } from "@tabler/icons-react";
@@ -8,9 +6,7 @@ import { useMessages } from "../../hooks/useMessages.ts";
 import { Organization, Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { useProjects } from "../../hooks/useProjects.ts";
 
 interface FormValues {
   name: string;
