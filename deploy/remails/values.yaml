@@ -22,6 +22,7 @@ smtp:
   replicas: 3
   load_balancer_plan: "essentials"
   server_name: "smtp.remails.net"
+  ehlo_domain: "sending.remails.net"
   port: 465
   # Possible values "staging" and "production".
   # Influences which type of Let's Encrypt certificate should be used
