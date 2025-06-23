@@ -33,8 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .context("failed to connect to database")?;
 
     let shutdown = CancellationToken::new();
-    // TODO change me
-    let handler_config = HandlerConfig::new("remails.tweedegolf-test.nl");
+    let handler_config = HandlerConfig::new();
 
     let message_handler = Handler::new(pool.clone(), handler_config.into(), shutdown);
 

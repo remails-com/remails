@@ -1,6 +1,6 @@
 import { Role } from "./types.ts";
 
-export function formatDateTime(date: string): string {
+export function formatDateTime(date: number | string | Date): string {
   return new Date(date).toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",

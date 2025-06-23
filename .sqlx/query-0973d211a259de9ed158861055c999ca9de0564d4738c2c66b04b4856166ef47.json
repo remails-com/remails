@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts\n            FROM messages m\n            WHERE ($3::message_status IS NULL OR status = $3)\n              AND m.organization_id = $4 \n              AND ($5::uuid IS NULL OR m.project_id = $5) \n              AND ($6::uuid IS NULL OR m.stream_id = $6)\n            ORDER BY created_at DESC\n            OFFSET $1\n            LIMIT $2\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts\n            FROM messages  m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND ($3::uuid IS NULL OR m.project_id = $3)\n              AND ($4::uuid IS NULL OR m.stream_id = $4)\n            ",
   "describe": {
     "columns": [
       {
@@ -75,13 +75,13 @@
       },
       {
         "ordinal": 11,
-        "name": "message_data",
-        "type_info": "Jsonb"
+        "name": "raw_size!",
+        "type_info": "Int4"
       },
       {
         "ordinal": 12,
-        "name": "raw_size!",
-        "type_info": "Int4"
+        "name": "message_data",
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 13,
@@ -106,27 +106,11 @@
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Int8",
-        {
-          "Custom": {
-            "name": "message_status",
-            "kind": {
-              "Enum": [
-                "processing",
-                "held",
-                "accepted",
-                "rejected",
-                "delivered",
-                "reattempt",
-                "failed"
-              ]
-            }
-          }
-        },
         "Uuid",
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -142,12 +126,12 @@
       false,
       null,
       null,
-      null,
+      true,
       false,
       false,
       true,
       false
     ]
   },
-  "hash": "ec76ba737634e86f14520131d5190c25df4d693ecfab5d682a5c70fefc2d3879"
+  "hash": "0973d211a259de9ed158861055c999ca9de0564d4738c2c66b04b4856166ef47"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE messages\n            SET message_data = $2, \n                status = $3,\n                reason = $4,\n                retry_after = $5,\n                attempts = $6\n            WHERE id = $1\n            ",
+  "query": "\n            UPDATE messages\n            SET message_data = $2,\n                status = $3,\n                reason = $4,\n                retry_after = $5,\n                attempts = $6\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -30,5 +30,5 @@
     },
     "nullable": []
   },
-  "hash": "275cdd8a7fb27946da3f85a06ce0820babe6ff7ff6376efd8c393a8165341bd6"
+  "hash": "0f456a65df58c6966c891308c1a1106a294fcffe9baefdb8daf70f9e4d32e150"
 }

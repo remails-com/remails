@@ -15,7 +15,7 @@ const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,
@@ -422,7 +422,7 @@ impl MessageRepository {
         sqlx::query!(
             r#"
             UPDATE messages
-            SET message_data = $2, 
+            SET message_data = $2,
                 status = $3,
                 reason = $4,
                 retry_after = $5,
@@ -472,8 +472,8 @@ impl MessageRepository {
                 m.attempts
             FROM messages m
             WHERE ($3::message_status IS NULL OR status = $3)
-              AND m.organization_id = $4 
-              AND ($5::uuid IS NULL OR m.project_id = $5) 
+              AND m.organization_id = $4
+              AND ($5::uuid IS NULL OR m.project_id = $5)
               AND ($6::uuid IS NULL OR m.stream_id = $6)
             ORDER BY created_at DESC
             OFFSET $1
@@ -524,8 +524,8 @@ impl MessageRepository {
                 m.attempts
             FROM messages  m
             WHERE m.id = $1
-              AND m.organization_id = $2 
-              AND ($3::uuid IS NULL OR m.project_id = $3) 
+              AND m.organization_id = $2
+              AND ($3::uuid IS NULL OR m.project_id = $3)
               AND ($4::uuid IS NULL OR m.stream_id = $4)
             "#,
             *message_id,

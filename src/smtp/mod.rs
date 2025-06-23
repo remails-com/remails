@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use crate::Environment;
+use std::{env, path::PathBuf};
 
 mod connection;
+mod proxy_protocol;
 pub mod server;
 mod session;
 
@@ -10,30 +12,36 @@ pub struct SmtpConfig {
     pub server_name: String,
     pub cert_file: PathBuf,
     pub key_file: PathBuf,
+    pub environment: Environment,
 }
 
 impl Default for SmtpConfig {
     fn default() -> Self {
-        let listen_addr = std::env::var("SMTP_LISTEN_ADDR")
+        let listen_addr = env::var("SMTP_LISTEN_ADDR")
             .expect("Missing SMTP_LISTEN_ADDR environment variable")
             .parse()
             .expect("Invalid SMTP_LISTEN_ADDR");
-        let server_name = std::env::var("SMTP_SERVER_NAME")
-            .expect("Missing SMTP_SERVER_NAME environment variable");
-        let cert_file = std::env::var("SMTP_CERT_FILE")
+        let server_name =
+            env::var("SMTP_SERVER_NAME").expect("Missing SMTP_SERVER_NAME environment variable");
+        let cert_file = env::var("SMTP_CERT_FILE")
             .expect("Missing SMTP_CERT_FILE environment variable")
             .parse()
             .expect("Invalid SMTP_CERT_FILE path");
-        let key_file = std::env::var("SMTP_KEY_FILE")
+        let key_file = env::var("SMTP_KEY_FILE")
             .expect("Missing SMTP_KEY_FILE environment variable")
             .parse()
             .expect("Invalid SMTP_KEY_FILE path");
+        let environment: Environment = env::var("ENVIRONMENT")
+            .map(|s| s.parse())
+            .unwrap_or(Ok(Environment::Development))
+            .unwrap_or(Environment::Development);
 
         Self {
             listen_addr,
             server_name,
             cert_file,
             key_file,
+            environment,
         }
     }
 }
@@ -54,7 +62,6 @@ mod test {
     use tokio::{sync::mpsc, task::JoinHandle};
     use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
-    use tracing_test::traced_test;
 
     async fn setup_server(
         pool: PgPool,
@@ -90,6 +97,7 @@ mod test {
             server_name: "localhost".to_string(),
             cert_file: "cert.pem".into(),
             key_file: "key.pem".into(),
+            ..Default::default()
         });
         let shutdown = CancellationToken::new();
         let (queue_sender, receiver) = mpsc::channel::<NewMessage>(100);
@@ -115,7 +123,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
     async fn test_smtp(pool: PgPool) {
         if crypto::CryptoProvider::get_default().is_none() {
             crypto::aws_lc_rs::default_provider()
@@ -160,7 +167,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
-    #[traced_test]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, _, port, username, _) = setup_server(pool).await;
 

@@ -36,7 +36,12 @@ spec:
             tcpSocket:
               port: smtp
             initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 15
+            periodSeconds: 30
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
@@ -46,6 +51,8 @@ spec:
               value: "0.0.0.0:3025"
             - name: SMTP_SERVER_NAME
               value: {{ .Values.smtp.server_name }}
+            - name: SMTP_EHLO_DOMAIN
+              value: {{ .Values.smtp.ehlo_domain }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

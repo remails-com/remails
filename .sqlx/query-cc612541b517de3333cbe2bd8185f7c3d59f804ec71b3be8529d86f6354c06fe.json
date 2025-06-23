@@ -15,11 +15,21 @@
       },
       {
         "ordinal": 2,
+        "name": "remaining_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "quota_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -30,6 +40,8 @@
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,

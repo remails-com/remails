@@ -33,6 +33,8 @@ impl OrganizationId {
 pub struct Organization {
     id: OrganizationId,
     pub name: String,
+    remaining_message_quota: i64,
+    quota_reset: DateTime<Utc>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -66,17 +68,74 @@ impl OrganizationFilter {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum QuotaStatus {
+    Exceeded,
+    Below(u64),
+}
+
 impl OrganizationRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+
+    async fn reset_quota(&self, id: OrganizationId) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE organizations
+            SET quota_reset = quota_reset + '1 day', --TODO align the start/end date with the subscription period
+                remaining_message_quota = 30 -- TODO make quota subscription dependent
+            WHERE id = $1
+            "#,
+            *id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn reduce_quota(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
+        struct Quota {
+            remaining_message_quota: i64,
+            quota_reset: DateTime<Utc>,
+        }
+
+        let quota = sqlx::query_as!(
+            Quota,
+            r#"
+            UPDATE organizations
+            SET remaining_message_quota = 
+                CASE WHEN remaining_message_quota - 1 > 0 
+                    THEN remaining_message_quota - 1
+                    ELSE 0
+                END
+            WHERE id = $1
+            RETURNING remaining_message_quota, quota_reset
+            "#,
+            *id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if quota.quota_reset < Utc::now() {
+            self.reset_quota(id).await?;
+            // Redo the check with the refilled quota
+            return Box::pin(self.reduce_quota(id)).await;
+        }
+
+        if quota.remaining_message_quota <= 0 {
+            Ok(QuotaStatus::Exceeded)
+        } else {
+            Ok(QuotaStatus::Below(quota.remaining_message_quota as u64))
+        }
     }
 
     pub async fn create(&self, organization: NewOrganization) -> Result<Organization, Error> {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name)
-            VALUES (gen_random_uuid(), $1)
+            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)
+            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')
             RETURNING *
             "#,
             organization.name,

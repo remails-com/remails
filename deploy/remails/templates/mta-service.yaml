@@ -11,6 +11,12 @@ metadata:
         "plan": {{ .Values.smtp.load_balancer_plan | quote }},
         "frontends": [{
           "mode": "tcp"
+        }],
+        "backends": [{
+          "name": "smtp",
+          "properties": {
+            "outbound_proxy_protocol": "v2"
+          }
         }]
       }
 spec:

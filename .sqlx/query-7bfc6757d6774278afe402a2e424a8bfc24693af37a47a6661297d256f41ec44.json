@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations\n            SET quota_reset = quota_reset + '1 day', --TODO align the start/end date with the subscription period\n                remaining_message_quota = 30 -- TODO make quota subscription dependent\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bfc6757d6774278afe402a2e424a8bfc24693af37a47a6661297d256f41ec44"
+}
