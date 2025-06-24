@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE api_users SET password_hash = $2 WHERE id = $1 \n            ",
+  "query": "\n            UPDATE api_users SET password_hash = $2 WHERE id = $1\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "4ab3721d517c4f10e06ffb138ef83ebb2113228d672a6bc4435614ed347d18e4"
+  "hash": "afe547a240e32ab10e7aee7673e3b04ccaf387ed7a638e8c756a767d53d38a71"
 }

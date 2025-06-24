@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM organizations\n            WHERE id = $1\n              AND ($2::uuid[] IS NULL OR id = ANY($2))\n            ",
+  "query": "\n            SELECT id,\n                   name,\n                   remaining_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\"\n            FROM organizations\n            WHERE ($1::uuid[] IS NULL OR id = ANY($1))\n            ORDER BY name\n            ",
   "describe": {
     "columns": [
       {
@@ -32,11 +32,15 @@
         "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "moneybird_contact_id: MoneybirdContactId",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "UuidArray"
       ]
     },
@@ -46,8 +50,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "3ddb6207a44c0614c5cd9b6d3224c882f43a22511448b77d174cb28b3db3b4b8"
+  "hash": "dec288b2a900ed5da192ea68fca7892b9c39723fd3184cd06611a76576b1982c"
 }

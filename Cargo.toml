@@ -23,6 +23,7 @@ path = "src/bin/retry.rs"
 
 [features]
 load-fixtures = []
+moneybird-live-tests = []
 
 [dependencies]
 anyhow = "1.0.98"
@@ -60,6 +61,7 @@ mail-auth = "0.7.1"
 rustls-pemfile = "2.2.0"
 humansize = "2.1.3"
 ppp = "2.3.0"
+url = "2.5.4"
 
 [dev-dependencies]
 reqwest = { version = "0.12.20", features = ["json"] }

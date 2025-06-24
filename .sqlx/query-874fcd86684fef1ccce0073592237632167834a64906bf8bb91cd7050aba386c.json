@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM organizations\n            WHERE ($1::uuid[] IS NULL OR id = ANY($1))\n            ORDER BY name\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)\n            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')\n            RETURNING id,\n                      name,\n                      remaining_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\"\n            ",
   "describe": {
     "columns": [
       {
@@ -32,11 +32,16 @@
         "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "moneybird_contact_id: MoneybirdContactId",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
-        "UuidArray"
+        "Varchar"
       ]
     },
     "nullable": [
@@ -45,8 +50,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "cc612541b517de3333cbe2bd8185f7c3d59f804ec71b3be8529d86f6354c06fe"
+  "hash": "874fcd86684fef1ccce0073592237632167834a64906bf8bb91cd7050aba386c"
 }

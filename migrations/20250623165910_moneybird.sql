@@ -1,0 +1,1 @@
+ALTER TABLE organizations ADD moneybird_contact_id varchar DEFAULT NULL;

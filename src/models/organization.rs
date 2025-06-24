@@ -1,4 +1,7 @@
-use crate::models::{ApiUserId, Error};
+use crate::{
+    models::{ApiUserId, Error},
+    moneybird::MoneybirdContactId,
+};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,7 @@ pub struct Organization {
     pub name: String,
     remaining_message_quota: i64,
     quota_reset: DateTime<Utc>,
+    moneybird_contact_id: Option<MoneybirdContactId>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -136,7 +140,13 @@ impl OrganizationRepository {
             r#"
             INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)
             VALUES (gen_random_uuid(), $1, 50, now() + '1 month')
-            RETURNING *
+            RETURNING id,
+                      name,
+                      remaining_message_quota,
+                      quota_reset,
+                      created_at,
+                      updated_at,
+                      moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
             "#,
             organization.name,
         )
@@ -149,7 +159,14 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT * FROM organizations
+            SELECT id,
+                   name,
+                   remaining_message_quota,
+                   quota_reset,
+                   created_at,
+                   updated_at,
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
+            FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY name
             "#,
@@ -168,7 +185,14 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT * FROM organizations
+            SELECT id,
+                   name,
+                   remaining_message_quota,
+                   quota_reset,
+                   created_at,
+                   updated_at,
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
+            FROM organizations
             WHERE id = $1
               AND ($2::uuid[] IS NULL OR id = ANY($2))
             "#,

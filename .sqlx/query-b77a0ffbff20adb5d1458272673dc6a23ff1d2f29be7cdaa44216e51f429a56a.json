@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users SET github_user_id = NULL WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b77a0ffbff20adb5d1458272673dc6a23ff1d2f29be7cdaa44216e51f429a56a"
+}
