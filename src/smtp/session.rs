@@ -343,12 +343,12 @@ impl SmtpSession {
             return (SmtpResponse::AUTH_ERROR.into(), false);
         };
 
-        if ratelimit <= 0 {
-            return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
-        }
-
         if !credential.verify_password(password) {
             return (SmtpResponse::AUTH_ERROR.into(), false);
+        }
+
+        if ratelimit <= 0 {
+            return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
         }
 
         self.authenticated_credential = Some(credential);
