@@ -27,6 +27,10 @@ export function MessageLog() {
     return <Loader />;
   }
 
+  if (messages.length == 0) {
+    return <Text c="dimmed">No recent messages...</Text>;
+  }
+
   const rows = messages.map((message) => (
     <Accordion.Item key={message.id} value={message.id}>
       <Accordion.Control icon={statusIcons(message.status)}>
