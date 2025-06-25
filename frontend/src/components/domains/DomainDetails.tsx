@@ -77,7 +77,7 @@ export function DomainDetails() {
   };
 
   return (
-    <Container size="sm">
+    <Container size="sm" ml="0" pl="0">
       <h2>Domain Details</h2>
       <Stack>
         <TextInput label="Domain" value={currentDomain.domain} readOnly={true} variant="filled" />

@@ -3,7 +3,7 @@ import { Loader } from "../../Loader.tsx";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { Button, Flex, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconEdit, IconPencilPlus } from "@tabler/icons-react";
+import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewCredential } from "./NewCredential.tsx";
 
@@ -45,6 +45,7 @@ export function CredentialsOverview() {
         <Table.Td>{formatDateTime(credential.updated_at)}</Table.Td>
         <Table.Td align={"right"}>
           <Button
+            variant="subtle"
             onClick={() =>
               navigate("projects.project.streams.stream.credentials.credential", {
                 credential_id: credential.id,
@@ -61,12 +62,7 @@ export function CredentialsOverview() {
   return (
     <>
       <NewCredential opened={opened} close={close} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
-          New Credential
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th miw="10rem">Username</Table.Th>
@@ -77,6 +73,11 @@ export function CredentialsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Credential
+        </Button>
+      </Flex>
     </>
   );
 }
