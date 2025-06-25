@@ -3,9 +3,10 @@ import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconEdit, IconPencilPlus } from "@tabler/icons-react";
+import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewProject } from "./NewProject.tsx";
+import { Link } from "../../Link.tsx";
 
 export default function ProjectsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -21,14 +22,25 @@ export default function ProjectsOverview() {
 
   const rows = projects.map((project) => (
     <Table.Tr key={project.id}>
-      <Table.Td>{project.name}</Table.Td>
+      <Table.Td>
+        <Link to="projects.project" params={{ proj_id: project.id }} query={{ tab: "streams" }}>
+          {project.name}
+        </Link>
+      </Table.Td>
       <Table.Td>{formatDateTime(project.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          variant="subtle"
           onClick={() =>
-            navigate("projects.project", {
-              proj_id: project.id,
-            })
+            navigate(
+              "projects.project",
+              {
+                proj_id: project.id,
+              },
+              {
+                tab: "settings",
+              }
+            )
           }
         >
           <IconEdit />
@@ -40,12 +52,7 @@ export default function ProjectsOverview() {
   return (
     <>
       <NewProject opened={opened} close={close} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
-          New Project
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Name</Table.Th>
@@ -55,6 +62,11 @@ export default function ProjectsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Project
+        </Button>
+      </Flex>
     </>
   );
 }
