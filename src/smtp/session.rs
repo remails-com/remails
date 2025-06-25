@@ -335,17 +335,17 @@ impl SmtpSession {
             password.len()
         );
 
-        let Ok(Some((credential, ratelimit))) = self
-            .smtp_credentials
-            .find_by_username_rate_limited(username)
-            .await
-        else {
+        let Ok(Some(credential)) = self.smtp_credentials.find_by_username(username).await else {
             return (SmtpResponse::AUTH_ERROR.into(), false);
         };
 
         if !credential.verify_password(password) {
             return (SmtpResponse::AUTH_ERROR.into(), false);
         }
+
+        let Ok(ratelimit) = self.smtp_credentials.rate_limit(credential.id()).await else {
+            return (SmtpResponse::RATE_LIMIT.into(), true);
+        };
 
         if ratelimit <= 0 {
             return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
