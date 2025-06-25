@@ -3,10 +3,11 @@ import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
 import { Button, Flex, Table } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconEdit, IconPencilPlus } from "@tabler/icons-react";
+import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
+import { Link } from "../../Link.tsx";
 
 export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -21,17 +22,20 @@ export default function DomainsOverview() {
     return <Loader />;
   }
 
+  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
+
   const rows = domains.map((domain) => (
     <Table.Tr key={domain.id}>
-      <Table.Td>{domain.domain}</Table.Td>
+      <Table.Td>
+        <Link to={route} params={{ domain_id: domain.id }}>
+          {domain.domain}
+        </Link>
+      </Table.Td>
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          variant="subtle"
           onClick={() => {
-            let route = "domains.domain";
-            if (currentProject) {
-              route = "projects.project.domains.domain";
-            }
             navigate(route, {
               domain_id: domain.id,
             });
@@ -46,13 +50,7 @@ export default function DomainsOverview() {
   return (
     <>
       <NewDomain opened={opened} close={close} projectId={currentProject?.id || null} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
-          {" "}
-          New Domain
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Domain</Table.Th>
@@ -62,6 +60,11 @@ export default function DomainsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Domain
+        </Button>
+      </Flex>
     </>
   );
 }

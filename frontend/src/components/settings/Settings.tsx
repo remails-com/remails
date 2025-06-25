@@ -1,5 +1,5 @@
 import { Button, Container, Grid, Group, PasswordInput, Stack, Text, TextInput, Tooltip } from "@mantine/core";
-import { IconBrandGithub, IconPencilPlus, IconPlugConnectedX, IconTrash, IconX } from "@tabler/icons-react";
+import { IconBrandGithub, IconPlus, IconPlugConnectedX, IconTrash, IconX } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../organizations/NewOrganization.tsx";
 import GitHubBadge from "./GitHubBadge.tsx";
@@ -160,9 +160,8 @@ export function Settings() {
   };
 
   return (
-    <Container size="xs">
+    <Container size="xs" ml="0" pl="0">
       <Stack>
-        <h1>Settings</h1>
         <form onSubmit={basicForm.onSubmit(updateUser)}>
           <Stack>
             <TextInput
@@ -293,7 +292,7 @@ export function Settings() {
             navigate("settings", { org_id: newOrg.id });
           }}
         />
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Organization
         </Button>
       </Stack>

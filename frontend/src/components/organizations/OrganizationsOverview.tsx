@@ -4,7 +4,7 @@ import { formatDateTime } from "../../util";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPencilPlus } from "@tabler/icons-react";
+import { IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 
 export function OrganizationsOverview() {
@@ -32,6 +32,8 @@ export function OrganizationsOverview() {
       <Table.Td>{formatDateTime(organization.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          rightSection={currentOrganization?.id == organization.id ? <IconSquareCheck /> : <IconSquare />}
+          variant="subtle"
           onClick={() => {
             navigate("organizations", { org_id: organization.id });
           }}
@@ -49,12 +51,7 @@ export function OrganizationsOverview() {
         close={close}
         done={(newOrg) => navigate("organizations", { org_id: newOrg.id })}
       />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPencilPlus />}>
-          New Organization
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>ID</Table.Th>
@@ -65,6 +62,11 @@ export function OrganizationsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Organization
+        </Button>
+      </Flex>
     </>
   );
 }
