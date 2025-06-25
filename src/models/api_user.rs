@@ -8,7 +8,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
 
-#[derive(From, derive_more::Debug, Deserialize)]
+#[derive(From, derive_more::Debug, Deserialize, FromStr)]
 #[debug("*****")]
 #[serde(transparent)]
 pub struct Password(String);

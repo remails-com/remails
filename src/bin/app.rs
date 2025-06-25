@@ -23,7 +23,12 @@ async fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or("remails=trace,tower_http=debug,axum=trace".parse().unwrap()),
         )
-        .with(tracing_subscriber::fmt::layer().without_time())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_file(true)
+                .with_line_number(true)
+                .without_time(),
+        )
         .init();
 
     let database_url = std::env::var("DATABASE_URL")

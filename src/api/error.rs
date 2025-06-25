@@ -1,5 +1,5 @@
 use crate::{api::oauth, models, models::Error};
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, error};
@@ -24,6 +24,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("{0}")]
     PreconditionFailed(String),
+    #[error("Moneybird: {0}")]
+    Moneybird(#[from] crate::moneybird::Error),
 }
 
 impl IntoResponse for ApiError {
@@ -58,6 +60,15 @@ impl IntoResponse for ApiError {
             ApiError::Serialization(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, err),
             ApiError::PreconditionFailed(err) => (StatusCode::PRECONDITION_FAILED, err),
+            ApiError::Moneybird(err) => match err {
+                crate::moneybird::Error::Unauthorized => {
+                    (StatusCode::UNAUTHORIZED, "Unauthorized".to_string())
+                }
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                ),
+            },
         };
 
         (status, Json(json!({ "error": message }))).into_response()

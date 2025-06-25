@@ -54,7 +54,7 @@ pub struct NewOrganization {
     name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OrganizationRepository {
     pool: sqlx::PgPool,
 }
@@ -108,8 +108,8 @@ impl OrganizationRepository {
             Quota,
             r#"
             UPDATE organizations
-            SET remaining_message_quota = 
-                CASE WHEN remaining_message_quota - 1 > 0 
+            SET remaining_message_quota =
+                CASE WHEN remaining_message_quota - 1 > 0
                     THEN remaining_message_quota - 1
                     ELSE 0
                 END
@@ -243,6 +243,16 @@ impl OrganizationRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
+    
+    impl Organization {
+        pub fn message_quota(&self) -> i64 {
+            self.remaining_message_quota
+        }
+        
+        pub fn quota_reset(&self) -> DateTime<Utc> {
+            self.quota_reset
+        }
+    }
 
     #[sqlx::test]
     async fn organization_lifecycle(db: PgPool) {

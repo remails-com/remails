@@ -1,5 +1,4 @@
 use crate::{
-    Environment,
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
@@ -14,18 +13,22 @@ use crate::{
             update_smtp_credential,
         },
         streams::{create_stream, list_streams, remove_stream, update_stream},
+        subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
     },
     handler::dns::DnsResolver,
     models::{
         ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
         ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
+    moneybird,
+    moneybird::MoneyBird,
+    Environment,
 };
 use axum::{
-    Json, Router,
-    extract::{FromRef, Request, State},
-    middleware,
+    extract::{FromRef, Request, State}, middleware,
     routing::{delete, get, post, put},
+    Json,
+    Router,
 };
 use base64ct::Encoding;
 use http::{HeaderName, HeaderValue, StatusCode};
@@ -52,6 +55,7 @@ mod organizations;
 mod projects;
 mod smtp_credentials;
 mod streams;
+mod subscriptions;
 mod whoami;
 
 static USER_AGENT_VALUE: &str = "remails";
@@ -105,6 +109,7 @@ pub struct ApiConfig {
 pub struct ApiState {
     pool: PgPool,
     config: ApiConfig,
+    moneybird: MoneyBird,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
 }
@@ -178,6 +183,12 @@ impl FromRef<ApiState> for RemailsConfig {
     }
 }
 
+impl FromRef<ApiState> for MoneyBird {
+    fn from_ref(state: &ApiState) -> Self {
+        state.moneybird.clone()
+    }
+}
+
 async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
@@ -213,12 +224,30 @@ impl ApiServer {
             }
         };
 
+        let moneybird_api_key =
+            env::var("MONEYBIRD_API_KEY").expect("MONEYBIRD_API_KEY env var must be set");
+
+        let moneybird_administration_id = env::var("MONEYBIRD_ADMINISTRATION_ID")
+            .expect("MONEYBIRD_ADMINISTRATION_ID env var must be set")
+            .into();
+
+        let moneybird = MoneyBird::new(
+            moneybird_api_key.into(),
+            pool.clone(),
+            moneybird_administration_id,
+            // FIXME: use a real URL
+            "https://dump.tweede.golf/dump/moneybird".parse().unwrap(),
+        )
+        .await
+        .expect("Cannot connect to Moneybird");
+
         let state = ApiState {
             pool,
             config: ApiConfig {
                 session_key,
                 remails_config: Default::default(),
             },
+            moneybird,
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
             resolver: DnsResolver::new(),
@@ -230,6 +259,7 @@ impl ApiServer {
             .route("/config", get(config::config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
+            .route("/webhook/moneybird", post(moneybird_webhook))
             .route("/api_user/{user_id}", put(api_users::update_user))
             .route("/api_user/{user_id}/password", put(api_users::update_password).delete(api_users::delete_password))
             .route(
@@ -239,6 +269,14 @@ impl ApiServer {
             .route(
                 "/organizations/{id}",
                 get(get_organization).delete(remove_organization),
+            )
+            .route(
+                "/organizations/{id}/subscription",
+                get(get_subscription),
+            )
+            .route(
+                "/organizations/{id}/subscription/new",
+                get(get_sales_link),
             )
             .route(
                 "/organizations/{org_id}/messages",
