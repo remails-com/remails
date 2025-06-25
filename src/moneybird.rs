@@ -1,6 +1,5 @@
 use crate::models::{OrganizationId, Password};
-use axum::routing::trace;
-use chrono::{Date, DateTime, Datelike, Days, Months, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Days, Months, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rand::Rng;
@@ -19,13 +18,13 @@ pub struct MoneybirdContactId(String);
 struct SubscriptionTemplateId(String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-struct SubscriptionId(String);
+pub struct SubscriptionId(String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
 struct ProductId(String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-struct RecurringSalesInvoiceId(String);
+pub struct RecurringSalesInvoiceId(String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
 pub struct AdministrationId(String);
@@ -87,7 +86,7 @@ struct RecurringSalesInvoice {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
-enum ProductIdentifier {
+pub enum ProductIdentifier {
     RmlsFree,
     RmlsTinyMonthly,
     RmlsSmallMonthly,
@@ -424,16 +423,13 @@ impl MoneyBird {
             | Action::SubscriptionEdited
             | Action::SubscriptionResumed
             | Action::SubscriptionUpdated => {
+                trace!("received {:?} webhook", payload.action);
                 let subscription = serde_json::from_value::<Subscription>(payload.entity)?;
                 self.sync_subscription(subscription).await?;
             }
         };
 
         Ok(())
-    }
-
-    async fn handle_destroyed_subscription(&self, subscription: Subscription) -> Result<(), Error> {
-
     }
 
     async fn sync_subscription(&self, subscription: Subscription) -> Result<(), Error> {
@@ -795,6 +791,7 @@ impl MoneyBird {
 mod test {
     use super::*;
     use crate::models::{OrganizationFilter, OrganizationRepository};
+    use chrono::Datelike;
 
     #[sqlx::test(fixtures("organizations"))]
     async fn quota_reset_without_moneybird(db: PgPool) {

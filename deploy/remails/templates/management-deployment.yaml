@@ -57,6 +57,13 @@ spec:
                 secretKeyRef:
                   name: secrets
                   key: github_client_secret
+            - name: MONEYBIRD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: moneybird_api_key
+            - name: MONEYBIRD_ADMINISTRATION_ID
+              value: {{ .Values.moneybird.administration | quote }}
             - name: GITHUB_OAUTH_REDIRECT_URL
               value: "https://{{ .Values.management.server_name }}/api/oauth/authorize/github"
             - name: SESSION_KEY

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO moneybird_webhook (moneybird_id, token) VALUES ($1, $2)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "72c6219bbb5e5654ff77cf7e41529b91943c92c31c1188b743a81ee63e35c0b4"
+}

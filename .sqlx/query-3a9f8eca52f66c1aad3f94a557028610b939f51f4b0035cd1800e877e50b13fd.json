@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations SET moneybird_contact_id = $2 WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a9f8eca52f66c1aad3f94a557028610b939f51f4b0035cd1800e877e50b13fd"
+}

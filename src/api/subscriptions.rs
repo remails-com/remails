@@ -1,14 +1,11 @@
 use crate::{
-    api::{
-        error::{ApiError, ApiResult},
-        ApiState,
-    },
+    api::error::{ApiError, ApiResult},
     models::{ApiUser, OrganizationId},
-    moneybird::{Error, MoneyBird, MoneybirdWebhookPayload, SubscriptionStatus},
+    moneybird::{MoneyBird, MoneybirdWebhookPayload, SubscriptionStatus},
 };
 use axum::{
-    debug_handler, extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
 use tracing::debug;
 use url::Url;

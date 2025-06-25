@@ -243,12 +243,12 @@ impl OrganizationRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
-    
+
     impl Organization {
         pub fn message_quota(&self) -> i64 {
             self.remaining_message_quota
         }
-        
+
         pub fn quota_reset(&self) -> DateTime<Utc> {
             self.quota_reset
         }

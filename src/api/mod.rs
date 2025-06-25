@@ -1,4 +1,5 @@
 use crate::{
+    Environment,
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
@@ -20,15 +21,13 @@ use crate::{
         ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
         ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
-    moneybird,
     moneybird::MoneyBird,
-    Environment,
 };
 use axum::{
-    extract::{FromRef, Request, State}, middleware,
+    Json, Router,
+    extract::{FromRef, Request, State},
+    middleware,
     routing::{delete, get, post, put},
-    Json,
-    Router,
 };
 use base64ct::Encoding;
 use http::{HeaderName, HeaderValue, StatusCode};
