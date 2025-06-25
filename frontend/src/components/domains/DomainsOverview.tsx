@@ -22,9 +22,7 @@ export default function DomainsOverview() {
     return <Loader />;
   }
 
-  const route = currentProject
-    ? "projects.project.domains.domain"
-    : "domains.domain";
+  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
 
   const rows = domains.map((domain) => (
     <Table.Tr key={domain.id}>
@@ -36,6 +34,7 @@ export default function DomainsOverview() {
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          variant="subtle"
           onClick={() => {
             navigate(route, {
               domain_id: domain.id,
@@ -51,13 +50,7 @@ export default function DomainsOverview() {
   return (
     <>
       <NewDomain opened={opened} close={close} projectId={currentProject?.id || null} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
-          {" "}
-          New Domain
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Domain</Table.Th>
@@ -67,6 +60,11 @@ export default function DomainsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Domain
+        </Button>
+      </Flex>
     </>
   );
 }

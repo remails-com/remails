@@ -30,12 +30,17 @@ export default function ProjectsOverview() {
       <Table.Td>{formatDateTime(project.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          variant="subtle"
           onClick={() =>
-            navigate("projects.project", {
-              proj_id: project.id,
-            }, {
-              tab: 'settings'
-            })
+            navigate(
+              "projects.project",
+              {
+                proj_id: project.id,
+              },
+              {
+                tab: "settings",
+              }
+            )
           }
         >
           <IconEdit />
@@ -47,12 +52,7 @@ export default function ProjectsOverview() {
   return (
     <>
       <NewProject opened={opened} close={close} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
-          New Project
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Name</Table.Th>
@@ -62,6 +62,11 @@ export default function ProjectsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Project
+        </Button>
+      </Flex>
     </>
   );
 }

@@ -23,23 +23,24 @@ export function StreamsOverview() {
   const rows = streams.map((stream) => (
     <Table.Tr key={stream.id}>
       <Table.Td>
-        <Link
-          to="projects.project.streams.stream"
-          params={{ stream_id: stream.id }}
-          query={{ tab: "messages" }}
-        >
+        <Link to="projects.project.streams.stream" params={{ stream_id: stream.id }} query={{ tab: "messages" }}>
           {stream.name}
         </Link>
       </Table.Td>
       <Table.Td>{formatDateTime(stream.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <Button
+          variant="subtle"
           onClick={() =>
-            navigate("projects.project.streams.stream", {
-              stream_id: stream.id,
-            }, {
-              tab: "settings",
-            })
+            navigate(
+              "projects.project.streams.stream",
+              {
+                stream_id: stream.id,
+              },
+              {
+                tab: "settings",
+              }
+            )
           }
         >
           <IconEdit />
@@ -51,12 +52,7 @@ export function StreamsOverview() {
   return (
     <>
       <NewStream opened={opened} close={close} />
-      <Flex justify="flex-end">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
-          New Stream
-        </Button>
-      </Flex>
-      <Table>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Name</Table.Th>
@@ -66,6 +62,11 @@ export function StreamsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Flex justify="center" mt="md">
+        <Button onClick={() => open()} leftSection={<IconPlus />}>
+          New Stream
+        </Button>
+      </Flex>
     </>
   );
 }
