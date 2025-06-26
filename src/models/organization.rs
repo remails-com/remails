@@ -35,6 +35,8 @@ pub struct Organization {
     pub name: String,
     remaining_message_quota: i64,
     quota_reset: DateTime<Utc>,
+    remaining_rate_limit: i64,
+    rate_limit_reset: DateTime<Utc>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -134,8 +136,8 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)
-            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')
+            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
+            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())
             RETURNING *
             "#,
             organization.name,

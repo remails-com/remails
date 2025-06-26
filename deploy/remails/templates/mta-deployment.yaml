@@ -62,6 +62,10 @@ spec:
               value: /etc/smtp-cert/tls.crt
             - name: SMTP_KEY_FILE
               value: /etc/smtp-cert/tls.key
+            - name: RATE_LIMIT_MINUTES
+              value: {{ .Values.smtp.rate_limit_minutes }}
+            - name: RATE_LIMIT_MAX_MESSAGES
+              value: {{ .Values.smtp.rate_limit_max_messages }}
           ports:
             - containerPort: 3025
               name: smtp

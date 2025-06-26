@@ -51,7 +51,7 @@ mod test {
     use crate::{
         models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
         smtp::{SmtpConfig, server::SmtpServer},
-        test::random_port,
+        test::{TestStreams, random_port},
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
@@ -76,9 +76,7 @@ mod test {
         let smtp_port = random_port();
         let user_repository = SmtpCredentialRepository::new(pool.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let credential_request = SmtpCredentialRequest {
             username: "john".to_string(),

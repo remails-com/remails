@@ -2,7 +2,10 @@ use crate::models::{Error, OrganizationId, ProjectId, streams::StreamId};
 use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
-use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::{
+    postgres::types::PgInterval,
+    types::chrono::{DateTime, Utc},
+};
 use uuid::Uuid;
 
 #[derive(
@@ -68,6 +71,10 @@ impl SmtpCredential {
         self.id
     }
 
+    pub fn stream_id(&self) -> StreamId {
+        self.stream_id
+    }
+
     pub fn username(&self) -> &str {
         &self.username
     }
@@ -76,11 +83,27 @@ impl SmtpCredential {
 #[derive(Debug, Clone)]
 pub struct SmtpCredentialRepository {
     pool: sqlx::PgPool,
+    rate_limit_timespan: PgInterval,
+    rate_limit_max_messages: i64,
 }
 
 impl SmtpCredentialRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        let rate_limit_minutes = std::env::var("RATE_LIMIT_MINUTES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MINUTES"))
+            .unwrap_or(1);
+        let rate_limit_max_messages = std::env::var("RATE_LIMIT_MAX_MESSAGES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MAX_MESSAGES"))
+            .unwrap_or(120);
+
+        Self {
+            pool,
+            rate_limit_timespan: PgInterval::try_from(chrono::Duration::minutes(
+                rate_limit_minutes,
+            ))
+            .expect("Could not set rate limit timespan"),
+            rate_limit_max_messages,
+        }
     }
 
     pub async fn generate(
@@ -155,6 +178,35 @@ impl SmtpCredentialRepository {
         .await?;
 
         Ok(credential)
+    }
+
+    pub async fn rate_limit(&self, id: StreamId) -> Result<i64, Error> {
+        let remaining_rate_limit = sqlx::query_scalar!(
+            r#"
+            UPDATE organizations o
+            SET
+            remaining_rate_limit = CASE
+                WHEN rate_limit_reset < now()
+                THEN $2
+                ELSE GREATEST(remaining_rate_limit - 1, 0)
+            END,
+            rate_limit_reset = CASE
+                WHEN rate_limit_reset < now()
+                THEN now() + $3
+                ELSE rate_limit_reset
+            END
+            FROM streams s JOIN projects p ON p.id = s.project_id
+            WHERE p.organization_id = o.id AND s.id = $1
+            RETURNING remaining_rate_limit
+            "#,
+            *id,
+            self.rate_limit_max_messages,
+            self.rate_limit_timespan
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(remaining_rate_limit)
     }
 
     pub async fn list(
@@ -256,7 +308,7 @@ impl SmtpCredentialRepository {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::MessageRepository;
+    use crate::{models::MessageRepository, test::TestStreams};
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
@@ -273,9 +325,7 @@ mod test {
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let credential = credential_repo
             .generate(org_id, project_id, stream_id, &credential_request)
@@ -305,9 +355,7 @@ mod test {
     async fn remove_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let rm_cred = credential_repo
@@ -327,9 +375,8 @@ mod test {
     async fn remove_org_does_not_match_proj(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (_org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let org_id = TestStreams::Org2Project1Stream1.org_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -349,9 +396,8 @@ mod test {
     async fn remove_proj_does_not_match_stream(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, _project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let project_id = TestStreams::Org2Project1Stream1.project_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -380,9 +426,7 @@ mod test {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
         let message_repo = MessageRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
@@ -423,9 +467,7 @@ mod test {
     async fn update_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let update = credential_repo
@@ -451,9 +493,8 @@ mod test {
     async fn update_org_does_not_match_proj(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (_org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let org_id = TestStreams::Org2Project1Stream1.org_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -478,9 +519,8 @@ mod test {
     async fn update_proj_does_not_match_stream(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, _project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let project_id = TestStreams::Org2Project1Stream1.project_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo

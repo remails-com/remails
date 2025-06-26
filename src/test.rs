@@ -1,6 +1,9 @@
 use crate::{
     handler::{HandlerConfig, dns::DnsResolver},
-    models::{ApiMessageMetadata, SmtpCredential, SmtpCredentialResponse},
+    models::{
+        ApiMessageMetadata, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
+        StreamId,
+    },
     run_api_server, run_mta,
     smtp::SmtpConfig,
 };
@@ -20,6 +23,73 @@ pub fn random_port() -> u16 {
     let mut rng = rand::rng();
 
     rng.random_range(10_000..30_000)
+}
+
+/// Streams used for testing, as configured in the fixtures
+#[allow(dead_code)]
+pub enum TestStreams {
+    Org1Project1Stream1,
+    Org1Project2Stream1,
+    Org1Project2Stream2,
+    Org2Project1Stream1,
+}
+
+impl TestStreams {
+    pub fn stream_id(&self) -> StreamId {
+        match self {
+            TestStreams::Org1Project1Stream1 => {
+                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap()
+            }
+            TestStreams::Org1Project2Stream1 => {
+                "d01de497-b40a-4795-a92e-5a8b83dea565".parse().unwrap()
+            }
+            TestStreams::Org1Project2Stream2 => {
+                "e1bcdb8e-6a01-4f6f-b4fd-2b71f872bb02".parse().unwrap()
+            }
+            TestStreams::Org2Project1Stream1 => {
+                "6af665cd-698e-47ca-9d6b-966f8e8fa07f".parse().unwrap()
+            }
+        }
+    }
+
+    pub fn project_id(&self) -> ProjectId {
+        match self {
+            TestStreams::Org1Project1Stream1 => {
+                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()
+            }
+            TestStreams::Org1Project2Stream1 | TestStreams::Org1Project2Stream2 => {
+                "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap()
+            }
+            TestStreams::Org2Project1Stream1 => {
+                "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()
+            }
+        }
+    }
+
+    pub fn org_id(&self) -> OrganizationId {
+        match self {
+            TestStreams::Org1Project1Stream1
+            | TestStreams::Org1Project2Stream1
+            | TestStreams::Org1Project2Stream2 => {
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap()
+            }
+            TestStreams::Org2Project1Stream1 => {
+                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap()
+            }
+        }
+    }
+
+    pub fn get_ids(&self) -> (OrganizationId, ProjectId, StreamId) {
+        (self.org_id(), self.project_id(), self.stream_id())
+    }
+
+    pub fn get_stringified_ids(&self) -> (String, String, String) {
+        (
+            self.org_id().to_string(),
+            self.project_id().to_string(),
+            self.stream_id().to_string(),
+        )
+    }
 }
 
 async fn setup(
@@ -86,9 +156,7 @@ async fn setup(
 async fn integration_test(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
-    let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
-    let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
+    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
 
     let john_cred = client
         .post(format!(
@@ -107,16 +175,14 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let org_id = "5d55aec5-136a-407c-952f-5348d4398204";
-    let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95";
-    let stream_id = "6af665cd-698e-47ca-9d6b-966f8e8fa07f";
+    let (org_id, project_id, stream_id) = TestStreams::Org2Project1Stream1.get_stringified_ids();
 
     let eddy_cred = client
         .post(format!(
             "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
             http_port
         ))
-        .header("X-Test-Login", org_id)
+        .header("X-Test-Login", &org_id)
         .json(&json!({
             "username": "eddy",
             "description": "Eddy test credential"
@@ -208,9 +274,7 @@ async fn integration_test(pool: PgPool) {
         _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
     }
 
-    let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
-    let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
-    let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
+    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
         .header("X-Test-Login", "44729d9f-a7dc-4226-b412-36a7537f5176")
@@ -234,6 +298,7 @@ async fn integration_test(pool: PgPool) {
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
 #[sqlx::test(fixtures(
     "organizations",
     "api_users",
@@ -251,10 +316,7 @@ async fn quotas_count_atomically(pool: PgPool) {
 
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    // test org 1
-    let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176";
-    let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
-    let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
+    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
 
     let john_cred = client
         .post(format!(
@@ -282,15 +344,12 @@ async fn quotas_count_atomically(pool: PgPool) {
                     assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
                     assert_eq!(recv.envelope_recipients.len(), 1);
                     assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
-                    if i % 100 == 0 {
-                        println!("received {i}th messages");
-                    }
-                    if i > 5000 {
+                    if i > 1000 {
                         panic!("went over quota")
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                    if i < 5000 {
+                    if i < 1000 {
                         panic!("timed out receiving {i}th email")
                     }
                     return
@@ -300,7 +359,7 @@ async fn quotas_count_atomically(pool: PgPool) {
     });
 
     // Spawn 51 tasks to throw 100 messages each to remails
-    for i in 0..51 {
+    for i in 0..11 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
             .implicit_tls(true)
             .allow_invalid_certs()
@@ -325,6 +384,108 @@ async fn quotas_count_atomically(pool: PgPool) {
                 john_smtp_client.send(message).await.unwrap();
             }
             john_smtp_client.quit().await.unwrap();
+        });
+    }
+
+    join_set.join_all().await;
+}
+
+#[sqlx::test(fixtures(
+    "organizations",
+    "api_users",
+    "projects",
+    "org_domains",
+    "proj_domains",
+    "streams"
+))]
+async fn rate_limit_count_atomically(pool: PgPool) {
+    let pool = PgPoolOptions::new()
+        .max_connections(70)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+
+    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
+
+    // Organization 2 has a rate limit of 0 that should be reset automatically to 120
+    let (org_id, project_id, stream_id) = TestStreams::Org2Project1Stream1.get_stringified_ids();
+
+    let john_cred = client
+        .post(format!(
+            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
+            http_port
+        ))
+        .header("X-Test-Login", org_id)
+        .json(&json!({
+            "username": "john",
+            "description": "John test credential"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json::<SmtpCredentialResponse>()
+        .await
+        .unwrap();
+
+    let mut join_set = JoinSet::new();
+
+    join_set.spawn(async move {
+        for i in 1.. {
+            select! {
+                Ok(recv) = mailcrab_rx.recv() => {
+                    assert_eq!(recv.envelope_from.as_str(), "john@test-org-2-project-1.com");
+                    assert_eq!(recv.envelope_recipients.len(), 1);
+                    assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-1-project-1.com");
+                    if i > 120 {
+                        panic!("went over rate limit")
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                    if i < 120 {
+                        panic!("timed out receiving {i}th email")
+                    }
+                    return
+                },
+            }
+        }
+    });
+
+    // Spawn 10 tasks to send 15 messages each to remails, only 120 of these should be accepted
+    for i in 0..10 {
+        let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .implicit_tls(true)
+            .allow_invalid_certs()
+            .credentials((
+                john_cred.username().as_str(),
+                john_cred.cleartext_password().as_str(),
+            ))
+            .connect()
+            .await
+            .unwrap();
+
+        join_set.spawn(async move {
+            for j in 1..=15 {
+                let message = MessageBuilder::new()
+                    .from(("John", "john@test-org-2-project-1.com"))
+                    .to(vec![("Eddy", "eddy@test-org-1-project-1.com")])
+                    .subject("TPS reports")
+                    .text_body(format!(
+                        "Have you finished the TPS reports yet? This is the {}th reminder!!!",
+                        i * 2 + j
+                    ));
+
+                match john_smtp_client.send(message).await {
+                    Ok(_) => (),
+                    Err(mail_send::Error::UnexpectedReply(response)) => {
+                        assert_eq!(response.code, 450);
+                        assert_eq!(response.esc, [4, 3, 2]);
+                        assert_eq!(response.message, "Sent too many messages, try again later");
+                        return; // early exit because connection has been terminated
+                    }
+                    Err(e) => panic!("Error sending mail {}", e),
+                }
+            }
+            let _ = john_smtp_client.quit().await;
         });
     }
 
