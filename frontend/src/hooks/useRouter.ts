@@ -5,8 +5,6 @@ import { Action } from "../types";
 export function useRouter(router: Router, dispatch: Dispatch<Action>) {
   // handle back / forward events
   useEffect(() => {
-    console.log("register popstate listener");
-
     const onPopState = (event: PopStateEvent) => {
       if (event.state?.routerState) {
         dispatch({

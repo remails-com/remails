@@ -72,7 +72,13 @@ export function useApi(user: WhoamiResponse | null, state: State, navigate: Navi
     } else {
       dispatch({ type: "set_messages", messages: null });
     }
-  }, [dispatch, user, state.routerState.params.org_id, state.routerState.params.proj_id, state.routerState.params.stream_id]);
+  }, [
+    dispatch,
+    user,
+    state.routerState.params.org_id,
+    state.routerState.params.proj_id,
+    state.routerState.params.stream_id,
+  ]);
 
   useEffect(() => {
     const org_id = state.routerState.params.org_id;
@@ -114,7 +120,13 @@ export function useApi(user: WhoamiResponse | null, state: State, navigate: Navi
       dispatch({ type: "set_credentials", credentials: null });
       return;
     }
-  }, [dispatch, user, state.routerState.params.org_id, state.routerState.params.proj_id, state.routerState.params.stream_id]);
+  }, [
+    dispatch,
+    user,
+    state.routerState.params.org_id,
+    state.routerState.params.proj_id,
+    state.routerState.params.stream_id,
+  ]);
 
   useEffect(() => {
     fetch("/api/config")

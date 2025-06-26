@@ -120,6 +120,7 @@ export class Router {
       name: "not_found",
       params: {},
     };
+    this.pathParamCache = this.initialState.params;
   }
 
   match(path: string): {

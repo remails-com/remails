@@ -1,4 +1,4 @@
-import { Button, Flex, Table } from "@mantine/core";
+import { Button, Divider, Flex, Table } from "@mantine/core";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useStreams } from "../../hooks/useStreams.ts";
@@ -57,6 +57,7 @@ export function StreamsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Divider />
       <Flex justify="center" mt="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Stream

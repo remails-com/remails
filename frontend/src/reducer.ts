@@ -67,7 +67,7 @@ function getActionHandler<T extends Action["type"]>(
 }
 
 export function reducer(state: State, action: Action): State {
-  // console.log("fired action", action);
+  console.log("action:", action);
   const handler = getActionHandler(action);
   return handler(state, action);
 }
