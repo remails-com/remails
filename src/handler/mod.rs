@@ -678,12 +678,11 @@ mod test {
     use crate::{
         handler::dns::DnsResolver,
         models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest},
+        test::{TestStreams, random_port},
     };
-    use std::{collections::HashSet, net::Ipv4Addr};
-
-    use crate::{models::OrganizationId, test::random_port};
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
+    use std::{collections::HashSet, net::Ipv4Addr};
     use tokio::select;
 
     #[sqlx::test(fixtures(
@@ -713,9 +712,7 @@ mod test {
             description: "Test SMTP credential description".to_string(),
         };
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
@@ -772,9 +769,7 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-            let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-            let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
@@ -837,9 +832,7 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-            let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-            let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
@@ -897,9 +890,7 @@ mod test {
         let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
         let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let get_message_status = async |id: MessageId| {
             message_repo
@@ -975,7 +966,7 @@ mod test {
         } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
-        let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let org_id = TestStreams::Org1Project1Stream1.org_id();
 
         let config = HandlerConfig {
             allow_plain: true,

@@ -308,7 +308,7 @@ impl SmtpCredentialRepository {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::MessageRepository;
+    use crate::{models::MessageRepository, test::TestStreams};
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
@@ -325,9 +325,7 @@ mod test {
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let credential = credential_repo
             .generate(org_id, project_id, stream_id, &credential_request)
@@ -357,9 +355,7 @@ mod test {
     async fn remove_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let rm_cred = credential_repo
@@ -379,9 +375,8 @@ mod test {
     async fn remove_org_does_not_match_proj(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (_org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let org_id = TestStreams::Org2Project1Stream1.org_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -401,9 +396,8 @@ mod test {
     async fn remove_proj_does_not_match_stream(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, _project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let project_id = TestStreams::Org2Project1Stream1.project_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -432,9 +426,7 @@ mod test {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
         let message_repo = MessageRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
@@ -475,9 +467,7 @@ mod test {
     async fn update_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let update = credential_repo
@@ -503,9 +493,8 @@ mod test {
     async fn update_org_does_not_match_proj(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
-        let project_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (_org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let org_id = TestStreams::Org2Project1Stream1.org_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
@@ -530,9 +519,8 @@ mod test {
     async fn update_proj_does_not_match_stream(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
 
-        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let project_id = "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let (org_id, _project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let project_id = TestStreams::Org2Project1Stream1.project_id();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
