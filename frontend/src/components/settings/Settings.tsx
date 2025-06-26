@@ -1,5 +1,5 @@
 import { Button, Container, Grid, Group, PasswordInput, Stack, Text, TextInput, Tooltip } from "@mantine/core";
-import { IconBrandGithub, IconPlus, IconPlugConnectedX, IconTrash, IconX } from "@tabler/icons-react";
+import { IconBrandGithub, IconPlugConnectedX, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../organizations/NewOrganization.tsx";
 import GitHubBadge from "./GitHubBadge.tsx";
@@ -7,6 +7,7 @@ import { useUser } from "../../hooks/useUser.ts";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails.ts";
+import SubscriptionCard from "./SubscriptionCard.tsx";
 
 interface BasicFormValues {
   name: string;
@@ -284,6 +285,8 @@ export function Settings() {
         </form>
 
         <h2>Organization Settings</h2>
+
+        <SubscriptionCard/>
 
         <NewOrganization
           opened={opened}

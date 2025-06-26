@@ -26,7 +26,7 @@ export default function StreamSettings({ currentStream, currentOrganization, cur
 
   const form = useForm<FormValues>({
     initialValues: {
-      name: currentStream?.name || '',
+      name: currentStream?.name || "",
     },
   });
 
@@ -45,7 +45,7 @@ export default function StreamSettings({ currentStream, currentOrganization, cur
         </Text>
       ),
       labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => { },
+      onCancel: () => {},
       onConfirm: () => deleteStream(project),
     });
   };

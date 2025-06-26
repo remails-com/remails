@@ -222,3 +222,30 @@ export interface DomainVerificationResult {
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";
+
+export type ProductIdentifier =
+  | "RMLS-FREE"
+  | "RMLS-TINY-MONTHLY"
+  | "RMLS-SMALL-MONTHLY"
+  | "RMLS-MEDIUM-MONTHLY"
+  | "RMLS-LARGE-MONTHLY"
+  | "RMLS-TINY-YEARLY"
+  | "RMLS-SMALL-YEARLY"
+  | "RMLS-MEDIUM-YEARLY"
+  | "RMLS-LARGE-YEARLY";
+
+export type SubscriptionStatus =
+  | (Subscription & { status: "active" })
+  | (Subscription & { status: "expired" })
+  | { status: "none" };
+
+export interface Subscription {
+  subscription_id: string;
+  product: ProductIdentifier;
+  title: string;
+  description: string;
+  recurring_sales_invoice_id: string;
+  start_date: string;
+  end_date: string | null;
+  sales_invoices_url: string;
+}

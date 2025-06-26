@@ -9,10 +9,13 @@ import { MessageLog } from "../messages/MessageLog.tsx";
 import StreamSettings from "./StreamSettings.tsx";
 import { useRemails } from "../../hooks/useRemails.ts";
 
-const DEFAULT_TAB = 'messages';
+const DEFAULT_TAB = "messages";
 
 export default function StreamDetails() {
-  const { state: { fullName, queryParams }, navigate } = useRemails();
+  const {
+    state: { fullName, queryParams },
+    navigate,
+  } = useRemails();
   const { currentOrganization } = useOrganizations();
   const { currentStream } = useStreams();
   const { currentProject } = useProjects();
@@ -21,9 +24,9 @@ export default function StreamDetails() {
     return <Loader />;
   }
 
-  const setActiveTab = (tab: string | null) =>  {
+  const setActiveTab = (tab: string | null) => {
     navigate(fullName, {}, { tab: tab || DEFAULT_TAB });
-  }
+  };
 
   return (
     <Tabs defaultValue="gallery" value={queryParams.tab || DEFAULT_TAB} onChange={setActiveTab}>

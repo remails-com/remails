@@ -5,7 +5,7 @@ use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Type};
-use std::{str::FromStr, time::Duration};
+use std::{cmp::Ordering, str::FromStr, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -60,9 +60,9 @@ struct SubscriptionTemplate {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Subscription {
+struct MoneybirdSubscription {
     id: SubscriptionId,
-    contact_id: MoneybirdContactId,
+    contact: Contact,
     recurring_sales_invoice_id: RecurringSalesInvoiceId,
     cancelled_at: Option<DateTime<Utc>>,
     product: Product,
@@ -74,6 +74,8 @@ struct Subscription {
 struct Product {
     id: ProductId,
     identifier: Option<ProductIdentifier>,
+    title: String,
+    description: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -139,28 +141,65 @@ impl ProductIdentifier {
     }
 }
 
-#[derive(Serialize)]
-#[serde(tag = "status")]
+#[derive(Serialize, PartialEq)]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum SubscriptionStatus {
-    Active {
-        subscription_id: SubscriptionId,
-        product: ProductIdentifier,
-        recurring_sales_invoice_id: RecurringSalesInvoiceId,
-        start_date: NaiveDate,
-        end_date: Option<NaiveDate>,
-    },
-    Expired {
-        subscription_id: SubscriptionId,
-        end_date: NaiveDate,
-    },
+    Active(Subscription),
+    Expired(Subscription<NaiveDate>),
     None,
+}
+
+#[derive(Serialize, PartialEq, Debug)]
+pub struct Subscription<EndDate = Option<NaiveDate>> {
+    subscription_id: SubscriptionId,
+    product: ProductIdentifier,
+    title: String,
+    description: String,
+    recurring_sales_invoice_id: RecurringSalesInvoiceId,
+    start_date: NaiveDate,
+    end_date: EndDate,
+    sales_invoices_url: Url,
+}
+
+impl PartialOrd for SubscriptionStatus {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self {
+            SubscriptionStatus::Active(Subscription { end_date, .. }) => match other {
+                SubscriptionStatus::Active(Subscription {
+                    end_date: other_end_date,
+                    ..
+                }) => match (end_date, other_end_date) {
+                    (Some(l), Some(r)) => l.partial_cmp(r),
+                    (Some(_), None) => Some(Ordering::Less),
+                    (None, Some(_)) => Some(Ordering::Greater),
+                    (None, None) => Some(Ordering::Equal),
+                },
+                SubscriptionStatus::Expired { .. } => Some(Ordering::Greater),
+                SubscriptionStatus::None => Some(Ordering::Greater),
+            },
+            SubscriptionStatus::Expired(Subscription { end_date, .. }) => match other {
+                SubscriptionStatus::Active { .. } => Some(Ordering::Less),
+                SubscriptionStatus::Expired(Subscription {
+                    end_date: other_end_date,
+                    ..
+                }) => end_date.partial_cmp(other_end_date),
+                SubscriptionStatus::None => Some(Ordering::Greater),
+            },
+            SubscriptionStatus::None => match other {
+                SubscriptionStatus::Active { .. } | SubscriptionStatus::Expired { .. } => {
+                    Some(Ordering::Less)
+                }
+                SubscriptionStatus::None => Some(Ordering::Equal),
+            },
+        }
+    }
 }
 
 impl SubscriptionStatus {
     pub fn quota(&self) -> u32 {
         match self {
-            SubscriptionStatus::Active { product, .. } => product.monthly_quota(),
-            SubscriptionStatus::Expired { .. } | SubscriptionStatus::None => {
+            SubscriptionStatus::Active(Subscription { product, .. }) => product.monthly_quota(),
+            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
                 ProductIdentifier::RmlsFree.monthly_quota()
             }
         }
@@ -169,7 +208,7 @@ impl SubscriptionStatus {
 
 impl<'a, T> From<T> for SubscriptionStatus
 where
-    T: IntoIterator<Item = &'a Subscription>,
+    T: IntoIterator<Item = &'a MoneybirdSubscription>,
 {
     fn from(subscriptions: T) -> Self {
         let mut iterator = subscriptions.into_iter().filter_map(|s| {
@@ -182,19 +221,31 @@ where
                     identifier => {
                         if let Some(end_date) = s.end_date {
                             if end_date < Utc::now().date_naive() {
-                                return Some(SubscriptionStatus::Expired {
-                                    end_date,
+                                return Some(SubscriptionStatus::Expired(Subscription {
                                     subscription_id: s.id.clone(),
-                                });
+                                    product: identifier.clone(),
+                                    title: s.product.title.clone(),
+                                    description: s.product.description.clone(),
+                                    recurring_sales_invoice_id: s
+                                        .recurring_sales_invoice_id
+                                        .clone(),
+                                    start_date: s.start_date,
+                                    end_date,
+                                    sales_invoices_url: s.contact.sales_invoices_url.clone(),
+                                }));
                             }
                         }
-                        Some(SubscriptionStatus::Active {
+
+                        Some(SubscriptionStatus::Active(Subscription {
                             subscription_id: s.id.clone(),
                             product: identifier.clone(),
+                            title: s.product.title.clone(),
+                            description: s.product.description.clone(),
                             recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
                             start_date: s.start_date,
                             end_date: s.end_date,
-                        })
+                            sales_invoices_url: s.contact.sales_invoices_url.clone(),
+                        }))
                     }
                 }
             } else {
@@ -424,7 +475,7 @@ impl MoneyBird {
             | Action::SubscriptionResumed
             | Action::SubscriptionUpdated => {
                 trace!("received {:?} webhook", payload.action);
-                let subscription = serde_json::from_value::<Subscription>(payload.entity)?;
+                let subscription = serde_json::from_value::<MoneybirdSubscription>(payload.entity)?;
                 self.sync_subscription(subscription).await?;
             }
         };
@@ -432,10 +483,10 @@ impl MoneyBird {
         Ok(())
     }
 
-    async fn sync_subscription(&self, subscription: Subscription) -> Result<(), Error> {
+    async fn sync_subscription(&self, subscription: MoneybirdSubscription) -> Result<(), Error> {
         debug!(
             subscription_id = subscription.id.as_str(),
-            moneybird_contact_id = subscription.contact_id.as_str(),
+            moneybird_contact_id = subscription.contact.id.as_str(),
             "syncing subscription"
         );
 
@@ -448,7 +499,7 @@ impl MoneyBird {
             r#"
             SELECT subscription_product, quota_reset FROM organizations WHERE moneybird_contact_id = $1
             "#,
-            *subscription.contact_id
+            *subscription.contact.id
         )
         .fetch_one(&self.pool)
         .await?;
@@ -466,8 +517,8 @@ impl MoneyBird {
             .await?;
 
         let product = match subscription_status {
-            SubscriptionStatus::Active { product, .. } => product,
-            SubscriptionStatus::Expired { .. } | SubscriptionStatus::None => {
+            SubscriptionStatus::Active(Subscription { product, .. }) => product,
+            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
                 ProductIdentifier::RmlsFree
             }
         };
@@ -477,7 +528,7 @@ impl MoneyBird {
             delta = product.monthly_quota() as i64 - current_product.monthly_quota() as i64;
             info!(
                 subscription_id = subscription.id.as_str(),
-                moneybird_contact_id = subscription.contact_id.as_str(),
+                moneybird_contact_id = subscription.contact.id.as_str(),
                 current_product = current_product.to_string(),
                 new_product = product.to_string(),
                 "Subscription product has changed -> Adjusting the remaining message quota by {delta:+}"
@@ -492,7 +543,7 @@ impl MoneyBird {
             WHERE moneybird_contact_id = $1
             returning remaining_message_quota
             "#,
-            *subscription.contact_id,
+            *subscription.contact.id,
             delta,
             product.to_string(),
             quota_reset
@@ -505,7 +556,7 @@ impl MoneyBird {
         if new_quota >= product.monthly_quota() as i64 {
             warn!(
                 subscription_id = subscription.id.as_str(),
-                moneybird_contact_id = subscription.contact_id.as_str(),
+                moneybird_contact_id = subscription.contact.id.as_str(),
                 current_product = current_product.to_string(),
                 new_product = product.to_string(),
                 "New message quota exceeds the total monthly quota"
@@ -539,12 +590,12 @@ impl MoneyBird {
         mut current_quota_reset: DateTime<Utc>,
     ) -> Result<DateTime<Utc>, Error> {
         Ok(match subscription {
-            SubscriptionStatus::Active {
+            SubscriptionStatus::Active(Subscription {
                 end_date,
                 recurring_sales_invoice_id,
                 subscription_id,
                 ..
-            } => {
+            }) => {
                 if let Some(end_date) = end_date {
                     trace!(
                         subscription_id = subscription_id.as_str(),
@@ -563,7 +614,7 @@ impl MoneyBird {
                             Error::Moneybird("Could not calculate subscription period end based on the next invoice date".to_string()))?
                 }
             }
-            SubscriptionStatus::Expired { .. } | SubscriptionStatus::None => {
+            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
                 trace!("Calculating subscription period end based existing reset date as the current subscription is expired or does not exist");
                 while current_quota_reset < Utc::now() {
                     current_quota_reset = current_quota_reset
@@ -768,7 +819,7 @@ impl MoneyBird {
             .get(self.url(&format!("subscriptions?contact_id={contact_id}",)))
             .send()
             .await?
-            .json::<Vec<Subscription>>()
+            .json::<Vec<MoneybirdSubscription>>()
             .await?
             .as_slice()
             .into();
@@ -792,6 +843,81 @@ mod test {
     use super::*;
     use crate::models::{OrganizationFilter, OrganizationRepository};
     use chrono::Datelike;
+
+    impl<T> Default for Subscription<T>
+    where
+        T: Default,
+    {
+        fn default() -> Self {
+            Self {
+                subscription_id: SubscriptionId("SubscriptionId".to_string()),
+                product: ProductIdentifier::RmlsFree,
+                title: "".to_string(),
+                description: "".to_string(),
+                recurring_sales_invoice_id: RecurringSalesInvoiceId("InvoiceId".to_string()),
+                start_date: Utc::now().date_naive(),
+                end_date: T::default(),
+                sales_invoices_url: "https://locahost".parse().unwrap(),
+            }
+        }
+    }
+
+    #[test]
+    fn subscription_ordering() {
+        let active_none = SubscriptionStatus::Active(Subscription {
+            end_date: None,
+            ..Default::default()
+        });
+        let active_today = SubscriptionStatus::Active(Subscription {
+            end_date: Some(Utc::now().date_naive()),
+            ..Default::default()
+        });
+        let active_tomorrow = SubscriptionStatus::Active(Subscription {
+            end_date: Some(
+                Utc::now()
+                    .date_naive()
+                    .checked_add_days(Days::new(1))
+                    .unwrap(),
+            ),
+            ..Default::default()
+        });
+
+        let expired_yesterday = SubscriptionStatus::Expired(Subscription {
+            end_date: Utc::now()
+                .date_naive()
+                .checked_sub_days(Days::new(1))
+                .unwrap(),
+            ..Default::default()
+        });
+
+        let expired_two_days_ago = SubscriptionStatus::Expired(Subscription {
+            end_date: Utc::now()
+                .date_naive()
+                .checked_sub_days(Days::new(2))
+                .unwrap(),
+            ..Default::default()
+        });
+
+        let none = SubscriptionStatus::None;
+
+        assert!(active_none > active_tomorrow);
+        assert!(active_tomorrow < active_none);
+        assert!(active_tomorrow > active_today);
+        assert!(active_none > active_today);
+
+        assert!(active_today > expired_yesterday);
+        assert!(active_none > expired_two_days_ago);
+
+        assert!(expired_yesterday > expired_two_days_ago);
+
+        assert!(active_none > none);
+        assert!(none < active_none);
+        assert!(active_today > none);
+        assert!(active_tomorrow > none);
+
+        assert!(expired_yesterday > none);
+        assert!(none < expired_yesterday);
+    }
 
     #[sqlx::test(fixtures("organizations"))]
     async fn quota_reset_without_moneybird(db: PgPool) {

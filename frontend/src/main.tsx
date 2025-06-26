@@ -12,18 +12,19 @@ const root = createRoot(element);
 
 const theme = createTheme({
   primaryColor: "remails-red",
+  // https://mantine.dev/colors-generator/?color=FF4B24
   colors: {
     "remails-red": [
-      "#ffb7a7",
-      "#ffa592",
-      "#ff937c",
-      "#ff8166",
-      "#ff6f50",
-      "#ff5d3a",
-      "#ff4b24",
-      "#cc3c1d",
-      "#992d16",
-      "#661e0e",
+      '#ffebe4',
+      '#ffd6cc',
+      '#ffac9a',
+      '#ff7f64',
+      '#ff5936',
+      '#ff4b24',
+      '#ff3407',
+      '#e42500',
+      '#cc1e00',
+      '#b21100',
     ],
   },
 });

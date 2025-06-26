@@ -3,9 +3,9 @@ import { useRemails } from "./hooks/useRemails.ts";
 import { Anchor } from "@mantine/core";
 
 interface LinkProps {
-  to: RouteName,
-  params?: RouteParams,
-  query?: RouteParams,
+  to: RouteName;
+  params?: RouteParams;
+  query?: RouteParams;
   children: React.ReactNode;
 }
 
