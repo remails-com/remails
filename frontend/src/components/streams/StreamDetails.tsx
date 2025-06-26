@@ -9,10 +9,13 @@ import { MessageLog } from "../messages/MessageLog.tsx";
 import StreamSettings from "./StreamSettings.tsx";
 import { useRemails } from "../../hooks/useRemails.ts";
 
-const DEFAULT_TAB = 'messages';
+const DEFAULT_TAB = "messages";
 
 export default function StreamDetails() {
-  const { state: { routerState }, navigate } = useRemails();
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
   const { currentOrganization } = useOrganizations();
   const { currentStream } = useStreams();
   const { currentProject } = useProjects();
@@ -21,12 +24,12 @@ export default function StreamDetails() {
     return <Loader />;
   }
 
-  const setActiveTab = (tab: string | null) =>  {
-    navigate(routerState.name, {}, { tab: tab || DEFAULT_TAB });
-  }
+  const setActiveTab = (tab: string | null) => {
+    navigate(routerState.name, { tab: tab || DEFAULT_TAB });
+  };
 
   return (
-    <Tabs defaultValue="gallery" value={routerState.query.tab || DEFAULT_TAB} onChange={setActiveTab}>
+    <Tabs defaultValue="gallery" value={routerState.params.tab || DEFAULT_TAB} onChange={setActiveTab}>
       <Tabs.List mb="md">
         <Tabs.Tab size="lg" value="messages" leftSection={<IconMessage size={12} />}>
           Messages

@@ -13,11 +13,11 @@ interface FormValues {
 }
 
 interface ProjectSettingsProps {
-  currentOrganization: Organization,
-  currentProject: Project,
+  currentOrganization: Organization;
+  currentProject: Project;
 }
 
-export default function ProjectSettings({ currentOrganization, currentProject}: ProjectSettingsProps) {
+export default function ProjectSettings({ currentOrganization, currentProject }: ProjectSettingsProps) {
   const { streams } = useStreams();
   const { dispatch, navigate } = useRemails();
 
@@ -105,35 +105,35 @@ export default function ProjectSettings({ currentOrganization, currentProject}: 
 
   return (
     <>
-        <h2>Project Settings</h2>
-        <form onSubmit={form.onSubmit(save)}>
-            <Stack>
-            <TextInput
-                label="Name"
-                key={form.key("name")}
-                value={form.values.name}
-                onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
-            />
-            <Group>
-                <Tooltip
-                label={canDelete ? "Delete project" : "Cannot delete project, there are streams in it"}
-                events={{ focus: false, hover: true, touch: true }}
-                >
-                <Button
-                    leftSection={<IconTrash />}
-                    variant="outline"
-                    disabled={!canDelete}
-                    onClick={() => confirmDeleteProject(currentProject)}
-                >
-                    Delete
-                </Button>
-                </Tooltip>
-                <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>
-                Save
-                </Button>
-            </Group>
-            </Stack>
-        </form>
+      <h2>Project Settings</h2>
+      <form onSubmit={form.onSubmit(save)}>
+        <Stack>
+          <TextInput
+            label="Name"
+            key={form.key("name")}
+            value={form.values.name}
+            onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
+          />
+          <Group>
+            <Tooltip
+              label={canDelete ? "Delete project" : "Cannot delete project, there are streams in it"}
+              events={{ focus: false, hover: true, touch: true }}
+            >
+              <Button
+                leftSection={<IconTrash />}
+                variant="outline"
+                disabled={!canDelete}
+                onClick={() => confirmDeleteProject(currentProject)}
+              >
+                Delete
+              </Button>
+            </Tooltip>
+            <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </form>
     </>
   );
 }

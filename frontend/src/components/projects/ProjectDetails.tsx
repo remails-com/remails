@@ -8,10 +8,13 @@ import ProjectSettings from "./ProjectSettings.tsx";
 import { IconAccessPoint, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 
-const DEFAULT_TAB = 'streams';
+const DEFAULT_TAB = "streams";
 
 export default function ProjectDetails() {
-  const { state: { routerState }, navigate } = useRemails();
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
 
@@ -19,12 +22,12 @@ export default function ProjectDetails() {
     return <Loader />;
   }
 
-  const setActiveTab = (tab: string | null) =>  {
-    navigate(routerState.name, {}, { tab: tab || DEFAULT_TAB});
-  }
+  const setActiveTab = (tab: string | null) => {
+    navigate(routerState.name, { tab: tab || DEFAULT_TAB });
+  };
 
   return (
-    <Tabs defaultValue="gallery" value={routerState.query.tab || DEFAULT_TAB} onChange={setActiveTab}>
+    <Tabs defaultValue="gallery" value={routerState.params.tab || DEFAULT_TAB} onChange={setActiveTab}>
       <Tabs.List mb="md">
         <Tabs.Tab size="lg" value="streams" leftSection={<IconAccessPoint size={12} />}>
           Streams
@@ -46,10 +49,7 @@ export default function ProjectDetails() {
       </Tabs.Panel>
 
       <Tabs.Panel value="settings">
-        <ProjectSettings
-          currentOrganization={currentOrganization}
-          currentProject={currentProject}
-        />
+        <ProjectSettings currentOrganization={currentOrganization} currentProject={currentProject} />
       </Tabs.Panel>
     </Tabs>
   );

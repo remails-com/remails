@@ -1,6 +1,6 @@
 import { ActionDispatch, createContext, useCallback, useContext, useEffect, useReducer } from "react";
 import { Action, State, WhoamiResponse } from "../types.ts";
-import { initRouter, Navigate, RouteName, RouteParams, routerNavigate } from "../router.ts";
+import { initRouter, Navigate, RouteParams, routerNavigate } from "../router.ts";
 
 const action_handler: {
   [action in Action["type"]]: (state: State, action: Extract<Action, { type: action }>) => State;
@@ -11,7 +11,7 @@ const action_handler: {
   add_organization: function (state, action) {
     return { ...state, organizations: [...(state.organizations || []), action.organization], loading: false };
   },
-  loading: function (state, _action) {
+  loading: function (state) {
     return { ...state, loading: true };
   },
   set_projects: function (state, action) {
@@ -54,7 +54,7 @@ const action_handler: {
     return { ...state, credentials: state.credentials?.filter((d) => d.id !== action.credentialId) || [] };
   },
   set_route: function (state, action) {
-    return { ...state, routerState: action.routerState};
+    return { ...state, routerState: action.routerState };
   },
   set_config: function (state, action) {
     return { ...state, config: action.config };
@@ -69,7 +69,7 @@ function getActionHandler<T extends Action["type"]>(
 }
 
 function reducer(state: State, action: Action): State {
-  console.log("fired action", action);
+  // console.log("fired action", action);
   const handler = getActionHandler(action);
   return handler(state, action);
 }
@@ -87,13 +87,12 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     routerState: {
       name: "",
       params: {},
-      query: {},
-    }
+    },
   },
   dispatch: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
-  navigate: (_name: RouteName, _params?: RouteParams) => {
+  navigate: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
 });
@@ -114,15 +113,15 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     credentials: null,
     config: null,
     loading: true,
-    routerState: initialRouterState
+    routerState: initialRouterState,
   });
 
   const navigate = useCallback(
-    (name: string, params: RouteParams, query?: RouteParams) => {
+    (name: string, params?: RouteParams) => {
       dispatch({
         type: "set_route",
-        routerState: routerNavigate(name, { ...state.routerState.params, ...params }, query || {}) }
-      );
+        routerState: routerNavigate(name, params || {}, state.routerState.params),
+      });
     },
     [state.routerState]
   );

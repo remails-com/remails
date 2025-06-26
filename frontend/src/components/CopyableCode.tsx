@@ -1,4 +1,13 @@
-import { ActionIcon, Code, CSSProperties, Input, MantineSpacing, StyleProp, Tooltip, useComputedColorScheme } from "@mantine/core";
+import {
+  ActionIcon,
+  Code,
+  CSSProperties,
+  Input,
+  MantineSpacing,
+  StyleProp,
+  Tooltip,
+  useComputedColorScheme,
+} from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 
@@ -22,7 +31,7 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
     whiteSpace: "pre-wrap",
     wordBreak: "break-all",
 
-    cursor: 'pointer',
+    cursor: "pointer",
   };
 
   return (
