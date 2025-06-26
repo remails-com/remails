@@ -2,100 +2,21 @@ export type RouteName = string;
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
 
-export interface Route {
+export interface RouterState {
   name: RouteName;
+  params: { [k: string]: string };
+}
+
+export interface Route {
+  name: string;
   path: string;
   children?: Route[];
 }
 
 interface FlatRoute {
-  name: string;
+  name: RouteName;
   path: string;
 }
-
-export interface RouterState {
-  name: string;
-  params: { [k: string]: string };
-}
-
-export const allRoutes: Route[] = [
-  {
-    name: "projects",
-    path: "/{org_id}/projects",
-    children: [
-      {
-        name: "project",
-        path: "/{proj_id}",
-        children: [
-          {
-            name: "domains",
-            path: "/domains",
-            children: [
-              {
-                name: "domain",
-                path: "/{domain_id}",
-              },
-            ],
-          },
-          {
-            name: "streams",
-            path: "/streams",
-            children: [
-              {
-                name: "stream",
-                path: "/{stream_id}",
-                children: [
-                  {
-                    name: "credentials",
-                    path: "/credentials",
-                    children: [
-                      {
-                        name: "credential",
-                        path: "/{credential_id}",
-                      },
-                    ],
-                  },
-                  {
-                    name: "messages",
-                    path: "/messages",
-                    children: [
-                      {
-                        name: "message",
-                        path: "/{message_id}",
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "domains",
-    path: "/{org_id}/domains",
-    children: [
-      {
-        name: "domain",
-        path: "/{domain_id}",
-      },
-    ],
-  },
-  {
-    name: "settings",
-    path: "/{org_id}/settings",
-  },
-  {
-    name: "statistics",
-    path: "/{org_id}/statistics",
-  },
-  {
-    name: "organizations",
-    path: "/{org_id}/organizations",
-  },
-];
 
 export function flattenRoutes(routes: Route[]): FlatRoute[] {
   return routes
@@ -122,12 +43,15 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
 }
 
 export function matchPath(definition: string, path: string): RouteParams | null {
-  let i = 0; // Definition index
-  let j = 0; // Path index
+  // definition index
+  let i = 0;
+  // path index
+  let j = 0;
+  // collected parameters
   const params: RouteParams = {};
 
   while (i < definition.length && j < path.length) {
-    // Match single characters
+    // match single characters
     if (definition[i] === path[j]) {
       i += 1;
       j += 1;
@@ -138,7 +62,8 @@ export function matchPath(definition: string, path: string): RouteParams | null 
       const end = definition.indexOf("}", i);
 
       if (end === -1) {
-        return null; // Invalid path, no closing brace found
+        // invalid path definition, no closing brace
+        return null;
       }
 
       let valueEnd = j;
@@ -149,15 +74,20 @@ export function matchPath(definition: string, path: string): RouteParams | null 
       const paramName = definition.slice(i + 1, end);
       const paramValue = path.slice(j, valueEnd);
 
-      i = end + 1; // Move past the closing brace
-      j = valueEnd; // Move past the parameter value
+      // move past the closing brace
+      i = end + 1;
+
+      // move past the parameter value
+      j = valueEnd;
 
       if (!paramName) {
-        return null; // Invalid path, empty parameter name
+        // invalid path, empty parameter name
+        return null;
       }
 
       if (!paramValue) {
-        return null; // Invalid path, empty parameter value
+        // invalid path, empty parameter value
+        return null;
       }
 
       params[paramName] = paramValue;
@@ -165,11 +95,12 @@ export function matchPath(definition: string, path: string): RouteParams | null 
       continue;
     }
 
-    return null; // Mismatch found
+    // mismatch found
+    return null;
   }
 
   if (i !== definition.length || j !== path.length) {
-    // Allow for trailing slashes in the path
+    // allow for trailing slashes in the path
     if (j !== path.length - 1 || path[j] !== "/") {
       return null;
     }
@@ -178,92 +109,74 @@ export function matchPath(definition: string, path: string): RouteParams | null 
   return params;
 }
 
-export function matchRoute(
-  routes: FlatRoute[],
-  path: string
-): {
-  params: RouteParams;
-  name: string;
-} | null {
-  const pathParts = path.split("?");
-  const basePath = pathParts[0];
-  const queryString = pathParts[1];
-  const query = Object.fromEntries(new URLSearchParams(queryString));
+export class Router {
+  private routes: FlatRoute[];
+  private pathParamCache: RouteParams = {};
+  public initialState: RouterState;
 
-  for (const route of routes) {
-    const params = matchPath(route.path, basePath);
-
-    if (params !== null) {
-      return {
-        name: route.name,
-        params: { ...params, ...query },
-      };
-    }
+  constructor(routes: Route[], path: string) {
+    this.routes = flattenRoutes(routes);
+    this.initialState = this.match(path) || {
+      name: "not_found",
+      params: {},
+    };
   }
 
-  return null;
-}
+  match(path: string): {
+    params: RouteParams;
+    name: string;
+  } | null {
+    const pathParts = path.split("?");
+    const basePath = pathParts[0];
+    const queryString = pathParts[1];
+    const query = Object.fromEntries(new URLSearchParams(queryString));
 
-export function routerNavigate(name: RouteName, params: RouteParams, keepParams: RouteParams = {}): RouterState {
-  const state = createRouteState(name, params, keepParams);
+    for (const route of this.routes) {
+      const params = matchPath(route.path, basePath);
 
-  const routerState = {
-    name: state.name,
-    params: state.params,
-  };
-
-  window.history.pushState(routerState, "", state.fullPath);
-
-  return routerState;
-}
-
-export function createRouteState(
-  name: RouteName,
-  params: RouteParams,
-  keepParams: RouteParams = {}
-): RouterState & { fullPath: string } {
-  const flatRoutes = flattenRoutes(allRoutes);
-  let path = flatRoutes.find((route) => route.name === name)?.path;
-
-  if (!path) {
-    throw new Error(`Route with name ${name} not found`);
-  }
-
-  const query = { ...params };
-  const pathParams = { ...params, ...keepParams };
-
-  path = path.replace(/{(\w+)}/g, (_match, key) => {
-    const value = pathParams[key];
-
-    if (!value) {
-      throw new Error(`Path variable ${key} not found in params`);
+      if (params !== null) {
+        return {
+          name: route.name,
+          params: { ...params, ...query },
+        };
+      }
     }
 
-    delete query[key];
-    params[key] = value;
-
-    return value;
-  });
-
-  if (Object.values(query).length > 0) {
-    const searchParams = new URLSearchParams(query);
-    path = `${path}?${searchParams}`;
+    return null;
   }
 
-  return { fullPath: path, name, params };
-}
+  navigate(name: RouteName, params: RouteParams): RouterState & { fullPath: string } {
+    let path = this.routes.find((route) => route.name === name)?.path;
 
-export function initRouter(): RouterState {
-  const currentPath = window.location.pathname + window.location.search;
-  const flatRoutes = flattenRoutes(allRoutes);
+    if (!path) {
+      throw new Error(`Route with name ${name} not found`);
+    }
 
-  const { params, name } = matchRoute(flatRoutes, currentPath) || {
-    params: {},
-    name: allRoutes[0].name,
-  };
+    const query = { ...params };
+    const pathParams = { ...params, ...this.pathParamCache };
 
-  return {
-    name,
-    params,
-  };
+    this.pathParamCache = {};
+
+    path = path.replace(/{(\w+)}/g, (_match, key) => {
+      const value = pathParams[key];
+
+      if (!value) {
+        throw new Error(`Path variable ${key} not found in params`);
+      }
+
+      delete query[key];
+
+      params[key] = value;
+      this.pathParamCache[key] = value;
+
+      return value;
+    });
+
+    if (Object.values(query).length > 0) {
+      const searchParams = new URLSearchParams(query);
+      path = `${path}?${searchParams}`;
+    }
+
+    return { fullPath: path, name, params };
+  }
 }

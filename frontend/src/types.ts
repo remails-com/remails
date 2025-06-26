@@ -1,4 +1,4 @@
-import { RouteParams, RouterState } from "./router.ts";
+import { RouteParams, RouterState } from "./router";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
 

@@ -1,17 +1,18 @@
 import { expect, test } from "vitest";
-import { matchRoute, createRouteState, allRoutes, flattenRoutes } from "./router";
+import { flattenRoutes, Router } from "./router";
+import { routes } from "./routes";
 
-test("matchPath", () => {
-  const flatRoutes = flattenRoutes(allRoutes);
+test("Match a path", () => {
+  const router = new Router(routes, "/");
 
-  expect(matchRoute(flatRoutes, "/be90adce-695a-439b-84a2-62c8a0180f90/projects")).toStrictEqual({
+  expect(router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects")).toStrictEqual({
     name: "projects",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
     },
   });
   expect(
-    matchRoute(flatRoutes, "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458")
+    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458")
   ).toStrictEqual({
     name: "projects.project",
     params: {
@@ -20,8 +21,7 @@ test("matchPath", () => {
     },
   });
   expect(
-    matchRoute(
-      flatRoutes,
+    router.match(
       "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/streams/2969c252-9a47-4d81-ac4f-aef87ee42d28?tab=messages"
     )
   ).toStrictEqual({
@@ -34,15 +34,14 @@ test("matchPath", () => {
     },
   });
   // Trailing slashes
-  expect(matchRoute(flatRoutes, "/be90adce-695a-439b-84a2-62c8a0180f90/projects/")).toStrictEqual({
+  expect(router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/")).toStrictEqual({
     name: "projects",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
     },
   });
   expect(
-    matchRoute(
-      flatRoutes,
+    router.match(
       "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/streams/2969c252-9a47-4d81-ac4f-aef87ee42d28/?tab=messages"
     )
   ).toStrictEqual({
@@ -57,8 +56,10 @@ test("matchPath", () => {
 });
 
 test("createRouteState", () => {
+  const router = new Router(routes, "/");
+
   expect(
-    createRouteState("projects", {
+    router.navigate("projects", {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
     })
   ).toStrictEqual({
@@ -69,7 +70,7 @@ test("createRouteState", () => {
     },
   });
   expect(
-    createRouteState("projects.project", {
+    router.navigate("projects.project", {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
     })
@@ -82,7 +83,7 @@ test("createRouteState", () => {
     },
   });
   expect(
-    createRouteState("projects.project.streams.stream", {
+    router.navigate("projects.project.streams.stream", {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
       stream_id: "2969c252-9a47-4d81-ac4f-aef87ee42d28",
@@ -102,7 +103,7 @@ test("createRouteState", () => {
 });
 
 test("flattenRoutes", () => {
-  expect(flattenRoutes(allRoutes)).toMatchObject([
+  expect(flattenRoutes(routes)).toMatchObject([
     {
       name: "projects",
       path: "/{org_id}/projects",
