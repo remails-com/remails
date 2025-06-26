@@ -343,10 +343,15 @@ impl SmtpSession {
             return (SmtpResponse::AUTH_ERROR.into(), false);
         }
 
-        let Ok(ratelimit) = self.smtp_credentials.rate_limit(credential.id()).await else {
+        let Ok(ratelimit) = self
+            .smtp_credentials
+            .rate_limit(credential.stream_id())
+            .await
+        else {
             return (SmtpResponse::RATE_LIMIT.into(), true);
         };
 
+        tracing::debug!(ratelimit);
         if ratelimit <= 0 {
             return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
         }

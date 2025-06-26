@@ -71,6 +71,10 @@ impl SmtpCredential {
         self.id
     }
 
+    pub fn stream_id(&self) -> StreamId {
+        self.stream_id
+    }
+
     pub fn username(&self) -> &str {
         &self.username
     }
@@ -176,7 +180,7 @@ impl SmtpCredentialRepository {
         Ok(credential)
     }
 
-    pub async fn rate_limit(&self, id: SmtpCredentialId) -> Result<i64, Error> {
+    pub async fn rate_limit(&self, id: StreamId) -> Result<i64, Error> {
         let remaining_rate_limit = sqlx::query_scalar!(
             r#"
             UPDATE organizations o
