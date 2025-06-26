@@ -15,8 +15,6 @@ CREATE TABLE organizations
     name                    varchar                  NOT NULL,
     remaining_message_quota bigint                   NOT NULL,
     quota_reset             timestamp with time zone NOT NULL,
-    remaining_rate_limit    bigint                   NOT NULL,
-    rate_limit_reset        timestamp with time zone NOT NULL,
     created_at              timestamp with time zone NOT NULL DEFAULT now(),
     updated_at              timestamp with time zone NOT NULL DEFAULT now()
 );
