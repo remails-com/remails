@@ -333,7 +333,6 @@ impl SmtpSession {
         Ok(AttemptedAuth { username, password })
     }
 
-    /// Returns a response and whether or not the session should stop
     pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> SmtpResponse {
         let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
             return SmtpResponse::SYNTAX_ERROR.into();

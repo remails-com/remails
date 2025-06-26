@@ -137,7 +137,7 @@ impl OrganizationRepository {
             Organization,
             r#"
             INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 50, now() + '1 hour')
+            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())
             RETURNING *
             "#,
             organization.name,
