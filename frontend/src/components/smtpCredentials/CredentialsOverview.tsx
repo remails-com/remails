@@ -6,6 +6,7 @@ import { formatDateTime } from "../../util.ts";
 import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewCredential } from "./NewCredential.tsx";
+import { SmtpInfo } from "./SmtpInfo.tsx";
 
 export function CredentialsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -73,11 +74,12 @@ export function CredentialsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
-      <Flex justify="center" mt="md">
+      <Flex justify="center" my="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Credential
         </Button>
       </Flex>
+      <SmtpInfo />
     </>
   );
 }
