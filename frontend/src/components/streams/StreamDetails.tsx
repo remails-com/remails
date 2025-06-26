@@ -12,7 +12,7 @@ import { useRemails } from "../../hooks/useRemails.ts";
 const DEFAULT_TAB = 'messages';
 
 export default function StreamDetails() {
-  const { state: { fullName, queryParams }, navigate } = useRemails();
+  const { state: { routerState }, navigate } = useRemails();
   const { currentOrganization } = useOrganizations();
   const { currentStream } = useStreams();
   const { currentProject } = useProjects();
@@ -22,11 +22,11 @@ export default function StreamDetails() {
   }
 
   const setActiveTab = (tab: string | null) =>  {
-    navigate(fullName, {}, { tab: tab || DEFAULT_TAB });
+    navigate(routerState.name, {}, { tab: tab || DEFAULT_TAB });
   }
 
   return (
-    <Tabs defaultValue="gallery" value={queryParams.tab || DEFAULT_TAB} onChange={setActiveTab}>
+    <Tabs defaultValue="gallery" value={routerState.query.tab || DEFAULT_TAB} onChange={setActiveTab}>
       <Tabs.List mb="md">
         <Tabs.Tab size="lg" value="messages" leftSection={<IconMessage size={12} />}>
           Messages

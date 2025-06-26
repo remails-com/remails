@@ -6,7 +6,7 @@ import { useRemails } from "../hooks/useRemails.ts";
 
 export function NavBar({ close }: { close: () => void }) {
   const {
-    state: { route, fullName },
+    state: { routerState },
     navigate,
   } = useRemails();
   const {
@@ -18,7 +18,7 @@ export function NavBar({ close }: { close: () => void }) {
       {is_global_admin(roles) && (
         <NavLink
           label="Organizations"
-          active={route.name === "organizations"}
+          active={routerState.name === "organizations"}
           leftSection={<IconBuildings size={20} stroke={1.8} />}
           onClick={() => {
             navigate("organizations");
@@ -28,7 +28,7 @@ export function NavBar({ close }: { close: () => void }) {
       )}
       <NavLink
         label="Projects"
-        active={fullName.startsWith("projects")}
+        active={routerState.name.startsWith("projects")}
         leftSection={<IconServer size={20} stroke={1.8} />}
         onClick={() => {
           navigate("projects");
@@ -37,7 +37,7 @@ export function NavBar({ close }: { close: () => void }) {
       />
       <NavLink
         label="Domains"
-        active={fullName.startsWith("domains")}
+        active={routerState.name.startsWith("domains")}
         leftSection={<IconWorldWww size={20} stroke={1.8} />}
         onClick={() => {
           navigate("domains");
@@ -46,7 +46,7 @@ export function NavBar({ close }: { close: () => void }) {
       />
       <NavLink
         label="Statistics"
-        active={route.name === "statistics"}
+        active={routerState.name === "statistics"}
         leftSection={<IconChartBar size={20} stroke={1.8} />}
         onClick={() => {
           navigate("statistics");
@@ -55,7 +55,7 @@ export function NavBar({ close }: { close: () => void }) {
       />
       <NavLink
         label="Settings"
-        active={route.name === "settings"}
+        active={routerState.name === "settings"}
         leftSection={<IconSettings size={20} stroke={1.8} />}
         onClick={() => {
           navigate("settings");

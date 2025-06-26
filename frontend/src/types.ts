@@ -1,4 +1,4 @@
-import { Route, RouteParams } from "./router.ts";
+import { RouteParams, RouterState } from "./router.ts";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
 
@@ -63,13 +63,7 @@ export interface State {
   credentials: SmtpCredential[] | null;
   loading: boolean;
   config: RemailsConfig | null;
-
-  // routing related state
-  route: Route;
-  fullPath: string;
-  fullName: string;
-  pathParams: RouteParams;
-  queryParams: RouteParams;
+  routerState: RouterState;
 }
 
 export interface BreadcrumbItem {
@@ -144,11 +138,7 @@ export type Action =
     }
   | {
       type: "set_route";
-      route: Route;
-      fullPath: string;
-      fullName: string;
-      pathParams: RouteParams;
-      queryParams: RouteParams;
+      routerState: RouterState;
     }
   | {
       type: "set_config";

@@ -1,6 +1,7 @@
 export type RouteName = string;
+export type RoutePath = string;
 export type RouteParams = Record<string, string>;
-export type Navigate = (name: RouteName, pathParams?: RouteParams, queryParams?: RouteParams) => void;
+export type Navigate = (name: RouteName, params?: RouteParams, query?: RouteParams) => void;
 
 export interface Route {
   name: RouteName;
@@ -8,7 +9,13 @@ export interface Route {
   children?: Route[];
 }
 
-export const routes: Route[] = [
+export interface RouterState {
+  name: string;
+  params: { [k: string]: string };
+  query: { [k: string]: string };
+}
+
+export const allRoutes: Route[] = [
   {
     name: "projects",
     path: "/{org_id}/projects",
@@ -46,7 +53,7 @@ export const routes: Route[] = [
                     ],
                   },
                   {
-                    name: "message-log",
+                    name: "messages",
                     path: "/messages",
                     children: [
                       {
@@ -87,32 +94,32 @@ export const routes: Route[] = [
   },
 ];
 
-export function matchPath(path: string): {
-  route: Route;
+export function matchPath(routes: Route[], path: string): {
   params: RouteParams;
-  fullName: string;
+  name: string;
 } | null {
   const match = matchPathRecursive(path, routes, {}, []);
   if (match) {
-    return { ...match, fullName: match.fullName.join(".") };
+    return { 
+      params: match.params,
+      name: match.name.join(".")
+    };
   } else {
     return null;
   }
 }
 
-// TODO remove logging
-
 function matchPathRecursive(
   path: string,
   routes: Route[],
-  pathParams: {
+  params: {
     [k: string]: string;
   },
-  fullName: string[]
+  name: string[]
 ): {
   route: Route;
   params: RouteParams;
-  fullName: string[];
+  name: string[];
 } | null {
   path = path.replace(/^\/|\/$/, "");
   const path_elems = path.split("/");
@@ -130,7 +137,7 @@ function matchPathRecursive(
         }
       }
     }
-    const new_full_name = [...fullName, route.name];
+    const new_full_name = [...name, route.name];
     if (route.children && path_elems.length > route_elems.length) {
       const rec_res = matchPathRecursive(
         path_elems.slice(route_elems.length).join("/"),
@@ -141,8 +148,8 @@ function matchPathRecursive(
       if (rec_res) {
         return {
           route: rec_res.route,
-          params: { ...pathParams, ...rec_res.params, ...new_path_params },
-          fullName: rec_res.fullName,
+          params: { ...params, ...rec_res.params, ...new_path_params },
+          name: rec_res.name,
         };
       } else {
         return null;
@@ -150,123 +157,97 @@ function matchPathRecursive(
     } else {
       return {
         route,
-        params: { ...pathParams, ...new_path_params },
-        fullName: new_full_name,
+        params: { ...params, ...new_path_params },
+        name: new_full_name,
       };
     }
   }
   return null;
 }
 
-export function matchName(name: RouteName): {
-  route: Route;
-  fullPath: string;
-  fullName: string;
-} {
-  const elems = name.split(".");
-  const match = recursiveMatchName(routes, elems, "", []);
-  if (match) {
-    return { ...match, fullName: match.fullName.join(".") };
-  }
-  return {
-    route: routes[0],
-    fullPath: routes[0].path,
-    fullName: routes[0].name,
-  };
-}
+export function matchName(routes: Route[], name: RoutePath): string {
+  const segments = name.split(".")
+  const currentSegment = segments[0];
+  const route = routes.find((r) => r.name === currentSegment);
 
-function recursiveMatchName(
-  routes: Route[],
-  name_elems: string[],
-  fullPath: string,
-  fullName: string[]
-): {
-  route: Route;
-  fullPath: string;
-  fullName: string[];
-} | null {
-  const elem = name_elems.at(0);
-  if (!elem) {
-    return null;
+  if (!route) {
+    throw new Error(`Route with name ${currentSegment} not found`);
   }
-  for (const route of routes) {
-    if (route.name === elem) {
-      const newFullName = [...fullName, route.name];
-      if (name_elems.length > 1 && route.children) {
-        return recursiveMatchName(
-          route.children,
-          name_elems.slice(1),
-          `${fullPath}/${route.path.replace(/^\/|\/$/, "")}`,
-          newFullName
-        );
-      }
-      return {
-        route,
-        fullPath: `${fullPath}/${route.path.replace(/^\/|\/$/, "")}`,
-        fullName: newFullName,
-      };
-    }
+
+  if (segments.length === 1) {
+    return route.path;
   }
-  return null;
+
+  return route.path + matchName(
+    route.children || [],
+    segments.slice(1).join(".")
+  );
 }
 
 export function routerNavigate(
   name: RouteName,
-  pathParams: RouteParams,
-  queryParams: RouteParams
-): {
-  route: Route;
-  fullPath: string;
-  fullName: string;
-  pathParams: { [k: string]: string };
-  queryParams: { [k: string]: string };
-} {
-  // eslint-disable-next-line prefer-const
-  let { route: newRoute, fullPath: path, fullName } = matchName(name);
+  params: RouteParams,
+  query: RouteParams
+): RouterState {
+  const state = createRouteState(name, params, query);
+
+  const routerState = {
+    name: state.name,
+    params: state.params,
+    query: state.query,
+  };
+  
+  if (query && Object.keys(query).length > 0) {
+    const searchParams = new URLSearchParams(query);
+    window.history.pushState(routerState, "", `${state.fullPath}?${searchParams}`);
+  } else {
+    window.history.pushState(routerState, "", state.fullPath);
+  }
+
+  return routerState;
+}
+
+export function createRouteState(
+  name: RouteName,
+  params: RouteParams,
+  query: RouteParams
+): RouterState & { fullPath: string } {
+  let path = matchName(allRoutes, name);
 
   const usedPathParams: RouteParams = {};
 
   path = path.replace(/{(\w*)}/g, (_match, path_var) => {
-    const path = pathParams[path_var];
+    const path = params[path_var];
     if (!path) {
-      throw new Error(`Path variable ${path_var} not found in pathParams`);
+      throw new Error(`Path variable ${path_var} not found in params`);
     }
-    usedPathParams[path_var] = pathParams[path_var];
+    usedPathParams[path_var] = params[path_var];
     return path;
   });
 
-  if (queryParams && Object.keys(queryParams).length > 0) {
-    const searchParams = new URLSearchParams(queryParams);
-    const fullPath = `${path}?${searchParams}`;
-    window.history.pushState(
-      { routeName: name, routePathParams: usedPathParams, routeQueryParams: queryParams },
-      "",
-      fullPath
-    );
-    return { route: newRoute, fullPath: path, fullName, pathParams: usedPathParams, queryParams };
-  } else {
-    window.history.pushState({ routeName: name, routePathParams: usedPathParams }, "", path);
-    return { route: newRoute, fullPath: path, fullName, pathParams: usedPathParams, queryParams: {} };
+  if (query && Object.keys(query).length > 0) {
+    return { fullPath: path, name, params: usedPathParams, query };
   }
+
+  return { fullPath: path, name, params: usedPathParams, query: {} };
 }
 
-export function initRouter() {
+export function initRouter(): RouterState {
   const currentPath = window.location.pathname;
+  const query = Object.fromEntries(new URLSearchParams(window.location.search));
+
   const {
-    route: init_route,
-    params: pathParams,
-    fullName: initFullName,
-  } = matchPath(currentPath) || {
-    route: routes[0],
+    params,
+    name,
+  } = matchPath(allRoutes, currentPath) || {
     params: {},
-    fullName: routes[0].name,
+    name: allRoutes[0].name,
   };
 
   return {
-    route: init_route,
-    fullPath: currentPath,
-    fullName: initFullName,
-    pathParams,
-    queryParams: Object.fromEntries(new URLSearchParams(window.location.search)),
+    name,
+    params,
+    query,
   };
 }
+

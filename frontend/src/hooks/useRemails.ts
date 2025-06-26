@@ -1,6 +1,6 @@
 import { ActionDispatch, createContext, useCallback, useContext, useEffect, useReducer } from "react";
 import { Action, State, WhoamiResponse } from "../types.ts";
-import { initRouter, matchName, Navigate, RouteName, RouteParams, routerNavigate, routes } from "../router.ts";
+import { initRouter, Navigate, RouteName, RouteParams, routerNavigate } from "../router.ts";
 
 const action_handler: {
   [action in Action["type"]]: (state: State, action: Extract<Action, { type: action }>) => State;
@@ -54,14 +54,7 @@ const action_handler: {
     return { ...state, credentials: state.credentials?.filter((d) => d.id !== action.credentialId) || [] };
   },
   set_route: function (state, action) {
-    return {
-      ...state,
-      route: action.route,
-      fullPath: action.fullPath,
-      fullName: action.fullName,
-      pathParams: action.pathParams,
-      queryParams: action.queryParams,
-    };
+    return { ...state, routerState: action.routerState};
   },
   set_config: function (state, action) {
     return { ...state, config: action.config };
@@ -91,11 +84,11 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     credentials: null,
     config: null,
     loading: true,
-    route: routes[0],
-    fullPath: "",
-    fullName: "",
-    queryParams: {},
-    pathParams: {},
+    routerState: {
+      name: "",
+      params: {},
+      query: {},
+    }
   },
   dispatch: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
@@ -110,7 +103,7 @@ export function useRemails() {
 }
 
 export function useLoadRemails(user: WhoamiResponse | null) {
-  const initialRoute = initRouter();
+  const initialRouterState = initRouter();
 
   const [state, dispatch] = useReducer(reducer, {
     organizations: null,
@@ -121,34 +114,31 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     credentials: null,
     config: null,
     loading: true,
-    ...initialRoute,
+    routerState: initialRouterState
   });
 
   const navigate = useCallback(
-    (name: RouteName, pathParams: RouteParams = {}, queryParams = {}) => {
-      dispatch({ type: "set_route", ...routerNavigate(name, { ...state.pathParams, ...pathParams }, queryParams) });
+    (name: string, params: RouteParams, query?: RouteParams) => {
+      dispatch({
+        type: "set_route",
+        routerState: routerNavigate(name, { ...state.routerState.params, ...params }, query || {}) }
+      );
     },
-    [state.pathParams]
+    [state.routerState]
   );
 
   // handle back / forward events
   useEffect(() => {
     window.addEventListener("popstate", (event) => {
-      if (event.state?.routeName) {
+      if (event.state?.routerState) {
         dispatch({
           type: "set_route",
-          pathParams: event.state?.routePathParams,
-          queryParams: event.state?.routeQueryParams || {},
-          ...matchName(event.state.routeName),
+          routerState: event.state.routerState,
         });
       } else {
         dispatch({
           type: "set_route",
-          pathParams: initialRoute.pathParams,
-          queryParams: initialRoute.queryParams,
-          route: initialRoute.route,
-          fullPath: initialRoute.fullPath,
-          fullName: initialRoute.fullName,
+          routerState: initialRouterState,
         });
       }
     });
@@ -163,7 +153,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
           if (Array.isArray(data)) {
             // TODO store this somehow, e.g., as cookie or in local storage
             dispatch({ type: "set_organizations", organizations: data });
-            if (!state.pathParams.org_id && data.length > 0) {
+            if (!state.routerState.params.org_id && data.length > 0) {
               navigate("projects", { org_id: data[0].id });
             }
           }
@@ -171,11 +161,11 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     } else {
       dispatch({ type: "set_organizations", organizations: null });
     }
-  }, [user, navigate, state.pathParams.org_id]);
+  }, [user, navigate, state.routerState.params.org_id]);
 
   // fetch projects when current organization changes
   useEffect(() => {
-    const id = state.pathParams.org_id;
+    const id = state.routerState.params.org_id;
 
     if (id) {
       fetch(`/api/organizations/${id}/projects`)
@@ -188,12 +178,12 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     } else {
       dispatch({ type: "set_projects", projects: null });
     }
-  }, [user, state.pathParams.org_id]);
+  }, [user, state.routerState.params.org_id]);
 
   // fetch streams when current project changes
   useEffect(() => {
-    const org_id = state.pathParams.org_id;
-    const proj_id = state.pathParams.proj_id;
+    const org_id = state.routerState.params.org_id;
+    const proj_id = state.routerState.params.proj_id;
 
     if (org_id && proj_id) {
       fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams`)
@@ -206,12 +196,12 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     } else {
       dispatch({ type: "set_streams", streams: null });
     }
-  }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
+  }, [user, state.routerState.params.org_id, state.routerState.params.proj_id]);
 
   useEffect(() => {
-    const org_id = state.pathParams.org_id;
-    const proj_id = state.pathParams.proj_id;
-    const stream_id = state.pathParams.stream_id;
+    const org_id = state.routerState.params.org_id;
+    const proj_id = state.routerState.params.proj_id;
+    const stream_id = state.routerState.params.stream_id;
 
     if (org_id && proj_id && stream_id) {
       fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams/${stream_id}/messages`)
@@ -224,11 +214,11 @@ export function useLoadRemails(user: WhoamiResponse | null) {
     } else {
       dispatch({ type: "set_messages", messages: null });
     }
-  }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
+  }, [user, state.routerState.params.org_id, state.routerState.params.proj_id, state.routerState.params.stream_id]);
 
   useEffect(() => {
-    const org_id = state.pathParams.org_id;
-    const proj_id = state.pathParams.proj_id;
+    const org_id = state.routerState.params.org_id;
+    const proj_id = state.routerState.params.proj_id;
 
     let url: string;
     if (org_id && proj_id) {
@@ -247,12 +237,12 @@ export function useLoadRemails(user: WhoamiResponse | null) {
           dispatch({ type: "set_domains", domains: data });
         }
       });
-  }, [user, state.pathParams.org_id, state.pathParams.proj_id]);
+  }, [user, state.routerState.params.org_id, state.routerState.params.proj_id]);
 
   useEffect(() => {
-    const org_id = state.pathParams.org_id;
-    const proj_id = state.pathParams.proj_id;
-    const stream_id = state.pathParams.stream_id;
+    const org_id = state.routerState.params.org_id;
+    const proj_id = state.routerState.params.proj_id;
+    const stream_id = state.routerState.params.stream_id;
 
     if (org_id && proj_id && stream_id) {
       fetch(`/api/organizations/${org_id}/projects/${proj_id}/streams/${stream_id}/smtp_credentials`)
@@ -266,7 +256,7 @@ export function useLoadRemails(user: WhoamiResponse | null) {
       dispatch({ type: "set_credentials", credentials: null });
       return;
     }
-  }, [user, state.pathParams.org_id, state.pathParams.proj_id, state.pathParams.stream_id]);
+  }, [user, state.routerState.params.org_id, state.routerState.params.proj_id, state.routerState.params.stream_id]);
 
   useEffect(() => {
     fetch("/api/config")

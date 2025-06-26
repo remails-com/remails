@@ -56,7 +56,7 @@ export function MessageLog() {
             leftSection={<IconEye />}
             variant="light"
             size="xs"
-            onClick={() => navigate("projects.project.streams.stream.message-log.message", { message_id: message.id })}
+            onClick={() => navigate("projects.project.streams.stream.messages.message", { message_id: message.id })}
           >
             View Message
           </Button>

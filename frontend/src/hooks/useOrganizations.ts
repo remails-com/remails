@@ -2,9 +2,9 @@ import { useRemails } from "./useRemails.ts";
 
 export function useOrganizations() {
   const {
-    state: { organizations, pathParams },
+    state: { organizations, routerState },
   } = useRemails();
-  const currentOrganization = organizations?.find((o) => o.id === pathParams.org_id) || null;
+  const currentOrganization = organizations?.find((o) => o.id === routerState.params.org_id) || null;
 
   return { organizations, currentOrganization };
 }

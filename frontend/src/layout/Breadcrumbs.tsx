@@ -17,7 +17,7 @@ export function Breadcrumbs() {
   const currentOrganisation = useOrganizations();
   const {
     navigate,
-    state: { fullName },
+    state: { routerState },
   } = useRemails();
 
   if (!currentOrganisation) {
@@ -26,19 +26,19 @@ export function Breadcrumbs() {
 
   const items: BreadcrumbItem[] = [];
 
-  if (fullName === "settings") {
+  if (routerState.name === "settings") {
     items.push({ title: "Settings", route: "settings" });
   }
 
-  if (fullName === "statistics") {
+  if (routerState.name === "statistics") {
     items.push({ title: "Statistics", route: "statistics" });
   }
 
-  if (projects && fullName.startsWith("projects")) {
+  if (projects && routerState.name.startsWith("projects")) {
     items.push({ title: "Projects", route: "projects" });
   }
 
-  if (domains && fullName.startsWith("domains")) {
+  if (domains && routerState.name.startsWith("domains")) {
     items.push({ title: "Domains", route: "domains" });
   }
 
@@ -77,7 +77,7 @@ export function Breadcrumbs() {
   if (currentMessage && "message_data" in currentMessage) {
     items.push({
       title: currentMessage.message_data.subject || "No Subject",
-      route: "projects.project.streams.stream.message-log.message",
+      route: "projects.project.streams.stream.messages.message",
     });
   }
 
