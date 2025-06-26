@@ -1,5 +1,4 @@
 export type RouteName = string;
-export type RoutePath = string;
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
 
@@ -7,6 +6,11 @@ export interface Route {
   name: RouteName;
   path: string;
   children?: Route[];
+}
+
+interface FlatRoute {
+  name: string;
+  path: string;
 }
 
 export interface RouterState {
@@ -93,99 +97,111 @@ export const allRoutes: Route[] = [
   },
 ];
 
-export function matchPath(
-  routes: Route[],
+export function flattenRoutes(routes: Route[]): FlatRoute[] {
+  return routes
+    .map((route) => {
+      const flatRoute: FlatRoute = {
+        name: route.name,
+        path: route.path,
+      };
+
+      if (route.children) {
+        const childRoutes = flattenRoutes(route.children);
+        return [
+          flatRoute,
+          ...childRoutes.map((childRoute) => ({
+            name: `${route.name}.${childRoute.name}`,
+            path: `${route.path}${childRoute.path}`,
+          })),
+        ];
+      }
+
+      return flatRoute;
+    })
+    .flat();
+}
+
+export function matchPath(definition: string, path: string): RouteParams | null {
+  let i = 0; // Definition index
+  let j = 0; // Path index
+  const params: RouteParams = {};
+
+  while (i < definition.length && j < path.length) {
+    // Match single characters
+    if (definition[i] === path[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    if (definition[i] === "{") {
+      const end = definition.indexOf("}", i);
+
+      if (end === -1) {
+        return null; // Invalid path, no closing brace found
+      }
+
+      let valueEnd = j;
+      while (path[valueEnd] !== "/" && path[valueEnd] !== "?" && valueEnd < path.length) {
+        valueEnd += 1;
+      }
+
+      const paramName = definition.slice(i + 1, end);
+      const paramValue = path.slice(j, valueEnd);
+
+      i = end + 1; // Move past the closing brace
+      j = valueEnd; // Move past the parameter value
+
+      if (!paramName) {
+        return null; // Invalid path, empty parameter name
+      }
+
+      if (!paramValue) {
+        return null; // Invalid path, empty parameter value
+      }
+
+      params[paramName] = paramValue;
+
+      continue;
+    }
+
+    return null; // Mismatch found
+  }
+
+  if (i !== definition.length || j !== path.length) {
+    // Allow for trailing slashes in the path
+    if (j !== path.length - 1 || path[j] !== "/") {
+      return null;
+    }
+  }
+
+  return params;
+}
+
+export function matchRoute(
+  routes: FlatRoute[],
   path: string
 ): {
   params: RouteParams;
   name: string;
 } | null {
-  const match = matchPathRecursive(path, routes, {}, []);
-
-  const queryString = path.split("?")[1];
+  const pathParts = path.split("?");
+  const basePath = pathParts[0];
+  const queryString = pathParts[1];
   const query = Object.fromEntries(new URLSearchParams(queryString));
 
-  if (match) {
-    return {
-      params: { ...match.params, ...query },
-      name: match.name.join("."),
-    };
+  for (const route of routes) {
+    const params = matchPath(route.path, basePath);
+
+    if (params !== null) {
+      return {
+        name: route.name,
+        params: { ...params, ...query },
+      };
+    }
   }
 
   return null;
-}
-
-function matchPathRecursive(
-  path: string,
-  routes: Route[],
-  params: RouteParams,
-  name: string[]
-): {
-  route: Route;
-  params: RouteParams;
-  name: string[];
-} | null {
-  path = path.replace(/^\/|\/$/, "").replace(/\?.*$/, ""); // Remove leading/trailing slashes and query params
-  const path_elems = path.split("/");
-
-  route_loop: for (const route of routes) {
-    const new_path_params: { [k: string]: string } = {};
-    const route_path = route.path.replace(/^\/|\/$/, "");
-    const route_elems = route_path.split("/");
-    for (const [index, route_elem] of route_elems.entries()) {
-      if (route_elem !== path_elems[index]) {
-        const path_var = route_elem.match(/^{(\w*)}$/)?.at(1);
-        if (path_var) {
-          new_path_params[path_var] = path_elems[index];
-        } else {
-          continue route_loop;
-        }
-      }
-    }
-
-    const new_full_name = [...name, route.name];
-    if (route.children && path_elems.length > route_elems.length) {
-      const rec_res = matchPathRecursive(
-        path_elems.slice(route_elems.length).join("/"),
-        route.children,
-        new_path_params,
-        new_full_name
-      );
-      if (rec_res) {
-        return {
-          route: rec_res.route,
-          params: { ...params, ...rec_res.params, ...new_path_params },
-          name: rec_res.name,
-        };
-      }
-
-      return null;
-    }
-
-    return {
-      route,
-      params: { ...params, ...new_path_params },
-      name: new_full_name,
-    };
-  }
-
-  return null;
-}
-
-export function matchName(routes: Route[], name: RoutePath): string {
-  const segments = name.split(".");
-  const currentSegment = segments[0];
-  const route = routes.find((r) => r.name === currentSegment);
-
-  if (!route) {
-    throw new Error(`Route with name ${currentSegment} not found`);
-  }
-
-  if (segments.length === 1) {
-    return route.path;
-  }
-
-  return route.path + matchName(route.children || [], segments.slice(1).join("."));
 }
 
 export function routerNavigate(name: RouteName, params: RouteParams, keepParams: RouteParams = {}): RouterState {
@@ -206,7 +222,13 @@ export function createRouteState(
   params: RouteParams,
   keepParams: RouteParams = {}
 ): RouterState & { fullPath: string } {
-  let path = matchName(allRoutes, name);
+  const flatRoutes = flattenRoutes(allRoutes);
+  let path = flatRoutes.find((route) => route.name === name)?.path;
+
+  if (!path) {
+    throw new Error(`Route with name ${name} not found`);
+  }
+
   const query = { ...params };
   const pathParams = { ...params, ...keepParams };
 
@@ -233,8 +255,9 @@ export function createRouteState(
 
 export function initRouter(): RouterState {
   const currentPath = window.location.pathname + window.location.search;
+  const flatRoutes = flattenRoutes(allRoutes);
 
-  const { params, name } = matchPath(allRoutes, currentPath) || {
+  const { params, name } = matchRoute(flatRoutes, currentPath) || {
     params: {},
     name: allRoutes[0].name,
   };
