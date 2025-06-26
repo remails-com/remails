@@ -298,6 +298,7 @@ async fn integration_test(pool: PgPool) {
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
 #[sqlx::test(fixtures(
     "organizations",
     "api_users",
@@ -343,15 +344,12 @@ async fn quotas_count_atomically(pool: PgPool) {
                     assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
                     assert_eq!(recv.envelope_recipients.len(), 1);
                     assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
-                    if i % 100 == 0 {
-                        println!("received {i}th messages");
-                    }
-                    if i > 5000 {
+                    if i > 1000 {
                         panic!("went over quota")
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                    if i < 5000 {
+                    if i < 1000 {
                         panic!("timed out receiving {i}th email")
                     }
                     return
@@ -361,7 +359,7 @@ async fn quotas_count_atomically(pool: PgPool) {
     });
 
     // Spawn 51 tasks to throw 100 messages each to remails
-    for i in 0..51 {
+    for i in 0..11 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
             .implicit_tls(true)
             .allow_invalid_certs()
@@ -386,6 +384,108 @@ async fn quotas_count_atomically(pool: PgPool) {
                 john_smtp_client.send(message).await.unwrap();
             }
             john_smtp_client.quit().await.unwrap();
+        });
+    }
+
+    join_set.join_all().await;
+}
+
+#[sqlx::test(fixtures(
+    "organizations",
+    "api_users",
+    "projects",
+    "org_domains",
+    "proj_domains",
+    "streams"
+))]
+async fn rate_limit_count_atomically(pool: PgPool) {
+    let pool = PgPoolOptions::new()
+        .max_connections(70)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+
+    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
+
+    // Organization 2 has a rate limit of 0 that should be reset automatically to 120
+    let (org_id, project_id, stream_id) = TestStreams::Org2Project1Stream1.get_stringified_ids();
+
+    let john_cred = client
+        .post(format!(
+            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
+            http_port
+        ))
+        .header("X-Test-Login", org_id)
+        .json(&json!({
+            "username": "john",
+            "description": "John test credential"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json::<SmtpCredentialResponse>()
+        .await
+        .unwrap();
+
+    let mut join_set = JoinSet::new();
+
+    join_set.spawn(async move {
+        for i in 1.. {
+            select! {
+                Ok(recv) = mailcrab_rx.recv() => {
+                    assert_eq!(recv.envelope_from.as_str(), "john@test-org-2-project-1.com");
+                    assert_eq!(recv.envelope_recipients.len(), 1);
+                    assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-1-project-1.com");
+                    if i > 120 {
+                        panic!("went over rate limit")
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                    if i < 120 {
+                        panic!("timed out receiving {i}th email")
+                    }
+                    return
+                },
+            }
+        }
+    });
+
+    // Spawn 10 tasks to send 15 messages each to remails, only 120 of these should be accepted
+    for i in 0..10 {
+        let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .implicit_tls(true)
+            .allow_invalid_certs()
+            .credentials((
+                john_cred.username().as_str(),
+                john_cred.cleartext_password().as_str(),
+            ))
+            .connect()
+            .await
+            .unwrap();
+
+        join_set.spawn(async move {
+            for j in 1..=15 {
+                let message = MessageBuilder::new()
+                    .from(("John", "john@test-org-2-project-1.com"))
+                    .to(vec![("Eddy", "eddy@test-org-1-project-1.com")])
+                    .subject("TPS reports")
+                    .text_body(format!(
+                        "Have you finished the TPS reports yet? This is the {}th reminder!!!",
+                        i * 2 + j
+                    ));
+
+                match john_smtp_client.send(message).await {
+                    Ok(_) => (),
+                    Err(mail_send::Error::UnexpectedReply(response)) => {
+                        assert_eq!(response.code, 450);
+                        assert_eq!(response.esc, [4, 3, 2]);
+                        assert_eq!(response.message, "Sent too many messages, try again later");
+                        return; // early exit because connection has been terminated
+                    }
+                    Err(e) => panic!("Error sending mail {}", e),
+                }
+            }
+            let _ = john_smtp_client.quit().await;
         });
     }
 

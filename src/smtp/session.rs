@@ -74,6 +74,7 @@ impl SmtpResponse {
     const NO_VRFY: ConstResponse = (502, "5.5.1 VRFY command is disabled");
     const INGEST_AUTH: ConstResponse = (334, "Tell me your secret.");
     const RATE_LIMIT: ConstResponse = (450, "4.3.2 Sent too many messages, try again later");
+    const INTERNAL_ERROR: ConstResponse = (455, "4.0.0 Internal server error, try again later");
 }
 
 pub enum SessionReply {
@@ -192,15 +193,11 @@ impl SmtpSession {
                     return SessionReply::IngestAuth(SmtpResponse::INGEST_AUTH.into());
                 }
 
-                let (response, stop) = self
+                let response = self
                     .handle_plain_auth(&mut initial_response.into_bytes())
                     .await;
 
-                if stop {
-                    SessionReply::ReplyAndStop(response)
-                } else {
-                    SessionReply::ReplyAndContinue(response)
-                }
+                SessionReply::ReplyAndContinue(response)
             }
             Request::Quit => {
                 // RFC5321, 4.1.1.10
@@ -226,6 +223,18 @@ impl SmtpSession {
 
                 if self.current_message.is_some() {
                     return SessionReply::ReplyAndContinue(SmtpResponse::NESTED_MAIL.into());
+                }
+
+                let Ok(ratelimit) = self
+                    .smtp_credentials
+                    .rate_limit(credential.stream_id())
+                    .await
+                else {
+                    return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());
+                };
+
+                if ratelimit <= 0 {
+                    return SessionReply::ReplyAndStop(SmtpResponse::RATE_LIMIT.into());
                 }
 
                 self.current_message = Some(NewMessage::new(credential.id(), from_address));
@@ -325,9 +334,9 @@ impl SmtpSession {
     }
 
     /// Returns a response and whether or not the session should stop
-    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> (SmtpResponse, bool) {
+    pub(super) async fn handle_plain_auth(&mut self, data: &mut [u8]) -> SmtpResponse {
         let Ok(AttemptedAuth { username, password }) = Self::decode_plain_auth(data) else {
-            return (SmtpResponse::SYNTAX_ERROR.into(), false);
+            return SmtpResponse::SYNTAX_ERROR.into();
         };
 
         trace!(
@@ -336,28 +345,15 @@ impl SmtpSession {
         );
 
         let Ok(Some(credential)) = self.smtp_credentials.find_by_username(username).await else {
-            return (SmtpResponse::AUTH_ERROR.into(), false);
+            return SmtpResponse::AUTH_ERROR.into();
         };
 
         if !credential.verify_password(password) {
-            return (SmtpResponse::AUTH_ERROR.into(), false);
-        }
-
-        let Ok(ratelimit) = self
-            .smtp_credentials
-            .rate_limit(credential.stream_id())
-            .await
-        else {
-            return (SmtpResponse::RATE_LIMIT.into(), true);
-        };
-
-        tracing::debug!(ratelimit);
-        if ratelimit <= 0 {
-            return (SmtpResponse::RATE_LIMIT.into(), true); // rate limited, stop session
+            return SmtpResponse::AUTH_ERROR.into();
         }
 
         self.authenticated_credential = Some(credential);
-        (SmtpResponse::AUTH_SUCCESS.into(), false)
+        SmtpResponse::AUTH_SUCCESS.into()
     }
 
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {

@@ -88,11 +88,8 @@ pub async fn handle(
                 write_reply(response, &mut sink).await?;
                 read_line(&mut reader, &mut buffer).await?;
 
-                let (response, stop) = session.handle_plain_auth(&mut buffer).await;
+                let response = session.handle_plain_auth(&mut buffer).await;
                 write_reply(response, &mut sink).await?;
-                if stop {
-                    break;
-                }
             }
         }
     }
