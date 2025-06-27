@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export function useSubscription() {
   const { currentOrganization } = useOrganizations();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const [salesLink, setSalesLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentOrganization) {
@@ -14,5 +15,13 @@ export function useSubscription() {
     }
   }, [currentOrganization]);
 
-  return { subscription };
+  useEffect(() => {
+    if (currentOrganization && subscription && subscription.status === "none") {
+      fetch(`/api/organizations/${currentOrganization.id}/subscription/new`)
+        .then((res) => res.json())
+        .then(setSalesLink);
+    }
+  }, [currentOrganization, subscription]);
+
+  return { subscription, salesLink };
 }

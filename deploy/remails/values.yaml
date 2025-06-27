@@ -50,6 +50,7 @@ retry:
 github_oauth:
   client_id: Ov23livRESUJK4twobxj
   client_secret: Secret
+  webhook_url: https://dump.tweede.golf/dump/moneybird
 
 imagePullSecrets:
   - name: "regcred"

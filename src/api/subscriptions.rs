@@ -49,7 +49,6 @@ pub async fn get_sales_link(
     Ok(Json(moneybird.create_sales_link(org).await?))
 }
 
-// TODO authentication?
 pub async fn moneybird_webhook(
     State(moneybird): State<MoneyBird>,
     Json(payload): Json<MoneybirdWebhookPayload>,

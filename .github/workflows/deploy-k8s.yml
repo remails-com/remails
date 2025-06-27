@@ -1,5 +1,5 @@
 name: Deploy to Kubernetes
-run-name: "Deploy \"${{ github.ref_name }}\" to Kubernetes"
+run-name: "Deploy \"${{ github.ref_name }}\" to ${{ github.event.inputs.env }}"
 
 on:
   workflow_dispatch:
@@ -170,6 +170,9 @@ jobs:
         run: |
           helm upgrade --install remails ./remails \
             --set environment="${{ vars.environment }}" \
+            --set moneybird.administration="${{ vars.MONEYBIRD_ADMINISTRATION_ID }}" \
+            --set moneybird.api_key="${{ secrets.MONEYBIRD_API_KEY }}" \
+            --set moneybird.webhook_url="${{ vars.MONEYBIRD_WEBHOOK_URL }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \

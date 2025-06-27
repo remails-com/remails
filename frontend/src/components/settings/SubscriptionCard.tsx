@@ -4,28 +4,42 @@ import { Subscription, SubscriptionStatus } from "../../types.ts";
 import React from "react";
 
 export default function SubscriptionCard() {
-  const { subscription } = useSubscription();
+  const { subscription, salesLink } = useSubscription();
 
   const details = (subscription: SubscriptionStatus) => {
     if (subscription.status === "none") {
       return no_subscription;
     } else {
-      return existing_subscription(subscription);
+      return existing_subscription(subscription, subscription.status);
     }
   };
 
-  const no_subscription = <Text size="xl">No subscription found</Text>;
+  const no_subscription = (
+    <>
+      <Text size="xl">No subscription found</Text>
+      <Button component="a" href={salesLink || ""} target="_blank">
+        Choose subscription
+      </Button>
+    </>
+  );
 
-  const existing_subscription = (subscription: Subscription) => (
+  const existing_subscription = (subscription: Subscription, status: "active" | "expired") => (
     <>
       <Grid justify="space-between">
         <Grid.Col span="auto">
           <Text size="xl">{subscription.title}</Text>
         </Grid.Col>
         <Grid.Col span="content">
-          <Badge size="lg" color="green" variant="light">
-            Active{subscription.end_date ? `until ${subscription.end_date}` : ""}
-          </Badge>
+          {status === "active" && (
+            <Badge size="lg" color="green" variant="light">
+              Active{subscription.end_date ? `until ${subscription.end_date}` : ""}
+            </Badge>
+          )}
+          {status === "expired" && (
+            <Badge size="lg" color="red" variant="light">
+              Expired since {subscription.end_date}
+            </Badge>
+          )}
         </Grid.Col>
       </Grid>
       <Divider />
