@@ -138,7 +138,7 @@ export class Router {
       if (params !== null) {
         return {
           name: route.name,
-          params: { ...params, ...query },
+          params: { ...query, ...params  },
         };
       }
     }
@@ -154,7 +154,7 @@ export class Router {
     }
 
     const query = { ...params };
-    const pathParams = { ...params, ...this.pathParamCache };
+    const pathParams = { ...this.pathParamCache, ...params };
 
     this.pathParamCache = {};
 
