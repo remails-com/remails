@@ -211,7 +211,7 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            limit: 50,
+            limit: 10,
             status: None,
             before: None,
         }
@@ -475,14 +475,14 @@ impl MessageRepository {
                 AND ($2::uuid IS NULL OR project_id = $2)
                 AND ($3::uuid IS NULL OR stream_id = $3)
                 AND ($5::message_status IS NULL OR status = $5)
-                AND ($6::timestamptz IS NULL OR created_at < $6)
+                AND ($6::timestamptz IS NULL OR created_at <= $6)
             ORDER BY created_at DESC
             LIMIT $4
             "#,
             *org_id,
             project_id.map(|p| p.as_uuid()),
             stream_id.map(|s| s.as_uuid()),
-            std::cmp::min(filter.limit, 100),
+            std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
             filter.status as _,
             filter.before,
         )

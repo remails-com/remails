@@ -1,10 +1,13 @@
-import { Accordion, Badge, Button, Code, Group, Text, Tooltip } from "@mantine/core";
+import { Accordion, Badge, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconCheck, IconClock, IconEye, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconX } from "@tabler/icons-react";
 import { getFullStatusDescription, renderRecipients } from "./MessageDetails.tsx";
+import { DateTimePicker } from "@mantine/dates";
+import dayjs from "dayjs";
+import { useState } from "react";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -19,19 +22,52 @@ function statusIcons(status: string) {
   return <IconX color="gray" />;
 }
 
+const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/models/messages.rs
+
 export function MessageLog() {
   const { messages } = useMessages();
-  const { navigate } = useRemails();
+  const [pages, setPages] = useState<string[]>([]);
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
 
   if (!messages) {
     return <Loader />;
   }
 
-  if (messages.length == 0) {
-    return <Text c="dimmed">No recent messages...</Text>;
+  const setFilter = (filter: "limit" | "status" | "before", value: string | null) => {
+    navigate(routerState.name, { ...routerState.params, [filter]: value ?? "" });
+  };
+
+  function setBeforeFromPicker(value: string | null) {
+    setPages([]);
+    setFilter("before", value ? dayjs(value).toISOString() : null);
   }
 
-  const rows = messages.map((message) => (
+  function loadNewer() {
+    if (pages.length <= 1) {
+      setPages([]);
+      setFilter("before", null);
+      return;
+    }
+    const previousDate = pages[pages.length - 2];
+    console.log("previousDate", previousDate);
+    console.log("pages", pages.slice(0, pages.length - 1));
+    setPages(pages.slice(0, pages.length - 1));
+    setFilter("before", previousDate);
+  }
+
+  function loadOlder() {
+    const lastDate = messages![messages!.length - 1].created_at;
+    console.log("pages", [...pages, lastDate]);
+    setPages([...pages, lastDate]);
+    setFilter("before", lastDate);
+  }
+
+  const has_more_entries = messages.length > parseInt(routerState.params.limit || LIMIT_DEFAULT);
+
+  const rows = messages.slice(0, has_more_entries ? -1 : undefined).map((message) => (
     <Accordion.Item key={message.id} value={message.id}>
       <Accordion.Control icon={statusIcons(message.status)}>
         {formatDateTime(message.created_at)}: message from
@@ -65,5 +101,71 @@ export function MessageLog() {
     </Accordion.Item>
   ));
 
-  return <Accordion variant="separated">{rows}</Accordion>;
+  const navigation_buttons = (
+    <Group justify="center">
+      <Button
+        variant="default"
+        leftSection={<IconArrowLeft />}
+        onClick={loadNewer}
+        disabled={!routerState.params.before}
+      >
+        newer messages
+      </Button>
+      <Button
+        variant="default"
+        rightSection={<IconArrowRight />}
+        onClick={loadOlder}
+        disabled={!has_more_entries || messages.length == 0}
+      >
+        older messages
+      </Button>
+    </Group>
+  );
+
+  return (
+    <>
+      <Group justify="space-between" align="flex-end">
+        <Group>
+          <NativeSelect
+            label="Message status"
+            value={routerState.params.status}
+            data={[
+              { label: "Show all", value: "" },
+              { group: "In progress", items: ["Processing", "Accepted"] },
+              { group: "Waiting for retry", items: ["Held", "Reattempt"] },
+              { group: "Not delivered", items: ["Rejected", "Failed"] },
+              "Delivered",
+            ]}
+            onChange={(event) => setFilter("status", event.currentTarget.value)}
+          />
+          <DateTimePicker
+            label="From before date"
+            value={routerState.params.before}
+            placeholder="Pick date and time"
+            onChange={setBeforeFromPicker}
+            clearable
+          />
+          <NativeSelect
+            label="Show per page"
+            value={routerState.params.limit || LIMIT_DEFAULT}
+            data={["10", "20", "50", "100"]}
+            onChange={(event) => setFilter("limit", event.currentTarget.value)}
+          />
+        </Group>
+        {navigation_buttons}
+      </Group>
+      {rows.length == 0 ? (
+        <Text c="dimmed" mt="md">
+          No messages found...
+        </Text>
+      ) : (
+        <>
+          <Accordion my="md" variant="separated">
+            {rows}
+          </Accordion>
+          {navigation_buttons}
+        </>
+      )}
+    </>
+  );
 }
