@@ -2,7 +2,6 @@ import { AppShell, Box, Burger, Button, Flex, Group, Menu, Text } from "@mantine
 import { useDisclosure } from "@mantine/hooks";
 import ColorTheme from "./ColorTheme";
 import { IconChevronDown, IconLogout, IconUser, IconUserBolt } from "@tabler/icons-react";
-import { useUser } from "../hooks/useUser";
 import { NavBar } from "./NavBar.tsx";
 import { ReactNode } from "react";
 import { useRemails } from "../hooks/useRemails.ts";
@@ -17,12 +16,15 @@ interface DashboardProps {
 
 export function Dashboard({ children }: DashboardProps) {
   const [navbarOpened, { toggle, close }] = useDisclosure();
-  const { user } = useUser();
   const {
-    state: { organizations },
+    state: { organizations, user },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
+
+  if (!user) {
+    return null;
+  }
 
   const isAdmin = user.roles.some(
     (role) => role.type == "super_admin" || (role.type == "organization_admin" && role.id == currentOrganization?.id)

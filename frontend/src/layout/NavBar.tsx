@@ -1,17 +1,15 @@
 import { NavLink } from "@mantine/core";
 import { IconBuildings, IconChartBar, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
-import { useUser } from "../hooks/useUser.ts";
 import { is_global_admin } from "../util.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 
 export function NavBar({ close }: { close: () => void }) {
   const {
-    state: { routerState },
+    state: { routerState, user },
     navigate,
   } = useRemails();
-  const {
-    user: { roles },
-  } = useUser();
+
+  const roles = user?.roles || [];
 
   return (
     <>

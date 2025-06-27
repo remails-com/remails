@@ -3,7 +3,6 @@ import { IconBrandGithub, IconPlus, IconPlugConnectedX, IconTrash, IconX } from 
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../organizations/NewOrganization.tsx";
 import GitHubBadge from "./GitHubBadge.tsx";
-import { useUser } from "../../hooks/useUser.ts";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -21,8 +20,11 @@ interface PasswordForm {
 
 export function Settings() {
   const [opened, { open, close }] = useDisclosure(false);
-  const { navigate } = useRemails();
-  const { user, setUser } = useUser();
+  const { dispatch, navigate, state: { user} } = useRemails();
+
+  if (!user) {
+    return null;
+  }
 
   const basicForm = useForm<BasicFormValues>({
     initialValues: {
@@ -55,7 +57,7 @@ export function Settings() {
     }).then((res) => {
       if (res.status === 200) {
         res.json().then((user) => {
-          setUser(user);
+          dispatch({ type: "set_user", user });
         });
       }
     });
@@ -71,7 +73,7 @@ export function Settings() {
     }).then((res) => {
       if (res.status === 200) {
         res.json().then((user) => {
-          setUser(user);
+          dispatch({ type: "set_user", user });
           basicForm.resetDirty();
           notifications.show({
             title: "Updated",
@@ -101,7 +103,7 @@ export function Settings() {
     }).then((res) => {
       if (res.status === 200) {
         passwordForm.reset();
-        setUser({ ...user, password_enabled: true });
+        dispatch({ type: "set_user", user: { ...user, password_enabled: true } });
         notifications.show({
           title: "Updated",
           color: "green",
@@ -141,7 +143,7 @@ export function Settings() {
     }).then((res) => {
       if (res.status === 200) {
         passwordForm.reset();
-        setUser({ ...user, password_enabled: false });
+        dispatch({ type: "set_user", user: { ...user, password_enabled: false } });
         notifications.show({
           title: "Removed Password login",
           color: "green",

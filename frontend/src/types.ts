@@ -55,7 +55,7 @@ export interface RemailsConfig {
 }
 
 export interface State {
-  user: WhoamiResponse | null;
+  user: User | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
@@ -77,7 +77,7 @@ export interface BreadcrumbItem {
 export type Action =
   | {
       type: "set_user";
-      user: WhoamiResponse | null;
+      user: User | null;
     }
   | {
       type: "set_organizations";

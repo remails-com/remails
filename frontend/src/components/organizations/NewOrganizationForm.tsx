@@ -4,7 +4,6 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconX } from "@tabler/icons-react";
 import { Organization } from "../../types.ts";
-import { useUser } from "../../hooks/useUser.ts";
 
 interface FormValues {
   name: string;
@@ -44,8 +43,11 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
 }
 
 export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
-  const { dispatch } = useRemails();
-  const { user, setUser } = useUser();
+  const { dispatch, state: { user } } = useRemails();
+
+  if (!user) {
+    return null;
+  }
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -60,7 +62,7 @@ export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
     saveNewOrganization(values.name).then(({ status, newOrg }) => {
       if (status === 201 && newOrg) {
         done(newOrg);
-        setUser({ ...user, roles: [...user.roles, { type: "organization_admin", id: newOrg.id }] });
+        dispatch({ type: 'set_user', user: { ...user, roles: [...user.roles, { type: "organization_admin", id: newOrg.id }] }});
         dispatch({ type: "add_organization", organization: newOrg });
       }
     });
