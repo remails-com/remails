@@ -166,7 +166,7 @@ test("flattenRoutes", () => {
     },
     {
       name: "not_found",
-      path: '/'
-    }
+      path: "/",
+    },
   ]);
 });
