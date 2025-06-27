@@ -367,16 +367,32 @@ impl MoneyBird {
             administration,
         };
 
-        res.register_webhook(webhook_url).await?;
+        let self_clone = res.clone();
+        // Webhook registration must happen asynchronously, otherwise the test webhook sent by
+        // moneybird will not succeed, and not webhook will get registered at all.
+        tokio::spawn(async move {
+            // Cannot inline this "random_delay", see: https://stackoverflow.com/a/75227719
+            let random_delay = {
+                let mut rng = rand::rng();
+                rng.random_range(0..10)
+            };
+
+            // If multiple instances (Pods) start at the same time,
+            // try to avoid race conditions by introducing a random delay
+            // so that only one will register the webhook
+            tokio::time::sleep(Duration::from_secs(random_delay)).await;
+
+            self_clone
+                .register_webhook(webhook_url)
+                .await
+                .inspect_err(|err| error!("Failed to register webhook: {}", err))
+                .ok();
+        });
+
         Ok(res)
     }
 
     async fn register_webhook(&self, url: Url) -> Result<(), Error> {
-        // If multiple instances (Pods) start at the same time,
-        // try to avoid race conditions by introducing a random delay
-        // so that only one will register the webhook
-        tokio::time::sleep(Duration::from_secs(rand::rng().random_range(0..10))).await;
-
         let exists = sqlx::query_scalar!(
             r#"
             SELECT true AS "exists!" FROM moneybird_webhook
@@ -501,8 +517,8 @@ impl MoneyBird {
             "#,
             *subscription.contact.id
         )
-        .fetch_one(&self.pool)
-        .await?;
+            .fetch_one(&self.pool)
+            .await?;
 
         let current_product: ProductIdentifier =
             product_and_reset_date.subscription_product.parse().unwrap();
@@ -591,11 +607,11 @@ impl MoneyBird {
     ) -> Result<DateTime<Utc>, Error> {
         Ok(match subscription {
             SubscriptionStatus::Active(Subscription {
-                end_date,
-                recurring_sales_invoice_id,
-                subscription_id,
-                ..
-            }) => {
+                                           end_date,
+                                           recurring_sales_invoice_id,
+                                           subscription_id,
+                                           ..
+                                       }) => {
                 if let Some(end_date) = end_date {
                     trace!(
                         subscription_id = subscription_id.as_str(),
