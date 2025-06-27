@@ -39,6 +39,8 @@ pub struct Organization {
     remaining_message_quota: i64,
     quota_reset: DateTime<Utc>,
     moneybird_contact_id: Option<MoneybirdContactId>,
+    remaining_rate_limit: i64,
+    rate_limit_reset: DateTime<Utc>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -138,15 +140,17 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)
-            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')
+            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
+            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())
             RETURNING id,
                       name,
                       remaining_message_quota,
                       quota_reset,
                       created_at,
                       updated_at,
-                      moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
+                      moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                      rate_limit_reset,
+                      remaining_rate_limit
             "#,
             organization.name,
         )
@@ -165,7 +169,9 @@ impl OrganizationRepository {
                    quota_reset,
                    created_at,
                    updated_at,
-                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                   rate_limit_reset,
+                   remaining_rate_limit
             FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY name
@@ -191,7 +197,9 @@ impl OrganizationRepository {
                    quota_reset,
                    created_at,
                    updated_at,
-                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId"
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                   rate_limit_reset,
+                   remaining_rate_limit
             FROM organizations
             WHERE id = $1
               AND ($2::uuid[] IS NULL OR id = ANY($2))

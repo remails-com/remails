@@ -41,8 +41,8 @@ spec:
               value: {{ .Values.environment }}
             - name: SMTP_SERVER_NAME
               value: {{ .Values.smtp.server_name }}
-            - name: SMTP_PORT
-              value: {{ .Values.smtp.port | quote }}
+            - name: SMTP_PORTS
+              value: {{ join "," .Values.smtp.ports | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

@@ -51,7 +51,7 @@ export interface RemailsConfig {
   version: string;
   environment: string;
   smtp_domain_name: string;
-  smtp_port: number;
+  smtp_ports: number[];
 }
 
 export interface State {

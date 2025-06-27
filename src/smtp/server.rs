@@ -182,7 +182,7 @@ impl SmtpServer {
 
                             connection::handle(
                                 &mut tls_stream,
-                                server_name.as_str(),
+                                server_name,
                                 peer_addr,
                                 queue,
                                 user_repository,

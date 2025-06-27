@@ -72,7 +72,7 @@ pub struct RemailsConfig {
     pub version: String,
     pub environment: Environment,
     pub smtp_domain_name: String,
-    pub smtp_port: u16,
+    pub smtp_ports: Vec<u16>,
 }
 
 impl Default for RemailsConfig {
@@ -82,17 +82,21 @@ impl Default for RemailsConfig {
             .map(|s| s.parse())
             .unwrap_or(Ok(Environment::Development))
             .unwrap_or(Environment::Development);
-        let smtp_domain_name = env::var("SMTP_SERVER_NAME").unwrap_or("remails.net".to_string());
-        let smtp_port = env::var("SMTP_PORT")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(465))
-            .unwrap_or(465);
+        let smtp_domain_name =
+            env::var("SMTP_SERVER_NAME").expect("SMTP_SERVER_NAME env var must be set");
+        let smtp_ports = env::var("SMTP_PORTS")
+            .map(|s| {
+                s.split(",")
+                    .map(|p| p.parse().expect("Could not parse port"))
+                    .collect()
+            })
+            .expect("SMTP_PORTS env var must be set");
 
         Self {
             version,
             environment,
             smtp_domain_name,
-            smtp_port,
+            smtp_ports,
         }
     }
 }

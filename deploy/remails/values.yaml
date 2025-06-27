@@ -23,7 +23,11 @@ smtp:
   load_balancer_plan: "essentials"
   server_name: "smtp.remails.net"
   ehlo_domain: "sending.remails.net"
-  port: 465
+  rate_limit_max_messages: "120"
+  rate_limit_minutes: "1"
+  ports:
+    - 465
+    - 2525
   # Possible values "staging" and "production".
   # Influences which type of Let's Encrypt certificate should be used
   certificate_type: "production"

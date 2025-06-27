@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset)\n            VALUES (gen_random_uuid(), $1, 50, now() + '1 month')\n            RETURNING id,\n                      name,\n                      remaining_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\"\n            ",
+  "query": "\n            SELECT id,\n                   name,\n                   remaining_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit\n            FROM organizations\n            WHERE id = $1\n              AND ($2::uuid[] IS NULL OR id = ANY($2))\n            ",
   "describe": {
     "columns": [
       {
@@ -37,11 +37,22 @@
         "ordinal": 6,
         "name": "moneybird_contact_id: MoneybirdContactId",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "rate_limit_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "remaining_rate_limit",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar"
+        "Uuid",
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -51,8 +62,10 @@
       false,
       false,
       false,
-      true
+      true,
+      false,
+      false
     ]
   },
-  "hash": "874fcd86684fef1ccce0073592237632167834a64906bf8bb91cd7050aba386c"
+  "hash": "7c02d7387118046e172b6b8c1a47745f91f7f4e315718291e55b7a818609f04f"
 }
