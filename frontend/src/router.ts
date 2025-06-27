@@ -7,6 +7,10 @@ export interface RouterState {
   params: { [k: string]: string };
 }
 
+export interface FullRouterState extends RouterState {
+  fullPath: string;
+}
+
 export interface Route {
   name: string;
   path: string;
@@ -146,7 +150,7 @@ export class Router {
     return null;
   }
 
-  navigate(name: RouteName, params: RouteParams): RouterState & { fullPath: string } {
+  navigate(name: RouteName, params: RouteParams): FullRouterState {
     let path = this.routes.find((route) => route.name === name)?.path;
 
     if (!path) {

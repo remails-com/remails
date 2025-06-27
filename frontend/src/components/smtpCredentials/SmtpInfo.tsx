@@ -1,5 +1,6 @@
 import { Code, Text } from "@mantine/core";
 import { useRemails } from "../../hooks/useRemails";
+import { Fragment } from "react/jsx-runtime";
 
 export function SmtpInfo() {
   const {
@@ -9,10 +10,10 @@ export function SmtpInfo() {
   // nicely format list of ports
   const ports =
     config?.smtp_ports.map((p, i, a) => (
-      <>
+      <Fragment key={p}>
         <Code>{p}</Code>
         {i < a.length - 2 ? ", " : i == a.length - 2 ? ", and " : ""}
-      </>
+      </Fragment>
     )) ?? [];
 
   return (

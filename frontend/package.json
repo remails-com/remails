@@ -17,6 +17,7 @@
     "@mantine/hooks": "^8.0.0",
     "@mantine/modals": "^8.0.0",
     "@mantine/notifications": "^8.0.0",
+    "@mantine/nprogress": "^8.1.2",
     "@tabler/icons-react": "^3.31.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

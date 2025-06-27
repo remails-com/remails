@@ -1,8 +1,23 @@
-import { Dispatch, useCallback, useEffect } from "react";
-import { RouteParams, Router } from "../router";
-import { Action } from "../types";
+import { Dispatch, useEffect, useState } from "react";
+import { FullRouterState, RouteParams, Router, RouterState } from "../router";
+import { Action, State, WhoamiResponse } from "../types";
 
-export function useRouter(router: Router, dispatch: Dispatch<Action>) {
+export interface NavigationState {
+  from: RouterState;
+  to: FullRouterState;
+  state: State;
+}
+
+export type Middleware = (navstate: NavigationState, router: Router, dispatch: Dispatch<Action>) => Promise<FullRouterState>;
+
+export function useRouter(
+  router: Router,
+  state: State,
+  dispatch: Dispatch<Action>,
+  middleware: Middleware[] = []
+) {
+  const [busy, setBusy] = useState(false);
+
   // handle back / forward events
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
@@ -20,6 +35,7 @@ export function useRouter(router: Router, dispatch: Dispatch<Action>) {
     };
 
     window.addEventListener("popstate", onPopState);
+    navigate(router.initialState.name, router.initialState.params);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
@@ -27,20 +43,42 @@ export function useRouter(router: Router, dispatch: Dispatch<Action>) {
   }, [dispatch, router]);
 
   // Navigate function to change the route
-  return useCallback(
-    (name: string, params?: RouteParams) => {
-      const routerState = router.navigate(name, params || {});
+  const navigate = async (name: string, params?: RouteParams) => {
+    if (busy) {
+      console.warn("Navigation is already in progress, ignoring new request.");
+      return false;
+    }
 
-      window.history.pushState(routerState, "", routerState.fullPath);
+    setBusy(true);
+    dispatch({ type: "loading", loading: true });
+    console.log('nav', name, params);
 
-      dispatch({
-        type: "set_route",
-        routerState: {
-          name: routerState.name,
-          params: routerState.params,
-        },
-      });
-    },
-    [dispatch, router]
-  );
+    let routerState = router.navigate(name, params || {});
+
+    const navState: NavigationState = {
+      from: state.routerState,
+      to: routerState,
+      state,
+    };
+
+    for (const mw of middleware) {
+      routerState = await mw(navState, router, dispatch);
+    }
+
+    window.history.pushState(routerState, "", routerState.fullPath);
+
+    dispatch({
+      type: "set_route",
+      routerState: {
+        name: routerState.name,
+        params: routerState.params,
+      },
+    });
+
+    console.log('nav done', routerState);
+    dispatch({ type: "loading", loading: false });
+    setBusy(false);
+  };
+
+  return navigate;
 }

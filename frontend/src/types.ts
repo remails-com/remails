@@ -55,11 +55,13 @@ export interface RemailsConfig {
 }
 
 export interface State {
+  user: WhoamiResponse | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
+  organisationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   loading: boolean;
   config: RemailsConfig | null;
@@ -74,6 +76,10 @@ export interface BreadcrumbItem {
 
 export type Action =
   | {
+      type: "set_user";
+      user: WhoamiResponse | null;
+    }
+  | {
       type: "set_organizations";
       organizations: Organization[] | null;
     }
@@ -83,6 +89,7 @@ export type Action =
     }
   | {
       type: "loading";
+      loading: boolean;
     }
   | {
       type: "set_projects";
@@ -122,6 +129,18 @@ export type Action =
     }
   | {
       type: "remove_domain";
+      domainId: string;
+    }
+  | {
+      type: "set_organisation_domains";
+      organisationDomains: Domain[] | null;
+    }
+  | {
+      type: "add_organisation_domain";
+      domain: Domain;
+    }
+  | {
+      type: "remove_organisation_domain";
       domainId: string;
     }
   | {

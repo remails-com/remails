@@ -14,11 +14,12 @@ import { useOrganizations } from "./hooks/useOrganizations.ts";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
+import { nprogress, NavigationProgress } from '@mantine/nprogress';
 
 export function Pages() {
   const [opened, { open, close }] = useDisclosure(false);
   const {
-    state: { routerState },
+    state: { routerState, loading },
   } = useRemails();
   const { organizations } = useOrganizations();
 
@@ -28,6 +29,14 @@ export function Pages() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizations]);
+
+  useEffect(() => {
+    if (loading) {
+      nprogress.start();
+    } else {
+      nprogress.complete();
+    }
+  }, [loading]);
 
   let element: ReactNode;
 
@@ -71,6 +80,7 @@ export function Pages() {
 
   return (
     <Dashboard>
+      <NavigationProgress />
       {organizations?.length === 0 && <Setup opened={opened} close={close} />}
       {element}
     </Dashboard>
