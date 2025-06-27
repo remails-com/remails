@@ -21,6 +21,7 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
     },
     body: JSON.stringify({ name }),
   });
+
   if (res.status === 201) {
     return res.json().then((newOrg) => {
       notifications.show({
@@ -28,26 +29,25 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
         message: `Organization ${newOrg.name} created`,
         color: "green",
       });
-      return Promise.resolve({ status: 201, newOrg });
+
+      return { status: 201, newOrg };
     });
-  } else {
-    notifications.show({
-      title: "Error",
-      message: "Something went wrong",
-      color: "red",
-      autoClose: 20000,
-      icon: <IconX size={20} />,
-    });
-    return Promise.resolve({ status: res.status, newOrg: null });
   }
+
+  notifications.show({
+    title: "Error",
+    message: "Something went wrong",
+    color: "red",
+    autoClose: 20000,
+    icon: <IconX size={20} />,
+  });
+
+  return { status: res.status, newOrg: null };
 }
 
 export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
-  const { dispatch, state: { user } } = useRemails();
-
-  if (!user) {
-    return null;
-  }
+  const { dispatch, state } = useRemails();
+  const user = state.user!;
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -62,7 +62,10 @@ export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
     saveNewOrganization(values.name).then(({ status, newOrg }) => {
       if (status === 201 && newOrg) {
         done(newOrg);
-        dispatch({ type: 'set_user', user: { ...user, roles: [...user.roles, { type: "organization_admin", id: newOrg.id }] }});
+        dispatch({
+          type: "set_user",
+          user: { ...user, roles: [...user.roles, { type: "organization_admin", id: newOrg.id }] },
+        });
         dispatch({ type: "add_organization", organization: newOrg });
       }
     });

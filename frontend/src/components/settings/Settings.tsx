@@ -20,11 +20,8 @@ interface PasswordForm {
 
 export function Settings() {
   const [opened, { open, close }] = useDisclosure(false);
-  const { dispatch, navigate, state: { user} } = useRemails();
-
-  if (!user) {
-    return null;
-  }
+  const { dispatch, navigate, state } = useRemails();
+  const user = state.user!;
 
   const basicForm = useForm<BasicFormValues>({
     initialValues: {

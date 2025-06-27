@@ -77,4 +77,8 @@ export const routes: Route[] = [
     name: "organizations",
     path: "/{org_id}/organizations",
   },
+  {
+    name: "not_found",
+    path: "/",
+  },
 ];

@@ -1,4 +1,4 @@
-import { Action, State, WhoamiResponse } from "./types";
+import { Action, State } from "./types";
 
 const actionHandler: {
   [action in Action["type"]]: (state: State, action: Extract<Action, { type: action }>) => State;
@@ -68,7 +68,7 @@ const actionHandler: {
   },
   set_user: function (state, action) {
     return { ...state, user: action.user };
-  }
+  },
 };
 
 // helper function to make TypeScript recognize the proper types

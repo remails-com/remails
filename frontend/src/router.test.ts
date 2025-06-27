@@ -3,7 +3,7 @@ import { flattenRoutes, Router } from "./router";
 import { routes } from "./routes";
 
 test("Match a path", () => {
-  const router = new Router(routes, "/");
+  const router = new Router(routes);
 
   expect(router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects")).toStrictEqual({
     name: "projects",
@@ -56,7 +56,7 @@ test("Match a path", () => {
 });
 
 test("createRouteState", () => {
-  const router = new Router(routes, "/");
+  const router = new Router(routes);
 
   expect(
     router.navigate("projects", {
@@ -164,5 +164,9 @@ test("flattenRoutes", () => {
       name: "organizations",
       path: "/{org_id}/organizations",
     },
+    {
+      name: "not_found",
+      path: '/'
+    }
   ]);
 });

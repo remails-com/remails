@@ -1,6 +1,6 @@
-import { Dispatch, useEffect, useState } from "react";
+import { Dispatch, useEffect, useRef } from "react";
 import { FullRouterState, RouteParams, Router, RouterState } from "../router";
-import { Action, State, WhoamiResponse } from "../types";
+import { Action, State } from "../types";
 
 export interface NavigationState {
   from: RouterState;
@@ -8,16 +8,13 @@ export interface NavigationState {
   state: State;
 }
 
-export type Middleware = (navstate: NavigationState, router: Router, dispatch: Dispatch<Action>) => Promise<FullRouterState>;
-
-export function useRouter(
+export type Middleware = (
+  navstate: NavigationState,
   router: Router,
-  state: State,
-  dispatch: Dispatch<Action>,
-  middleware: Middleware[] = []
-) {
-  const [busy, setBusy] = useState(false);
+  dispatch: Dispatch<Action>
+) => Promise<FullRouterState>;
 
+export function useRouter(router: Router, state: State, dispatch: Dispatch<Action>, middleware: Middleware[] = []) {
   // handle back / forward events
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
@@ -35,23 +32,23 @@ export function useRouter(
     };
 
     window.addEventListener("popstate", onPopState);
-    navigate(router.initialState.name, router.initialState.params);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
     };
   }, [dispatch, router]);
 
+  const busy = useRef(false);
+
   // Navigate function to change the route
   const navigate = async (name: string, params?: RouteParams) => {
-    if (busy) {
+    if (busy.current) {
       console.warn("Navigation is already in progress, ignoring new request.");
       return false;
     }
 
-    setBusy(true);
+    busy.current = true;
     dispatch({ type: "loading", loading: true });
-    console.log('nav', name, params);
 
     let routerState = router.navigate(name, params || {});
 
@@ -75,9 +72,10 @@ export function useRouter(
       },
     });
 
-    console.log('nav done', routerState);
     dispatch({ type: "loading", loading: false });
-    setBusy(false);
+    busy.current = false;
+
+    return true;
   };
 
   return navigate;

@@ -11,14 +11,11 @@ import { Link } from "../../Link.tsx";
 
 export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const {
-    state: { loading },
-    navigate,
-  } = useRemails();
+  const { navigate } = useRemails();
   const { currentProject } = useProjects();
   const { domains } = useDomains();
 
-  if (loading || domains === null) {
+  if (domains === null) {
     return <Loader />;
   }
 

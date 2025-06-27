@@ -6,7 +6,7 @@ export default function App() {
   const { state, dispatch, navigate } = useLoadRemails();
 
   if (!state.user) {
-    return <Login setUser={(user) => dispatch({ type: 'set_user', user })} />;
+    return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
   return (

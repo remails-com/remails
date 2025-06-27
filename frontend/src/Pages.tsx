@@ -14,7 +14,7 @@ import { useOrganizations } from "./hooks/useOrganizations.ts";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
-import { nprogress, NavigationProgress } from '@mantine/nprogress';
+import { nprogress, NavigationProgress } from "@mantine/nprogress";
 
 export function Pages() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -37,6 +37,10 @@ export function Pages() {
       nprogress.complete();
     }
   }, [loading]);
+
+  if (routerState.name === "not_found") {
+    return <NavigationProgress />;
+  }
 
   let element: ReactNode;
 

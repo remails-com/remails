@@ -118,9 +118,9 @@ export class Router {
   private pathParamCache: RouteParams = {};
   public initialState: RouterState;
 
-  constructor(routes: Route[], path: string) {
+  constructor(routes: Route[]) {
     this.routes = flattenRoutes(routes);
-    this.initialState = this.match(path) || {
+    this.initialState = {
       name: "not_found",
       params: {},
     };
@@ -142,7 +142,7 @@ export class Router {
       if (params !== null) {
         return {
           name: route.name,
-          params: { ...query, ...params  },
+          params: { ...query, ...params },
         };
       }
     }

@@ -10,13 +10,10 @@ import { Link } from "../../Link.tsx";
 
 export function StreamsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const {
-    state: { loading },
-    navigate,
-  } = useRemails();
+  const { navigate } = useRemails();
   const { streams } = useStreams();
 
-  if (loading || streams === null) {
+  if (streams === null) {
     return <Loader />;
   }
 

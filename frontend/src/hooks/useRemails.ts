@@ -1,4 +1,4 @@
-import { ActionDispatch, createContext, useContext, useReducer } from "react";
+import { ActionDispatch, createContext, useContext, useEffect, useReducer } from "react";
 import { Action, State } from "../types.ts";
 import { useRouter } from "./useRouter.ts";
 import { routes } from "../routes.ts";
@@ -35,7 +35,7 @@ export function useRemails() {
   return useContext(RemailsContext);
 }
 
-const router = new Router(routes, window.location.pathname + window.location.search);
+const router = new Router(routes);
 
 export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
@@ -52,12 +52,19 @@ export function useLoadRemails() {
     routerState: router.initialState,
   });
 
-  const navigate = useRouter(
-    router,
-    state,
-    dispatch,
-    [apiMiddleware]
-  );
+  const navigate = useRouter(router, state, dispatch, [apiMiddleware]);
+
+  useEffect(() => {
+    // initial navigation
+    const route = router.match(window.location.pathname + window.location.search);
+
+    if (route) {
+      navigate(route.name, route.params);
+    } else {
+      navigate("not_found");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     state,

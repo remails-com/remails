@@ -1,64 +1,87 @@
 import { Dispatch } from "react";
 import { NavigationState } from "./hooks/useRouter";
-import { Action } from "./types";
+import { Action, Organization } from "./types";
 import { FullRouterState, Router } from "./router";
 
-export default async function apiMiddleware(navState: NavigationState, router: Router, dispatch: Dispatch<Action>): Promise<FullRouterState> {
-    const newOrgId = navState.to.params.org_id;
-    const newProjId = navState.to.params.proj_id;
-    const newStreamId = navState.to.params.stream_id;
+async function get<T>(path: string): Promise<T> {
+  const response = await fetch(path, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
 
-    const orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
-    const projChanged = newProjId !== navState.from.params.proj_id && newProjId !== null;
-    const streamChanged = newStreamId !== navState.from.params.stream_id && newStreamId !== null;
-    
-    if (navState.state.config === null) {
-        const config = await fetch("/api/config").then((res) => res.json());
-        dispatch({ type: "set_config", config });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${path}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json() as T;
+}
+
+export default async function apiMiddleware(
+  navState: NavigationState,
+  router: Router,
+  dispatch: Dispatch<Action>
+): Promise<FullRouterState> {
+  let newOrgId = navState.to.params.org_id;
+  let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
+
+  if (navState.state.user === null) {
+    dispatch({ type: "set_user", user: await get("/api/whoami") });
+  }
+
+  if (navState.state.config === null) {
+    dispatch({ type: "set_config", config: await get("/api/config") });
+  }
+
+  if (navState.state.organizations === null) {
+    const organizations = await get<Organization[]>("/api/organizations");
+    dispatch({ type: "set_organizations", organizations });
+
+    // navigate to the first organization if none is selected
+    if (!navState.to.params.org_id && organizations.length > 0) {
+      navState.to = router.navigate("projects", { org_id: organizations[0].id });
+      orgChanged = true;
+      newOrgId = organizations[0].id;
     }
+  }
 
-    if (orgChanged) {
-        const organizations = await fetch("/api/organizations").then((r) => r.json())
-        dispatch({ type: "set_organizations", organizations });
+  const newProjId = navState.to.params.proj_id;
+  const newStreamId = navState.to.params.stream_id;
+  const projChanged = newProjId !== navState.from.params.proj_id && newProjId !== null;
+  const streamChanged = newStreamId !== navState.from.params.stream_id && newStreamId !== null;
 
-        // navigate to the first organization if none is selected
-        if (!navState.to.params.org_id && organizations.length > 0) {
-            navState.to = router.navigate("projects", { org_id: organizations[0].id });
-        }
+  if (orgChanged) {
+    dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
 
-        const projects = await fetch(`/api/organizations/${newOrgId}/projects`).then((res) => res.json());
-        dispatch({ type: "set_projects", projects });
-
-        if (!newProjId) {
-            const orgDomains = await fetch(`/api/organizations/${newOrgId}/domains`).then((res) => res.json());
-            dispatch({ type: "set_domains", domains: orgDomains });
-        }
+    if (!newProjId) {
+      dispatch({ type: "set_domains", domains: await get(`/api/organizations/${newOrgId}/domains`) });
     }
+  }
 
-    if (orgChanged || projChanged) {
-        const streams = await fetch(`/api/organizations/${newOrgId}/projects/${newProjId}/streams`).then((res) => res.json());
-        dispatch({ type: "set_streams", streams });
+  if ((orgChanged || projChanged) && newOrgId && newProjId) {
+    dispatch({
+      type: "set_streams",
+      streams: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams`),
+    });
+    dispatch({
+      type: "set_domains",
+      domains: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`),
+    });
+  }
 
-        const domains = await fetch(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`).then((res) => res.json());
-        dispatch({ type: "set_domains", domains });
-    }
+  if ((orgChanged || projChanged || streamChanged) && newOrgId && newProjId && newStreamId) {
+    dispatch({
+      type: "set_messages",
+      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages`),
+    });
+    dispatch({
+      type: "set_credentials",
+      credentials: await get(
+        `/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/smtp_credentials`
+      ),
+    });
+  }
 
-    if (orgChanged || projChanged || streamChanged) {
-        const messages = await fetch(`/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages`).then((res) => res.json());
-        dispatch({ type: "set_messages", messages });
-
-        const smtpCredentials = await fetch(`/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/smtp_credentials`).then((res) => res.json());
-        dispatch({ type: "set_credentials", credentials: smtpCredentials });
-    }
-
-    if (newOrgId === null) {
-        dispatch({ type: "set_organizations", organizations: null });
-        dispatch({ type: "set_projects", projects: null });
-        dispatch({ type: "set_streams", streams: null });
-        dispatch({ type: "set_messages", messages: null });
-        dispatch({ type: "set_domains", domains: null });
-        dispatch({ type: "set_credentials", credentials: null });
-    }
-
-    return navState.to;
+  return navState.to;
 }
