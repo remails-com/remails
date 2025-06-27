@@ -1,9 +1,9 @@
-import { Accordion, Badge, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
 import { getFullStatusDescription, renderRecipients } from "./MessageDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
@@ -27,6 +27,7 @@ const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/model
 export function MessageLog() {
   const { messages } = useMessages();
   const [pages, setPages] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const {
     state: { routerState },
     navigate,
@@ -39,6 +40,15 @@ export function MessageLog() {
   const setFilter = (filter: "limit" | "status" | "before", value: string | null) => {
     navigate(routerState.name, { ...routerState.params, [filter]: value ?? "" });
   };
+
+  function refresh() {
+    if (!refreshing) {
+      setRefreshing(true);
+      // TODO: maybe there is a nicer way to refresh the data
+      navigate(routerState.name, { ...routerState.params });
+      setTimeout(() => setRefreshing(false), 1000);
+    }
+  }
 
   function setBeforeFromPicker(value: string | null) {
     setPages([]);
@@ -102,7 +112,7 @@ export function MessageLog() {
   ));
 
   const navigation_buttons = (
-    <Group justify="center">
+    <>
       <Button
         variant="default"
         leftSection={<IconArrowLeft />}
@@ -119,7 +129,7 @@ export function MessageLog() {
       >
         older messages
       </Button>
-    </Group>
+    </>
   );
 
   return (
@@ -152,7 +162,16 @@ export function MessageLog() {
             onChange={(event) => setFilter("limit", event.currentTarget.value)}
           />
         </Group>
-        {navigation_buttons}
+        <Group justify="center">
+          {navigation_buttons}
+          <ActionIcon variant="default" size="input-sm" onClick={refresh} disabled={refreshing}>
+            <IconRefresh
+              style={
+                refreshing ? { rotate: "-360deg", transition: "rotate 1s" } : { rotate: "0deg", transition: "none" }
+              }
+            />
+          </ActionIcon>
+        </Group>
       </Group>
       {rows.length == 0 ? (
         <Text c="dimmed" mt="md">
@@ -163,7 +182,7 @@ export function MessageLog() {
           <Accordion my="md" variant="separated">
             {rows}
           </Accordion>
-          {navigation_buttons}
+          <Group justify="center">{navigation_buttons}</Group>
         </>
       )}
     </>
