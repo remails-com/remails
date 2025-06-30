@@ -29,12 +29,12 @@ export default async function apiMiddleware(
   if (navState.state.user === null) {
     const user = await get<WhoamiResponse>("/api/whoami");
 
-    if (user === null || user.hasOwnProperty("error")) {
+    if (user === null || "error" in user) {
       // If the user is not logged in, redirect to the login page
       return router.navigate("not_found", {});
     }
 
-    dispatch({ type: "set_user", user: user as User  });
+    dispatch({ type: "set_user", user: user as User });
   }
 
   if (navState.state.config === null) {
