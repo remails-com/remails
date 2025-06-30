@@ -1,4 +1,4 @@
-import { Accordion, ActionIcon, Badge, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
@@ -80,12 +80,19 @@ export function MessageLog() {
   const rows = messages.slice(0, has_more_entries ? -1 : undefined).map((message) => (
     <Accordion.Item key={message.id} value={message.id}>
       <Accordion.Control icon={statusIcons(message.status)}>
-        {formatDateTime(message.created_at)}: message from
-        <Badge color="secondary" size="lg" variant="light" mx="xs" tt="none">
-          {message.from_email}
-        </Badge>
-        to
-        {renderRecipients(message, "sm")}
+        <Group gap={0} justify="space-between" align="center">
+          <Box>
+            Message from
+            <Badge color="secondary" size="lg" variant="light" mx="xs" tt="none">
+              {message.from_email}
+            </Badge>
+            to
+            {renderRecipients(message, "sm")}
+          </Box>
+          <Text fz="xs" c="dimmed" mr="md">
+            {formatDateTime(message.created_at)}
+          </Text>
+        </Group>
       </Accordion.Control>
       <Accordion.Panel>
         <Text>
@@ -149,7 +156,7 @@ export function MessageLog() {
             onChange={(event) => setFilter("status", event.currentTarget.value)}
           />
           <DateTimePicker
-            label="From before date"
+            label="Created before"
             value={routerState.params.before}
             placeholder="Pick date and time"
             onChange={setBeforeFromPicker}
