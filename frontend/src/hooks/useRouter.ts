@@ -15,33 +15,10 @@ export type Middleware = (
 ) => Promise<FullRouterState>;
 
 export function useRouter(router: Router, state: State, dispatch: Dispatch<Action>, middleware: Middleware[] = []) {
-  // handle back / forward events
-  useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
-      if (event.state?.routerState) {
-        dispatch({
-          type: "set_route",
-          routerState: event.state.routerState,
-        });
-      } else {
-        dispatch({
-          type: "set_route",
-          routerState: router.initialState,
-        });
-      }
-    };
-
-    window.addEventListener("popstate", onPopState);
-
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-    };
-  }, [dispatch, router]);
-
   const busy = useRef(false);
 
   // Navigate function to change the route
-  const navigate = async (name: string, params?: RouteParams) => {
+  const navigate = async (name: string, params?: RouteParams, pushState = true) => {
     if (busy.current) {
       console.warn("Navigation is already in progress, ignoring new request.");
       return false;
@@ -62,7 +39,9 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       routerState = await mw(navState, router, dispatch);
     }
 
-    window.history.pushState(routerState, "", routerState.fullPath);
+    if (pushState) {
+      window.history.pushState({ routerState }, "", routerState.fullPath);
+    }
 
     dispatch({
       type: "set_route",
@@ -77,6 +56,25 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
 
     return true;
   };
+
+  // handle back / forward events
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      if (event.state?.routerState) {
+        navigate(event.state.routerState.name, event.state.routerState.params, false);
+      } else {
+        navigate(router.initialState.name, router.initialState.params, false);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, router]);
 
   return navigate;
 }

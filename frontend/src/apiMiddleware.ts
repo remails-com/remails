@@ -31,7 +31,7 @@ export default async function apiMiddleware(
 
     if (user === null || "error" in user) {
       // If the user is not logged in, redirect to the login page
-      return router.navigate("not_found", {});
+      return router.navigate("default", {});
     }
 
     dispatch({ type: "set_user", user: user as User });

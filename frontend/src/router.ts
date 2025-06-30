@@ -121,7 +121,7 @@ export class Router {
   constructor(routes: Route[]) {
     this.routes = flattenRoutes(routes);
     this.initialState = {
-      name: "not_found",
+      name: "default",
       params: {},
     };
     this.pathParamCache = this.initialState.params;
