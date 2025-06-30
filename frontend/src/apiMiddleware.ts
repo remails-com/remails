@@ -1,6 +1,6 @@
 import { Dispatch } from "react";
 import { NavigationState } from "./hooks/useRouter";
-import { Action, Organization } from "./types";
+import { Action, Organization, User, WhoamiResponse } from "./types";
 import { FullRouterState, Router } from "./router";
 
 async function get<T>(path: string): Promise<T> {
@@ -27,7 +27,14 @@ export default async function apiMiddleware(
   let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
 
   if (navState.state.user === null) {
-    dispatch({ type: "set_user", user: await get("/api/whoami") });
+    const user = await get<WhoamiResponse>("/api/whoami");
+
+    if (user === null || user.hasOwnProperty("error")) {
+      // If the user is not logged in, redirect to the login page
+      return router.navigate("not_found", {});
+    }
+
+    dispatch({ type: "set_user", user: user as User  });
   }
 
   if (navState.state.config === null) {

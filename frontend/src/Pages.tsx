@@ -38,10 +38,6 @@ export function Pages() {
     }
   }, [loading]);
 
-  if (routerState.name === "not_found") {
-    return <NavigationProgress />;
-  }
-
   let element: ReactNode;
 
   switch (routerState.name) {
@@ -76,6 +72,9 @@ export function Pages() {
       break;
     case "projects.project.streams.stream.messages.message":
       element = <MessageDetails />;
+      break;
+    case "not_found":
+      element = <NavigationProgress />;
       break;
     default:
       console.error("Unknown route:", routerState.name);
