@@ -1,4 +1,4 @@
-import { Button, Flex, Table } from "@mantine/core";
+import { Button, Divider, Flex, Table } from "@mantine/core";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useStreams } from "../../hooks/useStreams.ts";
@@ -23,7 +23,7 @@ export function StreamsOverview() {
   const rows = streams.map((stream) => (
     <Table.Tr key={stream.id}>
       <Table.Td>
-        <Link to="projects.project.streams.stream" params={{ stream_id: stream.id }} query={{ tab: "messages" }}>
+        <Link to="projects.project.streams.stream" params={{ stream_id: stream.id, tab: "messages" }}>
           {stream.name}
         </Link>
       </Table.Td>
@@ -32,15 +32,10 @@ export function StreamsOverview() {
         <Button
           variant="subtle"
           onClick={() =>
-            navigate(
-              "projects.project.streams.stream",
-              {
-                stream_id: stream.id,
-              },
-              {
-                tab: "settings",
-              }
-            )
+            navigate("projects.project.streams.stream", {
+              stream_id: stream.id,
+              tab: "settings",
+            })
           }
         >
           <IconEdit />
@@ -62,6 +57,7 @@ export function StreamsOverview() {
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
       </Table>
+      <Divider />
       <Flex justify="center" mt="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Stream

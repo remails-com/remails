@@ -18,7 +18,7 @@ import MessageDetails from "./components/messages/MessageDetails.tsx";
 export function Pages() {
   const [opened, { open, close }] = useDisclosure(false);
   const {
-    state: { route },
+    state: { routerState },
   } = useRemails();
   const { organizations } = useOrganizations();
 
@@ -31,26 +31,28 @@ export function Pages() {
 
   let element: ReactNode;
 
-  switch (route.name) {
+  switch (routerState.name) {
     case "organizations":
       element = <OrganizationsOverview />;
       break;
     case "projects":
       element = <ProjectsOverview />;
       break;
-    case "project":
+    case "projects.project":
       element = <ProjectDetails />;
       break;
-    case "stream":
+    case "projects.project.streams.stream":
       element = <StreamDetails />;
       break;
     case "domains":
+    case "projects.project.domains":
       element = <DomainsOverview />;
       break;
-    case "domain":
+    case "domains.domain":
+    case "projects.project.domains.domain":
       element = <DomainDetails />;
       break;
-    case "credential":
+    case "projects.project.streams.stream.credentials.credential":
       element = <CredentialDetails />;
       break;
     case "settings":
@@ -59,10 +61,11 @@ export function Pages() {
     case "statistics":
       element = <Text>Organization wide statistics, quotas, etc.</Text>;
       break;
-    case "message":
+    case "projects.project.streams.stream.messages.message":
       element = <MessageDetails />;
       break;
     default:
+      console.error("Unknown route:", routerState.name);
       element = "Not Found";
   }
 

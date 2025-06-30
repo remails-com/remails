@@ -4,7 +4,7 @@ import ColorTheme from "./ColorTheme";
 import { IconChevronDown, IconLogout, IconUser, IconUserBolt } from "@tabler/icons-react";
 import { useUser } from "../hooks/useUser";
 import { NavBar } from "./NavBar.tsx";
-import { ReactNode, useState } from "react";
+import { ReactNode } from "react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
@@ -17,7 +17,6 @@ interface DashboardProps {
 
 export function Dashboard({ children }: DashboardProps) {
   const [navbarOpened, { toggle, close }] = useDisclosure();
-  const [_, setUserMenuOpened] = useState(false);
   const { user } = useUser();
   const {
     state: { organizations },
@@ -31,14 +30,7 @@ export function Dashboard({ children }: DashboardProps) {
 
   const org_switching = (
     <>
-      <Menu
-        width={260}
-        position="bottom-start"
-        transitionProps={{ transition: "fade-down" }}
-        onClose={() => setUserMenuOpened(false)}
-        onOpen={() => setUserMenuOpened(true)}
-        withinPortal
-      >
+      <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>
         <Menu.Target>
           <Button
             leftSection={isAdmin ? <IconUserBolt /> : <IconUser />}

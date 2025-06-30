@@ -1,4 +1,3 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "@mantine/core/styles.css";
@@ -29,12 +28,10 @@ const theme = createTheme({
 });
 
 root.render(
-  <StrictMode>
-    <MantineProvider theme={theme}>
-      <ModalsProvider>
-        <Notifications />
-        <App />
-      </ModalsProvider>
-    </MantineProvider>
-  </StrictMode>
+  <MantineProvider theme={theme}>
+    <ModalsProvider>
+      <Notifications />
+      <App />
+    </ModalsProvider>
+  </MantineProvider>
 );

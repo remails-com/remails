@@ -2,9 +2,9 @@ import { useRemails } from "./useRemails.ts";
 
 export function useProjects() {
   const {
-    state: { projects, pathParams },
+    state: { projects, routerState },
   } = useRemails();
-  const currentProject = projects?.find((p) => p.id === pathParams.proj_id) || null;
+  const currentProject = projects?.find((p) => p.id === routerState.params.proj_id) || null;
 
   return { projects, currentProject };
 }
