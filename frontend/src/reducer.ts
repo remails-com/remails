@@ -57,8 +57,11 @@ const actionHandler: {
   remove_credential: function (state, action) {
     return { ...state, credentials: state.credentials?.filter((d) => d.id !== action.credentialId) || [] };
   },
+  set_next_router_state: function (state, action) {
+    return { ...state, nextRouterState: action.nextRouterState };
+  },
   set_route: function (state, action) {
-    return { ...state, routerState: action.routerState };
+    return { ...state, routerState: action.routerState, nextRouterState: null };
   },
   set_config: function (state, action) {
     return { ...state, config: action.config };
