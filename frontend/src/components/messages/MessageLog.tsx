@@ -29,9 +29,11 @@ export function MessageLog() {
   const [pages, setPages] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const {
-    state: { routerState },
+    state: { routerState, nextRouterState },
     navigate,
   } = useRemails();
+
+  const currentParams = nextRouterState?.params || routerState.params;
 
   if (!messages) {
     return <Loader />;
@@ -74,7 +76,7 @@ export function MessageLog() {
     setFilter("before", lastDate);
   }
 
-  const has_more_entries = messages.length > parseInt(routerState.params.limit || LIMIT_DEFAULT);
+  const has_more_entries = messages.length > parseInt(currentParams.limit || LIMIT_DEFAULT);
 
   const rows = messages.slice(0, has_more_entries ? -1 : undefined).map((message) => (
     <Accordion.Item key={message.id} value={message.id}>
@@ -144,7 +146,7 @@ export function MessageLog() {
         <Group>
           <NativeSelect
             label="Message status"
-            value={routerState.params.status}
+            value={currentParams.status}
             data={[
               { label: "Show all", value: "" },
               { group: "In progress", items: ["Processing", "Accepted"] },
@@ -156,14 +158,14 @@ export function MessageLog() {
           />
           <DateTimePicker
             label="Created before"
-            value={routerState.params.before}
+            value={currentParams.before}
             placeholder="Pick date and time"
             onChange={setBeforeFromPicker}
             clearable
           />
           <NativeSelect
             label="Show per page"
-            value={routerState.params.limit || LIMIT_DEFAULT}
+            value={currentParams.limit || LIMIT_DEFAULT}
             data={["10", "20", "50", "100"]}
             onChange={(event) => setFilter("limit", event.currentTarget.value)}
           />
