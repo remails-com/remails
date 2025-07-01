@@ -190,7 +190,9 @@ impl DnsResolver {
     pub async fn any_a_record(&self, domain: &str) -> VerifyResult {
         let domain = format!("{}.", domain.trim_matches('.'));
         match self.resolver.lookup_ip(domain).await {
-            Ok(ips) => {
+            Ok(ips) =>
+            {
+                #[cfg_attr(test, allow(clippy::iter_next_slice))]
                 if ips.iter().next().is_some() {
                     VerifyResult::success("available")
                 } else {
