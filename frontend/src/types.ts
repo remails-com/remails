@@ -61,7 +61,7 @@ export interface State {
   streams: Stream[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
-  organisationDomains: Domain[] | null;
+  organizationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   loading: boolean;
   config: RemailsConfig | null;
@@ -132,15 +132,15 @@ export type Action =
       domainId: string;
     }
   | {
-      type: "set_organisation_domains";
-      organisationDomains: Domain[] | null;
+      type: "set_organization_domains";
+      organizationDomains: Domain[] | null;
     }
   | {
-      type: "add_organisation_domain";
-      domain: Domain;
+      type: "add_organization_domain";
+      organizationDomain: Domain;
     }
   | {
-      type: "remove_organisation_domain";
+      type: "remove_organization_domain";
       domainId: string;
     }
   | {

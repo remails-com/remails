@@ -25,9 +25,11 @@ function validateDomain(domain: string) {
   if (domain.length < 3) {
     return "Domain must have at least 3 letters";
   }
+
   if (!domain.includes(".")) {
     return "Domain must include a top level domain (TLD)";
   }
+
   return null;
 }
 
@@ -61,7 +63,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
 
   if (!currentOrganization) {
     console.error("Cannot create domain without a selected organization");
-    return <></>;
+    return null;
   }
 
   const save = (values: FormValues) => {
@@ -75,12 +77,17 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
       if (res.status === 201) {
         res.json().then((newDomain) => {
           setNewDomain(newDomain);
-          dispatch({ type: "add_domain", domain: newDomain });
+
+          if (projectId) {
+            dispatch({ type: "add_domain", domain: newDomain });
+          } else {
+            dispatch({ type: "add_organization_domain", organizationDomain: newDomain });
+          }
+
           setActiveStep(1);
         });
       } else if (res.status === 409) {
         form.setFieldError("domain", "This domain is already configured");
-        return;
       } else {
         notifications.show({
           title: "Error",
@@ -97,10 +104,16 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
     if (!domain) {
       return;
     }
+
     fetch(`${domainsApi}/${domain.id}`, {
       method: "DELETE",
     }).then((r) => {
-      dispatch({ type: "remove_domain", domainId: domain.id });
+      if (projectId) {
+        dispatch({ type: "remove_domain", domainId: domain.id });
+      } else {
+        dispatch({ type: "remove_organization_domain", domainId: domain.id });
+      }
+
       if (r.status !== 200) {
         notifications.show({
           title: "Error",
@@ -198,11 +211,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
                 onClick={() => {
                   setActiveStep(0);
                   close();
-
-                  let route = "domains.domain";
-                  if (currentProject) {
-                    route = "projects.project.domains.domain";
-                  }
+                  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
                   navigate(route, { domain_id: newDomain?.id || "" });
                 }}
               >

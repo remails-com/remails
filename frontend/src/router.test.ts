@@ -168,7 +168,7 @@ test("flattenRoutes", () => {
       name: "default",
       path: "/",
     },
-        {
+    {
       name: "not_found",
       path: "/404",
     },

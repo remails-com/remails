@@ -42,14 +42,14 @@ const actionHandler: {
   remove_domain: function (state, action) {
     return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
   },
-  set_organisation_domains: function (state, action) {
-    return { ...state, organisationDomains: action.organisationDomains };
+  set_organization_domains: function (state, action) {
+    return { ...state, organizationDomains: action.organizationDomains };
   },
-  add_organisation_domain: function (state, action) {
-    return { ...state, organisationDomains: [...(state.organisationDomains || []), action.domain] };
+  add_organization_domain: function (state, action) {
+    return { ...state, organizationDomains: [...(state.organizationDomains || []), action.organizationDomain] };
   },
-  remove_organisation_domain: function (state, action) {
-    return { ...state, organisationDomains: state.organisationDomains?.filter((d) => d.id !== action.domainId) || [] };
+  remove_organization_domain: function (state, action) {
+    return { ...state, organizationDomains: state.organizationDomains?.filter((d) => d.id !== action.domainId) || [] };
   },
   set_credentials: function (state, action) {
     return { ...state, credentials: action.credentials };
@@ -79,7 +79,8 @@ function getActionHandler<T extends Action["type"]>(
 }
 
 export function reducer(state: State, action: Action): State {
-  console.log("action:", action);
   const handler = getActionHandler(action);
-  return handler(state, action);
+  const newState = handler(state, action);
+  console.log("action:", action, newState);
+  return newState;
 }

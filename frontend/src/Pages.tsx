@@ -45,12 +45,16 @@ export function Pages() {
       element = <StreamDetails />;
       break;
     case "domains":
-    case "projects.project.domains":
       element = <DomainsOverview />;
       break;
+    case "projects.project.domains":
+      element = <DomainsOverview projectDomains={true} />;
+      break;
     case "domains.domain":
-    case "projects.project.domains.domain":
       element = <DomainDetails />;
+      break;
+    case "projects.project.domains.domain":
+      element = <DomainDetails projectDomains={true} />;
       break;
     case "projects.project.streams.stream.credentials.credential":
       element = <CredentialDetails />;

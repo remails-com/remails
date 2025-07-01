@@ -60,13 +60,13 @@ export default async function apiMiddleware(
 
   if (orgChanged) {
     dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
-
-    if (!newProjId) {
-      dispatch({ type: "set_domains", domains: await get(`/api/organizations/${newOrgId}/domains`) });
-    }
+    dispatch({
+      type: "set_organization_domains",
+      organizationDomains: await get(`/api/organizations/${newOrgId}/domains`),
+    });
   }
 
-  if ((orgChanged || projChanged) && newOrgId && newProjId) {
+  if (projChanged && newProjId) {
     dispatch({
       type: "set_streams",
       streams: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams`),
@@ -77,7 +77,7 @@ export default async function apiMiddleware(
     });
   }
 
-  if ((orgChanged || projChanged || streamChanged) && newOrgId && newProjId && newStreamId) {
+  if (streamChanged && newStreamId) {
     dispatch({
       type: "set_messages",
       messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages`),

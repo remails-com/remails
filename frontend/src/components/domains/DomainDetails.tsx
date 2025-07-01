@@ -2,7 +2,6 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDomains } from "../../hooks/useDomains.ts";
-import { Loader } from "../../Loader.tsx";
 import { Domain } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -13,20 +12,21 @@ import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { useDisclosure } from "@mantine/hooks";
 
-export function DomainDetails() {
+export function DomainDetails({ projectDomains = false }: { projectDomains?: boolean }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentDomain } = useDomains();
+  const { currentDomain } = useDomains(projectDomains);
   const { dispatch, navigate } = useRemails();
   const [opened, { open, close }] = useDisclosure(false);
 
-  const domainsApi = currentProject
-    ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
-    : `/api/organizations/${currentOrganization?.id}/domains`;
+  const domainsApi =
+    projectDomains && currentProject
+      ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
+      : `/api/organizations/${currentOrganization?.id}/domains`;
   const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
 
   if (!currentDomain || !currentOrganization) {
-    return <Loader />;
+    return null;
   }
 
   const confirmDeleteDomain = (domain: Domain) => {
@@ -44,10 +44,10 @@ export function DomainDetails() {
   };
 
   const deleteDomain = async (domain: Domain) => {
-    let url = `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
-    if (currentProject) {
-      url = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`;
-    }
+    const url =
+      projectDomains && currentProject
+        ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
+        : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
 
     const res = await fetch(url, {
       method: "DELETE",
@@ -59,7 +59,8 @@ export function DomainDetails() {
         color: "green",
       });
       dispatch({ type: "remove_domain", domainId: domain.id });
-      if (currentProject) {
+
+      if (projectDomains && currentProject) {
         navigate("projects.project");
       } else {
         navigate("domains");
