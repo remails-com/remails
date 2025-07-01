@@ -22,6 +22,7 @@ pub struct DnsResolver {
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
     pub(crate) resolver: mock::Resolver,
+    pub preferred_spf_record: String,
 }
 
 #[cfg(not(test))]
@@ -38,6 +39,8 @@ impl DnsResolver {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
+            preferred_spf_record: std::env::var("PREFERRED_SPF_RECORD")
+                .unwrap_or("v=spf1 include:spf.remails.net -all".to_string()),
         }
     }
 
@@ -45,6 +48,7 @@ impl DnsResolver {
     pub fn mock(domain: &'static str, port: u16) -> Self {
         Self {
             resolver: mock::Resolver(domain, port),
+            preferred_spf_record: "v=spf1 include:spf.remails.net -all".to_string(),
         }
     }
 
@@ -160,7 +164,7 @@ impl DnsResolver {
         };
         trace!("spf data: {spf_data:?}");
 
-        if spf_data == "v=spf1 include:remails.net -all" {
+        if spf_data == self.preferred_spf_record {
             VerifyResult::success("correct!")
         } else {
             VerifyResult::warning("currently configured differently:", Some(spf_data))

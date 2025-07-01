@@ -70,6 +70,7 @@ pub struct RemailsConfig {
     pub environment: Environment,
     pub smtp_domain_name: String,
     pub smtp_ports: Vec<u16>,
+    pub preferred_spf_record: String,
 }
 
 impl Default for RemailsConfig {
@@ -88,12 +89,15 @@ impl Default for RemailsConfig {
                     .collect()
             })
             .expect("SMTP_PORTS env var must be set");
+        let preferred_spf_record = env::var("PREFERRED_SPF_RECORD")
+            .unwrap_or("v=spf1 include:spf.remails.net -all".to_string());
 
         Self {
             version,
             environment,
             smtp_domain_name,
             smtp_ports,
+            preferred_spf_record,
         }
     }
 }
