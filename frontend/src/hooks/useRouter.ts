@@ -27,11 +27,11 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
 
     busy.current = true;
     let routerState = router.navigate(name, params || {});
-    
+
     dispatch({
       type: "set_next_router_state",
       nextRouterState: routerState,
-    });    
+    });
 
     nprogress.start();
 
