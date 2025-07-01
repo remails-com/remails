@@ -182,4 +182,18 @@ impl DnsResolver {
             VerifyResult::warning("currently configured differently:", Some(dmarc_data))
         }
     }
+
+    pub async fn any_a_record(&self, domain: &str) -> VerifyResult {
+        let domain = format!("{}.", domain.trim_matches('.'));
+        match self.resolver.lookup_ip(domain).await {
+            Ok(ips) => {
+                if ips.iter().next().is_some() {
+                    VerifyResult::success("available")
+                } else {
+                    VerifyResult::warning("no A record set", None)
+                }
+            }
+            Err(_) => VerifyResult::warning("could not retrieve DNS record", None),
+        }
+    }
 }

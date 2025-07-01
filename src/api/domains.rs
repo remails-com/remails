@@ -198,6 +198,7 @@ pub struct DomainVerificationResult {
     dkim: VerifyResult,
     spf: VerifyResult,
     dmarc: VerifyResult,
+    a: VerifyResult,
 }
 
 pub(super) async fn verify_domain(
@@ -223,5 +224,6 @@ pub(super) async fn verify_domain(
             .into(),
         spf: resolver.verify_spf(&domain_name).await,
         dmarc: resolver.verify_dmarc(&domain_name).await,
+        a: resolver.any_a_record(&domain_name).await,
     }))
 }

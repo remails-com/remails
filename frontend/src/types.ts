@@ -224,6 +224,7 @@ export interface DomainVerificationResult {
   dkim: VerifyResult;
   spf: VerifyResult;
   dmarc: VerifyResult;
+  a: VerifyResult;
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";
