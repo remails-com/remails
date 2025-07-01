@@ -26,9 +26,14 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     }
 
     busy.current = true;
-    nprogress.start();
-
     let routerState = router.navigate(name, params || {});
+    
+    dispatch({
+      type: "set_next_router_state",
+      nextRouterState: routerState,
+    });    
+
+    nprogress.start();
 
     const navState: NavigationState = {
       from: state.routerState,
