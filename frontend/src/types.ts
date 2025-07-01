@@ -56,6 +56,7 @@ export interface RemailsConfig {
 
 export interface State {
   user: User | null;
+  userFetched: boolean;
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
@@ -63,7 +64,6 @@ export interface State {
   domains: Domain[] | null;
   organizationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
-  loading: boolean;
   config: RemailsConfig | null;
   routerState: RouterState;
 }
@@ -86,10 +86,6 @@ export type Action =
   | {
       type: "add_organization";
       organization: Organization;
-    }
-  | {
-      type: "loading";
-      loading: boolean;
     }
   | {
       type: "set_projects";
