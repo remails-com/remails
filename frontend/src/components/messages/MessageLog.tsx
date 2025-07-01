@@ -44,8 +44,7 @@ export function MessageLog() {
   function refresh() {
     if (!refreshing) {
       setRefreshing(true);
-      // TODO: maybe there is a nicer way to refresh the data
-      navigate(routerState.name, { ...routerState.params });
+      navigate(routerState.name, { ...routerState.params, force: "reload" });
       setTimeout(() => setRefreshing(false), 1000);
     }
   }
