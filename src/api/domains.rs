@@ -1,5 +1,8 @@
 use crate::{
-    api::error::{ApiError, ApiResult},
+    api::{
+        RemailsConfig,
+        error::{ApiError, ApiResult},
+    },
     dkim::PrivateKey,
     handler::dns::DnsResolver,
     models::{
@@ -198,10 +201,11 @@ pub struct DomainVerificationResult {
     dkim: VerifyResult,
     spf: VerifyResult,
     dmarc: VerifyResult,
+    a: VerifyResult,
 }
 
 pub(super) async fn verify_domain(
-    State((repo, resolver)): State<(DomainRepository, DnsResolver)>,
+    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
     user: ApiUser,
     Path(SpecificDomainPath {
         org_id,
@@ -221,7 +225,10 @@ pub(super) async fn verify_domain(
             .verify_dkim(&domain_name, db_key.public_key())
             .await
             .into(),
-        spf: resolver.verify_spf(&domain_name).await,
+        spf: resolver
+            .verify_spf(&domain_name, &config.preferred_spf_record)
+            .await,
         dmarc: resolver.verify_dmarc(&domain_name).await,
+        a: resolver.any_a_record(&domain_name).await,
     }))
 }

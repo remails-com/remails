@@ -52,6 +52,7 @@ export interface RemailsConfig {
   environment: string;
   smtp_domain_name: string;
   smtp_ports: number[];
+  preferred_spf_record: string;
 }
 
 export interface State {
@@ -224,6 +225,7 @@ export interface DomainVerificationResult {
   dkim: VerifyResult;
   spf: VerifyResult;
   dmarc: VerifyResult;
+  a: VerifyResult;
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";

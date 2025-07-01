@@ -549,13 +549,14 @@ impl Handler {
             let delivery_time = chrono::Utc::now() - message.created_at;
             let hours = delivery_time.num_hours();
             let minutes = delivery_time.num_minutes() % 60;
-            let seconds = delivery_time.as_seconds_f64() % 60.0;
+            let seconds = delivery_time.num_seconds() % 60;
+            let millis = delivery_time.subsec_millis();
             if hours > 0 {
-                Some(format!("in {hours}:{minutes:02}:{seconds:.2}s"))
+                Some(format!("in {hours}:{minutes:02}:{seconds:02}.{millis:03}s"))
             } else if minutes > 0 {
-                Some(format!("in {minutes}:{seconds:02.2}s"))
+                Some(format!("in {minutes}:{seconds:02}.{millis:03}s"))
             } else {
-                Some(format!("in {seconds:.2}s"))
+                Some(format!("in {seconds}.{millis:03}s"))
             }
         };
 
