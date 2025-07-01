@@ -159,11 +159,12 @@ impl FromRef<ApiState> for DomainRepository {
     }
 }
 
-impl FromRef<ApiState> for (DomainRepository, DnsResolver) {
+impl FromRef<ApiState> for (DomainRepository, DnsResolver, RemailsConfig) {
     fn from_ref(state: &ApiState) -> Self {
         (
             DomainRepository::new(state.pool.clone()),
             state.resolver.clone(),
+            state.config.remails_config.clone(),
         )
     }
 }
