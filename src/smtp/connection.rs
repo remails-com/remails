@@ -148,7 +148,7 @@ async fn write_reply(
     mut sink: impl AsyncWriteExt + Unpin,
 ) -> Result<(), ConnectionError> {
     let n = sink
-        .write(format!("{}\r\n", response).as_bytes())
+        .write(format!("{response}\r\n").as_bytes())
         .await
         .map_err(ConnectionError::Write)?;
 

@@ -30,7 +30,7 @@ impl Error {
     pub fn user_message(&self) -> String {
         match self {
             Self::MissingEnvironmentVariable(name) => {
-                format!("Missing environment variable: {}", name)
+                format!("Missing environment variable: {name}")
             }
             Self::OauthToken(_) => "Error fetching OAuth token".to_string(),
             Self::FetchUser(_) => "An error occurred while fetching the GitHub user".to_string(),

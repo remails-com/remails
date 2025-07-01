@@ -211,7 +211,7 @@ pub struct MessageFilter {
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            limit: 10,
+            limit: 10, // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
             status: None,
             before: None,
         }
