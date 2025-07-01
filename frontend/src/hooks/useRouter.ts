@@ -1,6 +1,7 @@
 import { Dispatch, useEffect, useRef } from "react";
 import { FullRouterState, RouteParams, Router, RouterState } from "../router";
 import { Action, State } from "../types";
+import { nprogress } from "@mantine/nprogress";
 
 export interface NavigationState {
   from: RouterState;
@@ -25,7 +26,7 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     }
 
     busy.current = true;
-    dispatch({ type: "loading", loading: true });
+    nprogress.start();
 
     let routerState = router.navigate(name, params || {});
 
@@ -51,7 +52,7 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       },
     });
 
-    dispatch({ type: "loading", loading: false });
+    nprogress.complete();
     busy.current = false;
 
     return true;

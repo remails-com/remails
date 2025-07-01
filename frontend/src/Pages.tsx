@@ -1,4 +1,3 @@
-import { ReactNode, useEffect } from "react";
 import { Dashboard } from "./layout/Dashboard";
 import { OrganizationsOverview } from "./components/organizations/OrganizationsOverview";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
@@ -9,84 +8,94 @@ import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import { DomainDetails } from "./components/domains/DomainDetails.tsx";
 import { CredentialDetails } from "./components/smtpCredentials/CredentialDetails.tsx";
 import { Text } from "@mantine/core";
-import { useOrganizations } from "./hooks/useOrganizations.ts";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
-import { nprogress, NavigationProgress } from "@mantine/nprogress";
+import { NavigationProgress } from "@mantine/nprogress";
+
+function Page() {
+  const {
+    state: { organizations, routerState },
+  } = useRemails();
+  const routeName = routerState.name;
+
+  if (organizations?.length === 0) {
+    return <Setup />;
+  }
+
+  if (routeName == "organizations") {
+    return <OrganizationsOverview />;
+  }
+
+  if (routeName == "projects") {
+    return <ProjectsOverview />;
+  }
+
+  if (routeName == "projects.project") {
+    return <ProjectDetails />;
+  }
+
+  if (routeName == "projects.project.streams.stream") {
+    return <StreamDetails />;
+  }
+
+  if (routeName == "domains") {
+    return <DomainsOverview />;
+  }
+
+  if (routeName == "projects.project.domains") {
+    return <DomainsOverview projectDomains={true} />;
+  }
+
+  if (routeName == "domains.domain") {
+    return <DomainDetails />;
+  }
+
+  if (routeName == "projects.project.domains.domain") {
+    return <DomainDetails projectDomains={true} />;
+  }
+
+  if (routeName == "projects.project.streams.stream.credentials.credential") {
+    return <CredentialDetails />;
+  }
+
+  if (routeName == "settings") {
+    return <Settings />;
+  }
+
+  if (routeName == "statistics") {
+    return <Text>Organization wide statistics, quotas, etc.</Text>;
+  }
+
+  if (routeName == "projects.project.streams.stream.messages.message") {
+    return <MessageDetails />;
+  }
+
+  if (routeName == "not_found") {
+    return <Text>Not Found</Text>;
+  }
+
+  if (routeName == "default") {
+    return null;
+  }
+
+  console.error("Unknown route:", routeName);
+  return "Not Found";
+}
 
 export function Pages() {
   const {
-    state: { routerState, loading },
+    state: { userFetched },
   } = useRemails();
-  const { organizations } = useOrganizations();
 
-  useEffect(() => {
-    if (loading) {
-      nprogress.start();
-    } else {
-      nprogress.complete();
-    }
-  }, [loading]);
-
-  let element: ReactNode;
-
-  switch (routerState.name) {
-    case "organizations":
-      element = <OrganizationsOverview />;
-      break;
-    case "projects":
-      element = <ProjectsOverview />;
-      break;
-    case "projects.project":
-      element = <ProjectDetails />;
-      break;
-    case "projects.project.streams.stream":
-      element = <StreamDetails />;
-      break;
-    case "domains":
-      element = <DomainsOverview />;
-      break;
-    case "projects.project.domains":
-      element = <DomainsOverview projectDomains={true} />;
-      break;
-    case "domains.domain":
-      element = <DomainDetails />;
-      break;
-    case "projects.project.domains.domain":
-      element = <DomainDetails projectDomains={true} />;
-      break;
-    case "projects.project.streams.stream.credentials.credential":
-      element = <CredentialDetails />;
-      break;
-    case "settings":
-      element = <Settings />;
-      break;
-    case "statistics":
-      element = <Text>Organization wide statistics, quotas, etc.</Text>;
-      break;
-    case "projects.project.streams.stream.messages.message":
-      element = <MessageDetails />;
-      break;
-    case "not_found":
-      element = <Text>Not Found</Text>;
-      break;
-    case "default":
-      element = null;
-      break;
-    default:
-      console.error("Unknown route:", routerState.name);
-      element = "Not Found";
-  }
-
-  if (organizations?.length === 0) {
-    element = <Setup />;
+  if (!userFetched) {
+    return <NavigationProgress />;
   }
 
   return (
     <Dashboard>
       <NavigationProgress />
-      {element}
+      <Page />
     </Dashboard>
   );
 }

@@ -6,7 +6,7 @@ export function Loader() {
 
   if (organizations?.length === 0) {
     // In this case, the user has to create an organization first.
-    return <></>;
+    return null;
   }
 
   return (

@@ -9,9 +9,6 @@ const actionHandler: {
   add_organization: function (state, action) {
     return { ...state, organizations: [...(state.organizations || []), action.organization] };
   },
-  loading: function (state, action) {
-    return { ...state, loading: action.loading };
-  },
   set_projects: function (state, action) {
     return { ...state, projects: action.projects };
   },
@@ -67,7 +64,7 @@ const actionHandler: {
     return { ...state, config: action.config };
   },
   set_user: function (state, action) {
-    return { ...state, user: action.user };
+    return { ...state, user: action.user, userFetched: true };
   },
 };
 
@@ -81,6 +78,6 @@ function getActionHandler<T extends Action["type"]>(
 export function reducer(state: State, action: Action): State {
   const handler = getActionHandler(action);
   const newState = handler(state, action);
-  console.log("action:", action, newState);
+  // console.log("action:", action, newState);
   return newState;
 }
