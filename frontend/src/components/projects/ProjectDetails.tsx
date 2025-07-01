@@ -45,7 +45,7 @@ export default function ProjectDetails() {
       </Tabs.Panel>
 
       <Tabs.Panel value="domains">
-        <DomainsOverview />
+        <DomainsOverview projectDomains={true} />
       </Tabs.Panel>
 
       <Tabs.Panel value="settings">

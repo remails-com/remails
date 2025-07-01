@@ -10,13 +10,10 @@ import { Link } from "../../Link.tsx";
 
 export default function ProjectsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const {
-    state: { loading },
-    navigate,
-  } = useRemails();
+  const { navigate } = useRemails();
   const { projects } = useProjects();
 
-  if (loading || projects === null) {
+  if (projects === null) {
     return <Loader />;
   }
 

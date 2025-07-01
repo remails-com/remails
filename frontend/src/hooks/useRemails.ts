@@ -1,21 +1,23 @@
-import { ActionDispatch, createContext, useContext, useReducer } from "react";
-import { Action, State, WhoamiResponse } from "../types.ts";
+import { ActionDispatch, createContext, useContext, useEffect, useReducer } from "react";
+import { Action, State } from "../types.ts";
 import { useRouter } from "./useRouter.ts";
 import { routes } from "../routes.ts";
 import { Navigate, Router } from "../router.ts";
-import { useApi } from "./useApi.ts";
 import { reducer } from "../reducer.ts";
+import apiMiddleware from "../apiMiddleware.ts";
 
 export const RemailsContext = createContext<{ state: State; dispatch: ActionDispatch<[Action]>; navigate: Navigate }>({
   state: {
+    user: null,
     organizations: null,
     projects: null,
     streams: null,
     messages: null,
     domains: null,
+    organizationDomains: null,
     credentials: null,
     config: null,
-    loading: true,
+    loading: false,
     routerState: {
       name: "",
       params: {},
@@ -33,24 +35,36 @@ export function useRemails() {
   return useContext(RemailsContext);
 }
 
-const router = new Router(routes, window.location.pathname + window.location.search);
+const router = new Router(routes);
 
-export function useLoadRemails(user: WhoamiResponse | null) {
+export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
+    user: null,
     organizations: null,
     projects: null,
     streams: null,
     messages: null,
     domains: null,
+    organizationDomains: null,
     credentials: null,
     config: null,
-    loading: true,
+    loading: false,
     routerState: router.initialState,
   });
 
-  const navigate = useRouter(router, dispatch);
+  const navigate = useRouter(router, state, dispatch, [apiMiddleware]);
 
-  useApi(user, state, navigate, dispatch);
+  useEffect(() => {
+    // initial navigation
+    const route = router.match(window.location.pathname + window.location.search);
+
+    if (route) {
+      navigate(route.name, route.params);
+    } else {
+      navigate("default");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     state,

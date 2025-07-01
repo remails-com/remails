@@ -9,25 +9,25 @@ import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import { DomainDetails } from "./components/domains/DomainDetails.tsx";
 import { CredentialDetails } from "./components/smtpCredentials/CredentialDetails.tsx";
 import { Text } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
 import { useOrganizations } from "./hooks/useOrganizations.ts";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
+import { nprogress, NavigationProgress } from "@mantine/nprogress";
 
 export function Pages() {
-  const [opened, { open, close }] = useDisclosure(false);
   const {
-    state: { routerState },
+    state: { routerState, loading },
   } = useRemails();
   const { organizations } = useOrganizations();
 
   useEffect(() => {
-    if (organizations?.length === 0) {
-      open();
+    if (loading) {
+      nprogress.start();
+    } else {
+      nprogress.complete();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizations]);
+  }, [loading]);
 
   let element: ReactNode;
 
@@ -45,12 +45,16 @@ export function Pages() {
       element = <StreamDetails />;
       break;
     case "domains":
-    case "projects.project.domains":
       element = <DomainsOverview />;
       break;
+    case "projects.project.domains":
+      element = <DomainsOverview projectDomains={true} />;
+      break;
     case "domains.domain":
-    case "projects.project.domains.domain":
       element = <DomainDetails />;
+      break;
+    case "projects.project.domains.domain":
+      element = <DomainDetails projectDomains={true} />;
       break;
     case "projects.project.streams.stream.credentials.credential":
       element = <CredentialDetails />;
@@ -64,14 +68,24 @@ export function Pages() {
     case "projects.project.streams.stream.messages.message":
       element = <MessageDetails />;
       break;
+    case "not_found":
+      element = <Text>Not Found</Text>;
+      break;
+    case "default":
+      element = null;
+      break;
     default:
       console.error("Unknown route:", routerState.name);
       element = "Not Found";
   }
 
+  if (organizations?.length === 0) {
+    element = <Setup />;
+  }
+
   return (
     <Dashboard>
-      {organizations?.length === 0 && <Setup opened={opened} close={close} />}
+      <NavigationProgress />
       {element}
     </Dashboard>
   );
