@@ -32,4 +32,4 @@ spec:
                   name: secrets
                   key: database_url
             - name: RUST_LOG
-              value: info
+              value:  {{ .Values.rust_log | quote }}

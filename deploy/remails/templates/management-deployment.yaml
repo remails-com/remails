@@ -49,7 +49,7 @@ spec:
                   name: secrets
                   key: database_url
             - name: RUST_LOG
-              value: remails=trace,info
+              value:  {{ .Values.rust_log | quote }}
             - name: OAUTH_CLIENT_ID
               value: {{ .Values.github_oauth.client_id }}
             - name: OAUTH_CLIENT_SECRET

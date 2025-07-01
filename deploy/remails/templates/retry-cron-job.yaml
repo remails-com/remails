@@ -35,5 +35,5 @@ spec:
                       name: secrets
                       key: database_url
                 - name: RUST_LOG
-                  value: remails=trace,info
+                  value: {{ .Values.rust_log | quote }}
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}

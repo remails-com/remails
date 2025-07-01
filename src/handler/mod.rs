@@ -446,7 +446,7 @@ impl Handler {
 
             let Err(err) = result else { return Ok(()) };
 
-            trace!("could not use server: {err}");
+            info!("could not use server: {err}");
 
             match err {
                 mail_send::Error::Io(_) => is_temporary_failure = true,
