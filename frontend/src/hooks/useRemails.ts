@@ -9,6 +9,7 @@ import apiMiddleware from "../apiMiddleware.ts";
 export const RemailsContext = createContext<{ state: State; dispatch: ActionDispatch<[Action]>; navigate: Navigate }>({
   state: {
     user: null,
+    userFetched: false,
     organizations: null,
     projects: null,
     streams: null,
@@ -17,7 +18,6 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     organizationDomains: null,
     credentials: null,
     config: null,
-    loading: false,
     routerState: {
       name: "",
       params: {},
@@ -40,6 +40,7 @@ const router = new Router(routes);
 export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
     user: null,
+    userFetched: false,
     organizations: null,
     projects: null,
     streams: null,
@@ -48,7 +49,6 @@ export function useLoadRemails() {
     organizationDomains: null,
     credentials: null,
     config: null,
-    loading: false,
     routerState: router.initialState,
   });
 

@@ -30,6 +30,7 @@ export default async function apiMiddleware(
     const user = await get<WhoamiResponse>("/api/whoami");
 
     if (user === null || "error" in user) {
+      dispatch({ type: "set_user", user: null });
       // If the user is not logged in, redirect to the login page
       return router.navigate("default", {});
     }

@@ -5,7 +5,7 @@ import { RemailsContext, useLoadRemails } from "./hooks/useRemails.ts";
 export default function App() {
   const { state, dispatch, navigate } = useLoadRemails();
 
-  if (!state.user) {
+  if (state.userFetched && !state.user) {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
