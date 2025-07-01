@@ -551,11 +551,11 @@ impl Handler {
             let minutes = delivery_time.num_minutes() % 60;
             let seconds = delivery_time.as_seconds_f64() % 60.0;
             if hours > 0 {
-                Some(format!("in {}:{:02}:{:.2}s", hours, minutes, seconds))
+                Some(format!("in {hours}:{minutes:02}:{seconds:.2}s"))
             } else if minutes > 0 {
-                Some(format!("in {}:{:02.2}s", minutes, seconds))
+                Some(format!("in {minutes}:{seconds:02.2}s"))
             } else {
-                Some(format!("in {:.2}s", seconds))
+                Some(format!("in {seconds:.2}s"))
             }
         };
 
