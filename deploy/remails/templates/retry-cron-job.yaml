@@ -34,6 +34,15 @@ spec:
                     secretKeyRef:
                       name: secrets
                       key: database_url
+                - name: MONEYBIRD_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: moneybird_api_key
+                - name: MONEYBIRD_ADMINISTRATION_ID
+                  value: {{ .Values.moneybird.administration | quote }}
+                - name: MONEYBIRD_WEBHOOK_URL
+                  value: {{ .Values.moneybird.webhook_url }}
                 - name: RUST_LOG
                   value: {{ .Values.rust_log | quote }}
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}

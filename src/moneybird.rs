@@ -5,7 +5,7 @@ use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Type};
-use std::{cmp::Ordering, str::FromStr, time::Duration};
+use std::{cmp::Ordering, env, str::FromStr, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -288,14 +288,10 @@ struct Webhook {
     id: WebhookId,
     administration_id: AdministrationId,
     url: Url,
-    #[cfg(test)]
-    last_http_status: Option<u16>,
-    #[cfg(test)]
-    last_http_body: Option<String>,
     token: Password,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 enum EntityType {
     Contact,
     Subscription,
@@ -341,19 +337,20 @@ pub struct MoneyBird {
 }
 
 impl MoneyBird {
-    pub async fn new(
-        api_key: Password,
-        pool: PgPool,
-        administration: AdministrationId,
-        webhook_url: Url,
-    ) -> Result<Self, Error> {
+    pub async fn new(pool: PgPool) -> Result<Self, Error> {
+        let api_key = env::var("MONEYBIRD_API_KEY").expect("MONEYBIRD_API_KEY env var must be set");
+
+        let administration = env::var("MONEYBIRD_ADMINISTRATION_ID")
+            .expect("MONEYBIRD_ADMINISTRATION_ID env var must be set")
+            .into();
+
+        let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL")
+            .expect("MONEYBIRD_WEBHOOK_URL env var must be set")
+            .parse()
+            .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL");
+
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            format!("Bearer {}", api_key.danger_as_str())
-                .parse()
-                .unwrap(),
-        );
+        headers.insert(AUTHORIZATION, format!("Bearer {api_key}").parse().unwrap());
         headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         headers.insert(ACCEPT, "application/json".parse().unwrap());
 
@@ -438,7 +435,9 @@ impl MoneyBird {
         .await?;
 
         info!(
+            administration_id = webhook.administration_id.as_str(),
             webhook_id = webhook.id.as_str(),
+            url = webhook.url.as_str(),
             "Moneybird webhook registered"
         );
 
@@ -455,12 +454,18 @@ impl MoneyBird {
 
     pub async fn webhook_handler(&self, payload: MoneybirdWebhookPayload) -> Result<(), Error> {
         if matches!(payload.action, Action::TestWebhook) {
-            debug!("Received test webhook");
+            debug!(
+                administration_id = payload.administration_id.as_str(),
+                "Received test webhook"
+            );
             return Ok(());
         }
 
         let Some(webhook_id) = payload.webhook_id else {
-            warn!("Received webhook without webhook_id");
+            warn!(
+                administration_id = payload.administration_id.as_str(),
+                "Received webhook without webhook_id"
+            );
             return Err(Error::Unauthorized);
         };
 
@@ -476,21 +481,44 @@ impl MoneyBird {
         .await?;
 
         if exists.is_none() {
-            warn!("Received webhook for unknown moneybird webhook");
+            warn!(
+                webhook_id = webhook_id.as_str(),
+                administration_id = payload.administration_id.as_str(),
+                "Received webhook for unknown moneybird webhook"
+            );
             return Err(Error::Unauthorized);
         };
 
         match payload.action {
             Action::TestWebhook => {}
             Action::Unknown(unknown) => {
-                warn!("Received unknown webhook action: {unknown}");
+                warn!(
+                    webhook_id = webhook_id.as_str(),
+                    administration_id = payload.administration_id.as_str(),
+                    "Received unknown webhook action: {unknown}"
+                );
             }
             Action::SubscriptionCancelled
             | Action::SubscriptionCreated
             | Action::SubscriptionEdited
             | Action::SubscriptionResumed
             | Action::SubscriptionUpdated => {
-                trace!("received {:?} webhook", payload.action);
+                trace!(
+                    webhook_id = webhook_id.as_str(),
+                    administration_id = payload.administration_id.as_str(),
+                    "received {:?} webhook",
+                    payload.action
+                );
+                if payload.entity_type != EntityType::Subscription {
+                    error!(
+                        webhook_id = webhook_id.as_str(),
+                        administration_id = payload.administration_id.as_str(),
+                        "webhook does not have subscription entity type"
+                    );
+                    return Err(Error::Moneybird(
+                        "Webhook does not have subscription entity type".to_string(),
+                    ));
+                }
                 let subscription = serde_json::from_value::<MoneybirdSubscription>(payload.entity)?;
                 self.sync_subscription(subscription).await?;
             }
@@ -589,8 +617,7 @@ impl MoneyBird {
         Ok(self
             .client
             .get(self.url(&format!(
-                "recurring_sales_invoices/{}",
-                recurring_sales_invoice_id
+                "recurring_sales_invoices/{recurring_sales_invoice_id}",
             )))
             .send()
             .await?
@@ -649,7 +676,7 @@ impl MoneyBird {
             .and_utc())
     }
 
-    async fn reset_all_quotas(&self) -> Result<(), Error> {
+    pub async fn reset_all_quotas(&self) -> Result<(), Error> {
         let quota_infos = sqlx::query_as!(
             QuotaResetInfo,
             r#"
@@ -937,14 +964,7 @@ mod test {
 
     #[sqlx::test(fixtures("organizations"))]
     async fn quota_reset_without_moneybird(db: PgPool) {
-        let moneybird = MoneyBird::new(
-            "not-an-actual-api-key".to_string().into(),
-            db.clone(),
-            "not-an-actual-administration".to_string().into(),
-            "https://dump.tweede.golf/dump/moneybird".parse().unwrap(),
-        )
-        .await
-        .unwrap();
+        let moneybird = MoneyBird::new(db.clone()).await.unwrap();
         moneybird.reset_all_quotas().await.unwrap();
 
         let org_repo = OrganizationRepository::new(db);
@@ -956,7 +976,7 @@ mod test {
         for org in orgs {
             match org.id().as_uuid().to_string().as_str() {
                 "44729d9f-a7dc-4226-b412-36a7537f5176" => {
-                    assert_eq!(org.message_quota(), 5_000);
+                    assert_eq!(org.message_quota(), 1_000);
                     assert_eq!(
                         org.quota_reset().date_naive(),
                         Utc::now()

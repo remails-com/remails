@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())\n            RETURNING id,\n                      name,\n                      remaining_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, now(), 0, now())\n            RETURNING id,\n                      name,\n                      remaining_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit\n            ",
   "describe": {
     "columns": [
       {
@@ -66,5 +66,5 @@
       false
     ]
   },
-  "hash": "446c3fea05ce28a636723da007e2d87e7cc4967fd07bc5c42fb02b9c2d94a351"
+  "hash": "6fa0f0246ea8377b862cabd8f979f5d2a8c6124c0745168740bc6a5bf852e78d"
 }

@@ -85,54 +85,23 @@ impl OrganizationRepository {
         Self { pool }
     }
 
-    async fn reset_quota(&self, id: OrganizationId) -> Result<(), Error> {
-        sqlx::query!(
-            r#"
-            UPDATE organizations
-            SET quota_reset = quota_reset + '1 day', --TODO align the start/end date with the subscription period
-                remaining_message_quota = 30 -- TODO make quota subscription dependent
-            WHERE id = $1
-            "#,
-            *id
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     pub async fn reduce_quota(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
-        struct Quota {
-            remaining_message_quota: i64,
-            quota_reset: DateTime<Utc>,
-        }
-
-        let quota = sqlx::query_as!(
-            Quota,
+        let quota = sqlx::query_scalar!(
             r#"
             UPDATE organizations
-            SET remaining_message_quota =
-                CASE WHEN remaining_message_quota - 1 > 0
-                    THEN remaining_message_quota - 1
-                    ELSE 0
-                END
+            SET remaining_message_quota = GREATEST(remaining_message_quota - 1, 0)
             WHERE id = $1
-            RETURNING remaining_message_quota, quota_reset
+            RETURNING remaining_message_quota
             "#,
             *id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        if quota.quota_reset < Utc::now() {
-            self.reset_quota(id).await?;
-            // Redo the check with the refilled quota
-            return Box::pin(self.reduce_quota(id)).await;
-        }
-
-        if quota.remaining_message_quota <= 0 {
+        if quota <= 0 {
             Ok(QuotaStatus::Exceeded)
         } else {
-            Ok(QuotaStatus::Below(quota.remaining_message_quota as u64))
+            Ok(QuotaStatus::Below(quota as u64))
         }
     }
 
@@ -141,7 +110,7 @@ impl OrganizationRepository {
             Organization,
             r#"
             INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())
+            VALUES (gen_random_uuid(), $1, 50, now(), 0, now())
             RETURNING id,
                       name,
                       remaining_message_quota,

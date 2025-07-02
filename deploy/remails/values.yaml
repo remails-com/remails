@@ -46,6 +46,7 @@ management:
 moneybird:
   api_key: "nothing-to-see-here"
   administration: "457129080952718731"
+  webhook_url: https://dump.tweede.golf/dump/moneybird
 
 retry:
   schedule: "*/10 * * * *"
@@ -53,7 +54,6 @@ retry:
 github_oauth:
   client_id: Ov23livRESUJK4twobxj
   client_secret: Secret
-  webhook_url: https://dump.tweede.golf/dump/moneybird
 
 imagePullSecrets:
   - name: "regcred"

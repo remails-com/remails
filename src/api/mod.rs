@@ -232,26 +232,9 @@ impl ApiServer {
             }
         };
 
-        let moneybird_api_key =
-            env::var("MONEYBIRD_API_KEY").expect("MONEYBIRD_API_KEY env var must be set");
-
-        let moneybird_administration_id = env::var("MONEYBIRD_ADMINISTRATION_ID")
-            .expect("MONEYBIRD_ADMINISTRATION_ID env var must be set")
-            .into();
-
-        let moneybird_webhook_url = env::var("MONEYBIRD_WEBHOOK_URL")
-            .expect("MONEYBIRD_WEBHOOK_URL env var must be set")
-            .parse()
-            .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL");
-
-        let moneybird = MoneyBird::new(
-            moneybird_api_key.into(),
-            pool.clone(),
-            moneybird_administration_id,
-            moneybird_webhook_url,
-        )
-        .await
-        .expect("Cannot connect to Moneybird");
+        let moneybird = MoneyBird::new(pool.clone())
+            .await
+            .expect("Cannot connect to Moneybird");
 
         let state = ApiState {
             pool,
