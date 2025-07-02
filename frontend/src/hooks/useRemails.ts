@@ -22,6 +22,7 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
       name: "",
       params: {},
     },
+    nextRouterState: null,
   },
   dispatch: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
@@ -50,6 +51,7 @@ export function useLoadRemails() {
     credentials: null,
     config: null,
     routerState: router.initialState,
+    nextRouterState: null,
   });
 
   const navigate = useRouter(router, state, dispatch, [apiMiddleware]);

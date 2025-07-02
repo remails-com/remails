@@ -78,11 +78,23 @@ export default async function apiMiddleware(
     });
   }
 
-  if (streamChanged && newStreamId) {
+  let messageFilterChanged = false;
+  const messageFilter = new URLSearchParams();
+  for (const param of ["limit", "status", "before"]) {
+    const value = navState.to.params[param];
+    if (value != navState.from.params[param]) messageFilterChanged = true;
+    if (value) messageFilter.append(param, value);
+  }
+  if ((streamChanged || messageFilterChanged || navState.to.params.force == "reload") && newStreamId) {
     dispatch({
       type: "set_messages",
-      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages`),
+      messages: await get(
+        `/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages?${messageFilter.toString()}`
+      ),
     });
+  }
+
+  if (streamChanged && newStreamId) {
     dispatch({
       type: "set_credentials",
       credentials: await get(

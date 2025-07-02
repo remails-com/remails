@@ -36,7 +36,7 @@ const deliveryStatus: {
   NotSent: { color: "secondary", icon: undefined },
   Success: { color: "green", icon: <IconCheck size={16} /> },
   Reattempt: { color: "orange", icon: <IconClock size={16} /> },
-  Failure: { color: "red", icon: <IconX size={16} /> },
+  Failed: { color: "red", icon: <IconX size={16} /> },
 };
 
 export function renderRecipients(
@@ -48,7 +48,7 @@ export function renderRecipients(
     const status = message.delivery_status[recipient] ?? { type: "NotSent" };
 
     let tooltip = "Message not (yet) sent";
-    if (status.type == "Failure") {
+    if (status.type == "Failed") {
       tooltip = "Permanent failure";
     } else if (status.type == "Reattempt") {
       tooltip = "Temporary failure";

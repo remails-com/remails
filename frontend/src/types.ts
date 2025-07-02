@@ -14,7 +14,7 @@ export interface User {
 export type WhoamiResponse = User | { error: string };
 
 export type DeliveryStatus = {
-  type: "NotSent" | "Success" | "Reattempt" | "Failure";
+  type: "NotSent" | "Success" | "Reattempt" | "Failed";
   delivered?: string;
 };
 
@@ -52,6 +52,7 @@ export interface RemailsConfig {
   environment: string;
   smtp_domain_name: string;
   smtp_ports: number[];
+  preferred_spf_record: string;
 }
 
 export interface State {
@@ -66,6 +67,7 @@ export interface State {
   credentials: SmtpCredential[] | null;
   config: RemailsConfig | null;
   routerState: RouterState;
+  nextRouterState: RouterState | null;
 }
 
 export interface BreadcrumbItem {
@@ -152,6 +154,10 @@ export type Action =
       credentialId: string;
     }
   | {
+      type: "set_next_router_state";
+      nextRouterState: RouterState | null;
+    }
+  | {
       type: "set_route";
       routerState: RouterState;
     }
@@ -224,6 +230,7 @@ export interface DomainVerificationResult {
   dkim: VerifyResult;
   spf: VerifyResult;
   dmarc: VerifyResult;
+  a: VerifyResult;
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";

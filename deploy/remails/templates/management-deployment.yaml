@@ -43,6 +43,8 @@ spec:
               value: {{ .Values.smtp.server_name }}
             - name: SMTP_PORTS
               value: {{ join "," .Values.smtp.ports | quote }}
+            - name: PREFERRED_SPF_RECORD
+              value: {{ .Values.smtp.preferred_spf_record }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

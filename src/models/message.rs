@@ -203,17 +203,17 @@ pub struct MessageRepository {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct MessageFilter {
-    offset: i64,
     limit: i64,
     status: Option<MessageStatus>,
+    before: Option<DateTime<Utc>>,
 }
 
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            offset: 0,
-            limit: 100,
+            limit: 10, // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
             status: None,
+            before: None,
         }
     }
 }
@@ -453,38 +453,38 @@ impl MessageRepository {
             PgMessage,
             r#"
             SELECT
-                m.id,
-                m.organization_id,
-                m.project_id,
-                m.stream_id,
-                m.smtp_credential_id,
-                m.status as "status: _",
-                m.reason,
-                m.delivery_status,
-                m.from_email,
-                m.recipients,
+                id,
+                organization_id,
+                project_id,
+                stream_id,
+                smtp_credential_id,
+                status AS "status: _",
+                reason,
+                delivery_status,
+                from_email,
+                recipients,
                 ''::bytea AS "raw_data!",
                 NULL::jsonb AS "message_data",
-                octet_length(m.raw_data) as "raw_size!",
-                m.created_at,
-                m.updated_at,
-                m.retry_after,
-                m.attempts
+                octet_length(raw_data) AS "raw_size!",
+                created_at,
+                updated_at,
+                retry_after,
+                attempts
             FROM messages m
-            WHERE ($3::message_status IS NULL OR status = $3)
-              AND m.organization_id = $4
-              AND ($5::uuid IS NULL OR m.project_id = $5)
-              AND ($6::uuid IS NULL OR m.stream_id = $6)
+            WHERE organization_id = $1
+                AND ($2::uuid IS NULL OR project_id = $2)
+                AND ($3::uuid IS NULL OR stream_id = $3)
+                AND ($5::message_status IS NULL OR status = $5)
+                AND ($6::timestamptz IS NULL OR created_at <= $6)
             ORDER BY created_at DESC
-            OFFSET $1
-            LIMIT $2
+            LIMIT $4
             "#,
-            filter.offset,
-            filter.limit,
-            filter.status as _,
             *org_id,
             project_id.map(|p| p.as_uuid()),
             stream_id.map(|s| s.as_uuid()),
+            std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
+            filter.status as _,
+            filter.before,
         )
         .fetch_all(&self.pool)
         .await?
