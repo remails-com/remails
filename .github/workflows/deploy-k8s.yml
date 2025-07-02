@@ -9,8 +9,8 @@ on:
         required: true
         type: choice
         options:
-          - Production UpCloud private NL-AMS
           - Staging UpCloud private NL-AMS
+          - Production UpCloud private NL-AMS
 
 permissions:
   packages: write
