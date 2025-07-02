@@ -4,16 +4,11 @@ import { useForm } from "@mantine/form";
 import { useRemails } from "../hooks/useRemails.ts";
 import { RemailsLogo } from "./RemailsLogo.tsx";
 
-interface SetupProps {
-  opened: boolean;
-  close: () => void;
-}
-
 interface FormValues {
   name: string;
 }
 
-export function Setup({ opened, close }: SetupProps) {
+export function Setup() {
   const { navigate, dispatch } = useRemails();
 
   const form = useForm<FormValues>({
@@ -28,7 +23,6 @@ export function Setup({ opened, close }: SetupProps) {
   const save = (values: FormValues) => {
     saveNewOrganization(values.name).then(({ status, newOrg }) => {
       if (status === 201 && newOrg) {
-        close();
         dispatch({ type: "add_organization", organization: newOrg });
         navigate("projects", { org_id: newOrg.id });
       }
@@ -37,7 +31,7 @@ export function Setup({ opened, close }: SetupProps) {
 
   return (
     <Modal
-      opened={opened}
+      opened={true}
       onClose={() => {}}
       withCloseButton={false}
       centered

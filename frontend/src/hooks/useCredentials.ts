@@ -2,9 +2,9 @@ import { useRemails } from "./useRemails.ts";
 
 export function useCredentials() {
   const {
-    state: { credentials, pathParams },
+    state: { credentials, routerState },
   } = useRemails();
-  const currentCredential = credentials?.find((s) => s.id === pathParams.credential_id) || null;
+  const currentCredential = credentials?.find((s) => s.id === routerState.params.credential_id) || null;
 
   return { credentials, currentCredential };
 }

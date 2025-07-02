@@ -11,6 +11,13 @@ impl Resolver {
         Ok([MX(*self)])
     }
 
+    pub async fn lookup_ip(
+        &self,
+        _: impl AsRef<str>,
+    ) -> Result<[(); 1], hickory_resolver::ResolveError> {
+        Ok([()])
+    }
+
     pub async fn txt_lookup(
         &self,
         _: impl AsRef<str>,

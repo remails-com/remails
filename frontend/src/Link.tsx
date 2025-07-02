@@ -5,16 +5,15 @@ import { Anchor } from "@mantine/core";
 interface LinkProps {
   to: RouteName;
   params?: RouteParams;
-  query?: RouteParams;
   children: React.ReactNode;
 }
 
-export function Link({ to, params, query, children }: LinkProps) {
+export function Link({ to, params, children }: LinkProps) {
   const { navigate } = useRemails();
 
   const onClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    navigate(to, params, query);
+    navigate(to, params);
   };
 
   return (

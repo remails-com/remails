@@ -6,17 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . && tsc --noEmit",
     "format": "prettier . --write",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
   },
   "dependencies": {
     "@mantine/core": "^8.0.0",
+    "@mantine/dates": "^8.0.0",
     "@mantine/form": "^8.0.0",
     "@mantine/hooks": "^8.0.0",
     "@mantine/modals": "^8.0.0",
     "@mantine/notifications": "^8.0.0",
+    "@mantine/nprogress": "^8.1.2",
     "@tabler/icons-react": "^3.31.0",
+    "dayjs": "^1.11.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -36,7 +40,8 @@
     "prettier": "3.5.3",
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.26.1",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
   },
   "prettier": {
     "trailingComma": "es5",

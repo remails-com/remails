@@ -1,10 +1,12 @@
 import { useRemails } from "./useRemails.ts";
 
-export function useDomains() {
+export function useDomains(projectDomains = false) {
   const {
-    state: { domains, pathParams },
+    state: { domains, organizationDomains, routerState },
   } = useRemails();
-  const currentDomain = domains?.find((d) => d.id === pathParams.domain_id) || null;
 
-  return { domains, currentDomain };
+  const selectedDomains = projectDomains ? domains : organizationDomains;
+  const currentDomain = selectedDomains?.find((d) => d.id === routerState.params.domain_id) || null;
+
+  return { domains: selectedDomains, currentDomain };
 }

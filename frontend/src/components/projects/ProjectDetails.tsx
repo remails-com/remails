@@ -12,7 +12,7 @@ const DEFAULT_TAB = "streams";
 
 export default function ProjectDetails() {
   const {
-    state: { fullName, queryParams },
+    state: { routerState },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
@@ -23,11 +23,11 @@ export default function ProjectDetails() {
   }
 
   const setActiveTab = (tab: string | null) => {
-    navigate(fullName, {}, { tab: tab || DEFAULT_TAB });
+    navigate(routerState.name, { tab: tab || DEFAULT_TAB });
   };
 
   return (
-    <Tabs defaultValue="gallery" value={queryParams.tab || DEFAULT_TAB} onChange={setActiveTab}>
+    <Tabs defaultValue="gallery" value={routerState.params.tab || DEFAULT_TAB} onChange={setActiveTab}>
       <Tabs.List mb="md">
         <Tabs.Tab size="lg" value="streams" leftSection={<IconAccessPoint size={12} />}>
           Streams
@@ -45,7 +45,7 @@ export default function ProjectDetails() {
       </Tabs.Panel>
 
       <Tabs.Panel value="domains">
-        <DomainsOverview />
+        <DomainsOverview projectDomains={true} />
       </Tabs.Panel>
 
       <Tabs.Panel value="settings">

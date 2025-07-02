@@ -1,5 +1,5 @@
 name: Deploy to Kubernetes
-run-name: "Deploy \"${{ github.ref_name }}\" to ${{ github.event.inputs.env }}"
+run-name: "Deploy \"${{ github.ref_name }}\" to ${{ inputs.env }}"
 
 on:
   workflow_dispatch:
@@ -9,8 +9,8 @@ on:
         required: true
         type: choice
         options:
-          - Upcloud Staging
-          - UpCloud Production
+          - Production UpCloud private NL-AMS
+          - Staging UpCloud private NL-AMS
 
 permissions:
   packages: write
@@ -66,7 +66,7 @@ jobs:
           toolchain: stable
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           shared-key: "stable"
 
@@ -175,6 +175,7 @@ jobs:
             --set moneybird.webhook_url="${{ vars.MONEYBIRD_WEBHOOK_URL }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
+            --set rust_log="${{ vars.RUST_LOG }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
             --set github_oauth.client_id="${{ vars.OAUTH_CLIENT_ID_GITHUB }}" \
             --set smtp.server_name="${{ vars.SMTP_SERVER_NAME }}" \

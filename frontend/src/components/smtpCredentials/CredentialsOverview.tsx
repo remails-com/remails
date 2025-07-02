@@ -10,13 +10,10 @@ import { SmtpInfo } from "./SmtpInfo.tsx";
 
 export function CredentialsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const {
-    state: { loading },
-    navigate,
-  } = useRemails();
+  const { navigate } = useRemails();
   const { credentials } = useCredentials();
 
-  if (loading || credentials === null) {
+  if (credentials === null) {
     return <Loader />;
   }
 

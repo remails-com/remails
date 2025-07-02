@@ -16,11 +16,11 @@ import { useForm } from "@mantine/form";
 import { upperFirst, useToggle } from "@mantine/hooks";
 import { IconBrandGithub, IconX } from "@tabler/icons-react";
 import { useState } from "react";
-import { SignUpRequest, WhoamiResponse } from "./types.ts";
+import { SignUpRequest, User } from "./types.ts";
 import { RemailsLogo } from "./components/RemailsLogo.tsx";
 
 interface LoginProps {
-  setUser: (user: WhoamiResponse) => void;
+  setUser: (user: User | null) => void;
 }
 
 export function Login({ setUser }: LoginProps) {

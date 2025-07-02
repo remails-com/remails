@@ -446,7 +446,7 @@ impl Handler {
 
             let Err(err) = result else { return Ok(()) };
 
-            trace!("could not use server: {err}");
+            info!("could not use server: {err}");
 
             match err {
                 mail_send::Error::Io(_) => is_temporary_failure = true,
@@ -549,13 +549,14 @@ impl Handler {
             let delivery_time = chrono::Utc::now() - message.created_at;
             let hours = delivery_time.num_hours();
             let minutes = delivery_time.num_minutes() % 60;
-            let seconds = delivery_time.as_seconds_f64() % 60.0;
+            let seconds = delivery_time.num_seconds() % 60;
+            let millis = delivery_time.subsec_millis();
             if hours > 0 {
-                Some(format!("in {}:{:02}:{:.2}s", hours, minutes, seconds))
+                Some(format!("in {hours}:{minutes:02}:{seconds:02}.{millis:03}s"))
             } else if minutes > 0 {
-                Some(format!("in {}:{:02.2}s", minutes, seconds))
+                Some(format!("in {minutes}:{seconds:02}.{millis:03}s"))
             } else {
-                Some(format!("in {:.2}s", seconds))
+                Some(format!("in {seconds}.{millis:03}s"))
             }
         };
 

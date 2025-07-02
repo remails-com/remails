@@ -160,8 +160,7 @@ async fn integration_test(pool: PgPool) {
 
     let john_cred = client
         .post(format!(
-            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-            http_port
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .json(&json!({
@@ -179,8 +178,7 @@ async fn integration_test(pool: PgPool) {
 
     let eddy_cred = client
         .post(format!(
-            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-            http_port
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
         ))
         .header("X-Test-Login", &org_id)
         .json(&json!({
@@ -196,8 +194,7 @@ async fn integration_test(pool: PgPool) {
 
     let credentials: Vec<SmtpCredential> = client
         .get(format!(
-            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-            http_port
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .send()
@@ -320,8 +317,7 @@ async fn quotas_count_atomically(pool: PgPool) {
 
     let john_cred = client
         .post(format!(
-            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-            http_port
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .json(&json!({
@@ -412,8 +408,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     let john_cred = client
         .post(format!(
-            "http://localhost:{}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-            http_port
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .json(&json!({
@@ -482,7 +477,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
                         assert_eq!(response.message, "Sent too many messages, try again later");
                         return; // early exit because connection has been terminated
                     }
-                    Err(e) => panic!("Error sending mail {}", e),
+                    Err(e) => panic!("Error sending mail {e}"),
                 }
             }
             let _ = john_smtp_client.quit().await;

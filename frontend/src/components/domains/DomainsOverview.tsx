@@ -9,20 +9,17 @@ import { NewDomain } from "./NewDomain.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { Link } from "../../Link.tsx";
 
-export default function DomainsOverview() {
+export default function DomainsOverview({ projectDomains = false }: { projectDomains?: boolean }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const {
-    state: { loading },
-    navigate,
-  } = useRemails();
+  const { navigate } = useRemails();
   const { currentProject } = useProjects();
-  const { domains } = useDomains();
+  const { domains } = useDomains(projectDomains);
 
-  if (loading || domains === null) {
+  if (domains === null) {
     return <Loader />;
   }
 
-  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
+  const route = projectDomains ? "projects.project.domains.domain" : "domains.domain";
 
   const rows = domains.map((domain) => (
     <Table.Tr key={domain.id}>

@@ -12,16 +12,16 @@ export function useMessages() {
   const { currentStream } = useStreams();
   const [currentMessage, setCurrentMessage] = useState<Message | MessageMetadata | null>(null);
   const {
-    state: { messages, pathParams },
+    state: { messages, routerState },
   } = useRemails();
 
   useEffect(() => {
-    if (pathParams.message_id) {
-      const incompleteMessage = messages?.find((m) => m.id === pathParams.message_id) || null;
+    if (routerState.params.message_id) {
+      const incompleteMessage = messages?.find((m) => m.id === routerState.params.message_id) || null;
       setCurrentMessage(incompleteMessage);
       if (currentOrganization && currentProject && currentStream) {
         fetch(
-          `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${pathParams.message_id}`
+          `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${routerState.params.message_id}`
         )
           .then((res) => res.json())
           .then(setCurrentMessage);
@@ -29,7 +29,7 @@ export function useMessages() {
     } else {
       setCurrentMessage(null);
     }
-  }, [currentOrganization, currentProject, currentStream, pathParams.message_id, messages]);
+  }, [currentOrganization, currentProject, currentStream, routerState.params.message_id, messages]);
 
   return { messages, currentMessage };
 }

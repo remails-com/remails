@@ -43,13 +43,15 @@ spec:
               value: {{ .Values.smtp.server_name }}
             - name: SMTP_PORTS
               value: {{ join "," .Values.smtp.ports | quote }}
+            - name: PREFERRED_SPF_RECORD
+              value: {{ .Values.smtp.preferred_spf_record }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: secrets
                   key: database_url
             - name: RUST_LOG
-              value: remails=trace,info
+              value:  {{ .Values.rust_log | quote }}
             - name: OAUTH_CLIENT_ID
               value: {{ .Values.github_oauth.client_id }}
             - name: OAUTH_CLIENT_SECRET

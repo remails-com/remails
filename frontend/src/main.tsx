@@ -1,7 +1,8 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "@mantine/core/styles.css";
+import "@mantine/dates/styles.css";
+import "@mantine/nprogress/styles.css";
 import { createTheme, MantineProvider } from "@mantine/core";
 import "@mantine/notifications/styles.css";
 import { Notifications } from "@mantine/notifications";
@@ -30,12 +31,10 @@ const theme = createTheme({
 });
 
 root.render(
-  <StrictMode>
-    <MantineProvider theme={theme}>
-      <ModalsProvider>
-        <Notifications />
-        <App />
-      </ModalsProvider>
-    </MantineProvider>
-  </StrictMode>
+  <MantineProvider theme={theme}>
+    <ModalsProvider>
+      <Notifications />
+      <App />
+    </ModalsProvider>
+  </MantineProvider>
 );

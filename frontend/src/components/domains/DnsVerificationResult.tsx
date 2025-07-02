@@ -1,5 +1,5 @@
 import { Code, Title, Box, LoadingOverlay, Flex, List, Text, ThemeIcon } from "@mantine/core";
-import { IconAlertTriangle, IconCheck, IconX } from "@tabler/icons-react";
+import { IconCheck, IconExclamationMark, IconX } from "@tabler/icons-react";
 import { DomainVerificationResult, DomainVerificationStatus, VerifyResult } from "../../types";
 import { ReactElement } from "react";
 
@@ -20,7 +20,7 @@ export function DnsVerificationResult({
     ),
     Warning: (
       <ThemeIcon color="orange" size={24} radius="xl" style={{ verticalAlign: "top" }}>
-        <IconAlertTriangle size={16} />
+        <IconExclamationMark size={16} />
       </ThemeIcon>
     ),
     Error: (
@@ -80,6 +80,12 @@ export function DnsVerificationResult({
               </>
             )}
           </List.Item>
+          {verificationResult?.a.status != "Success" && (
+            <List.Item icon={icons[verificationResult?.a.status ?? "Warning"]}>
+              A record: {verificationResult?.a.reason} (some mail services may require an A record to be set for the
+              sender domain)
+            </List.Item>
+          )}
         </List>
       </Box>
       <Text>

@@ -18,6 +18,8 @@ database_url: ""
 # Only use this value for development, use a secret for production
 session_key: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
 
+rust_log: "remails=debug,tower_http=debug,axum=debug,info"
+
 smtp:
   replicas: 3
   load_balancer_plan: "essentials"
@@ -25,6 +27,7 @@ smtp:
   ehlo_domain: "sending.remails.net"
   rate_limit_max_messages: "120"
   rate_limit_minutes: "1"
+  preferred_spf_record: "v=spf1 include:spf.remails.net -all"
   ports:
     - 465
     - 2525

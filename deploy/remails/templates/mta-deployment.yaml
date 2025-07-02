@@ -46,7 +46,7 @@ spec:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
             - name: RUST_LOG
-              value: remails=trace,info
+              value:  {{ .Values.rust_log | quote }}
             - name: SMTP_LISTEN_ADDR
               value: "0.0.0.0:3025"
             - name: SMTP_SERVER_NAME

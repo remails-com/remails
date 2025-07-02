@@ -1,4 +1,4 @@
-import { Route, RouteParams } from "./router.ts";
+import { RouteParams, RouterState } from "./router";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
 
@@ -14,7 +14,7 @@ export interface User {
 export type WhoamiResponse = User | { error: string };
 
 export type DeliveryStatus = {
-  type: "NotSent" | "Success" | "Reattempt" | "Failure";
+  type: "NotSent" | "Success" | "Reattempt" | "Failed";
   delivered?: string;
 };
 
@@ -52,24 +52,22 @@ export interface RemailsConfig {
   environment: string;
   smtp_domain_name: string;
   smtp_ports: number[];
+  preferred_spf_record: string;
 }
 
 export interface State {
+  user: User | null;
+  userFetched: boolean;
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
+  organizationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
-  loading: boolean;
   config: RemailsConfig | null;
-
-  // routing related state
-  route: Route;
-  fullPath: string;
-  fullName: string;
-  pathParams: RouteParams;
-  queryParams: RouteParams;
+  routerState: RouterState;
+  nextRouterState: RouterState | null;
 }
 
 export interface BreadcrumbItem {
@@ -80,15 +78,16 @@ export interface BreadcrumbItem {
 
 export type Action =
   | {
+      type: "set_user";
+      user: User | null;
+    }
+  | {
       type: "set_organizations";
       organizations: Organization[] | null;
     }
   | {
       type: "add_organization";
       organization: Organization;
-    }
-  | {
-      type: "loading";
     }
   | {
       type: "set_projects";
@@ -131,6 +130,18 @@ export type Action =
       domainId: string;
     }
   | {
+      type: "set_organization_domains";
+      organizationDomains: Domain[] | null;
+    }
+  | {
+      type: "add_organization_domain";
+      organizationDomain: Domain;
+    }
+  | {
+      type: "remove_organization_domain";
+      domainId: string;
+    }
+  | {
       type: "set_credentials";
       credentials: SmtpCredential[] | null;
     }
@@ -143,12 +154,12 @@ export type Action =
       credentialId: string;
     }
   | {
+      type: "set_next_router_state";
+      nextRouterState: RouterState | null;
+    }
+  | {
       type: "set_route";
-      route: Route;
-      fullPath: string;
-      fullName: string;
-      pathParams: RouteParams;
-      queryParams: RouteParams;
+      routerState: RouterState;
     }
   | {
       type: "set_config";
@@ -219,6 +230,7 @@ export interface DomainVerificationResult {
   dkim: VerifyResult;
   spf: VerifyResult;
   dmarc: VerifyResult;
+  a: VerifyResult;
 }
 
 export type DomainVerificationStatus = "verified" | "failed" | "loading";
