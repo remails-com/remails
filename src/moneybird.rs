@@ -567,7 +567,7 @@ impl MoneyBird {
             product.monthly_quota() as i64,
             quota_reset
         )
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
 
         Ok(())
@@ -652,6 +652,8 @@ impl MoneyBird {
         )
         .fetch_all(&self.pool)
         .await?;
+
+        debug!("resetting quotas for {} organizations", quota_infos.len());
 
         for quota_info in quota_infos {
             self.reset_single_quota(quota_info).await?;
