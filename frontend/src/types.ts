@@ -14,7 +14,7 @@ export interface User {
 export type WhoamiResponse = User | { error: string };
 
 export type DeliveryStatus = {
-  type: "NotSent" | "Success" | "Reattempt" | "Failure";
+  type: "NotSent" | "Success" | "Reattempt" | "Failed";
   delivered?: string;
 };
 
