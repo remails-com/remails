@@ -1,5 +1,5 @@
 name: Deploy to Kubernetes
-run-name: "Deploy \"${{ github.ref_name }}\" to Kubernetes"
+run-name: "Deploy \"${{ github.ref_name }}\" to ${{ inputs.env }}"
 
 on:
   workflow_dispatch:
@@ -9,8 +9,8 @@ on:
         required: true
         type: choice
         options:
-          - Upcloud Staging
-          - UpCloud Production
+          - Production UpCloud private NL-AMS
+          - Staging UpCloud private NL-AMS
 
 permissions:
   packages: write
@@ -172,6 +172,7 @@ jobs:
             --set environment="${{ vars.environment }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
+            --set rust_log="${{ vars.RUST_LOG }}" \
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
             --set github_oauth.client_id="${{ vars.OAUTH_CLIENT_ID_GITHUB }}" \
             --set smtp.server_name="${{ vars.SMTP_SERVER_NAME }}" \
