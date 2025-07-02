@@ -67,6 +67,7 @@ export interface State {
   credentials: SmtpCredential[] | null;
   config: RemailsConfig | null;
   routerState: RouterState;
+  nextRouterState: RouterState | null;
 }
 
 export interface BreadcrumbItem {
@@ -151,6 +152,10 @@ export type Action =
   | {
       type: "remove_credential";
       credentialId: string;
+    }
+  | {
+      type: "set_next_router_state";
+      nextRouterState: RouterState | null;
     }
   | {
       type: "set_route";
