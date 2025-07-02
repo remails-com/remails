@@ -23,7 +23,6 @@ path = "src/bin/retry.rs"
 
 [features]
 load-fixtures = []
-moneybird-live-tests = []
 
 [dependencies]
 anyhow = "1.0.98"

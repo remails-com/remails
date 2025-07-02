@@ -32,7 +32,7 @@ export default function SubscriptionCard() {
         <Grid.Col span="content">
           {status === "active" && (
             <Badge size="lg" color="green" variant="light">
-              Active{subscription.end_date ? `until ${subscription.end_date}` : ""}
+              Active{subscription.end_date ? ` until ${subscription.end_date}` : ""}
             </Badge>
           )}
           {status === "expired" && (
