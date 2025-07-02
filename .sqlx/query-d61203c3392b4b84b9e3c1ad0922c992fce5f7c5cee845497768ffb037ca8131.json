@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   name,\n                   remaining_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit\n            FROM organizations\n            WHERE id = $1\n              AND ($2::uuid[] IS NULL OR id = ANY($2))\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())\n            RETURNING id,\n                      name,\n                      total_message_quota,\n                      used_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit\n            ",
   "describe": {
     "columns": [
       {
@@ -15,47 +15,52 @@
       },
       {
         "ordinal": 2,
-        "name": "remaining_message_quota",
+        "name": "total_message_quota",
         "type_info": "Int8"
       },
       {
         "ordinal": 3,
+        "name": "used_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
         "name": "quota_reset",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "moneybird_contact_id: MoneybirdContactId",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "rate_limit_reset",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "remaining_rate_limit",
         "type_info": "Int8"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "UuidArray"
+        "Varchar"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -67,5 +72,5 @@
       false
     ]
   },
-  "hash": "7c02d7387118046e172b6b8c1a47745f91f7f4e315718291e55b7a818609f04f"
+  "hash": "d61203c3392b4b84b9e3c1ad0922c992fce5f7c5cee845497768ffb037ca8131"
 }

@@ -534,30 +534,19 @@ impl MoneyBird {
             "syncing subscription"
         );
 
-        struct ProdAndReset {
-            subscription_product: String,
-            quota_reset: DateTime<Utc>,
-        }
-        let product_and_reset_date = sqlx::query_as!(
-            ProdAndReset,
+        let quota_reset = sqlx::query_scalar!(
             r#"
-            SELECT subscription_product, quota_reset FROM organizations WHERE moneybird_contact_id = $1
+            SELECT quota_reset FROM organizations WHERE moneybird_contact_id = $1
             "#,
             *subscription.contact.id
         )
-            .fetch_one(&self.pool)
-            .await?;
-
-        let current_product: ProductIdentifier =
-            product_and_reset_date.subscription_product.parse().unwrap();
+        .fetch_one(&self.pool)
+        .await?;
 
         let subscription_status: SubscriptionStatus = [&subscription].into();
 
         let quota_reset = self
-            .calculate_quota_reset_datetime(
-                &subscription_status,
-                product_and_reset_date.quota_reset,
-            )
+            .calculate_quota_reset_datetime(&subscription_status, quota_reset)
             .await?;
 
         let product = match subscription_status {
@@ -567,45 +556,19 @@ impl MoneyBird {
             }
         };
 
-        let mut delta = 0i64;
-        if product != current_product {
-            delta = product.monthly_quota() as i64 - current_product.monthly_quota() as i64;
-            info!(
-                subscription_id = subscription.id.as_str(),
-                moneybird_contact_id = subscription.contact.id.as_str(),
-                current_product = current_product.to_string(),
-                new_product = product.to_string(),
-                "Subscription product has changed -> Adjusting the remaining message quota by {delta:+}"
-            );
-        }
-        let new_quota = sqlx::query_scalar!(
+        sqlx::query!(
             r#"
             UPDATE organizations
-            SET remaining_message_quota = remaining_message_quota + $2,
-                subscription_product = $3,
-                quota_reset = $4
+            SET total_message_quota = $2,
+                quota_reset = $3
             WHERE moneybird_contact_id = $1
-            returning remaining_message_quota
             "#,
             *subscription.contact.id,
-            delta,
-            product.to_string(),
+            product.monthly_quota() as i64,
             quota_reset
         )
         .fetch_one(&self.pool)
         .await?;
-
-        // Post-mortem sanity check if the new remaining quota isn't bigger than the total monthly quota
-        debug_assert!(new_quota <= product.monthly_quota() as i64);
-        if new_quota >= product.monthly_quota() as i64 {
-            warn!(
-                subscription_id = subscription.id.as_str(),
-                moneybird_contact_id = subscription.contact.id.as_str(),
-                current_product = current_product.to_string(),
-                new_product = product.to_string(),
-                "New message quota exceeds the total monthly quota"
-            );
-        }
 
         Ok(())
     }
@@ -715,7 +678,8 @@ impl MoneyBird {
             r#"
             UPDATE organizations
             SET quota_reset = $2,
-                remaining_message_quota = $3
+                total_message_quota = $3,
+                used_message_quota = 0
             WHERE id = $1
             "#,
             *quota_info.org_id,
@@ -976,7 +940,7 @@ mod test {
         for org in orgs {
             match org.id().as_uuid().to_string().as_str() {
                 "44729d9f-a7dc-4226-b412-36a7537f5176" => {
-                    assert_eq!(org.message_quota(), 1_000);
+                    assert_eq!(org.remaining_message_quota(), 1_000);
                     assert_eq!(
                         org.quota_reset().date_naive(),
                         Utc::now()
@@ -986,7 +950,7 @@ mod test {
                     );
                 }
                 "5d55aec5-136a-407c-952f-5348d4398204" => {
-                    assert_eq!(org.message_quota(), 500);
+                    assert_eq!(org.remaining_message_quota(), 500);
                     assert_eq!(
                         org.quota_reset().date_naive(),
                         Utc::now()
@@ -996,7 +960,7 @@ mod test {
                     );
                 }
                 "533d9a19-16e8-4a1b-a824-ff50af8b428c" => {
-                    assert_eq!(org.message_quota(), 1_000);
+                    assert_eq!(org.remaining_message_quota(), 1_000);
                     assert_eq!(
                         org.quota_reset().date_naive(),
                         Utc::now()
@@ -1006,7 +970,7 @@ mod test {
                     );
                 }
                 "ee14cdb8-f62e-42ac-a0cd-294d708be994" => {
-                    assert_eq!(org.message_quota(), 1_000);
+                    assert_eq!(org.remaining_message_quota(), 1_000);
                     let new_reset_date = if Utc::now().date_naive().day() <= 25 {
                         Utc::now().date_naive().with_day(25).unwrap()
                     } else {
@@ -1020,11 +984,11 @@ mod test {
                     assert_eq!(org.quota_reset().date_naive(), new_reset_date);
                 }
                 "7b2d91d0-f9d9-4ddd-88ac-6853f736501c" => {
-                    assert_eq!(org.message_quota(), 333);
+                    assert_eq!(org.remaining_message_quota(), 333);
                     assert_eq!(org.quota_reset().date_naive(), Utc::now().date_naive());
                 }
                 "0f83bfee-e7b6-4670-83ec-192afec2b137" => {
-                    assert_eq!(org.message_quota(), 1_000);
+                    assert_eq!(org.remaining_message_quota(), 1_000);
                     // If a reset date is the last of the month,
                     // it will gradually reduce to the 28th of the month, because of the February.
                     // This is only true if there is no connection to Moneybird,

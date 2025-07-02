@@ -1,7 +1,8 @@
 ALTER TABLE organizations
     ADD moneybird_contact_id varchar DEFAULT NULL,
-    -- Currently, the product in the DB is only used to calculate the quota difference when the subscription changes
-    ADD subscription_product varchar NOT NULL DEFAULT 'RmlsFree';
+    ADD total_message_quota  bigint NOT NULL DEFAULT 0,
+    ADD used_message_quota   bigint NOT NULL DEFAULT 0,
+    DROP COLUMN remaining_message_quota;
 
 CREATE TABLE moneybird_webhook
 (

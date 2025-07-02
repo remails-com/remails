@@ -36,7 +36,8 @@ impl OrganizationId {
 pub struct Organization {
     id: OrganizationId,
     pub name: String,
-    remaining_message_quota: i64,
+    total_message_quota: i64,
+    used_message_quota: i64,
     quota_reset: DateTime<Utc>,
     moneybird_contact_id: Option<MoneybirdContactId>,
     remaining_rate_limit: i64,
@@ -89,9 +90,9 @@ impl OrganizationRepository {
         let quota = sqlx::query_scalar!(
             r#"
             UPDATE organizations
-            SET remaining_message_quota = GREATEST(remaining_message_quota - 1, 0)
+            SET used_message_quota = LEAST(used_message_quota + 1, total_message_quota)
             WHERE id = $1
-            RETURNING remaining_message_quota
+            RETURNING (total_message_quota - used_message_quota) as "remaining!"
             "#,
             *id
         )
@@ -109,11 +110,12 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, now(), 0, now())
+            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
+            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())
             RETURNING id,
                       name,
-                      remaining_message_quota,
+                      total_message_quota,
+                      used_message_quota,
                       quota_reset,
                       created_at,
                       updated_at,
@@ -134,7 +136,8 @@ impl OrganizationRepository {
             r#"
             SELECT id,
                    name,
-                   remaining_message_quota,
+                   total_message_quota,
+                   used_message_quota,
                    quota_reset,
                    created_at,
                    updated_at,
@@ -162,7 +165,8 @@ impl OrganizationRepository {
             r#"
             SELECT id,
                    name,
-                   remaining_message_quota,
+                   total_message_quota,
+                   used_message_quota,
                    quota_reset,
                    created_at,
                    updated_at,
@@ -222,8 +226,8 @@ mod test {
     use sqlx::PgPool;
 
     impl Organization {
-        pub fn message_quota(&self) -> i64 {
-            self.remaining_message_quota
+        pub fn remaining_message_quota(&self) -> i64 {
+            self.total_message_quota - self.used_message_quota
         }
 
         pub fn quota_reset(&self) -> DateTime<Utc> {
