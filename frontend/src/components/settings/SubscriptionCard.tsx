@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Divider, Grid, Skeleton, Stack, Text, Tooltip } from "@mantine/core";
-import { useSubscription } from "../../hooks/useSubscription.ts";
+import { useSubscription } from "../../hooks/useSubscription.tsx";
 import { Subscription, SubscriptionStatus } from "../../types.ts";
 import React from "react";
 

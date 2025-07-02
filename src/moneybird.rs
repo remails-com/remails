@@ -366,7 +366,7 @@ impl MoneyBird {
 
         let self_clone = res.clone();
         // Webhook registration must happen asynchronously, otherwise the test webhook sent by
-        // moneybird will not succeed, and not webhook will get registered at all.
+        // moneybird will not succeed, and no webhook will get registered at all.
         tokio::spawn(async move {
             // Cannot inline this "random_delay", see: https://stackoverflow.com/a/75227719
             let random_delay = {
@@ -719,6 +719,7 @@ impl MoneyBird {
             }))
             .send()
             .await?
+            .error_for_status()?
             .json()
             .await?;
 
@@ -788,6 +789,7 @@ impl MoneyBird {
             )))
             .send()
             .await?
+            .error_for_status()?
             .json()
             .await?;
 
@@ -828,6 +830,7 @@ impl MoneyBird {
             .get(self.url(&format!("subscriptions?contact_id={contact_id}",)))
             .send()
             .await?
+            .error_for_status()?
             .json::<Vec<MoneybirdSubscription>>()
             .await?
             .as_slice()
@@ -842,6 +845,7 @@ impl MoneyBird {
             .get(self.url("subscription_templates"))
             .send()
             .await?
+            .error_for_status()?
             .json()
             .await?)
     }
