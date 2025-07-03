@@ -8,10 +8,16 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
 
-#[derive(From, derive_more::Debug, Deserialize)]
+#[derive(From, derive_more::Debug, Deserialize, FromStr)]
 #[debug("*****")]
 #[serde(transparent)]
 pub struct Password(String);
+
+impl Password {
+    pub fn danger_as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "type")]
@@ -169,7 +175,7 @@ impl ApiUserRepository {
         for org_role in organization_roles {
             sqlx::query!(
                 r#"
-                INSERT INTO api_users_organizations (api_user_id, organization_id, role) 
+                INSERT INTO api_users_organizations (api_user_id, organization_id, role)
                 VALUES ($1, $2, $3)
                 "#,
                 user_id,
@@ -183,7 +189,7 @@ impl ApiUserRepository {
         for global_role in global_roles {
             sqlx::query!(
                 r#"
-                INSERT INTO api_users_global_roles (api_user_id, role) 
+                INSERT INTO api_users_global_roles (api_user_id, role)
                 VALUES ($1, $2)
                 "#,
                 user_id,
@@ -208,9 +214,9 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
                    u.password_hash IS NOT NULL AS "password_enabled!"
-            FROM api_users u 
+            FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE github_user_id = $1
             GROUP BY u.id
             "#,
@@ -225,7 +231,7 @@ impl ApiUserRepository {
     pub async fn add_github_id(&self, user_id: &ApiUserId, github_id: i64) -> Result<(), Error> {
         sqlx::query!(
             r#"
-            UPDATE api_users SET github_user_id = $2 WHERE id = $1 
+            UPDATE api_users SET github_user_id = $2 WHERE id = $1
             "#,
             **user_id,
             github_id,
@@ -239,7 +245,7 @@ impl ApiUserRepository {
     pub async fn remove_github_id(&self, api_user_id: &ApiUserId) -> Result<(), Error> {
         sqlx::query!(
             r#"
-            UPDATE api_users SET github_user_id = NULL WHERE id = $1 
+            UPDATE api_users SET github_user_id = NULL WHERE id = $1
             "#,
             **api_user_id,
         )
@@ -251,7 +257,7 @@ impl ApiUserRepository {
     pub async fn update(&self, update: ApiUserUpdate, user_id: &ApiUserId) -> Result<(), Error> {
         sqlx::query!(
             r#"
-            UPDATE api_users SET name = $2, email = $3 WHERE id = $1 
+            UPDATE api_users SET name = $2, email = $3 WHERE id = $1
             "#,
             **user_id,
             update.name,
@@ -288,7 +294,7 @@ impl ApiUserRepository {
         let hash = password_auth::generate_hash(update.new_password.0);
         sqlx::query!(
             r#"
-            UPDATE api_users SET password_hash = $2 WHERE id = $1 
+            UPDATE api_users SET password_hash = $2 WHERE id = $1
             "#,
             **user_id,
             hash
@@ -325,7 +331,7 @@ impl ApiUserRepository {
 
         sqlx::query!(
             r#"
-            UPDATE api_users SET password_hash = NULL WHERE id = $1 
+            UPDATE api_users SET password_hash = NULL WHERE id = $1
             "#,
             **user_id
         )
@@ -347,9 +353,9 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
                    u.password_hash IS NOT NULL AS "password_enabled!"
-            FROM api_users u 
+            FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id 
+                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE u.id = $1
             GROUP BY u.id
             "#,

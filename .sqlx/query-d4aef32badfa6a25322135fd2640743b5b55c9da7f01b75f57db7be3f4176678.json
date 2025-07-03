@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations\n            SET used_message_quota = LEAST(used_message_quota + 1, total_message_quota)\n            WHERE id = $1\n            RETURNING (total_message_quota - used_message_quota) as \"remaining!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "remaining!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d4aef32badfa6a25322135fd2640743b5b55c9da7f01b75f57db7be3f4176678"
+}

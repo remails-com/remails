@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations\n            SET total_message_quota = $2,\n                quota_reset = $3\n            WHERE moneybird_contact_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52b6fdfc36610cfb29d374578f01f78fa8e195266034eb92c9a653d4ada82ade"
+}

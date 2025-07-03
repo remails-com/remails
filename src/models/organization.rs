@@ -1,4 +1,7 @@
-use crate::models::{ApiUserId, Error};
+use crate::{
+    models::{ApiUserId, Error},
+    moneybird::MoneybirdContactId,
+};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
@@ -33,8 +36,10 @@ impl OrganizationId {
 pub struct Organization {
     id: OrganizationId,
     pub name: String,
-    remaining_message_quota: i64,
+    total_message_quota: i64,
+    used_message_quota: i64,
     quota_reset: DateTime<Utc>,
+    moneybird_contact_id: Option<MoneybirdContactId>,
     remaining_rate_limit: i64,
     rate_limit_reset: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -52,7 +57,7 @@ pub struct NewOrganization {
     name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OrganizationRepository {
     pool: sqlx::PgPool,
 }
@@ -81,54 +86,23 @@ impl OrganizationRepository {
         Self { pool }
     }
 
-    async fn reset_quota(&self, id: OrganizationId) -> Result<(), Error> {
-        sqlx::query!(
-            r#"
-            UPDATE organizations
-            SET quota_reset = quota_reset + '1 day', --TODO align the start/end date with the subscription period
-                remaining_message_quota = 30 -- TODO make quota subscription dependent
-            WHERE id = $1
-            "#,
-            *id
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     pub async fn reduce_quota(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
-        struct Quota {
-            remaining_message_quota: i64,
-            quota_reset: DateTime<Utc>,
-        }
-
-        let quota = sqlx::query_as!(
-            Quota,
+        let quota = sqlx::query_scalar!(
             r#"
             UPDATE organizations
-            SET remaining_message_quota = 
-                CASE WHEN remaining_message_quota - 1 > 0 
-                    THEN remaining_message_quota - 1
-                    ELSE 0
-                END
+            SET used_message_quota = LEAST(used_message_quota + 1, total_message_quota)
             WHERE id = $1
-            RETURNING remaining_message_quota, quota_reset
+            RETURNING (total_message_quota - used_message_quota) as "remaining!"
             "#,
             *id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        if quota.quota_reset < Utc::now() {
-            self.reset_quota(id).await?;
-            // Redo the check with the refilled quota
-            return Box::pin(self.reduce_quota(id)).await;
-        }
-
-        if quota.remaining_message_quota <= 0 {
+        if quota <= 0 {
             Ok(QuotaStatus::Exceeded)
         } else {
-            Ok(QuotaStatus::Below(quota.remaining_message_quota as u64))
+            Ok(QuotaStatus::Below(quota as u64))
         }
     }
 
@@ -136,9 +110,18 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            INSERT INTO organizations (id, name, remaining_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, now() + '1 month', 0, now())
-            RETURNING *
+            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
+            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())
+            RETURNING id,
+                      name,
+                      total_message_quota,
+                      used_message_quota,
+                      quota_reset,
+                      created_at,
+                      updated_at,
+                      moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                      rate_limit_reset,
+                      remaining_rate_limit
             "#,
             organization.name,
         )
@@ -151,7 +134,17 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT * FROM organizations
+            SELECT id,
+                   name,
+                   total_message_quota,
+                   used_message_quota,
+                   quota_reset,
+                   created_at,
+                   updated_at,
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                   rate_limit_reset,
+                   remaining_rate_limit
+            FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY name
             "#,
@@ -170,7 +163,17 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             Organization,
             r#"
-            SELECT * FROM organizations
+            SELECT id,
+                   name,
+                   total_message_quota,
+                   used_message_quota,
+                   quota_reset,
+                   created_at,
+                   updated_at,
+                   moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                   rate_limit_reset,
+                   remaining_rate_limit
+            FROM organizations
             WHERE id = $1
               AND ($2::uuid[] IS NULL OR id = ANY($2))
             "#,
@@ -221,6 +224,16 @@ impl OrganizationRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
+
+    impl Organization {
+        pub fn remaining_message_quota(&self) -> i64 {
+            self.total_message_quota - self.used_message_quota
+        }
+
+        pub fn quota_reset(&self) -> DateTime<Utc> {
+            self.quota_reset
+        }
+    }
 
     #[sqlx::test]
     async fn organization_lifecycle(db: PgPool) {

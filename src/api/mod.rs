@@ -14,12 +14,14 @@ use crate::{
             update_smtp_credential,
         },
         streams::{create_stream, list_streams, remove_stream, update_stream},
+        subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
     },
     handler::dns::DnsResolver,
     models::{
         ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
         ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
+    moneybird::MoneyBird,
 };
 use axum::{
     Json, Router,
@@ -52,6 +54,7 @@ mod organizations;
 mod projects;
 mod smtp_credentials;
 mod streams;
+mod subscriptions;
 mod whoami;
 
 static USER_AGENT_VALUE: &str = "remails";
@@ -113,6 +116,7 @@ pub struct ApiConfig {
 pub struct ApiState {
     pool: PgPool,
     config: ApiConfig,
+    moneybird: MoneyBird,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
 }
@@ -187,6 +191,12 @@ impl FromRef<ApiState> for RemailsConfig {
     }
 }
 
+impl FromRef<ApiState> for MoneyBird {
+    fn from_ref(state: &ApiState) -> Self {
+        state.moneybird.clone()
+    }
+}
+
 async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
@@ -222,12 +232,17 @@ impl ApiServer {
             }
         };
 
+        let moneybird = MoneyBird::new(pool.clone())
+            .await
+            .expect("Cannot connect to Moneybird");
+
         let state = ApiState {
             pool,
             config: ApiConfig {
                 session_key,
                 remails_config: Default::default(),
             },
+            moneybird,
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
             resolver: DnsResolver::new(),
@@ -239,6 +254,7 @@ impl ApiServer {
             .route("/config", get(config::config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
+            .route("/webhook/moneybird", post(moneybird_webhook))
             .route("/api_user/{user_id}", put(api_users::update_user))
             .route("/api_user/{user_id}/password", put(api_users::update_password).delete(api_users::delete_password))
             .route(
@@ -248,6 +264,14 @@ impl ApiServer {
             .route(
                 "/organizations/{id}",
                 get(get_organization).delete(remove_organization),
+            )
+            .route(
+                "/organizations/{id}/subscription",
+                get(get_subscription),
+            )
+            .route(
+                "/organizations/{id}/subscription/new",
+                get(get_sales_link),
             )
             .route(
                 "/organizations/{org_id}/messages",

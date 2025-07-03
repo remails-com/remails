@@ -31,6 +31,7 @@ metadata:
           "name": "https",
           "mode": "http",
           "port": 443,
+          "http2_enabled": true,
           "tls_configs": [
             {
                "name": {{ .Values.management.certificate_bundle_name | quote }},

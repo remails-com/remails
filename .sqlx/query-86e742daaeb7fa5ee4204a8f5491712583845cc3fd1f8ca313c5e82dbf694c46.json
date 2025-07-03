@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit\n            FROM organizations\n            WHERE ($1::uuid[] IS NULL OR id = ANY($1))\n            ORDER BY name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "total_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "used_message_quota",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "quota_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "moneybird_contact_id: MoneybirdContactId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "rate_limit_reset",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "remaining_rate_limit",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "86e742daaeb7fa5ee4204a8f5491712583845cc3fd1f8ca313c5e82dbf694c46"
+}

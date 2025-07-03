@@ -15,7 +15,7 @@ async function get<T>(path: string): Promise<T> {
     throw new Error(`Failed to fetch ${path}: ${response.status} ${response.statusText}`);
   }
 
-  return response.json() as T;
+  return await response.json() as T;
 }
 
 export default async function apiMiddleware(

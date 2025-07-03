@@ -9,8 +9,8 @@ on:
         required: true
         type: choice
         options:
-          - Production UpCloud private NL-AMS
           - Staging UpCloud private NL-AMS
+          - Production UpCloud private NL-AMS
 
 permissions:
   packages: write
@@ -170,6 +170,9 @@ jobs:
         run: |
           helm upgrade --install remails ./remails \
             --set environment="${{ vars.environment }}" \
+            --set moneybird.administration="${{ vars.MONEYBIRD_ADMINISTRATION_ID }}" \
+            --set moneybird.api_key="${{ secrets.MONEYBIRD_API_KEY }}" \
+            --set moneybird.webhook_url="${{ vars.MONEYBIRD_WEBHOOK_URL }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set rust_log="${{ vars.RUST_LOG }}" \

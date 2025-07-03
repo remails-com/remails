@@ -43,6 +43,11 @@ management:
   certificate_bundle_name: "remails-management"
   certificate_bundle_uuid: "0a7a685a-ae71-4e2f-95f2-8538711fb11b"
 
+moneybird:
+  api_key: "nothing-to-see-here"
+  administration: "457129080952718731"
+  webhook_url: https://dump.tweede.golf/dump/moneybird
+
 retry:
   schedule: "*/10 * * * *"
 

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations\n            SET quota_reset = $2,\n                total_message_quota = $3,\n                used_message_quota = 0\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c04c9647a70b370aeac7eed74c43c4e898c9c948202f4f051ce76de5595b0021"
+}

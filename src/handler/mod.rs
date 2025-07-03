@@ -999,7 +999,7 @@ mod test {
 
         let remaining = sqlx::query_scalar!(
             r#"
-            SELECT remaining_message_quota FROM organizations WHERE id = $1
+            SELECT total_message_quota - used_message_quota as "remaining!" FROM organizations WHERE id = $1
             "#,
             *org_id
         )

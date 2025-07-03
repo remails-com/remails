@@ -1,10 +1,11 @@
 use anyhow::Context;
-use remails::{HandlerConfig, handler::Handler};
+use remails::{HandlerConfig, MoneyBird, handler::Handler};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use tokio_util::sync::CancellationToken;
+use tracing::error;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -31,6 +32,16 @@ async fn main() -> anyhow::Result<()> {
         .connect_with(db_options)
         .await
         .context("failed to connect to database")?;
+
+    let moneybird = MoneyBird::new(pool.clone())
+        .await
+        .expect("Cannot connect to Moneybird");
+
+    moneybird
+        .reset_all_quotas()
+        .await
+        .inspect_err(|err| error!("Failed to reset quotas: {}", err))
+        .ok();
 
     let shutdown = CancellationToken::new();
     let handler_config = HandlerConfig::new();
