@@ -14,17 +14,19 @@ export function Breadcrumbs() {
   const { currentCredential } = useCredentials();
   const { domains, currentDomain } = useDomains();
   const { currentMessage } = useMessages();
-  const currentOrganisation = useOrganizations();
+  const { currentOrganization } = useOrganizations();
   const {
     navigate,
     state: { routerState },
   } = useRemails();
 
-  if (!currentOrganisation) {
+  if (!currentOrganization) {
     return <></>;
   }
 
   const items: BreadcrumbItem[] = [];
+
+  items.push({ title: currentOrganization.name, route: "projects" });
 
   if (routerState.name === "settings") {
     items.push({ title: "Settings", route: "settings" });

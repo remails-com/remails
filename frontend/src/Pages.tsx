@@ -12,6 +12,7 @@ import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
 import { NavigationProgress } from "@mantine/nprogress";
+import { Quota } from "./components/statistics/Quota.tsx";
 
 function Page() {
   const {
@@ -64,7 +65,7 @@ function Page() {
   }
 
   if (routeName == "statistics") {
-    return <Text>Organization wide statistics, quotas, etc.</Text>;
+    return <Quota />;
   }
 
   if (routeName == "projects.project.streams.stream.messages.message") {

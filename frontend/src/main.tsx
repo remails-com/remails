@@ -16,16 +16,16 @@ const theme = createTheme({
   // https://mantine.dev/colors-generator/?color=FF4B24
   colors: {
     "remails-red": [
-      '#ffebe4',
-      '#ffd6cc',
-      '#ffac9a',
-      '#ff7f64',
-      '#ff5936',
-      '#ff4b24',
-      '#ff3407',
-      '#e42500',
-      '#cc1e00',
-      '#b21100',
+      "#ffebe4",
+      "#ffd6cc",
+      "#ffac9a",
+      "#ff7f64",
+      "#ff5936",
+      "#ff4b24",
+      "#ff3407",
+      "#e42500",
+      "#cc1e00",
+      "#b21100",
     ],
   },
 });

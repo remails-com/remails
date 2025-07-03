@@ -19,6 +19,9 @@ export function formatDate(date: number | string | Date): string {
   });
 }
 
+export function formatNumber(number: number): string {
+  return number.toLocaleString("en-US");
+}
 
 export function is_global_admin(roles: Array<Role>): boolean {
   return roles.some((role) => role.type === "super_admin");

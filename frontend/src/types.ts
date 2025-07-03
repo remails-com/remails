@@ -169,6 +169,9 @@ export type Action =
 export interface Organization {
   id: string;
   name: string;
+  total_message_quota: number;
+  used_message_quota: number;
+  quota_reset: string;
   created_at: string;
   updated_at: string;
 }
@@ -248,7 +251,7 @@ export type ProductIdentifier =
 
 export type SubscriptionStatus =
   | (Subscription & { status: "active" })
-  | (Subscription & { status: "expired", end_date: string })
+  | (Subscription & { status: "expired"; end_date: string })
   | { status: "none" };
 
 export interface Subscription {

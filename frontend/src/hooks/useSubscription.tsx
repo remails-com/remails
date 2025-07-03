@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { IconX } from "@tabler/icons-react";
 
-
 export function useSubscription() {
   const { currentOrganization } = useOrganizations();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
@@ -19,11 +18,11 @@ export function useSubscription() {
           } else {
             notifications.show({
               title: "Error",
-              message: 'Failed to load the current subscription',
+              message: "Failed to load the current subscription",
               color: "red",
               autoClose: 20000,
               icon: <IconX size={20} />,
-          });
+            });
             return null;
           }
         })
