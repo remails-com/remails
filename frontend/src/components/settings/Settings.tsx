@@ -285,7 +285,7 @@ export function Settings() {
 
         <h2>Organization Settings</h2>
 
-        <SubscriptionCard/>
+        <SubscriptionCard />
 
         <NewOrganization
           opened={opened}
