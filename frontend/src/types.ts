@@ -248,7 +248,7 @@ export type ProductIdentifier =
 
 export type SubscriptionStatus =
   | (Subscription & { status: "active" })
-  | (Subscription & { status: "expired" })
+  | (Subscription & { status: "expired", end_date: string })
   | { status: "none" };
 
 export interface Subscription {

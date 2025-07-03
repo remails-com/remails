@@ -424,12 +424,13 @@ impl MoneyBird {
             .json()
             .await?;
 
+        let hash = password_auth::generate_hash(webhook.token.danger_as_str());
         sqlx::query!(
             r#"
-            INSERT INTO moneybird_webhook (moneybird_id, token) VALUES ($1, $2)
+            INSERT INTO moneybird_webhook (moneybird_id, token_hash) VALUES ($1, $2)
             "#,
             *webhook.id,
-            webhook.token.danger_as_str()
+            hash
         )
         .execute(&self.pool)
         .await?;
@@ -469,18 +470,16 @@ impl MoneyBird {
             return Err(Error::Unauthorized);
         };
 
-        // TODO check if we should hash the moneybird token
-        let exists = sqlx::query_scalar!(
+        let token_hash = sqlx::query_scalar!(
             r#"
-            SELECT true AS "exists!" FROM moneybird_webhook WHERE moneybird_id = $1 AND token = $2
+            SELECT token_hash FROM moneybird_webhook WHERE moneybird_id = $1
             "#,
             *webhook_id,
-            payload.webhook_token.danger_as_str()
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        if exists.is_none() {
+        let Some(hash) = token_hash else {
             warn!(
                 webhook_id = webhook_id.as_str(),
                 administration_id = payload.administration_id.as_str(),
@@ -488,6 +487,17 @@ impl MoneyBird {
             );
             return Err(Error::Unauthorized);
         };
+
+        password_auth::verify_password(payload.webhook_token.danger_as_str(), &hash)
+            .inspect_err(|err| {
+                warn!(
+                    webhook_id = webhook_id.as_str(),
+                    administration_id = payload.administration_id.as_str(),
+                    "Received webhook with invalid token: {}",
+                    err
+                )
+            })
+            .map_err(|_| Error::Unauthorized)?;
 
         match payload.action {
             Action::TestWebhook => {}

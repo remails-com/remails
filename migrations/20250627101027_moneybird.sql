@@ -7,5 +7,5 @@ ALTER TABLE organizations
 CREATE TABLE moneybird_webhook
 (
     moneybird_id varchar NOT NULL PRIMARY KEY,
-    token        varchar NOT NULL
+    token_hash   varchar NOT NULL
 );

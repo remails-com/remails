@@ -1,7 +1,8 @@
 import { Badge, Button, Card, Divider, Grid, Skeleton, Stack, Text, Tooltip } from "@mantine/core";
 import { useSubscription } from "../../hooks/useSubscription.tsx";
-import { Subscription, SubscriptionStatus } from "../../types.ts";
+import { SubscriptionStatus } from "../../types.ts";
 import React from "react";
+import { formatDate } from "../../util.ts";
 
 export default function SubscriptionCard() {
   const { subscription, salesLink } = useSubscription();
@@ -10,34 +11,36 @@ export default function SubscriptionCard() {
     if (subscription.status === "none") {
       return no_subscription;
     } else {
-      return existing_subscription(subscription, subscription.status);
+      return existing_subscription(subscription);
     }
   };
 
   const no_subscription = (
     <>
       <Text size="xl">No subscription found</Text>
-      <Button component="a" href={salesLink || ""} target="_blank">
-        Choose subscription
-      </Button>
+      <Tooltip label="Can't connect to sales backend, try again later" disabled={!!salesLink}>
+        <Button component="a" href={salesLink ? salesLink : undefined} target="_blank" disabled={!salesLink}>
+          Choose subscription
+        </Button>
+      </Tooltip>
     </>
   );
 
-  const existing_subscription = (subscription: Subscription, status: "active" | "expired") => (
+  const existing_subscription = (subscription: Exclude<SubscriptionStatus, { status: "none" }>) => (
     <>
       <Grid justify="space-between">
         <Grid.Col span="auto">
           <Text size="xl">{subscription.title}</Text>
         </Grid.Col>
         <Grid.Col span="content">
-          {status === "active" && (
-            <Badge size="lg" color="green" variant="light">
-              Active{subscription.end_date ? ` until ${subscription.end_date}` : ""}
+          {subscription.status === "active" && (
+            <Badge size="lg" color="green" variant="light" tt="none">
+              Active{subscription.end_date ? ` until ${formatDate(subscription.end_date)}` : ""}
             </Badge>
           )}
-          {status === "expired" && (
+          {subscription.status === "expired" && (
             <Badge size="lg" color="red" variant="light">
-              Expired since {subscription.end_date}
+              Expired since {formatDate(subscription.end_date)}
             </Badge>
           )}
         </Grid.Col>
