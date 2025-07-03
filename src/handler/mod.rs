@@ -288,48 +288,52 @@ impl Handler {
     }
 
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
-        // parse and save message contents
-        let mut parsed_msg: mail_parser::Message = MessageParser::default()
-            .parse(&message.raw_data)
-            .unwrap_or_else(|| mail_parser::Message {
-                raw_message: Borrowed(&message.raw_data),
-                ..Default::default()
-            });
+        fn parse_message<'a>(raw_data: &'a Vec<u8>) -> mail_parser::Message<'a> {
+            MessageParser::default()
+                .parse(raw_data)
+                .unwrap_or_else(|| mail_parser::Message {
+                    raw_message: Borrowed(raw_data),
+                    ..Default::default()
+                })
+        }
 
-        // this should never fail since mail_parser::Message has a derived Serialize instance
-        let mut json_message_data =
-            serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
+        // parse, add new headers if needed, and save message contents
+        let mut parsed_msg: mail_parser::Message = parse_message(&message.raw_data);
 
-        if !parsed_msg.parts.first().is_some_and(|msg| {
-            msg.headers
-                .iter()
-                .any(|hdr| hdr.name == HeaderName::MessageId)
-        }) {
-            // the message-id header was not provided by the MUA, we are going to
-            // provide one ourselves.
-            trace!("adding message-id header");
+        let has_header = |name: HeaderName| {
+            parsed_msg
+                .parts
+                .first()
+                .is_some_and(|msg| msg.headers.iter().any(|hdr| hdr.name == name))
+        };
+
+        let mut new_headers = Vec::new();
+
+        if !has_header(HeaderName::MessageId) {
+            trace!("adding Message-ID header");
             use aws_lc_rs::digest;
             let hash = digest::digest(&digest::SHA224, &message.raw_data);
             let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
-
             let sender_domain = message.from_email.domain();
-            message.prepend_headers(&format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
-
-            // we need to re-parse the message because the data has shifted
-            parsed_msg = MessageParser::default()
-                .parse(&message.raw_data)
-                .unwrap_or_else(|| mail_parser::Message {
-                    raw_message: Borrowed(&message.raw_data),
-                    ..Default::default()
-                });
-
-            json_message_data =
-                serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
+            new_headers.push(format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
         }
 
-        trace!("updating message {}", message.id());
+        if !has_header(HeaderName::Date) {
+            trace!("adding Date header");
+            let date = chrono::Utc::now().to_rfc2822();
+            new_headers.push(format!("Date: {date}\r\n"));
+        }
 
-        message.message_data = json_message_data;
+        if !new_headers.is_empty() {
+            trace!("updating message {}", message.id());
+            message.prepend_headers(&new_headers.join(""));
+
+            // we need to re-parse the message because the data has shifted
+            parsed_msg = parse_message(&message.raw_data);
+        }
+
+        message.message_data =
+            serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
 
         let result = self.check_and_sign_message(message, &parsed_msg).await?;
         message.status = match result {
@@ -365,11 +369,8 @@ impl Handler {
             Err((status, reason)) => return Err(HandlerError::MessageNotAccepted(status, reason)),
         };
 
-        // generate message headers
-
-        trace!("adding headers");
-        debug!("{dkim_header:?}");
-
+        trace!("adding DKIM header");
+        trace!("{dkim_header:?}");
         message.prepend_headers(&dkim_header);
 
         Ok(())
