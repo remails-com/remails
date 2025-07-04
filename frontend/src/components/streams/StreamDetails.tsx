@@ -22,6 +22,7 @@ export default function StreamDetails() {
           name: "Settings",
           icon: <IconSettings size={12} />,
           content: <StreamSettings />,
+          notSoWide: true,
         },
       ]}
     />

@@ -22,6 +22,7 @@ export default function ProjectDetails() {
           name: "Settings",
           icon: <IconSettings size={12} />,
           content: <ProjectSettings />,
+          notSoWide: true,
         },
       ]}
     />
