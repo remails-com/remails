@@ -9,7 +9,7 @@ import { Domain } from "../../types.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { DnsRecords } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
-import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
+import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 
 interface FormValues {
   domain: string;
@@ -197,11 +197,11 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
             </Group>
           </Stepper.Step>
           <Stepper.Step label="Verify" allowStepSelect={activeStep >= 1}>
-            <DnsVerificationResult
+            <DnsVerificationContent
               domainVerified={domainVerified}
               verificationResult={verificationResult}
               domain={newDomain?.domain}
-            ></DnsVerificationResult>
+            />
             <Group justify="space-between" mt="md">
               <Button disabled={domainVerified === "loading"} variant="outline" onClick={() => verifyDomain(newDomain)}>
                 Retry verification

@@ -10,17 +10,17 @@ export default function ProjectDetails() {
       tabs={[
         {
           name: "Streams",
-          icon: <IconAccessPoint size={12} />,
+          icon: <IconAccessPoint size={14} />,
           content: <StreamsOverview />,
         },
         {
           name: "Domains",
-          icon: <IconWorldWww size={12} />,
+          icon: <IconWorldWww size={14} />,
           content: <DomainsOverview projectDomains={true} />,
         },
         {
           name: "Settings",
-          icon: <IconSettings size={12} />,
+          icon: <IconSettings size={14} />,
           content: <ProjectSettings />,
           notSoWide: true,
         },

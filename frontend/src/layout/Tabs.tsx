@@ -25,14 +25,14 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
     <MTabs defaultValue={default_tab} value={routerState.params.tab || default_tab} onChange={setActiveTab}>
       <MTabs.List mb="md">
         {tabs.map((t) => (
-          <MTabs.Tab size="lg" value={t.name} leftSection={t.icon}>
+          <MTabs.Tab size="lg" value={t.name} leftSection={t.icon} key={t.name}>
             {t.name}
           </MTabs.Tab>
         ))}
       </MTabs.List>
 
       {tabs.map((t) => (
-        <MTabs.Panel value={t.name}>
+        <MTabs.Panel value={t.name} key={t.name}>
           {t.notSoWide ? (
             <Container size="sm" ml="0" pl="0">
               {t.content}

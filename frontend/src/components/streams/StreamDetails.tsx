@@ -10,17 +10,17 @@ export default function StreamDetails() {
       tabs={[
         {
           name: "Messages",
-          icon: <IconMessage size={12} />,
+          icon: <IconMessage size={14} />,
           content: <MessageLog />,
         },
         {
           name: "Credentials",
-          icon: <IconKey size={12} />,
+          icon: <IconKey size={14} />,
           content: <CredentialsOverview />,
         },
         {
           name: "Settings",
-          icon: <IconSettings size={12} />,
+          icon: <IconSettings size={14} />,
           content: <StreamSettings />,
           notSoWide: true,
         },
