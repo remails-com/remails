@@ -61,7 +61,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
       dispatch({ type: "remove_domain", domainId: domain.id });
 
       if (projectDomains && currentProject) {
-        navigate("projects.project");
+        navigate("projects.project", { tab: "Domains" });
       } else {
         navigate("domains");
       }
