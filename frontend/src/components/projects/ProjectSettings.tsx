@@ -1,31 +1,32 @@
 import { useForm } from "@mantine/form";
 import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
-import { Organization, Project } from "../../types.ts";
+import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { useEffect } from "react";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { Loader } from "../../Loader.tsx";
 
 interface FormValues {
   name: string;
 }
 
-interface ProjectSettingsProps {
-  currentOrganization: Organization;
-  currentProject: Project;
-}
-
-export default function ProjectSettings({ currentOrganization, currentProject }: ProjectSettingsProps) {
+export default function ProjectSettings() {
   const { streams } = useStreams();
   const { dispatch, navigate } = useRemails();
+
+  const { currentOrganization } = useOrganizations();
+  const { currentProject } = useProjects();
 
   const canDelete = streams && streams.length === 0;
 
   const form = useForm<FormValues>({
     initialValues: {
-      name: currentProject.name,
+      name: currentProject?.name || "",
     },
   });
 
@@ -34,6 +35,10 @@ export default function ProjectSettings({ currentOrganization, currentProject }:
     form.resetDirty();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
+
+  if (!currentProject || !currentOrganization) {
+    return <Loader />;
+  }
 
   const confirmDeleteProject = (project: Project) => {
     modals.openConfirmModal({
