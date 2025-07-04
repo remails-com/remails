@@ -76,7 +76,7 @@ helm upgrade --install remails ./remails \
 export AWS_ACCESS_KEY_ID=$SCW_ACCESS_KEY
 export AWS_SECRET_ACCESS_KEY=$SCW_SECRET_KEY
 export RESTIC_REPOSITORY=s3:https://s3.fr-par.scw.cloud/remails-backup
-restic -o s3.storage-class=ONEZONE_IA  init
+restic -o s3.storage-class=ONEZONE_IA init
 ```
 
 3. Backup
@@ -88,6 +88,12 @@ See [backup.sh](./backup.sh) and [the job definition](./remails/templates/databa
 
 Keep in mind that the "messages" table does not get backed up, and therefore,
 you have to create it manually with the currently applicable schema.
+
+```postgresql
+-- on a fresh database, you might need to create the user first
+CREATE USER remails_production WITH PASSWORD 'super-secret' CONNECTION LIMIT 80;
+CREATE DATABASE "remails_production" OWNER "remails_production";
+```
 
 ```shell
 export AWS_ACCESS_KEY_ID=$SCW_ACCESS_KEY
