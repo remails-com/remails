@@ -1,0 +1,56 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-db
+  labels:
+    app: backup-db
+    version: {{ .Chart.AppVersion }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Replace
+  jobTemplate:
+    metadata:
+      labels:
+        app: backup-db
+        version: {{ .Chart.AppVersion }}
+    spec:
+      template:
+        spec:
+        {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+              {{- toYaml . | nindent 12 }}
+        {{- end }}
+          restartPolicy: OnFailure
+          containers:
+            - name: retry
+              image: "{{ .Values.images.backup_db.repository }}:{{ .Chart.AppVersion }}"
+              env:
+                - name: VERSION
+                  value: {{ .Chart.AppVersion }}
+                - name: ENVIRONMENT
+                  value: {{ .Values.environment | quote }}
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: database_url
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: db_backup_scw_access_key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: db_backup_scw_secret_key
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: secrets
+                      key: restic_password
+                - name: RESTIC_REPOSITORY
+                  value: {{ printf "%s:%s" "s3" .Values.backup.s3_url | quote }}
+              imagePullPolicy: {{ .Values.images.retry.pullPolicy }}
+  {{- end }}
