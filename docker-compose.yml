@@ -1,6 +1,6 @@
 services:
   psql:
-    image: postgres:16
+    image: postgres:17
     environment:
       POSTGRES_USER: remails
       POSTGRES_DB: remails

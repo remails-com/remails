@@ -11,6 +11,9 @@ images:
   migrate_db:
     repository: ghcr.io/tweedegolf/remails/migrate_db
     pullPolicy: Always
+  backup_db:
+    repository: ghcr.io/tweedegolf/remails/backup_db
+    pullPolicy: Always
 
 environment: development
 
@@ -54,6 +57,14 @@ retry:
 github_oauth:
   client_id: Ov23livRESUJK4twobxj
   client_secret: Secret
+
+backup:
+  enabled: true
+  s3_url: "https://s3.fr-par.scw.cloud/remails-backup"
+  restic_password: "something secret"
+  scw_secret_key: "something secret"
+  scw_access_key: "something secret"
+  schedule: "0 01 * * *"
 
 imagePullSecrets:
   - name: "regcred"
