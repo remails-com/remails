@@ -1,13 +1,18 @@
 use std::ops::Range;
 
 use base64ct::{Base64Unpadded, Encoding};
+use chrono::{DateTime, Utc};
 #[cfg(not(test))]
 use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
+use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
-use crate::api::domains::VerifyResult;
 #[cfg(test)]
 use crate::handler::mock;
+use crate::{
+    dkim::PrivateKey,
+    models::{Domain, Error},
+};
 
 //TODO: do we want to do anything with DNS errors?
 pub enum ResolveError {
@@ -22,6 +27,65 @@ pub struct DnsResolver {
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
     pub(crate) resolver: mock::Resolver,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) enum VerifyResultStatus {
+    Success,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct VerifyResult {
+    pub(crate) status: VerifyResultStatus,
+    pub(crate) reason: String,
+    pub(crate) value: Option<String>,
+}
+
+impl VerifyResult {
+    pub fn error(reason: impl Into<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Error,
+            reason: reason.into(),
+            value: None,
+        }
+    }
+    pub fn warning(reason: impl Into<String>, value: Option<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Warning,
+            reason: reason.into(),
+            value,
+        }
+    }
+    pub fn success(reason: impl Into<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Success,
+            reason: reason.into(),
+            value: None,
+        }
+    }
+}
+
+impl From<Result<&'static str, &'static str>> for VerifyResult {
+    fn from(value: Result<&'static str, &'static str>) -> Self {
+        VerifyResult {
+            status: value
+                .map(|_| VerifyResultStatus::Success)
+                .unwrap_or(VerifyResultStatus::Error),
+            reason: value.unwrap_or_else(|e| e).to_string(),
+            value: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DomainVerificationStatus {
+    timestamp: DateTime<Utc>,
+    dkim: VerifyResult,
+    spf: VerifyResult,
+    dmarc: VerifyResult,
+    a: VerifyResult,
 }
 
 #[cfg(not(test))]
@@ -197,5 +261,22 @@ impl DnsResolver {
             }
             Err(_) => VerifyResult::warning("could not retrieve DNS record", None),
         }
+    }
+
+    pub async fn verify_domain(
+        &self,
+        domain: &Domain,
+        preferred_spf_record: &str,
+    ) -> Result<DomainVerificationStatus, Error> {
+        let db_key = PrivateKey::new(domain, "remails")?;
+        let domain = &domain.domain;
+
+        Ok(DomainVerificationStatus {
+            timestamp: Utc::now(),
+            dkim: self.verify_dkim(domain, db_key.public_key()).await.into(),
+            spf: self.verify_spf(domain, preferred_spf_record).await,
+            dmarc: self.verify_dmarc(domain).await,
+            a: self.any_a_record(domain).await,
+        })
     }
 }

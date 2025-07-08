@@ -1,4 +1,7 @@
-use crate::models::{Error, OrganizationId, ProjectId, SmtpCredentialId, projects};
+use crate::{
+    handler::dns::DomainVerificationStatus,
+    models::{Error, OrganizationId, ProjectId, SmtpCredentialId, projects},
+};
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
@@ -117,6 +120,7 @@ pub struct ApiDomain {
     domain: String,
     dkim_key_type: DkimKeyType,
     dkim_public_key: String,
+    verification_status: DomainVerificationStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -135,7 +139,7 @@ impl ApiDomain {
 
 #[derive(Debug)]
 pub struct Domain {
-    id: DomainId,
+    pub(crate) id: DomainId,
     parent_id: DomainParent,
     pub(crate) domain: String,
     pub(crate) dkim_key: DkimKey,
@@ -190,8 +194,8 @@ impl TryFrom<PgDomain> for Domain {
     }
 }
 
-impl From<Domain> for ApiDomain {
-    fn from(d: Domain) -> Self {
+impl ApiDomain {
+    pub fn verified(d: Domain, verification_status: DomainVerificationStatus) -> Self {
         let dkim_key_type = match d.dkim_key {
             DkimKey::Ed25519(_) => DkimKeyType::Ed25519,
             DkimKey::RsaSha256(_) => DkimKeyType::RsaSha256,
@@ -203,6 +207,7 @@ impl From<Domain> for ApiDomain {
             domain: d.domain,
             dkim_key_type,
             dkim_public_key: Base64::encode_string(d.dkim_key.pub_key().expect("As we generate the keys ourselves, we should never run into a marshalling problem").as_ref()),
+            verification_status,
             created_at: d.created_at,
             updated_at: d.updated_at,
         }

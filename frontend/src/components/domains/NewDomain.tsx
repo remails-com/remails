@@ -44,7 +44,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
     ? `/api/organizations/${currentOrganization?.id}/projects/${projectId}/domains`
     : `/api/organizations/${currentOrganization?.id}/domains`;
 
-  const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
+  const { reverifyDomain: verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, newDomain);
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -135,7 +135,11 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
           form.reset();
           close();
         }}
-        title={<Title order={2}>Create New Domain</Title>}
+        title={
+          <Title order={2} component="span">
+            Create New Domain
+          </Title>
+        }
         size="lg"
         padding="xl"
       >

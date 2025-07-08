@@ -12,8 +12,8 @@ import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { useDisclosure } from "@mantine/hooks";
 import Tabs from "../../layout/Tabs.tsx";
-import { useEffect } from "react";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
+import { formatDateTime } from "../../util.ts";
 
 export function DomainDetails({ projectDomains = false }: { projectDomains?: boolean }) {
   const { currentOrganization } = useOrganizations();
@@ -26,10 +26,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
     projectDomains && currentProject
       ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
       : `/api/organizations/${currentOrganization?.id}/domains`;
-  const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => verifyDomain(currentDomain), [currentDomain]);
+  const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, currentDomain);
 
   if (!currentDomain || !currentOrganization) {
     return null;
@@ -101,6 +98,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                 domainVerified={domainVerified}
                 verificationResult={verificationResult}
               />
+              Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "never"}
               <Group mt="xl">
                 <Tooltip label="Delete Domain">
                   <Button
@@ -128,7 +126,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                 <Tooltip label="Verify DNS records">
                   <Button
                     onClick={() => {
-                      verifyDomain(currentDomain);
+                      reverifyDomain(currentDomain);
                       open();
                     }}
                   >
@@ -158,9 +156,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                   <Button
                     disabled={domainVerified === "loading"}
                     variant="outline"
-                    onClick={() => {
-                      verifyDomain(currentDomain);
-                    }}
+                    onClick={() => reverifyDomain(currentDomain)}
                   >
                     Retry verification
                   </Button>

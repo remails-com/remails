@@ -27,6 +27,20 @@ const icons: { [key in VerifyResult["status"]]: ReactElement } = {
   ),
 };
 
+function errWarn(result: VerifyResult | undefined) {
+  if (!result) return "";
+
+  if (result.status == "Error") {
+    return " error";
+  }
+
+  if (result.status == "Warning") {
+    return " warning";
+  }
+
+  return "";
+}
+
 export function DnsVerificationResult({ domainVerified, verificationResult }: DnsVerificationProps) {
   return (
     <Box pos="relative">
@@ -45,10 +59,10 @@ export function DnsVerificationResult({ domainVerified, verificationResult }: Dn
       />
       <List m="sm" spacing="md">
         <List.Item icon={icons[verificationResult?.dkim.status ?? "Warning"]}>
-          DKIM: {verificationResult?.dkim.reason}
+          DKIM{errWarn(verificationResult?.dkim)}: {verificationResult?.dkim.reason}
         </List.Item>
         <List.Item icon={icons[verificationResult?.spf.status ?? "Warning"]}>
-          SPF: {verificationResult?.spf.reason}
+          SPF{errWarn(verificationResult?.spf)}: {verificationResult?.spf.reason}
           {verificationResult?.spf?.value && (
             <>
               <Code block style={{ whiteSpace: "pre-wrap" }} my="2">
@@ -61,10 +75,10 @@ export function DnsVerificationResult({ domainVerified, verificationResult }: Dn
           )}
         </List.Item>
         <List.Item icon={icons[verificationResult?.dmarc.status ?? "Warning"]}>
-          DMARC: {verificationResult?.dmarc.reason}
+          DMARC{errWarn(verificationResult?.dmarc)}: {verificationResult?.dmarc.reason}
           {verificationResult?.dmarc?.value && (
             <>
-              <Code block style={{ "white-space": "pre-wrap" }} my="2">
+              <Code block style={{ whiteSpace: "pre-wrap" }} my="2">
                 {verificationResult?.dmarc?.value}
               </Code>
               <Text span fs="italic" c="dimmed">
@@ -75,7 +89,7 @@ export function DnsVerificationResult({ domainVerified, verificationResult }: Dn
         </List.Item>
         {verificationResult?.a.status != "Success" && (
           <List.Item icon={icons[verificationResult?.a.status ?? "Warning"]}>
-            A record: {verificationResult?.a.reason}
+            A record{errWarn(verificationResult?.a)}: {verificationResult?.a.reason}
             <Text fs="italic" c="dimmed">
               Some mail services may require an A record to be set for the sender domain
             </Text>
