@@ -12,7 +12,8 @@ export function Breadcrumbs() {
   const { projects, currentProject } = useProjects();
   const { currentStream } = useStreams();
   const { currentCredential } = useCredentials();
-  const { domains, currentDomain } = useDomains();
+  const { domains: orgDomains, currentDomain: orgCurrentDomain } = useDomains(false);
+  const { currentDomain: projCurrentDomain } = useDomains(true);
   const { currentMessage } = useMessages();
   const { currentOrganization } = useOrganizations();
   const {
@@ -21,7 +22,7 @@ export function Breadcrumbs() {
   } = useRemails();
 
   if (!currentOrganization) {
-    return <></>;
+    return null;
   }
 
   const items: BreadcrumbItem[] = [];
@@ -40,7 +41,7 @@ export function Breadcrumbs() {
     items.push({ title: "Projects", route: "projects" });
   }
 
-  if (domains && routerState.name.startsWith("domains")) {
+  if (orgDomains && routerState.name.startsWith("domains")) {
     items.push({ title: "Domains", route: "domains" });
   }
 
@@ -58,14 +59,17 @@ export function Breadcrumbs() {
     });
   }
 
-  if (currentDomain) {
-    let route = "domains.domain";
-    if (currentProject) {
-      route = "projects.project.domains.domain";
-    }
+  if (orgCurrentDomain) {
     items.push({
-      title: currentDomain.domain,
-      route,
+      title: orgCurrentDomain.domain,
+      route: "domains.domain",
+    });
+  }
+
+  if (projCurrentDomain) {
+    items.push({
+      title: projCurrentDomain.domain,
+      route: "projects.project.domains.domain",
     });
   }
 

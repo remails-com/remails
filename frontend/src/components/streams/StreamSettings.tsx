@@ -3,24 +3,25 @@ import { useForm } from "@mantine/form";
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { useEffect } from "react";
 import { useMessages } from "../../hooks/useMessages.ts";
-import { Organization, Project } from "../../types.ts";
+import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails.ts";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { useStreams } from "../../hooks/useStreams.ts";
+import { Loader } from "../../Loader.tsx";
 
 interface FormValues {
   name: string;
 }
 
-interface StreamSettingsProps {
-  currentStream: Project;
-  currentOrganization: Organization;
-  currentProject: Project;
-}
-
-export default function StreamSettings({ currentStream, currentOrganization, currentProject }: StreamSettingsProps) {
+export default function StreamSettings() {
   const { messages } = useMessages();
   const { dispatch, navigate } = useRemails();
+  const { currentOrganization } = useOrganizations();
+  const { currentStream } = useStreams();
+  const { currentProject } = useProjects();
 
   const canDelete = messages && messages.length === 0;
 
@@ -35,6 +36,10 @@ export default function StreamSettings({ currentStream, currentOrganization, cur
     form.resetDirty();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStream]);
+
+  if (!currentStream || !currentOrganization || !currentProject) {
+    return <Loader />;
+  }
 
   const confirmDeleteStream = (project: Project) => {
     modals.openConfirmModal({

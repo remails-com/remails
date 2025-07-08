@@ -20,7 +20,7 @@ export function StreamsOverview() {
   const rows = streams.map((stream) => (
     <Table.Tr key={stream.id}>
       <Table.Td>
-        <Link to="projects.project.streams.stream" params={{ stream_id: stream.id, tab: "messages" }}>
+        <Link to="projects.project.streams.stream" params={{ stream_id: stream.id, tab: "Messages" }}>
           {stream.name}
         </Link>
       </Table.Td>
@@ -31,7 +31,7 @@ export function StreamsOverview() {
           onClick={() =>
             navigate("projects.project.streams.stream", {
               stream_id: stream.id,
-              tab: "settings",
+              tab: "Settings",
             })
           }
         >
