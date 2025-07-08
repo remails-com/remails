@@ -109,7 +109,7 @@ jobs:
       - name: Build and push MTA image
         uses: docker/build-push-action@v6
         with:
-          file: ci.Dockerfile
+          file: deploy/ci.Dockerfile
           target: mta
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
@@ -118,7 +118,7 @@ jobs:
       - name: Build and push management image
         uses: docker/build-push-action@v6
         with:
-          file: ci.Dockerfile
+          file: deploy/ci.Dockerfile
           target: management
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
@@ -127,7 +127,7 @@ jobs:
       - name: Build and push retry image
         uses: docker/build-push-action@v6
         with:
-          file: ci.Dockerfile
+          file: deploy/ci.Dockerfile
           target: retry
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
@@ -136,12 +136,20 @@ jobs:
       - name: Build and push migrate_db image
         uses: docker/build-push-action@v6
         with:
-          file: ci.Dockerfile
+          file: deploy/ci.Dockerfile
           target: migrate-db
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
+      - name: Build and push backup_db image
+        uses: docker/build-push-action@v6
+        with:
+          file: deploy/backup.Dockerfile
+          push: true
+          context: deploy
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/tweedegolf/remails/backup_db:${{ needs.build-frontend.outputs.tag }}"
 
   helm-install:
     name: Helm install
@@ -173,6 +181,11 @@ jobs:
             --set moneybird.administration="${{ vars.MONEYBIRD_ADMINISTRATION_ID }}" \
             --set moneybird.api_key="${{ secrets.MONEYBIRD_API_KEY }}" \
             --set moneybird.webhook_url="${{ vars.MONEYBIRD_WEBHOOK_URL }}" \
+            --set backup.enabled="${{ vars.BACKUP_ENABLED }}" \
+            --set backup.s3_url="${{ vars.BACKUP_S3_URL }}" \
+            --set backup.restic_password="${{ secrets.RESTIC_PASSWORD }}" \
+            --set backup.scw_secret_key="${{ secrets.DB_BACKUP_SCW_SECRET_KEY }}" \
+            --set backup.scw_access_key="${{ vars.DB_BACKUP_SCW_ACCESS_KEY }}" \
             --set database_url="${{ secrets.DB_URL }}" \
             --set session_key="${{ secrets.SESSION_KEY }}" \
             --set rust_log="${{ vars.RUST_LOG }}" \
