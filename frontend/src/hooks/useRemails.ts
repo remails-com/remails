@@ -63,7 +63,7 @@ export function useLoadRemails() {
     if (route) {
       navigate(route.name, route.params);
     } else {
-      navigate("default");
+      navigate("not_found");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
