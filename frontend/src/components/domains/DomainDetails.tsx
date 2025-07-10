@@ -15,17 +15,16 @@ import Tabs from "../../layout/Tabs.tsx";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { formatDateTime } from "../../util.ts";
 
-export function DomainDetails({ projectDomains = false }: { projectDomains?: boolean }) {
+export function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentDomain } = useDomains(projectDomains);
+  const { currentDomain } = useDomains();
   const { dispatch, navigate } = useRemails();
   const [opened, { open, close }] = useDisclosure(false);
 
-  const domainsApi =
-    projectDomains && currentProject
-      ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
-      : `/api/organizations/${currentOrganization?.id}/domains`;
+  const domainsApi = currentProject
+    ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
+    : `/api/organizations/${currentOrganization?.id}/domains`;
   const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, currentDomain);
 
   if (!currentDomain || !currentOrganization) {
@@ -47,10 +46,9 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
   };
 
   const deleteDomain = async (domain: Domain) => {
-    const url =
-      projectDomains && currentProject
-        ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
-        : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
+    const url = currentProject
+      ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
+      : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
 
     const res = await fetch(url, {
       method: "DELETE",
@@ -63,7 +61,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
       });
       dispatch({ type: "remove_domain", domainId: domain.id });
 
-      if (projectDomains && currentProject) {
+      if (currentProject) {
         navigate("projects.project", { tab: "Domains" });
       } else {
         navigate("domains");

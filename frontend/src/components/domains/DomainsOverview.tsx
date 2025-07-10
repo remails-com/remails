@@ -61,17 +61,20 @@ function formatVerificationStatus(status: DomainVerificationResult | null) {
   );
 }
 
-export default function DomainsOverview({ projectDomains = false }: { projectDomains?: boolean }) {
+export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const { navigate } = useRemails();
+  const {
+    navigate,
+    state: { routerState },
+  } = useRemails();
   const { currentProject } = useProjects();
-  const { domains } = useDomains(projectDomains);
+  const { domains } = useDomains();
 
   if (domains === null) {
     return <Loader />;
   }
 
-  const route = projectDomains ? "projects.project.domains.domain" : "domains.domain";
+  const route = routerState.params.proj_id ? "projects.project.domains.domain" : "domains.domain";
 
   const rows = domains.map((domain) => (
     <Table.Tr key={domain.id}>

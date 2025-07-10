@@ -46,7 +46,7 @@ function Page() {
   }
 
   if (routeName == "projects.project.domains") {
-    return <DomainsOverview projectDomains={true} />;
+    return <ProjectDetails />;
   }
 
   if (routeName == "domains.domain") {
@@ -54,7 +54,7 @@ function Page() {
   }
 
   if (routeName == "projects.project.domains.domain") {
-    return <DomainDetails projectDomains={true} />;
+    return <DomainDetails />;
   }
 
   if (routeName == "projects.project.streams.stream.credentials.credential") {
@@ -78,7 +78,7 @@ function Page() {
   }
 
   console.error("Unknown route:", routeName);
-  return "Not Found";
+  return <NotFound />;
 }
 
 export function Pages() {

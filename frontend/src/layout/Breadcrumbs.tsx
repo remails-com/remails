@@ -12,8 +12,7 @@ export function Breadcrumbs() {
   const { projects, currentProject } = useProjects();
   const { currentStream } = useStreams();
   const { currentCredential } = useCredentials();
-  const { domains: orgDomains, currentDomain: orgCurrentDomain } = useDomains(false);
-  const { currentDomain: projCurrentDomain } = useDomains(true);
+  const { currentDomain } = useDomains();
   const { currentMessage } = useMessages();
   const { currentOrganization } = useOrganizations();
   const {
@@ -41,7 +40,7 @@ export function Breadcrumbs() {
     items.push({ title: "Projects", route: "projects" });
   }
 
-  if (orgDomains && routerState.name.startsWith("domains")) {
+  if (routerState.name.startsWith("domains")) {
     items.push({ title: "Domains", route: "domains" });
   }
 
@@ -54,22 +53,28 @@ export function Breadcrumbs() {
 
   if (currentStream) {
     items.push({
+      title: "Streams",
+      route: "projects.project",
+      params: { tab: "Streams" },
+    });
+    items.push({
       title: currentStream.name,
       route: "projects.project.streams.stream",
     });
   }
 
-  if (orgCurrentDomain) {
+  if (currentDomain) {
+    const orgDomain = !routerState.params.proj_id;
+    if (!orgDomain) {
+      items.push({
+        title: "Domains",
+        route: "projects.project",
+        params: { tab: "Domains" },
+      });
+    }
     items.push({
-      title: orgCurrentDomain.domain,
-      route: "domains.domain",
-    });
-  }
-
-  if (projCurrentDomain) {
-    items.push({
-      title: projCurrentDomain.domain,
-      route: "projects.project.domains.domain",
+      title: currentDomain.domain,
+      route: orgDomain ? "domains.domain" : "projects.project.domains.domain",
     });
   }
 
@@ -88,7 +93,7 @@ export function Breadcrumbs() {
   }
 
   const anchors = items.map((item) => (
-    <Anchor key={item.route} onClick={() => navigate(item.route)}>
+    <Anchor key={item.route} onClick={() => navigate(item.route, item.params)}>
       {item.title}
     </Anchor>
   ));
