@@ -3,8 +3,7 @@ use crate::{
         RemailsConfig,
         error::{ApiError, ApiResult},
     },
-    dkim::PrivateKey,
-    handler::dns::DnsResolver,
+    handler::dns::{DnsResolver, DomainVerificationStatus},
     models::{
         ApiDomain, ApiUser, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId,
     },
@@ -15,7 +14,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::{debug, info};
 
 fn has_write_access(
@@ -53,14 +52,20 @@ pub struct SpecificDomainPath {
 }
 
 pub async fn create_domain(
-    State(repo): State<DomainRepository>,
+    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
     user: ApiUser,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
 ) -> Result<impl IntoResponse, ApiError> {
     has_write_access(org_id, project_id, None, &user)?;
 
-    let domain: ApiDomain = repo.create(new, org_id, project_id).await?.into();
+    let domain = repo.create(new, org_id, project_id).await?;
+
+    let status = resolver
+        .verify_domain(&domain, &config.preferred_spf_record)
+        .await?;
+
+    let domain = ApiDomain::verified(domain, status);
 
     info!(
         user_id = user.id().to_string(),
@@ -73,32 +78,37 @@ pub async fn create_domain(
 }
 
 pub async fn list_domains(
-    State(repo): State<DomainRepository>,
+    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
     user: ApiUser,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
 ) -> ApiResult<Vec<ApiDomain>> {
     has_read_access(org_id, project_id, None, &user)?;
 
-    let domains = repo
-        .list(org_id, project_id)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<ApiDomain>>();
+    let domains = repo.list(org_id, project_id).await?;
+
+    let mut verified_domains = Vec::with_capacity(domains.len());
+
+    for domain in domains {
+        let status = resolver
+            .verify_domain(&domain, &config.preferred_spf_record)
+            .await?;
+
+        verified_domains.push(ApiDomain::verified(domain, status));
+    }
 
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
         project_id = project_id.map(|id| id.to_string()),
-        "listed {} domains",
-        domains.len()
+        "verified & listed {} domains",
+        verified_domains.len()
     );
 
-    Ok(Json(domains))
+    Ok(Json(verified_domains))
 }
 
 pub async fn get_domain(
-    State(repo): State<DomainRepository>,
+    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
     user: ApiUser,
     Path(SpecificDomainPath {
         org_id,
@@ -108,7 +118,13 @@ pub async fn get_domain(
 ) -> ApiResult<ApiDomain> {
     has_read_access(org_id, project_id, Some(domain_id), &user)?;
 
-    let domain: ApiDomain = repo.get(org_id, project_id, domain_id).await?.into();
+    let domain = repo.get(org_id, project_id, domain_id).await?;
+
+    let status = resolver
+        .verify_domain(&domain, &config.preferred_spf_record)
+        .await?;
+
+    let domain = ApiDomain::verified(domain, status);
 
     debug!(
         user_id = user.id().to_string(),
@@ -146,64 +162,6 @@ pub async fn delete_domain(
     Ok(Json(domain_id))
 }
 
-#[derive(Deserialize, Serialize)]
-pub(crate) enum VerifyResultStatus {
-    Success,
-    Warning,
-    Error,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct VerifyResult {
-    pub(crate) status: VerifyResultStatus,
-    pub(crate) reason: String,
-    pub(crate) value: Option<String>,
-}
-
-impl VerifyResult {
-    pub fn error(reason: impl Into<String>) -> Self {
-        VerifyResult {
-            status: VerifyResultStatus::Error,
-            reason: reason.into(),
-            value: None,
-        }
-    }
-    pub fn warning(reason: impl Into<String>, value: Option<String>) -> Self {
-        VerifyResult {
-            status: VerifyResultStatus::Warning,
-            reason: reason.into(),
-            value,
-        }
-    }
-    pub fn success(reason: impl Into<String>) -> Self {
-        VerifyResult {
-            status: VerifyResultStatus::Success,
-            reason: reason.into(),
-            value: None,
-        }
-    }
-}
-
-impl From<Result<&'static str, &'static str>> for VerifyResult {
-    fn from(value: Result<&'static str, &'static str>) -> Self {
-        VerifyResult {
-            status: value
-                .map(|_| VerifyResultStatus::Success)
-                .unwrap_or(VerifyResultStatus::Error),
-            reason: value.unwrap_or_else(|e| e).to_string(),
-            value: None,
-        }
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct DomainVerificationResult {
-    dkim: VerifyResult,
-    spf: VerifyResult,
-    dmarc: VerifyResult,
-    a: VerifyResult,
-}
-
 pub(super) async fn verify_domain(
     State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
     user: ApiUser,
@@ -212,23 +170,14 @@ pub(super) async fn verify_domain(
         project_id,
         domain_id,
     }): Path<SpecificDomainPath>,
-) -> ApiResult<DomainVerificationResult> {
+) -> ApiResult<DomainVerificationStatus> {
     has_write_access(org_id, project_id, Some(domain_id), &user)?;
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
-    let domain_name = domain.domain.clone();
-    let db_key = PrivateKey::new(&domain, "remails")?;
+    let status = resolver
+        .verify_domain(&domain, &config.preferred_spf_record)
+        .await?;
 
-    Ok(Json(DomainVerificationResult {
-        dkim: resolver
-            .verify_dkim(&domain_name, db_key.public_key())
-            .await
-            .into(),
-        spf: resolver
-            .verify_spf(&domain_name, &config.preferred_spf_record)
-            .await,
-        dmarc: resolver.verify_dmarc(&domain_name).await,
-        a: resolver.any_a_record(&domain_name).await,
-    }))
+    Ok(Json(status))
 }

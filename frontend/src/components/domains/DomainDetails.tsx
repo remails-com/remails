@@ -12,24 +12,20 @@ import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { useDisclosure } from "@mantine/hooks";
 import Tabs from "../../layout/Tabs.tsx";
-import { useEffect } from "react";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
+import { formatDateTime } from "../../util.ts";
 
-export function DomainDetails({ projectDomains = false }: { projectDomains?: boolean }) {
+export function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentDomain } = useDomains(projectDomains);
+  const { currentDomain } = useDomains();
   const { dispatch, navigate } = useRemails();
   const [opened, { open, close }] = useDisclosure(false);
 
-  const domainsApi =
-    projectDomains && currentProject
-      ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
-      : `/api/organizations/${currentOrganization?.id}/domains`;
-  const { verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => verifyDomain(currentDomain), [currentDomain]);
+  const domainsApi = currentProject
+    ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
+    : `/api/organizations/${currentOrganization?.id}/domains`;
+  const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, currentDomain);
 
   if (!currentDomain || !currentOrganization) {
     return null;
@@ -50,10 +46,9 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
   };
 
   const deleteDomain = async (domain: Domain) => {
-    const url =
-      projectDomains && currentProject
-        ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
-        : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
+    const url = currentProject
+      ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
+      : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
 
     const res = await fetch(url, {
       method: "DELETE",
@@ -66,7 +61,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
       });
       dispatch({ type: "remove_domain", domainId: domain.id });
 
-      if (projectDomains && currentProject) {
+      if (currentProject) {
         navigate("projects.project", { tab: "Domains" });
       } else {
         navigate("domains");
@@ -101,6 +96,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                 domainVerified={domainVerified}
                 verificationResult={verificationResult}
               />
+              Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "never"}
               <Group mt="xl">
                 <Tooltip label="Delete Domain">
                   <Button
@@ -128,7 +124,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                 <Tooltip label="Verify DNS records">
                   <Button
                     onClick={() => {
-                      verifyDomain(currentDomain);
+                      reverifyDomain(currentDomain);
                       open();
                     }}
                   >
@@ -158,9 +154,7 @@ export function DomainDetails({ projectDomains = false }: { projectDomains?: boo
                   <Button
                     disabled={domainVerified === "loading"}
                     variant="outline"
-                    onClick={() => {
-                      verifyDomain(currentDomain);
-                    }}
+                    onClick={() => reverifyDomain(currentDomain)}
                   >
                     Retry verification
                   </Button>

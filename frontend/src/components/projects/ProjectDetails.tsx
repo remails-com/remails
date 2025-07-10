@@ -16,7 +16,7 @@ export default function ProjectDetails() {
         {
           name: "Domains",
           icon: <IconWorldWww size={14} />,
-          content: <DomainsOverview projectDomains={true} />,
+          content: <DomainsOverview />,
         },
         {
           name: "Settings",

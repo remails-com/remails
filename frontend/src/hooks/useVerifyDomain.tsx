@@ -3,21 +3,26 @@ import { Domain, DomainVerificationResult, DomainVerificationStatus } from "../t
 import { notifications } from "@mantine/notifications";
 import { IconX } from "@tabler/icons-react";
 
-export function useVerifyDomain(domainsApi: string) {
-  const [domainVerified, setDomainVerified] = useState<DomainVerificationStatus>("loading");
-  const [verificationResult, setVerificationResult] = useState<DomainVerificationResult | null>(null);
+export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
+  const [verificationResult, setVerificationResult] = useState<DomainVerificationResult | null>(
+    domain?.verification_status ?? null
+  );
+  const [domainVerified, setDomainVerified] = useState<DomainVerificationStatus>(
+    verificationResult ? "verified" : "loading"
+  );
 
-  const verifyDomain = useCallback(
-    (newDomain: Domain | null) => {
+
+  const reverifyDomain = useCallback(
+    (domain: Domain | null) => {
       setVerificationResult(null);
-      if (!newDomain) {
+      if (!domain) {
         setDomainVerified("failed");
         return;
       }
       setDomainVerified("loading");
       setTimeout(
         () =>
-          fetch(`${domainsApi}/${newDomain.id}/verify`, {
+          fetch(`${domainsApi}/${domain.id}/verify`, {
             method: "POST",
           }).then((r) => {
             if (r.status !== 200) {
@@ -43,5 +48,5 @@ export function useVerifyDomain(domainsApi: string) {
     [domainsApi]
   );
 
-  return { verifyDomain, domainVerified, verificationResult };
+  return { reverifyDomain, domainVerified, verificationResult };
 }

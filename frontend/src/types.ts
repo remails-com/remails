@@ -190,12 +190,29 @@ export interface Stream {
   updated_at: string;
 }
 
+export interface VerifyResult {
+  status: "Success" | "Warning" | "Error";
+  reason: string;
+  value: string | null;
+}
+
+export interface DomainVerificationResult {
+  timestamp: string;
+  dkim: VerifyResult;
+  spf: VerifyResult;
+  dmarc: VerifyResult;
+  a: VerifyResult;
+}
+
+export type DomainVerificationStatus = "verified" | "failed" | "loading";
+
 export interface Domain {
   id: string;
   parent_id: { organization: string } | { project: string };
   domain: string;
   dkim_key_type: "rsa_sha265" | "ed25519";
   dkim_public_key: string;
+  verification_status: DomainVerificationResult | null;
   created_at: string;
   updated_at: string;
 }
@@ -222,21 +239,6 @@ export interface SignUpRequest extends PasswordLoginRequest {
   name: string;
   terms: boolean;
 }
-
-export interface VerifyResult {
-  status: "Success" | "Warning" | "Error";
-  reason: string;
-  value: string | null;
-}
-
-export interface DomainVerificationResult {
-  dkim: VerifyResult;
-  spf: VerifyResult;
-  dmarc: VerifyResult;
-  a: VerifyResult;
-}
-
-export type DomainVerificationStatus = "verified" | "failed" | "loading";
 
 export type ProductIdentifier =
   | "RMLS-FREE"
