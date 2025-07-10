@@ -157,8 +157,9 @@ export class Router {
       throw new Error(`Route with name ${name} not found`);
     }
 
-    const query = { ...params };
-    const pathParams = { ...this.pathParamCache, ...params };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const query = Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined));
+    const pathParams = { ...this.pathParamCache, ...query };
 
     this.pathParamCache = {};
 

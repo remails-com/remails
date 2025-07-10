@@ -85,4 +85,8 @@ export const routes: Route[] = [
     name: "not_found",
     path: "/404",
   },
+  {
+    name: "login",
+    path: "/login",
+  },
 ];

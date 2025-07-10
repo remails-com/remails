@@ -13,6 +13,7 @@ import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
 import { NavigationProgress } from "@mantine/nprogress";
 import { Quota } from "./components/statistics/Quota.tsx";
+import { Login } from "./Login.tsx";
 
 function Page() {
   const {
@@ -86,11 +87,19 @@ function Page() {
 
 export function Pages() {
   const {
-    state: { userFetched },
+    state: {
+      userFetched,
+      routerState: { name },
+    },
+    dispatch,
   } = useRemails();
 
   if (!userFetched) {
     return <NavigationProgress />;
+  }
+
+  if (name === "login") {
+    return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
   return (
