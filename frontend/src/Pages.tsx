@@ -7,13 +7,13 @@ import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import { DomainDetails } from "./components/domains/DomainDetails.tsx";
 import { CredentialDetails } from "./components/smtpCredentials/CredentialDetails.tsx";
-import { Text } from "@mantine/core";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
 import { NavigationProgress } from "@mantine/nprogress";
 import { Quota } from "./components/statistics/Quota.tsx";
 import { Login } from "./Login.tsx";
+import { NotFound } from "./components/NotFound.tsx";
 
 function Page() {
   const {
@@ -73,10 +73,6 @@ function Page() {
     return <MessageDetails />;
   }
 
-  if (routeName == "not_found") {
-    return <Text>Not Found</Text>;
-  }
-
   if (routeName == "default") {
     return null;
   }
@@ -100,6 +96,10 @@ export function Pages() {
 
   if (name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
+  }
+
+  if (name === "not_found") {
+    return <NotFound />;
   }
 
   return (

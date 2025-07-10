@@ -26,8 +26,9 @@ export default async function apiMiddleware(
   let newOrgId = navState.to.params.org_id;
   let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
 
+  let user: WhoamiResponse | null = navState.state.user;
   if (navState.state.user === null) {
-    const user = await get<WhoamiResponse>("/api/whoami");
+    user = await get<WhoamiResponse>("/api/whoami");
 
     if (user === null || "error" in user) {
       dispatch({ type: "set_user", user: null });
@@ -42,16 +43,25 @@ export default async function apiMiddleware(
     dispatch({ type: "set_config", config: await get("/api/config") });
   }
 
+  let organizations = navState.state.organizations;
   if (navState.state.organizations === null) {
-    const organizations = await get<Organization[]>("/api/organizations");
+    organizations = await get<Organization[]>("/api/organizations");
     dispatch({ type: "set_organizations", organizations });
+  }
 
-    // navigate to the first organization if none is selected
-    if (!navState.to.params.org_id && organizations.length > 0) {
-      navState.to = router.navigate("projects", { org_id: organizations[0].id });
-      orgChanged = true;
-      newOrgId = organizations[0].id;
-    }
+  // navigate to the first organization if none is selected
+  if (
+    navState.to.name === "default" &&
+    user?.roles &&
+    user?.roles.length > 0 &&
+    organizations &&
+    organizations.length > 0
+  ) {
+    newOrgId = user?.roles.find((r) => r.type === "organization_admin")?.id || organizations[0].id;
+    navState.to = router.navigate("projects", {
+      org_id: newOrgId,
+    });
+    orgChanged = true;
   }
 
   const newProjId = navState.to.params.proj_id;
