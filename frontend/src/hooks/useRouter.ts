@@ -26,7 +26,13 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     }
 
     busy.current = true;
-    let routerState = router.navigate(name, params || {});
+    let routerState;
+    try {
+      routerState = router.navigate(name, params || {});
+    } catch (e) {
+      console.error(e);
+      routerState = router.navigate("not_found", {});
+    }
 
     dispatch({
       type: "set_next_router_state",
@@ -42,7 +48,12 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     };
 
     for (const mw of middleware) {
-      routerState = await mw(navState, router, dispatch);
+      try {
+        routerState = await mw(navState, router, dispatch);
+      } catch (e) {
+        console.error(e);
+        routerState = router.navigate("not_found", {});
+      }
     }
 
     if (pushState) {
@@ -65,11 +76,11 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
 
   // handle back / forward events
   useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
+    const onPopState = async (event: PopStateEvent) => {
       if (event.state?.routerState) {
-        navigate(event.state.routerState.name, event.state.routerState.params, false);
+        await navigate(event.state.routerState.name, event.state.routerState.params, false);
       } else {
-        navigate(router.initialState.name, router.initialState.params, false);
+        await navigate(router.initialState.name, router.initialState.params, false);
       }
     };
 

@@ -7,12 +7,12 @@ import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import { DomainDetails } from "./components/domains/DomainDetails.tsx";
 import { CredentialDetails } from "./components/smtpCredentials/CredentialDetails.tsx";
-import { Text } from "@mantine/core";
 import { Settings } from "./components/settings/Settings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
 import { NavigationProgress } from "@mantine/nprogress";
 import { Quota } from "./components/statistics/Quota.tsx";
+import { NotFound } from "./components/NotFound.tsx";
 
 function Page() {
   const {
@@ -72,10 +72,6 @@ function Page() {
     return <MessageDetails />;
   }
 
-  if (routeName == "not_found") {
-    return <Text>Not Found</Text>;
-  }
-
   if (routeName == "default") {
     return null;
   }
@@ -86,11 +82,17 @@ function Page() {
 
 export function Pages() {
   const {
-    state: { userFetched },
+    state: { userFetched, routerState },
   } = useRemails();
+
+  const routeName = routerState.name;
 
   if (!userFetched) {
     return <NavigationProgress />;
+  }
+
+  if (routeName === "not_found") {
+    return <NotFound />;
   }
 
   return (

@@ -1,4 +1,4 @@
-import { Code, Box, LoadingOverlay, Flex, List, Text, ThemeIcon } from "@mantine/core";
+import { Box, Code, Flex, List, LoadingOverlay, Text, ThemeIcon } from "@mantine/core";
 import { IconCheck, IconExclamationMark, IconX } from "@tabler/icons-react";
 import { DomainVerificationResult, DomainVerificationStatus, VerifyResult } from "../../types";
 import { ReactElement } from "react";
@@ -75,8 +75,10 @@ export function DnsVerificationResult({ domainVerified, verificationResult }: Dn
         </List.Item>
         {verificationResult?.a.status != "Success" && (
           <List.Item icon={icons[verificationResult?.a.status ?? "Warning"]}>
-            A record: {verificationResult?.a.reason} (some mail services may require an A record to be set for the
-            sender domain)
+            A record: {verificationResult?.a.reason}
+            <Text fs="italic" c="dimmed">
+              Some mail services may require an A record to be set for the sender domain
+            </Text>
           </List.Item>
         )}
       </List>
