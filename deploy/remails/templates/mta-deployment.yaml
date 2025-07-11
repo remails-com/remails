@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mta
+  namespace: {{ .Release.Namespace }}
   labels:
     app: mta
     version: {{ .Chart.AppVersion }}
@@ -10,10 +11,12 @@ spec:
   selector:
     matchLabels:
       app: mta
+      environment: {{ .Values.environment }}
   template:
     metadata:
       labels:
         app: mta
+        environment: {{ .Values.environment }}
         version: {{ .Chart.AppVersion }}
     spec:
     {{- with .Values.imagePullSecrets }}
@@ -46,7 +49,7 @@ spec:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
             - name: RUST_LOG
-              value:  {{ .Values.rust_log | quote }}
+              value: {{ .Values.rust_log | quote }}
             - name: SMTP_LISTEN_ADDR
               value: "0.0.0.0:3025"
             - name: SMTP_SERVER_NAME

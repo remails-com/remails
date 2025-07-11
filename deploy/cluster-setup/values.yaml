@@ -1,0 +1,55 @@
+scaleway-certmanager-webhook:
+  certManager:
+    namespace: cert-manager
+  secret:
+    accessKey:
+    secretKey:
+
+nginxLoadBalancer:
+  scw_loadbalancers: # TODO https://www.scaleway.com/en/docs/kubernetes/reference-content/multi-az-clusters/#dns-with-dynamic-record-health-check
+    - zone: "nl-ams-1"
+      # 51.15.60.162 and 2001:bc8:1640:6::
+      ip_ids: "5d59bfa3-ccbc-4f59-8ecd-8a0a576a0546,96195995-6c04-4d4b-9e9c-a059833dfaa4"
+    - zone: "nl-ams-2"
+      # 51.158.231.158 and 2001:bc8:5090:14::
+      ip_ids: "26982c39-c2da-4e53-a133-794f2b824e34,bd902354-c928-4672-a137-432ea8e1cb7f"
+  scw_loadbalancer_type: "lb-s" # available are "lb-s", "lb-gp-m", "lb-pg-l", and "lb-gp-xl"
+
+namespaces:
+  - name: remails-production
+  - name: remails-staging
+
+docker:
+  - url: ghcr.io
+    username: pohlm01
+    password: personal-access-token-with-packages-read-access
+
+ingress-nginx:
+  namespaceOverride: ingress
+  controller:
+    config:
+      use-forwarded-headers: "true"
+      compute-full-forwarded-for: "true"
+      use-proxy-protocol: "true"
+    kind: DaemonSet
+    service:
+      enabled: false
+    livenessProbe:
+      httpGet:
+        path: "/healthz"
+        port: 10254
+        scheme: HTTP
+
+    readinessProbe:
+      httpGet:
+        path: "/healthz"
+        port: 10254
+        scheme: HTTP
+    resources:
+      ##  limits:
+      ##    cpu: 100m
+      ##    memory: 90Mi
+      requests:
+        cpu: 100m
+        memory: 90Mi
+

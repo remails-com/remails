@@ -9,8 +9,7 @@ on:
         required: true
         type: choice
         options:
-          - Staging UpCloud private NL-AMS
-          - Production UpCloud private NL-AMS
+          - Staging Scaleway
 
 permissions:
   packages: write

@@ -2,17 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: management
+  namespace: {{ .Release.Namespace }}
   labels:
     app: management
+    environment: {{ .Values.environment }}
     version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.management.replicas }}
   selector:
     matchLabels:
+      environment: {{ .Values.environment }}
       app: management
   template:
     metadata:
       labels:
+        environment: {{ .Values.environment }}
         app: management
         version: {{ .Chart.AppVersion }}
     spec:
