@@ -9,16 +9,19 @@ export default function StreamDetails() {
     <Tabs
       tabs={[
         {
+          route: "projects.project.streams.stream.messages",
           name: "Messages",
           icon: <IconMessage size={14} />,
           content: <MessageLog />,
         },
         {
+          route: "projects.project.streams.stream.credentials",
           name: "Credentials",
           icon: <IconKey size={14} />,
           content: <CredentialsOverview />,
         },
         {
+          route: "projects.project.streams.stream.settings",
           name: "Settings",
           icon: <IconSettings size={14} />,
           content: <StreamSettings />,

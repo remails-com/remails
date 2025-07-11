@@ -9,16 +9,19 @@ export default function ProjectDetails() {
     <Tabs
       tabs={[
         {
+          route: "projects.project.streams",
           name: "Streams",
           icon: <IconAccessPoint size={14} />,
           content: <StreamsOverview />,
         },
         {
+          route: "projects.project.domains",
           name: "Domains",
           icon: <IconWorldWww size={14} />,
           content: <DomainsOverview />,
         },
         {
+          route: "projects.project.settings",
           name: "Settings",
           icon: <IconSettings size={14} />,
           content: <ProjectSettings />,

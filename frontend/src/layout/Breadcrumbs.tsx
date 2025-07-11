@@ -54,8 +54,7 @@ export function Breadcrumbs() {
   if (currentStream) {
     items.push({
       title: "Streams",
-      route: "projects.project",
-      params: { tab: "Streams" },
+      route: "projects.project.streams",
     });
     items.push({
       title: currentStream.name,
@@ -68,8 +67,7 @@ export function Breadcrumbs() {
     if (!orgDomain) {
       items.push({
         title: "Domains",
-        route: "projects.project",
-        params: { tab: "Domains" },
+        route: "projects.project.domains",
       });
     }
     items.push({

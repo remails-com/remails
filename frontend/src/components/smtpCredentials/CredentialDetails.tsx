@@ -70,7 +70,7 @@ export default function CredentialDetails() {
         color: "green",
       });
       dispatch({ type: "remove_credential", credentialId: credential.id });
-      navigate("projects.project.streams.stream", { tab: "Credentials" });
+      navigate("projects.project.streams.stream.credentials");
     } else {
       notifications.show({
         title: "Error",

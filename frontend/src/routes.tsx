@@ -23,18 +23,6 @@ export const routes: Route[] = [
         content: <ProjectDetails />,
         children: [
           {
-            name: "domains",
-            path: "/domains",
-            content: null,
-            children: [
-              {
-                name: "domain",
-                path: "/{domain_id}",
-                content: <DomainDetails />,
-              },
-            ],
-          },
-          {
             name: "streams",
             path: "/streams",
             content: null,
@@ -44,6 +32,18 @@ export const routes: Route[] = [
                 path: "/{stream_id}",
                 content: <StreamDetails />,
                 children: [
+                  {
+                    name: "messages",
+                    path: "/messages",
+                    content: null,
+                    children: [
+                      {
+                        name: "message",
+                        path: "/{message_id}",
+                        content: <MessageDetails />,
+                      },
+                    ],
+                  },
                   {
                     name: "credentials",
                     path: "/credentials",
@@ -57,20 +57,37 @@ export const routes: Route[] = [
                     ],
                   },
                   {
-                    name: "messages",
-                    path: "/messages",
+                    name: "settings",
+                    path: "/settings",
                     content: null,
-                    children: [
-                      {
-                        name: "message",
-                        path: "/{message_id}",
-                        content: <MessageDetails />,
-                      },
-                    ],
                   },
                 ],
               },
             ],
+          },
+          {
+            name: "domains",
+            path: "/domains",
+            content: null,
+            children: [
+              {
+                name: "domain",
+                path: "/{domain_id}",
+                content: <DomainDetails />,
+                children: [
+                  {
+                    name: "dns",
+                    path: "/dns",
+                    content: null,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: "settings",
+            path: "/settings",
+            content: null,
           },
         ],
       },
@@ -85,6 +102,13 @@ export const routes: Route[] = [
         name: "domain",
         path: "/{domain_id}",
         content: <DomainDetails />,
+        children: [
+          {
+            name: "dns",
+            path: "/dns",
+            content: null,
+          },
+        ],
       },
     ],
   },
