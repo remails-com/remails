@@ -16,7 +16,7 @@ interface FormValues {
   description: string;
 }
 
-export function CredentialDetails() {
+export default function CredentialDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentStream } = useStreams();
   const { currentProject } = useProjects();

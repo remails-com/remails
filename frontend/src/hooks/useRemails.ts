@@ -1,12 +1,17 @@
 import { ActionDispatch, createContext, useContext, useEffect, useReducer } from "react";
 import { Action, State } from "../types.ts";
 import { useRouter } from "./useRouter.ts";
-import { routes } from "../routes.ts";
-import { Navigate, Router } from "../router.ts";
+import { routes } from "../routes.tsx";
+import { Navigate, Render, Router } from "../router.ts";
 import { reducer } from "../reducer.ts";
 import apiMiddleware from "../apiMiddleware.ts";
 
-export const RemailsContext = createContext<{ state: State; dispatch: ActionDispatch<[Action]>; navigate: Navigate }>({
+export const RemailsContext = createContext<{
+  state: State;
+  dispatch: ActionDispatch<[Action]>;
+  navigate: Navigate;
+  render: Render;
+}>({
   state: {
     user: null,
     userFetched: false,
@@ -28,6 +33,9 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
   navigate: () => {
+    throw new Error("RemailsContext must be used within RemailsProvider");
+  },
+  render: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
 });
@@ -54,7 +62,7 @@ export function useLoadRemails() {
     nextRouterState: null,
   });
 
-  const navigate = useRouter(router, state, dispatch, [apiMiddleware]);
+  const { navigate, render } = useRouter(router, state, dispatch, [apiMiddleware]);
 
   useEffect(() => {
     // initial navigation
@@ -72,5 +80,6 @@ export function useLoadRemails() {
     state,
     dispatch,
     navigate,
+    render,
   };
 }

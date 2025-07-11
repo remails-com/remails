@@ -1,5 +1,5 @@
 import { Dispatch, useEffect, useRef } from "react";
-import { FullRouterState, RouteParams, Router, RouterState } from "../router";
+import { FullRouterState, RouteName, RouteParams, Router, RouterState } from "../router";
 import { Action, State } from "../types";
 import { nprogress } from "@mantine/nprogress";
 
@@ -74,6 +74,10 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     return true;
   };
 
+  const render = (name: RouteName) => {
+    return router.render(name);
+  };
+
   // handle back / forward events
   useEffect(() => {
     const onPopState = async (event: PopStateEvent) => {
@@ -93,5 +97,5 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, router]);
 
-  return navigate;
+  return { navigate, render };
 }

@@ -1,6 +1,11 @@
+import { JSX } from "react";
+
+type RouteContent = JSX.Element | null;
+
 export type RouteName = string;
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
+export type Render = (name: RouteName) => RouteContent;
 
 export interface RouterState {
   name: RouteName;
@@ -14,12 +19,14 @@ export interface FullRouterState extends RouterState {
 export interface Route {
   name: string;
   path: string;
+  content: RouteContent;
   children?: Route[];
 }
 
 interface FlatRoute {
   name: RouteName;
   path: string;
+  content: RouteContent;
 }
 
 export function flattenRoutes(routes: Route[]): FlatRoute[] {
@@ -28,6 +35,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
       const flatRoute: FlatRoute = {
         name: route.name,
         path: route.path,
+        content: route.content,
       };
 
       if (route.children) {
@@ -37,6 +45,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
           ...childRoutes.map((childRoute) => ({
             name: `${route.name}.${childRoute.name}`,
             path: `${route.path}${childRoute.path}`,
+            content: childRoute.content || route.content, // show parent's content if child has no content
           })),
         ];
       }
@@ -150,15 +159,23 @@ export class Router {
     return null;
   }
 
-  navigate(name: RouteName, params: RouteParams): FullRouterState {
-    let path = this.routes.find((route) => route.name === name)?.path;
+  render(name: RouteName) {
+    const route = this.routes.find((route) => route.name === name);
+    if (!route) {
+      throw new Error(`Route with name ${name} not found`);
+    }
+    return route.content;
+  }
 
-    if (!path) {
+  navigate(name: RouteName, params: RouteParams): FullRouterState {
+    const route = this.routes.find((route) => route.name === name);
+    if (!route) {
       throw new Error(`Route with name ${name} not found`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const query = Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined));
+    let path = route.path;
+
+    const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
     const pathParams = { ...this.pathParamCache, ...query };
 
     this.pathParamCache = {};

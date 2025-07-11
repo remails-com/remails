@@ -15,7 +15,7 @@ import Tabs from "../../layout/Tabs.tsx";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { formatDateTime } from "../../util.ts";
 
-export function DomainDetails() {
+export default function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentDomain } = useDomains();
