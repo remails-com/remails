@@ -1,8 +1,8 @@
 import { JSX } from "react";
+import { RouteName } from "./routes";
 
 type RouteContent = JSX.Element | null;
 
-export type RouteName = string;
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
 export type Render = (name: RouteName) => RouteContent;
@@ -33,7 +33,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
   return routes
     .map((route) => {
       const flatRoute: FlatRoute = {
-        name: route.name,
+        name: route.name as RouteName,
         path: route.path,
         content: route.content,
       };
@@ -43,7 +43,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
         return [
           flatRoute,
           ...childRoutes.map((childRoute) => ({
-            name: `${route.name}.${childRoute.name}`,
+            name: `${route.name}.${childRoute.name}` as RouteName,
             path: `${route.path}${childRoute.path}`,
             content: childRoute.content || route.content, // show parent's content if child has no content
           })),
@@ -137,8 +137,8 @@ export class Router {
   }
 
   match(path: string): {
+    name: RouteName;
     params: RouteParams;
-    name: string;
   } | null {
     const pathParts = path.split("?");
     const basePath = pathParts[0];

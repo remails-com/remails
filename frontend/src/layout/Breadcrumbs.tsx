@@ -1,12 +1,19 @@
 import { Anchor, Breadcrumbs as MantineBreadcrumbs } from "@mantine/core";
+import { useCredentials } from "../hooks/useCredentials.ts";
+import { useDomains } from "../hooks/useDomains.ts";
+import { useMessages } from "../hooks/useMessages.ts";
+import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
-import { BreadcrumbItem } from "../types.ts";
-import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useStreams } from "../hooks/useStreams.ts";
-import { useDomains } from "../hooks/useDomains.ts";
-import { useCredentials } from "../hooks/useCredentials.ts";
-import { useMessages } from "../hooks/useMessages.ts";
+import { RouteParams } from "../router.ts";
+import { RouteName } from "../routes.tsx";
+
+interface BreadcrumbItem {
+  title: string;
+  route: RouteName;
+  params?: RouteParams;
+}
 
 export function Breadcrumbs() {
   const { projects, currentProject } = useProjects();

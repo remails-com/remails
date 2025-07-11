@@ -24,7 +24,7 @@ export const RemailsContext = createContext<{
     credentials: null,
     config: null,
     routerState: {
-      name: "",
+      name: "default",
       params: {},
     },
     nextRouterState: null,

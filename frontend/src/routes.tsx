@@ -11,7 +11,7 @@ import Settings from "./components/settings/Settings.tsx";
 import StreamDetails from "./components/streams/StreamDetails.tsx";
 import { Route } from "./router.ts";
 
-export const routes: Route[] = [
+export const routes = [
   {
     name: "projects",
     path: "/{org_id}/projects",
@@ -142,4 +142,17 @@ export const routes: Route[] = [
     path: "/login",
     content: null,
   },
-];
+] as const satisfies Route[];
+
+// Recursive type to get all the route names from the Route[]
+type GetRouteNames<R extends readonly Route[], Prefix extends string = ""> = {
+  [K in keyof R]: R[K] extends { name: infer Name extends string; children?: readonly Route[] }
+    ?
+        | (Prefix extends "" ? Name : `${Prefix}.${Name}`)
+        | (R[K]["children"] extends readonly Route[]
+            ? GetRouteNames<R[K]["children"], Prefix extends "" ? Name : `${Prefix}.${Name}`>
+            : never)
+    : never;
+}[number];
+
+export type RouteName = GetRouteNames<typeof routes>;

@@ -1,9 +1,10 @@
+import { Container, Tabs as MTabs } from "@mantine/core";
 import React from "react";
 import { useRemails } from "../hooks/useRemails";
-import { Container, Tabs as MTabs } from "@mantine/core";
+import { RouteName } from "../routes";
 
 type Tab = {
-  route: string;
+  route: RouteName;
   name: string;
   icon: React.ReactNode;
   content: React.JSX.Element;
@@ -21,7 +22,7 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
   const tab_route = tabs.find((t) => t.route == routerState.name) ? routerState.name : default_route;
 
   const setActiveTab = (route: string | null) => {
-    navigate(route || default_route);
+    navigate((route as RouteName | null) || default_route);
   };
 
   return (

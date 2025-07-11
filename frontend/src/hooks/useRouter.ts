@@ -1,7 +1,8 @@
-import { Dispatch, useEffect, useRef } from "react";
-import { FullRouterState, RouteName, RouteParams, Router, RouterState } from "../router";
-import { Action, State } from "../types";
 import { nprogress } from "@mantine/nprogress";
+import { Dispatch, useEffect, useRef } from "react";
+import { FullRouterState, RouteParams, Router, RouterState } from "../router";
+import { RouteName } from "../routes";
+import { Action, State } from "../types";
 
 export interface NavigationState {
   from: RouterState;
@@ -19,7 +20,7 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
   const busy = useRef(false);
 
   // Navigate function to change the route
-  const navigate = async (name: string, params?: RouteParams, pushState = true) => {
+  const navigate = async (name: RouteName, params?: RouteParams, pushState = true) => {
     if (busy.current) {
       console.warn("Navigation is already in progress, ignoring new request.");
       return false;
