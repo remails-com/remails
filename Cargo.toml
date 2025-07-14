@@ -55,7 +55,7 @@ memory-serve = "1.2.1"
 derive_more = { version = "2.0.1", default-features = false, features = ["from", "display", "deref", "debug", "from_str"] }
 rand = "0.9.1"
 hickory-resolver = "0.25.2"
-aws-lc-rs = "1.13.1"
+aws-lc-rs = "1.13.2"
 mail-auth = "0.7.1"
 rustls-pemfile = "2.2.0"
 humansize = "2.1.3"
