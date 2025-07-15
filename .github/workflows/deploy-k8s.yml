@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - Staging Scaleway
+          - Production Scaleway
 
 permissions:
   packages: write
@@ -191,9 +192,7 @@ jobs:
             --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
             --set github_oauth.client_id="${{ vars.OAUTH_CLIENT_ID_GITHUB }}" \
             --set smtp.server_name="${{ vars.SMTP_SERVER_NAME }}" \
-            --set smtp.load_balancer_plan="${{ vars.SMTP_LOAD_BALANCER_PLAN }}" \
+            --set smtp.scw_loadbalancer_type="${{ vars.SMTP_LOAD_BALANCER_TYPE }}" \
+            --set-json 'smtp.scw_loadbalancers=${{ vars.SMTP_LOAD_BALANCERS }}' \
             --set management.server_name="${{ vars.MANAGEMENT_SERVER_NAME }}" \
-            --set management.certificate_bundle_name="${{ vars.MANAGEMENT_CERTIFICATE_BUNDLE_NAME }}" \
-            --set management.certificate_bundle_uuid="${{ vars.MANAGEMENT_CERTIFICATE_BUNDLE_UUID }}" \
-            --set management.load_balancer_plan="${{ vars.MANAGEMENT_LOAD_BALANCER_PLAN }}" \
             --namespace ${{ vars.namespace }}

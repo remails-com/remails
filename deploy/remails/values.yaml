@@ -37,8 +37,7 @@ smtp:
   # Influences which type of Let's Encrypt certificate should be used
   certificate_type: "production"
 
-  # TODO make this configurable via Github
-  scw_loadbalancers: # TODO https://www.scaleway.com/en/docs/kubernetes/reference-content/multi-az-clusters/#dns-with-dynamic-record-health-check
+  scw_loadbalancers:
     - zone: "nl-ams-1"
       # 51.15.47.245 and 2001:bc8:1640:f::
       ip_ids: "6fd80879-44b6-435f-852c-08701718f6af,9b9a9cf2-0b42-4301-a803-6f2f753cb166"

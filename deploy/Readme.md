@@ -14,9 +14,7 @@ helm upgrade --install cluster-setup ./cluster-setup \
   --namespace cert-manager \
   --set scaleway-certmanager-webhook.secret.accessKey=$SCW_ACCESS_KEY \
   --set scaleway-certmanager-webhook.secret.secretKey=$SCW_SECRET_KEY \
-  --set docker[0].username=$GITHUB_USERNAME \
-  --set docker[0].password=$GITHUB_TOKEN \
-  --set docker[0].url=ghcr.io
+  --set-json 'docker=[{"username": "$GITHUB_USERNAME", "password": "$GITHUB_TOKEN", "url": "ghcr.io"}]'
 ```
 
 5. Setup Database

@@ -16,7 +16,7 @@ metadata:
 spec:
   selector:
     app: mta
-    environment: {{ .Values.environment }}
+    environment: {{ $.Values.environment }}
   ports:
   {{- range $port := $.Values.smtp.ports }}
     - name: smtp-{{ $port }}
