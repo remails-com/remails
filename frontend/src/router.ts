@@ -1,11 +1,7 @@
-import { JSX } from "react";
 import { RouteName } from "./routes";
-
-type RouteContent = JSX.Element | null;
 
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
-export type Render = (name: RouteName) => RouteContent;
 
 export interface RouterState {
   name: RouteName;
@@ -19,14 +15,12 @@ export interface FullRouterState extends RouterState {
 export interface Route {
   name: string;
   path: string;
-  content: RouteContent;
   children?: Route[];
 }
 
 interface FlatRoute {
   name: RouteName;
   path: string;
-  content: RouteContent;
 }
 
 export function flattenRoutes(routes: Route[]): FlatRoute[] {
@@ -35,7 +29,6 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
       const flatRoute: FlatRoute = {
         name: route.name as RouteName,
         path: route.path,
-        content: route.content,
       };
 
       if (route.children) {
@@ -45,7 +38,6 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
           ...childRoutes.map((childRoute) => ({
             name: `${route.name}.${childRoute.name}` as RouteName,
             path: `${route.path}${childRoute.path}`,
-            content: childRoute.content || route.content, // show parent's content if child has no content
           })),
         ];
       }
@@ -157,14 +149,6 @@ export class Router {
     }
 
     return null;
-  }
-
-  render(name: RouteName) {
-    const route = this.routes.find((route) => route.name === name);
-    if (!route) {
-      throw new Error(`Route with name ${name} not found`);
-    }
-    return route.content;
   }
 
   navigate(name: RouteName, params: RouteParams): FullRouterState {

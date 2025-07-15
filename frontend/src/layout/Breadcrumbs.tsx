@@ -6,7 +6,7 @@ import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useStreams } from "../hooks/useStreams.ts";
-import { RouteName } from "../routes.tsx";
+import { RouteName } from "../routes.ts";
 import { JSX } from "react";
 
 interface BreadcrumbItem {
