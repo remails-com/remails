@@ -20,7 +20,7 @@ export default function ProjectsOverview() {
   const rows = projects.map((project) => (
     <Table.Tr key={project.id}>
       <Table.Td>
-        <Link to="projects.project" params={{ proj_id: project.id, tab: "Streams" }}>
+        <Link to="projects.project.streams" params={{ proj_id: project.id }}>
           {project.name}
         </Link>
       </Table.Td>
@@ -29,9 +29,8 @@ export default function ProjectsOverview() {
         <Button
           variant="subtle"
           onClick={() =>
-            navigate("projects.project", {
+            navigate("projects.project.settings", {
               proj_id: project.id,
-              tab: "Settings",
             })
           }
         >

@@ -113,28 +113,12 @@ test("flattenRoutes", () => {
       path: "/{org_id}/projects/{proj_id}",
     },
     {
-      name: "projects.project.domains",
-      path: "/{org_id}/projects/{proj_id}/domains",
-    },
-    {
-      name: "projects.project.domains.domain",
-      path: "/{org_id}/projects/{proj_id}/domains/{domain_id}",
-    },
-    {
       name: "projects.project.streams",
       path: "/{org_id}/projects/{proj_id}/streams",
     },
     {
       name: "projects.project.streams.stream",
       path: "/{org_id}/projects/{proj_id}/streams/{stream_id}",
-    },
-    {
-      name: "projects.project.streams.stream.credentials",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials",
-    },
-    {
-      name: "projects.project.streams.stream.credentials.credential",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials/{credential_id}",
     },
     {
       name: "projects.project.streams.stream.messages",
@@ -145,12 +129,44 @@ test("flattenRoutes", () => {
       path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/messages/{message_id}",
     },
     {
+      name: "projects.project.streams.stream.credentials",
+      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials",
+    },
+    {
+      name: "projects.project.streams.stream.credentials.credential",
+      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials/{credential_id}",
+    },
+    {
+      name: "projects.project.streams.stream.settings",
+      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/settings",
+    },
+    {
+      name: "projects.project.domains",
+      path: "/{org_id}/projects/{proj_id}/domains",
+    },
+    {
+      name: "projects.project.domains.domain",
+      path: "/{org_id}/projects/{proj_id}/domains/{domain_id}",
+    },
+    {
+      name: "projects.project.domains.domain.dns",
+      path: "/{org_id}/projects/{proj_id}/domains/{domain_id}/dns",
+    },
+    {
+      name: "projects.project.settings",
+      path: "/{org_id}/projects/{proj_id}/settings",
+    },
+    {
       name: "domains",
       path: "/{org_id}/domains",
     },
     {
       name: "domains.domain",
       path: "/{org_id}/domains/{domain_id}",
+    },
+    {
+      name: "domains.domain.dns",
+      path: "/{org_id}/domains/{domain_id}/dns",
     },
     {
       name: "settings",

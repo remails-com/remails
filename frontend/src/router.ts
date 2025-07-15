@@ -1,4 +1,5 @@
-export type RouteName = string;
+import { RouteName } from "./routes";
+
 export type RouteParams = Record<string, string>;
 export type Navigate = (name: RouteName, params?: RouteParams) => void;
 
@@ -26,7 +27,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
   return routes
     .map((route) => {
       const flatRoute: FlatRoute = {
-        name: route.name,
+        name: route.name as RouteName,
         path: route.path,
       };
 
@@ -35,7 +36,7 @@ export function flattenRoutes(routes: Route[]): FlatRoute[] {
         return [
           flatRoute,
           ...childRoutes.map((childRoute) => ({
-            name: `${route.name}.${childRoute.name}`,
+            name: `${route.name}.${childRoute.name}` as RouteName,
             path: `${route.path}${childRoute.path}`,
           })),
         ];
@@ -128,8 +129,8 @@ export class Router {
   }
 
   match(path: string): {
+    name: RouteName;
     params: RouteParams;
-    name: string;
   } | null {
     const pathParts = path.split("?");
     const basePath = pathParts[0];
@@ -151,14 +152,14 @@ export class Router {
   }
 
   navigate(name: RouteName, params: RouteParams): FullRouterState {
-    let path = this.routes.find((route) => route.name === name)?.path;
-
-    if (!path) {
+    const route = this.routes.find((route) => route.name === name);
+    if (!route) {
       throw new Error(`Route with name ${name} not found`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const query = Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined));
+    let path = route.path;
+
+    const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
     const pathParams = { ...this.pathParamCache, ...query };
 
     this.pathParamCache = {};

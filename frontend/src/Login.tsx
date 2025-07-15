@@ -24,7 +24,7 @@ interface LoginProps {
   setUser: (user: User | null) => void;
 }
 
-export function Login({ setUser }: LoginProps) {
+export default function Login({ setUser }: LoginProps) {
   const {
     state: { routerState },
     navigate,

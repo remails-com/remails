@@ -7,7 +7,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 
-export function OrganizationsOverview() {
+export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
   const { organizations, currentOrganization } = useOrganizations();
   const { navigate } = useRemails();

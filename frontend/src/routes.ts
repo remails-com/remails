@@ -1,6 +1,6 @@
-import { Route } from "./router";
+import { Route } from "./router.ts";
 
-export const routes: Route[] = [
+export const routes = [
   {
     name: "projects",
     path: "/{org_id}/projects",
@@ -10,16 +10,6 @@ export const routes: Route[] = [
         path: "/{proj_id}",
         children: [
           {
-            name: "domains",
-            path: "/domains",
-            children: [
-              {
-                name: "domain",
-                path: "/{domain_id}",
-              },
-            ],
-          },
-          {
             name: "streams",
             path: "/streams",
             children: [
@@ -27,6 +17,16 @@ export const routes: Route[] = [
                 name: "stream",
                 path: "/{stream_id}",
                 children: [
+                  {
+                    name: "messages",
+                    path: "/messages",
+                    children: [
+                      {
+                        name: "message",
+                        path: "/{message_id}",
+                      },
+                    ],
+                  },
                   {
                     name: "credentials",
                     path: "/credentials",
@@ -38,18 +38,32 @@ export const routes: Route[] = [
                     ],
                   },
                   {
-                    name: "messages",
-                    path: "/messages",
-                    children: [
-                      {
-                        name: "message",
-                        path: "/{message_id}",
-                      },
-                    ],
+                    name: "settings",
+                    path: "/settings",
                   },
                 ],
               },
             ],
+          },
+          {
+            name: "domains",
+            path: "/domains",
+            children: [
+              {
+                name: "domain",
+                path: "/{domain_id}",
+                children: [
+                  {
+                    name: "dns",
+                    path: "/dns",
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: "settings",
+            path: "/settings",
           },
         ],
       },
@@ -62,6 +76,12 @@ export const routes: Route[] = [
       {
         name: "domain",
         path: "/{domain_id}",
+        children: [
+          {
+            name: "dns",
+            path: "/dns",
+          },
+        ],
       },
     ],
   },
@@ -89,4 +109,17 @@ export const routes: Route[] = [
     name: "login",
     path: "/login",
   },
-];
+] as const satisfies Route[];
+
+// Recursive type to get all the route names from the Route[]
+type GetRouteNames<R extends readonly Route[], Prefix extends string = ""> = {
+  [K in keyof R]: R[K] extends { name: infer Name extends string; children?: readonly Route[] }
+    ?
+        | (Prefix extends "" ? Name : `${Prefix}.${Name}`)
+        | (R[K]["children"] extends readonly Route[]
+            ? GetRouteNames<R[K]["children"], Prefix extends "" ? Name : `${Prefix}.${Name}`>
+            : never)
+    : never;
+}[number];
+
+export type RouteName = GetRouteNames<typeof routes>;

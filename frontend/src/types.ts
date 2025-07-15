@@ -1,4 +1,4 @@
-import { RouteParams, RouterState } from "./router";
+import { RouterState } from "./router";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
 
@@ -68,12 +68,6 @@ export interface State {
   config: RemailsConfig | null;
   routerState: RouterState;
   nextRouterState: RouterState | null;
-}
-
-export interface BreadcrumbItem {
-  title: string;
-  route: string;
-  params?: RouteParams;
 }
 
 export type Action =

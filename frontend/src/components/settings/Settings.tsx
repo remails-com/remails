@@ -19,7 +19,7 @@ interface PasswordForm {
   new_password2: string;
 }
 
-export function Settings() {
+export default function Settings() {
   const [opened, { open, close }] = useDisclosure(false);
   const { dispatch, navigate, state } = useRemails();
   const user = state.user!;

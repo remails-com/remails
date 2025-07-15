@@ -2,7 +2,7 @@ import { Card, Group, Progress, Text, Tooltip } from "@mantine/core";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { formatDate, formatNumber } from "../../util.ts";
 
-export function Quota() {
+export default function Quota() {
   const { currentOrganization } = useOrganizations();
 
   if (!currentOrganization) {

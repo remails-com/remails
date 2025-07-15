@@ -1,6 +1,7 @@
-import { RouteName, RouteParams } from "./router.ts";
-import { useRemails } from "./hooks/useRemails.ts";
 import { Anchor } from "@mantine/core";
+import { useRemails } from "./hooks/useRemails.ts";
+import { RouteParams } from "./router.ts";
+import { RouteName } from "./routes.ts";
 
 interface LinkProps {
   to: RouteName;

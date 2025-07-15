@@ -6,7 +6,11 @@ import { Navigate, Router } from "../router.ts";
 import { reducer } from "../reducer.ts";
 import apiMiddleware from "../apiMiddleware.ts";
 
-export const RemailsContext = createContext<{ state: State; dispatch: ActionDispatch<[Action]>; navigate: Navigate }>({
+export const RemailsContext = createContext<{
+  state: State;
+  dispatch: ActionDispatch<[Action]>;
+  navigate: Navigate;
+}>({
   state: {
     user: null,
     userFetched: false,
@@ -19,7 +23,7 @@ export const RemailsContext = createContext<{ state: State; dispatch: ActionDisp
     credentials: null,
     config: null,
     routerState: {
-      name: "",
+      name: "default",
       params: {},
     },
     nextRouterState: null,
@@ -54,7 +58,7 @@ export function useLoadRemails() {
     nextRouterState: null,
   });
 
-  const navigate = useRouter(router, state, dispatch, [apiMiddleware]);
+  const { navigate } = useRouter(router, state, dispatch, [apiMiddleware]);
 
   useEffect(() => {
     // initial navigation

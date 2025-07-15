@@ -3,8 +3,7 @@ import { useEffect, useState } from "react";
 import { useOrganizations } from "./useOrganizations.ts";
 import { useProjects } from "./useProjects.ts";
 import { useStreams } from "./useStreams.ts";
-import { Message } from "postcss";
-import { MessageMetadata } from "../types.ts";
+import { Message, MessageMetadata } from "../types.ts";
 
 export function useMessages() {
   const { currentOrganization } = useOrganizations();

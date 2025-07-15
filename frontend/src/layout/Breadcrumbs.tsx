@@ -1,15 +1,21 @@
-import { Anchor, Breadcrumbs as MantineBreadcrumbs } from "@mantine/core";
+import { Anchor, Breadcrumbs as MantineBreadcrumbs, Text } from "@mantine/core";
+import { useCredentials } from "../hooks/useCredentials.ts";
+import { useDomains } from "../hooks/useDomains.ts";
+import { useMessages } from "../hooks/useMessages.ts";
+import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
-import { BreadcrumbItem } from "../types.ts";
-import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useStreams } from "../hooks/useStreams.ts";
-import { useDomains } from "../hooks/useDomains.ts";
-import { useCredentials } from "../hooks/useCredentials.ts";
-import { useMessages } from "../hooks/useMessages.ts";
+import { RouteName } from "../routes.ts";
+import { JSX } from "react";
+
+interface BreadcrumbItem {
+  title: string | JSX.Element;
+  route: RouteName;
+}
 
 export function Breadcrumbs() {
-  const { projects, currentProject } = useProjects();
+  const { currentProject } = useProjects();
   const { currentStream } = useStreams();
   const { currentCredential } = useCredentials();
   const { currentDomain } = useDomains();
@@ -26,77 +32,48 @@ export function Breadcrumbs() {
 
   const items: BreadcrumbItem[] = [];
 
-  items.push({ title: currentOrganization.name, route: "projects" });
+  items.push({ title: <Text fs="italic">{currentOrganization.name}</Text>, route: "projects" });
 
-  if (routerState.name === "settings") {
-    items.push({ title: "Settings", route: "settings" });
-  }
+  const route_parts = routerState.name.split(".");
 
-  if (routerState.name === "statistics") {
-    items.push({ title: "Statistics", route: "statistics" });
-  }
+  for (let i = 0; i < route_parts.length; i++) {
+    const route = route_parts.slice(0, i + 1).join(".") as RouteName;
 
-  if (projects && routerState.name.startsWith("projects")) {
-    items.push({ title: "Projects", route: "projects" });
-  }
+    let title: string | JSX.Element = route_parts[i];
 
-  if (routerState.name.startsWith("domains")) {
-    items.push({ title: "Domains", route: "domains" });
-  }
-
-  if (currentProject) {
-    items.push({
-      title: currentProject.name,
-      route: "projects.project",
-    });
-  }
-
-  if (currentStream) {
-    items.push({
-      title: "Streams",
-      route: "projects.project",
-      params: { tab: "Streams" },
-    });
-    items.push({
-      title: currentStream.name,
-      route: "projects.project.streams.stream",
-    });
-  }
-
-  if (currentDomain) {
-    const orgDomain = !routerState.params.proj_id;
-    if (!orgDomain) {
-      items.push({
-        title: "Domains",
-        route: "projects.project",
-        params: { tab: "Domains" },
-      });
+    // set user-defined name as breadcrumb title
+    if (route == "projects.project") {
+      title = <Text fs="italic">{currentProject?.name}</Text>;
     }
-    items.push({
-      title: currentDomain.domain,
-      route: orgDomain ? "domains.domain" : "projects.project.domains.domain",
-    });
+    if (route == "projects.project.streams.stream") {
+      title = <Text fs="italic">{currentStream?.name}</Text>;
+    }
+    if (route == "projects.project.streams.stream.messages.message") {
+      let subject: string | null = null;
+      if (currentMessage && "message_data" in currentMessage) {
+        subject = currentMessage?.message_data?.subject;
+      }
+      title = <Text fs="italic">{subject ?? "no subject"}</Text>;
+    }
+    if (route == "projects.project.streams.stream.credentials.credential") {
+      title = <Text fs="italic">{currentCredential?.username}</Text>;
+    }
+    if (route == "domains.domain" || route == "projects.project.domains.domain") {
+      title = <Text fs="italic">{currentDomain?.domain}</Text>;
+    }
+
+    items.push({ title, route });
   }
 
-  if (currentCredential) {
-    items.push({
-      title: currentCredential.username,
-      route: "projects.project.streams.stream.credentials.credential",
-    });
-  }
-
-  if (currentMessage && "message_data" in currentMessage) {
-    items.push({
-      title: currentMessage.message_data.subject || "No Subject",
-      route: "projects.project.streams.stream.messages.message",
-    });
-  }
-
-  const anchors = items.map((item) => (
-    <Anchor key={item.route} onClick={() => navigate(item.route, item.params)}>
-      {item.title}
-    </Anchor>
-  ));
+  const anchors = items.map((item, i, arr) =>
+    i == arr.length - 1 ? (
+      <Text c="dimmed">{item.title}</Text>
+    ) : (
+      <Anchor key={item.route} onClick={() => navigate(item.route)}>
+        {item.title}
+      </Anchor>
+    )
+  );
 
   return <MantineBreadcrumbs mb="lg">{anchors}</MantineBreadcrumbs>;
 }

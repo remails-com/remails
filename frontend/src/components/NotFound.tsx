@@ -2,7 +2,7 @@ import { Button, Group, Stack, Text, Title } from "@mantine/core";
 import classes from "./NotFound.module.css";
 import { Link } from "../Link.tsx";
 
-export function NotFound() {
+export default function NotFound() {
   return (
     <Stack align="center" className={classes.root}>
       <div className={classes.label}>404</div>
@@ -13,7 +13,9 @@ export function NotFound() {
       </Text>
       <Group justify="center">
         <Button variant="subtle" size="md" mt="lg">
-          <Link to="default" underline="never">Take me back home</Link>
+          <Link to="default" underline="never">
+            Take me back home
+          </Link>
         </Button>
       </Group>
     </Stack>

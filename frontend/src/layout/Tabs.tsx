@@ -1,8 +1,10 @@
+import { Container, Tabs as MTabs } from "@mantine/core";
 import React from "react";
 import { useRemails } from "../hooks/useRemails";
-import { Container, Tabs as MTabs } from "@mantine/core";
+import { RouteName } from "../routes";
 
 type Tab = {
+  route: RouteName;
   name: string;
   icon: React.ReactNode;
   content: React.JSX.Element;
@@ -15,24 +17,26 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
     navigate,
   } = useRemails();
 
-  const default_tab = tabs[0].name;
+  const default_route = tabs[0].route;
 
-  const setActiveTab = (tab: string | null) => {
-    navigate(routerState.name, { tab: tab || default_tab });
+  const tab_route = tabs.find((t) => t.route == routerState.name) ? routerState.name : default_route;
+
+  const setActiveTab = (route: string | null) => {
+    navigate((route as RouteName | null) || default_route);
   };
 
   return (
-    <MTabs defaultValue={default_tab} value={routerState.params.tab || default_tab} onChange={setActiveTab}>
+    <MTabs value={tab_route} onChange={setActiveTab}>
       <MTabs.List mb="md">
         {tabs.map((t) => (
-          <MTabs.Tab size="lg" value={t.name} leftSection={t.icon} key={t.name}>
+          <MTabs.Tab size="lg" value={t.route} leftSection={t.icon} key={t.route}>
             {t.name}
           </MTabs.Tab>
         ))}
       </MTabs.List>
 
       {tabs.map((t) => (
-        <MTabs.Panel value={t.name} key={t.name}>
+        <MTabs.Panel value={t.route} key={t.route}>
           {t.notSoWide ? (
             <Container size="sm" ml="0" pl="0">
               {t.content}

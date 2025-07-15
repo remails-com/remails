@@ -15,7 +15,7 @@ import Tabs from "../../layout/Tabs.tsx";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { formatDateTime } from "../../util.ts";
 
-export function DomainDetails() {
+export default function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentDomain } = useDomains();
@@ -45,6 +45,8 @@ export function DomainDetails() {
     });
   };
 
+  const domain_route = currentProject ? "projects.project.domains" : "domains";
+
   const deleteDomain = async (domain: Domain) => {
     const url = currentProject
       ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
@@ -61,11 +63,7 @@ export function DomainDetails() {
       });
       dispatch({ type: "remove_domain", domainId: domain.id });
 
-      if (currentProject) {
-        navigate("projects.project", { tab: "Domains" });
-      } else {
-        navigate("domains");
-      }
+      navigate(domain_route);
     } else {
       notifications.show({
         title: "Error",
@@ -82,6 +80,7 @@ export function DomainDetails() {
     <Tabs
       tabs={[
         {
+          route: `${domain_route}.domain`,
           name: "Details",
           icon: <IconWorldSearch size={14} />,
           content: (
@@ -113,6 +112,7 @@ export function DomainDetails() {
           notSoWide: true,
         },
         {
+          route: `${domain_route}.domain.dns`,
           name: "DNS records",
           icon: <IconLabel size={14} />,
           content: (
