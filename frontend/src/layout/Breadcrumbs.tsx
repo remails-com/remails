@@ -65,11 +65,15 @@ export function Breadcrumbs() {
     items.push({ title, route });
   }
 
-  const anchors = items.map((item) => (
-    <Anchor key={item.route} onClick={() => navigate(item.route)}>
-      {item.title}
-    </Anchor>
-  ));
+  const anchors = items.map((item, i, arr) =>
+    i == arr.length - 1 ? (
+      <Text c="dimmed">{item.title}</Text>
+    ) : (
+      <Anchor key={item.route} onClick={() => navigate(item.route)}>
+        {item.title}
+      </Anchor>
+    )
+  );
 
   return <MantineBreadcrumbs mb="lg">{anchors}</MantineBreadcrumbs>;
 }
