@@ -44,7 +44,7 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       if (busy.current) {
         nprogress.start();
       }
-    }, 500);
+    }, 100);
 
     const navState: NavigationState = {
       from: state.routerState,
