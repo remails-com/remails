@@ -40,7 +40,11 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       nextRouterState: routerState,
     });
 
-    nprogress.start();
+    setTimeout(() => {
+      if (busy.current) {
+        nprogress.start();
+      }
+    }, 500);
 
     const navState: NavigationState = {
       from: state.routerState,
@@ -69,8 +73,8 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       },
     });
 
-    nprogress.complete();
     busy.current = false;
+    nprogress.complete();
 
     return true;
   };
