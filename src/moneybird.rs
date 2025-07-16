@@ -334,6 +334,7 @@ pub struct MoneyBird {
     client: reqwest::Client,
     pool: PgPool,
     administration: AdministrationId,
+    webhook_url: Url,
 }
 
 impl MoneyBird {
@@ -362,11 +363,17 @@ impl MoneyBird {
             client,
             pool,
             administration,
+            webhook_url,
         };
 
-        let self_clone = res.clone();
-        // Webhook registration must happen asynchronously, otherwise the test webhook sent by
-        // moneybird will not succeed, and no webhook will get registered at all.
+        Ok(res)
+    }
+
+    /// Asynchronously register a webhook at moneybird.
+    /// This function will immediately return and register the webhook in the background,
+    /// logging possible errors.
+    pub(crate) fn register_webhook(&self) {
+        let self_clone = self.clone();
         tokio::spawn(async move {
             // Cannot inline this "random_delay", see: https://stackoverflow.com/a/75227719
             let random_delay = {
@@ -379,70 +386,92 @@ impl MoneyBird {
             // so that only one will register the webhook
             tokio::time::sleep(Duration::from_secs(random_delay)).await;
 
-            self_clone
-                .register_webhook(webhook_url)
+            match sqlx::query_scalar!(
+                r#"
+                SELECT true AS "exists!" FROM moneybird_webhook
+                "#
+            )
+            .fetch_optional(&self_clone.pool)
+            .await
+            {
+                Ok(Some(true)) => {
+                    info!("Moneybird webhook already registered");
+                    return;
+                }
+                Err(err) => {
+                    warn!(
+                        "Error checking if moneybird webhook is already registered: {}",
+                        err
+                    );
+                    return;
+                }
+                _ => {}
+            };
+
+            info!("registering Moneybird webhook");
+
+            let webhook: Webhook = match self_clone
+                .client
+                .post(self_clone.url("webhooks"))
+                .json(&serde_json::json!({
+                    "url": self_clone.webhook_url.as_str(),
+                    "enabled_events": [
+                        "subscription_cancelled",
+                        "subscription_created",
+                        "subscription_edited",
+                        "subscription_resumed",
+                        "subscription_updated"
+                    ]
+                }))
+                .send()
                 .await
-                .inspect_err(|err| error!("Failed to register webhook: {}", err))
-                .ok();
-        });
+            {
+                Ok(res) if res.status().is_success() => match res.json().await {
+                    Ok(webhook) => webhook,
+                    Err(err) => {
+                        error!("Error registering Moneybird webhook: {}", err);
+                        return;
+                    }
+                },
+                Err(err) => {
+                    error!("Error registering Moneybird webhook: {}", err);
+                    return;
+                }
+                Ok(res) => {
+                    error!(
+                        "Error registering Moneybird webhook: Status {}, Response: {}",
+                        res.status(),
+                        res.text().await.unwrap()
+                    );
+                    return;
+                }
+            };
 
-        Ok(res)
-    }
-
-    async fn register_webhook(&self, url: Url) -> Result<(), Error> {
-        let exists = sqlx::query_scalar!(
-            r#"
-            SELECT true AS "exists!" FROM moneybird_webhook
-            "#
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        if let Some(true) = exists {
-            info!("Moneybird webhook already registered");
-            return Ok(());
-        }
-
-        info!("registering Moneybird webhook");
-
-        let webhook: Webhook = self
-            .client
-            .post(self.url("webhooks"))
-            .json(&serde_json::json!({
-                "url": url,
-                "enabled_events": [
-                    "subscription_cancelled",
-                    "subscription_created",
-                    "subscription_edited",
-                    "subscription_resumed",
-                    "subscription_updated"
-                ]
-            }))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        let hash = password_auth::generate_hash(webhook.token.danger_as_str());
-        sqlx::query!(
-            r#"
+            let hash = password_auth::generate_hash(webhook.token.danger_as_str());
+            match sqlx::query!(
+                r#"
             INSERT INTO moneybird_webhook (moneybird_id, token_hash) VALUES ($1, $2)
             "#,
-            *webhook.id,
-            hash
-        )
-        .execute(&self.pool)
-        .await?;
+                *webhook.id,
+                hash
+            )
+            .execute(&self_clone.pool)
+            .await
+            {
+                Ok(_) => {}
+                Err(err) => {
+                    error!("Error storing Moneybird webhook in database: {}", err);
+                    return;
+                }
+            };
 
-        info!(
-            administration_id = webhook.administration_id.as_str(),
-            webhook_id = webhook.id.as_str(),
-            url = webhook.url.as_str(),
-            "Moneybird webhook registered"
-        );
-
-        Ok(())
+            info!(
+                administration_id = webhook.administration_id.as_str(),
+                webhook_id = webhook.id.as_str(),
+                url = webhook.url.as_str(),
+                "Moneybird webhook registered"
+            );
+        });
     }
 
     fn url(&self, path: &str) -> String {
