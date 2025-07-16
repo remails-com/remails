@@ -1,0 +1,18 @@
+apiVersion: v2
+name: cluster-setup
+description: All applications that run only one in the Remails cluster
+
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.1.0
+
+dependencies:
+  - name: ingress-nginx
+    version: 4.13.0
+    repository: https://kubernetes.github.io/ingress-nginx
+  - name: scaleway-certmanager-webhook
+    version: 0.4.0
+    repository: https://helm.scw.cloud/

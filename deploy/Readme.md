@@ -8,37 +8,13 @@ The following commands are all executed in the `deploy` folder
 helm upgrade --install -f cert-manager-values.yaml -n cert-manager --create-namespace cert-manager jetstack/cert-manager
 ```
 
-2. Create certificate issuers
-
+2. Install remaining one-time cluster recources (needs to execute in "cert-manager" namespace, see https://github.com/scaleway/helm-charts/issues/37)
 ```shell
-kubectl apply -f cert-issuers.yaml -n cert-manager
-```
-
-3. Install the scaleway-certmanager-webhook to allow creating Let's Encrypt certificates using the `DNS-01` ACME
-   challenge.
-   This is required for generating certificates for the SMTP interface.
-
-```shell
-helm repo add scaleway https://helm.scw.cloud/
-helm upgrade --install -f scaleway-certmanager-webhook-values.yaml -n cert-manager scaleway-certmanager-webhook scaleway/scaleway-certmanager-webhook \
-  --set secret.accessKey=$SCW_ACCESS_KEY \
-  --set secret.secretKey=$SCW_SECRET_KEY
-```
-
-2. Create a namespace for remails (or possible multiple for different environments)
-
-```shell
-kubectl create ns remails-staging
-```
-
-3. Create image pull secret (one for each namespace)
-
-```shell
-kubectl create secret docker-registry regcred \
-  --docker-server=ghcr.io \
-  --docker-username=<usename> \
-  --docker-password=<access token> \
-  --namespace remails-production
+helm upgrade --install cluster-setup ./cluster-setup \
+  --namespace cert-manager \
+  --set scaleway-certmanager-webhook.secret.accessKey=$SCW_ACCESS_KEY \
+  --set scaleway-certmanager-webhook.secret.secretKey=$SCW_SECRET_KEY \
+  --set-json 'docker=[{"username": "$GITHUB_USERNAME", "password": "$GITHUB_TOKEN", "url": "ghcr.io"}]'
 ```
 
 5. Setup Database

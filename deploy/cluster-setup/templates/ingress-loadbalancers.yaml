@@ -1,0 +1,32 @@
+{{- range $i, $lb := .Values.nginxLoadBalancer.scw_loadbalancers }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller-{{ $lb.zone }}
+  namespace: ingress
+  annotations:
+    service.beta.kubernetes.io/scw-loadbalancer-zone: {{ $lb.zone | quote }}
+    service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
+    service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
+    service.beta.kubernetes.io/scw-loadbalancer-ip-ids: {{ $lb.ip_ids | quote }}
+    service.beta.kubernetes.io/scw-loadbalancer-type: {{ $.Values.nginxLoadBalancer.scw_loadbalancer_type | quote }}
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: {{ .Chart.Name }}
+    app.kubernetes.io/name: ingress-nginx
+  ports:
+    - appProtocol: http
+      name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - appProtocol: https
+      name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  type: LoadBalancer
+---
+{{- end }}

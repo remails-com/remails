@@ -1,38 +1,29 @@
-{{- define "upcloud-lb" }}
-  plan: {{ .Values.smtp.load_balancer_plan | quote }}
-  frontends:
-  {{- range .Values.smtp.ports }}
-    - name: "smtp-{{ . }}"
-      port: {{ . }}
-      mode: "tcp"
-  {{- end }}
-  backends:
-  {{- range .Values.smtp.ports }}
-    - name: "smtp-{{ . }}"
-      properties:
-        outbound_proxy_protocol: "v2"
-  {{- end }}
-{{- end}}
+{{- range $i, $lb := .Values.smtp.scw_loadbalancers }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: mta
+  name: mta-{{ $lb.zone }}
   labels:
     app: mta
+    environment: {{ $.Values.environment }}
+    namespace: {{ $.Release.Namespace }}
   annotations:
-    helm.sh/resource-policy: keep
-    service.beta.kubernetes.io/upcloud-load-balancer-config: |
-{{ include "upcloud-lb" . | fromYaml | toPrettyJson | indent 6 }}
+    service.beta.kubernetes.io/scw-loadbalancer-zone: {{ $lb.zone | quote }}
+    service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
+    service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
+    service.beta.kubernetes.io/scw-loadbalancer-ip-ids: {{ $lb.ip_ids | quote }}
+    service.beta.kubernetes.io/scw-loadbalancer-type: {{ $.Values.smtp.scw_loadbalancer_type | quote }}
 spec:
-  ipFamilyPolicy: PreferDualStack
   selector:
     app: mta
+    environment: {{ $.Values.environment }}
   ports:
-  {{- range .Values.smtp.ports }}
-    - name: smtp-{{ . }}
+  {{- range $port := $.Values.smtp.ports }}
+    - name: smtp-{{ $port }}
       protocol: TCP
-      port: {{ . }}
+      port: {{ $port }}
       targetPort: smtp
   {{- end }}
   type: LoadBalancer
-  
+---
+{{- end }}

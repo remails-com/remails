@@ -2,74 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: management
-  annotations:
-    helm.sh/resource-policy: keep
-    service.beta.kubernetes.io/upcloud-load-balancer-config: |
-      {
-        "plan": {{ .Values.management.load_balancer_plan | quote }},
-        "frontends": [{
-          "name": "http",
-          "mode": "http",
-          "port": 80,
-          "rules": [
-            {
-              "name": "redirect-to-https",
-              "priority": 100,
-              "matchers": [],
-              "actions": [
-                {
-                  "type": "http_redirect",
-                  "action_http_redirect": {
-                    "scheme": "https"
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "https",
-          "mode": "http",
-          "port": 443,
-          "http2_enabled": true,
-          "tls_configs": [
-            {
-               "name": {{ .Values.management.certificate_bundle_name | quote }},
-               "certificate_bundle_uuid": {{ .Values.management.certificate_bundle_uuid | quote }}
-            }
-          ]
-        }],
-        "backends": [
-          {
-            "name": "http",
-            "properties": {
-              "health_check_type": "http",
-              "health_check_url": "/api/healthy",
-              "health_check_expected_status": 200
-            }
-          },
-          {
-            "name": "https",
-            "properties": {
-              "health_check_type": "http",
-              "health_check_url": "/api/healthy",
-              "health_check_expected_status": 200
-            }
-          }
-        ]
-      }
 spec:
-  ipFamilyPolicy: PreferDualStack
   selector:
     app: management
+    environment: {{ .Values.environment }}
   ports:
     - name: http
       protocol: TCP
       port: 80
       targetPort: http
-    - name: https
-      protocol: TCP
-      port: 443
-      targetPort: http
-  type: LoadBalancer
+  type: ClusterIP
   
