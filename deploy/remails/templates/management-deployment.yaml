@@ -24,6 +24,27 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 75
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - management
+                topologyKey: topology.kubernetes.io/zone
+            - weight: 75
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - management
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: management
           image: "{{ .Values.images.management.repository }}:{{ .Chart.AppVersion }}"
@@ -55,7 +76,7 @@ spec:
                   name: secrets
                   key: database_url
             - name: RUST_LOG
-              value:  {{ .Values.rust_log | quote }}
+              value: {{ .Values.rust_log | quote }}
             - name: OAUTH_CLIENT_ID
               value: {{ .Values.github_oauth.client_id }}
             - name: OAUTH_CLIENT_SECRET

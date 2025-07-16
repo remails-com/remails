@@ -27,6 +27,27 @@ spec:
         - name: smtp-cert
           secret:
             secretName: smtp-cert
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 75
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - mta
+                topologyKey: topology.kubernetes.io/zone
+            - weight: 75
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - mta
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: mta
           image: "{{ .Values.images.mta.repository }}:{{ .Chart.AppVersion }}"
