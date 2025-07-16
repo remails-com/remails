@@ -46,11 +46,15 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       }
     }, 100);
 
+    console.log("state:", state);
+
     const navState: NavigationState = {
       from: state.routerState,
       to: routerState,
       state,
     };
+
+    console.log("navState.state.config:", navState.state.config);
 
     for (const mw of middleware) {
       try {
@@ -62,7 +66,7 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     }
 
     if (pushState) {
-      window.history.pushState({ routerState }, "", routerState.fullPath);
+      window.history.pushState(state, "", routerState.fullPath);
     }
 
     dispatch({
@@ -82,11 +86,18 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
   // handle back / forward events
   useEffect(() => {
     const onPopState = async (event: PopStateEvent) => {
+      console.log("popstate state.config:", state.config);
+      console.log("popstate event.state.config:", event.state.config);
+
+      console.log("popstate state:", state);
+
       if (event.state?.routerState) {
         await navigate(event.state.routerState.name, event.state.routerState.params, false);
       } else {
         await navigate(router.initialState.name, router.initialState.params, false);
       }
+
+      dispatch({type: "set_state", state: event.state});
     };
 
     window.addEventListener("popstate", onPopState);

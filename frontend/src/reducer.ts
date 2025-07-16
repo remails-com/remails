@@ -69,6 +69,10 @@ const actionHandler: {
   set_user: function (state, action) {
     return { ...state, user: action.user, userFetched: true };
   },
+  set_state: function (state, action) {
+    console.log("set_state")
+    return { ...state, ...action.state };
+  }
 };
 
 // helper function to make TypeScript recognize the proper types

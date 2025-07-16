@@ -58,6 +58,10 @@ export function useLoadRemails() {
     nextRouterState: null,
   });
 
+  if (!state.config) {
+    console.warn("useLoadRemails state.config", state.config);
+  }
+
   const { navigate } = useRouter(router, state, dispatch, [apiMiddleware]);
 
   useEffect(() => {

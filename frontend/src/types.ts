@@ -159,6 +159,10 @@ export type Action =
   | {
       type: "set_config";
       config: RemailsConfig;
+    }
+  | {
+      type: "set_state";
+      state: State;
     };
 
 export interface Organization {
