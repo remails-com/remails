@@ -1186,6 +1186,7 @@ checksum = "6d844af74f7b799e41c78221be863bade11c430d46042c3b49ca8ae0c6d27287"
 dependencies = [
  "async-recursion",
  "async-trait",
+ "bytes",
  "cfg-if",
  "critical-section",
  "data-encoding",
@@ -1198,11 +1199,14 @@ dependencies = [
  "once_cell",
  "rand 0.9.1",
  "ring",
+ "rustls",
  "thiserror 2.0.12",
  "tinyvec",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
+ "webpki-roots 0.26.8",
 ]
 
 [[package]]
@@ -1251,10 +1255,13 @@ dependencies = [
  "parking_lot",
  "rand 0.9.1",
  "resolv-conf",
+ "rustls",
  "smallvec",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-rustls",
  "tracing",
+ "webpki-roots 0.26.8",
 ]
 
 [[package]]

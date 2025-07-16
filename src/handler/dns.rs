@@ -1,18 +1,19 @@
-use std::ops::Range;
-
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
 #[cfg(not(test))]
-use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy::Ipv4Only, NameServerConfig, ResolverConfig, ResolverOpts},
+    name_server::TokioConnectionProvider,
+    proto::xfer::Protocol,
+};
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use tracing::{debug, trace};
 
 #[cfg(test)]
 use crate::handler::mock;
-use crate::{
-    dkim::PrivateKey,
-    models::{Domain, Error},
-};
+use crate::models::{Domain, Error};
 
 //TODO: do we want to do anything with DNS errors?
 pub enum ResolveError {
@@ -99,10 +100,55 @@ impl Default for DnsResolver {
 impl DnsResolver {
     #[cfg(not(test))]
     pub fn new() -> Self {
+        let mut resolver_options = ResolverOpts::default();
+        // The cluster does not support DualStack
+        resolver_options.ip_strategy = Ipv4Only;
+        resolver_options.negative_max_ttl = Some(std::time::Duration::from_secs(20));
+
+        let mut resolver_config = ResolverConfig::new();
+        // protective (DNS4EU)
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "86.54.11.1:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("protective.joindns4.eu".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "86.54.11.201:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("protective.joindns4.eu".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+
+        // Malware Blocking, DNSSEC Validation (Quad9)
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "9.9.9.9:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("dns.quad9.net".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "149.112.112.112:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("dns.quad9.net".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+
         Self {
-            resolver: Resolver::builder_tokio()
-                .expect("could not build Resolver")
-                .build(),
+            resolver: Resolver::builder_with_config(
+                resolver_config,
+                TokioConnectionProvider::default(),
+            )
+            .with_options(resolver_options)
+            .build(),
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .expect("DKIM_SELECTOR environment variable not set"),
         }
@@ -197,7 +243,7 @@ impl DnsResolver {
         dkim_pk_from_db: &[u8],
     ) -> Result<&'static str, &'static str> {
         let domain = domain.trim_matches('.');
-        let record = format!("remails._domainkey.{domain}.");
+        let record = format!("{}._domainkey.{domain}.", self.dkim_selector);
         let dkim_data = self.get_singular_dns_record(&record, "v=DKIM1").await?;
         trace!("dkim data: {dkim_data:?}");
 
@@ -272,15 +318,15 @@ impl DnsResolver {
         domain: &Domain,
         preferred_spf_record: &str,
     ) -> Result<DomainVerificationStatus, Error> {
-        let db_key = PrivateKey::new(domain, &self.dkim_selector)?;
-        let domain = &domain.domain;
-
         Ok(DomainVerificationStatus {
             timestamp: Utc::now(),
-            dkim: self.verify_dkim(domain, db_key.public_key()).await.into(),
-            spf: self.verify_spf(domain, preferred_spf_record).await,
-            dmarc: self.verify_dmarc(domain).await,
-            a: self.any_a_record(domain).await,
+            dkim: self
+                .verify_dkim(&domain.domain, domain.dkim_key.pub_key()?.as_ref())
+                .await
+                .into(),
+            spf: self.verify_spf(&domain.domain, preferred_spf_record).await,
+            dmarc: self.verify_dmarc(&domain.domain).await,
+            a: self.any_a_record(&domain.domain).await,
         })
     }
 }
