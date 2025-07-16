@@ -216,7 +216,7 @@ impl Handler {
         };
 
         // check dkim key
-        let dkim_key = match PrivateKey::new(&domain, "remails") {
+        let dkim_key = match PrivateKey::new(&domain, &self.config.resolver.dkim_selector) {
             Ok(key) => key,
             Err(e) => {
                 error!("error creating DKIM key: {e}");

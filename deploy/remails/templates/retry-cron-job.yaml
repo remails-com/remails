@@ -45,4 +45,7 @@ spec:
                   value: {{ .Values.moneybird.webhook_url }}
                 - name: RUST_LOG
                   value: {{ .Values.rust_log | quote }}
+                - name: DKIM_SELECTOR
+                  value: {{ .Values.smtp.dkim_selector | quote }}
+
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}

@@ -27,6 +27,7 @@ pub struct DnsResolver {
     pub(crate) resolver: Resolver<TokioConnectionProvider>,
     #[cfg(test)]
     pub(crate) resolver: mock::Resolver,
+    pub dkim_selector: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -102,6 +103,8 @@ impl DnsResolver {
             resolver: Resolver::builder_tokio()
                 .expect("could not build Resolver")
                 .build(),
+            dkim_selector: std::env::var("DKIM_SELECTOR")
+                .expect("DKIM_SELECTOR environment variable not set"),
         }
     }
 
@@ -109,6 +112,7 @@ impl DnsResolver {
     pub fn mock(domain: &'static str, port: u16) -> Self {
         Self {
             resolver: mock::Resolver(domain, port),
+            dkim_selector: "remails-testing".to_string(),
         }
     }
 
@@ -268,7 +272,7 @@ impl DnsResolver {
         domain: &Domain,
         preferred_spf_record: &str,
     ) -> Result<DomainVerificationStatus, Error> {
-        let db_key = PrivateKey::new(domain, "remails")?;
+        let db_key = PrivateKey::new(domain, &self.dkim_selector)?;
         let domain = &domain.domain;
 
         Ok(DomainVerificationStatus {

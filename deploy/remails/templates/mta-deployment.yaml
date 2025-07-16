@@ -90,6 +90,8 @@ spec:
               value: {{ .Values.smtp.rate_limit_minutes | quote }}
             - name: RATE_LIMIT_MAX_MESSAGES
               value: {{ .Values.smtp.rate_limit_max_messages | quote }}
+            - name: DKIM_SELECTOR
+              value: {{ .Values.smtp.dkim_selector | quote }}
           ports:
             - containerPort: 3025
               name: smtp
