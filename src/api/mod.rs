@@ -74,6 +74,7 @@ pub struct RemailsConfig {
     pub smtp_domain_name: String,
     pub smtp_ports: Vec<u16>,
     pub preferred_spf_record: String,
+    pub dkim_selector: String,
 }
 
 impl Default for RemailsConfig {
@@ -95,12 +96,15 @@ impl Default for RemailsConfig {
         let preferred_spf_record = env::var("PREFERRED_SPF_RECORD")
             .unwrap_or("v=spf1 include:spf.remails.net -all".to_string());
 
+        let dkim_selector = env::var("DKIM_SELECTOR").expect("DKIM_SELECTOR env var must be set");
+
         Self {
             version,
             environment,
             smtp_domain_name,
             smtp_ports,
             preferred_spf_record,
+            dkim_selector,
         }
     }
 }

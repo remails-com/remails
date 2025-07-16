@@ -27,7 +27,7 @@ export function DnsRecords({
       <Title order={title_order} mt="md">
         1. DKIM Public Key
       </Title>
-      Set a TXT record for <Code>remails._domainkey.{domain.domain}</Code> to:
+      Set a TXT record for <Code>{config.dkim_selector}._domainkey.{domain.domain}</Code> to:
       <CopyableCode mt="xs">{dkim_entry}</CopyableCode>
       <Title order={title_order} mt="md">
         2. Remails SPF

@@ -53,6 +53,7 @@ export interface RemailsConfig {
   smtp_domain_name: string;
   smtp_ports: number[];
   preferred_spf_record: string;
+  dkim_selector: string;
 }
 
 export interface State {
