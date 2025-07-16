@@ -67,7 +67,9 @@ export function Breadcrumbs() {
 
   const anchors = items.map((item, i, arr) =>
     i == arr.length - 1 ? (
-      <Text c="dimmed">{item.title}</Text>
+      <Text c="dimmed" span>
+        {item.title}
+      </Text>
     ) : (
       <Anchor key={item.route} onClick={() => navigate(item.route)}>
         {item.title}
