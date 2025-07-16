@@ -14,10 +14,7 @@ use tracing::{debug, trace};
 
 #[cfg(test)]
 use crate::handler::mock;
-use crate::{
-    dkim::PrivateKey,
-    models::{Domain, Error},
-};
+use crate::models::{Domain, Error};
 
 //TODO: do we want to do anything with DNS errors?
 pub enum ResolveError {
@@ -246,7 +243,7 @@ impl DnsResolver {
         dkim_pk_from_db: &[u8],
     ) -> Result<&'static str, &'static str> {
         let domain = domain.trim_matches('.');
-        let record = format!("remails._domainkey.{domain}.");
+        let record = format!("{}._domainkey.{domain}.", self.dkim_selector);
         let dkim_data = self.get_singular_dns_record(&record, "v=DKIM1").await?;
         trace!("dkim data: {dkim_data:?}");
 
@@ -321,15 +318,15 @@ impl DnsResolver {
         domain: &Domain,
         preferred_spf_record: &str,
     ) -> Result<DomainVerificationStatus, Error> {
-        let db_key = PrivateKey::new(domain, &self.dkim_selector)?;
-        let domain = &domain.domain;
-
         Ok(DomainVerificationStatus {
             timestamp: Utc::now(),
-            dkim: self.verify_dkim(domain, db_key.public_key()).await.into(),
-            spf: self.verify_spf(domain, preferred_spf_record).await,
-            dmarc: self.verify_dmarc(domain).await,
-            a: self.any_a_record(domain).await,
+            dkim: self
+                .verify_dkim(&domain.domain, domain.dkim_key.pub_key()?.as_ref())
+                .await
+                .into(),
+            spf: self.verify_spf(&domain.domain, preferred_spf_record).await,
+            dmarc: self.verify_dmarc(&domain.domain).await,
+            a: self.any_a_record(&domain.domain).await,
         })
     }
 }
