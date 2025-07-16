@@ -3,7 +3,7 @@ use crate::{
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-        messages::{get_message, list_messages},
+        messages::{get_message, list_messages, update_to_retry_asap},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_organizations, remove_organization,
@@ -288,6 +288,10 @@ impl ApiServer {
                 get(get_message),
             )
             .route(
+                "/organizations/{org_id}/messages/{message_id}/retry",
+                put(update_to_retry_asap),
+            )
+            .route(
                 "/organizations/{org_id}/projects",
                 get(list_projects).post(create_project),
             )
@@ -302,6 +306,10 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
                 get(get_message),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/messages/{message_id}/retry",
+                put(update_to_retry_asap),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams",
@@ -326,6 +334,10 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
                 get(get_message),
+            )
+            .route(
+                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
+                put(update_to_retry_asap),
             )
             .route(
                 "/organizations/{org_id}/domains",

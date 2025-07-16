@@ -23,7 +23,7 @@ export interface MessageMetadata {
   from_email: string;
   created_at: string;
   recipients: string[];
-  status: string;
+  status: "Processing" | "Held" | "Accepted" | "Rejected" | "Delivered" | "Reattempt" | "Failed";
   reason: string | undefined;
   raw_size: string;
   delivery_status: { [receiver: string]: DeliveryStatus };

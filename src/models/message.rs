@@ -134,6 +134,13 @@ pub struct NewMessage {
     pub message_data: serde_json::Value,
 }
 
+#[derive(Serialize, Debug)]
+pub struct MessageRetryUpdate {
+    status: MessageStatus,
+    retry_after: Option<DateTime<Utc>>,
+    attempts: i32,
+}
+
 impl Message {
     pub fn id(&self) -> MessageId {
         self.id
@@ -418,7 +425,6 @@ impl MessageRepository {
     }
 
     pub async fn update_message_data_and_status(&self, message: &Message) -> Result<(), Error> {
-        tracing::debug!("updating message data and status");
         sqlx::query!(
             r#"
             UPDATE messages
@@ -576,6 +582,41 @@ impl MessageRepository {
         .into_iter()
         .map(TryInto::try_into)
         .collect::<Result<Vec<_>, Error>>()
+    }
+
+    pub async fn update_to_retry_asap(
+        &self,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<MessageRetryUpdate, Error> {
+        Ok(sqlx::query_as!(
+            MessageRetryUpdate,
+            r#"
+            UPDATE messages
+            SET retry_after = $5,
+                attempts = $6,
+                status = CASE status
+                    WHEN 'rejected' THEN 'held'
+                    WHEN 'failed' THEN 'reattempt'
+                    ELSE status
+                END
+            WHERE id = $1
+              AND organization_id = $2
+              AND ($3::uuid IS NULL OR project_id = $3)
+              AND ($4::uuid IS NULL OR stream_id = $4)
+            RETURNING retry_after, attempts, status as "status: _"
+            "#,
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
+            chrono::Utc::now(),
+            0 // TODO: set to limit - 1, or introduce and increment max attempts?
+        )
+        .fetch_one(&self.pool)
+        .await?)
     }
 }
 

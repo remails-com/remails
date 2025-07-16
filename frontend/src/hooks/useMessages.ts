@@ -30,5 +30,14 @@ export function useMessages() {
     }
   }, [currentOrganization, currentProject, currentStream, routerState.params.message_id, messages]);
 
-  return { messages, currentMessage };
+  function updateMessage(message_id: string, update: Partial<Message>) {
+    if (currentMessage?.id == message_id) {
+      console.log("Updating current message");
+      setCurrentMessage({ ...currentMessage, ...update });
+    } else {
+      console.log("Updating other message");
+    }
+  }
+
+  return { messages, currentMessage, updateMessage };
 }
