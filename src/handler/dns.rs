@@ -3,7 +3,12 @@ use std::ops::Range;
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
 #[cfg(not(test))]
-use hickory_resolver::{Resolver, name_server::TokioConnectionProvider};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy::Ipv4Only, NameServerConfig, ResolverConfig, ResolverOpts},
+    name_server::TokioConnectionProvider,
+    proto::xfer::Protocol,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
@@ -99,10 +104,54 @@ impl Default for DnsResolver {
 impl DnsResolver {
     #[cfg(not(test))]
     pub fn new() -> Self {
+        let mut resolver_options = ResolverOpts::default();
+        // The cluster does not support DualStack
+        resolver_options.ip_strategy = Ipv4Only;
+
+        let mut resolver_config = ResolverConfig::new();
+        // protective (DNS4EU)
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "86.54.11.1:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("protective.joindns4.eu ".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "86.54.11.201:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("protective.joindns4.eu ".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+
+        // Malware Blocking, DNSSEC Validation (Quad9)
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "9.9.9.9:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("dns.quad9.net".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr: "149.112.112.112:853".parse().unwrap(),
+            protocol: Protocol::Tls,
+            tls_dns_name: Some("dns.quad9.net".to_string()),
+            http_endpoint: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+
         Self {
-            resolver: Resolver::builder_tokio()
-                .expect("could not build Resolver")
-                .build(),
+            resolver: Resolver::builder_with_config(
+                resolver_config,
+                TokioConnectionProvider::default(),
+            )
+            .with_options(resolver_options)
+            .build(),
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .expect("DKIM_SELECTOR environment variable not set"),
         }
