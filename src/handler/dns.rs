@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
 #[cfg(not(test))]
@@ -10,6 +8,7 @@ use hickory_resolver::{
     proto::xfer::Protocol,
 };
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use tracing::{debug, trace};
 
 #[cfg(test)]
@@ -104,13 +103,14 @@ impl DnsResolver {
         let mut resolver_options = ResolverOpts::default();
         // The cluster does not support DualStack
         resolver_options.ip_strategy = Ipv4Only;
+        resolver_options.negative_max_ttl = Some(std::time::Duration::from_secs(20));
 
         let mut resolver_config = ResolverConfig::new();
         // protective (DNS4EU)
         resolver_config.add_name_server(NameServerConfig {
             socket_addr: "86.54.11.1:853".parse().unwrap(),
             protocol: Protocol::Tls,
-            tls_dns_name: Some("protective.joindns4.eu ".to_string()),
+            tls_dns_name: Some("protective.joindns4.eu".to_string()),
             http_endpoint: None,
             trust_negative_responses: false,
             bind_addr: None,
@@ -118,7 +118,7 @@ impl DnsResolver {
         resolver_config.add_name_server(NameServerConfig {
             socket_addr: "86.54.11.201:853".parse().unwrap(),
             protocol: Protocol::Tls,
-            tls_dns_name: Some("protective.joindns4.eu ".to_string()),
+            tls_dns_name: Some("protective.joindns4.eu".to_string()),
             http_endpoint: None,
             trust_negative_responses: false,
             bind_addr: None,
