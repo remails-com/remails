@@ -4,15 +4,17 @@ import { IconReload, IconX } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
 import { useStreams } from "../../hooks/useStreams";
-import { Button, Tooltip } from "@mantine/core";
+import { ActionIcon, Button, Tooltip } from "@mantine/core";
 import { is_in_the_future } from "../../util";
 
 export default function MessageRetryButton({
   message,
   updateMessage,
+  small,
 }: {
   message: MessageMetadata;
   updateMessage: (message_id: string, update: Partial<Message>) => void;
+  small?: boolean;
 }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
@@ -72,9 +74,15 @@ export default function MessageRetryButton({
           : `Message is ${message.status.toLowerCase()}`
       }
     >
-      <Button leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
-        Retry
-      </Button>
+      {small ? (
+        <ActionIcon disabled={!can_retry} onClick={retry} variant="light" size={30}>
+          <IconReload />
+        </ActionIcon>
+      ) : (
+        <Button leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
+          Retry
+        </Button>
+      )}
     </Tooltip>
   );
 }

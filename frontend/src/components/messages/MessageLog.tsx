@@ -8,6 +8,8 @@ import { getFullStatusDescription, renderRecipients } from "./MessageDetails.tsx
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { useState } from "react";
+import MessageDeleteButton from "./MessageDeleteButton.tsx";
+import MessageRetryButton from "./MessageRetryButton.tsx";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -25,7 +27,7 @@ function statusIcons(status: string) {
 const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/models/messages.rs
 
 export function MessageLog() {
-  const { messages } = useMessages();
+  const { messages, updateMessage } = useMessages();
   const [pages, setPages] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const {
@@ -106,14 +108,18 @@ export function MessageLog() {
               <Code>{message.id.slice(0, 8)}</Code>
             </Tooltip>
           </Text>
-          <Button
-            leftSection={<IconEye />}
-            variant="light"
-            size="xs"
-            onClick={() => navigate("projects.project.streams.stream.messages.message", { message_id: message.id })}
-          >
-            View Message
-          </Button>
+          <Group>
+            <MessageDeleteButton message={message} small />
+            <MessageRetryButton message={message} updateMessage={updateMessage} small />
+            <Button
+              leftSection={<IconEye />}
+              variant="light"
+              size="xs"
+              onClick={() => navigate("projects.project.streams.stream.messages.message", { message_id: message.id })}
+            >
+              View Message
+            </Button>
+          </Group>
         </Group>
       </Accordion.Panel>
     </Accordion.Item>

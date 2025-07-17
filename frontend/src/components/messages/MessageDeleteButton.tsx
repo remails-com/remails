@@ -1,4 +1,4 @@
-import { Button, Text } from "@mantine/core";
+import { ActionIcon, Button, Text, Tooltip } from "@mantine/core";
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { MessageMetadata } from "../../types";
 import { modals } from "@mantine/modals";
@@ -8,7 +8,7 @@ import { useStreams } from "../../hooks/useStreams";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
 
-export default function MessageDeleteButton({ message }: { message: MessageMetadata }) {
+export default function MessageDeleteButton({ message, small }: { message: MessageMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentStream } = useStreams();
@@ -56,8 +56,16 @@ export default function MessageDeleteButton({ message }: { message: MessageMetad
   };
 
   return (
-    <Button leftSection={<IconTrash />} variant="outline" onClick={confirmDeleteCredential}>
-      Delete
-    </Button>
+    <Tooltip label="Delete message">
+      {small ? (
+        <ActionIcon variant="light" onClick={confirmDeleteCredential} size={30}>
+          <IconTrash />
+        </ActionIcon>
+      ) : (
+        <Button leftSection={<IconTrash />} variant="outline" onClick={confirmDeleteCredential}>
+          Delete
+        </Button>
+      )}
+    </Tooltip>
   );
 }
