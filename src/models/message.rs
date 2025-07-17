@@ -743,5 +743,43 @@ mod test {
         ];
 
         assert_eq!(fetched_message.metadata.recipients, expected);
+
+        let messages = repository
+            .list_message_metadata(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                MessageFilter {
+                    limit: 5,
+                    status: None,
+                    before: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, message.id);
+
+        repository
+            .remove(org_id, Some(project_id), Some(stream_id), message.id)
+            .await
+            .unwrap();
+
+        let messages = repository
+            .list_message_metadata(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                MessageFilter {
+                    limit: 5,
+                    status: None,
+                    before: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(messages.len(), 0);
     }
 }
