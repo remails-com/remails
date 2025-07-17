@@ -946,6 +946,34 @@ mod test {
             get_message_status(message_on_timeout).await,
             MessageStatus::Reattempt
         );
+
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_out_of_attempts,
+            )
+            .await
+            .unwrap();
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_on_timeout,
+            )
+            .await
+            .unwrap();
+        handler.retry_all().await.unwrap();
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Delivered
+        );
     }
 
     #[sqlx::test(fixtures(
