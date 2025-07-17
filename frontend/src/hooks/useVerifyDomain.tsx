@@ -11,7 +11,6 @@ export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
     verificationResult ? "verified" : "loading"
   );
 
-
   const reverifyDomain = useCallback(
     (domain: Domain | null) => {
       setVerificationResult(null);
