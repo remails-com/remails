@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM messages\n            WHERE id = $1\n              AND organization_id = $2\n              AND ($3::uuid IS NULL OR project_id = $3)\n              AND ($4::uuid IS NULL OR stream_id = $4)\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d25dc977e479a066da4dc81e2ee894d14b9921adff762bec5901655801acf312"
+}
