@@ -12,8 +12,6 @@ function canRetryFaster(message: MessageMetadata) {
     return false;
   }
 
-  // TODO: check if attempt limit has been reached, if so return true
-
   if (message.retry_after && !is_in_the_future(message.retry_after)) {
     return false;
   }

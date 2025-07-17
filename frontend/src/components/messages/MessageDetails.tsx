@@ -37,7 +37,7 @@ export function getFullStatusDescription(message: MessageMetadata) {
     }
 
     if (message.attempts > 1) {
-      s += ` (${message.attempts} attempts)`;
+      s += ` (attempt ${message.attempts} of ${message.max_attempts})`;
     }
 
     return s;

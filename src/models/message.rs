@@ -97,6 +97,7 @@ pub struct ApiMessageMetadata {
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
+    max_attempts: i32,
 }
 
 #[derive(Serialize, Default)]
@@ -139,6 +140,7 @@ pub struct MessageRetryUpdate {
     status: MessageStatus,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
+    max_attempts: i32,
 }
 
 impl Message {
@@ -165,7 +167,7 @@ impl Message {
             return;
         }
 
-        if self.attempts < config.max_retries {
+        if self.attempts < config.max_automatic_retries {
             let timeout = config
                 .retry_delay
                 .checked_mul(self.attempts)
@@ -177,13 +179,6 @@ impl Message {
                 MessageStatus::Reattempt => self.status = MessageStatus::Failed,
                 _ => {}
             };
-            self.reason = Some(self.reason.take().map_or(
-                "out of attempts".to_string(),
-                |mut reason| {
-                    reason.push_str(" - out of attempts");
-                    reason
-                },
-            ));
             self.retry_after = None;
         }
     }
@@ -243,6 +238,7 @@ struct PgMessage {
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
+    max_attempts: i32,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -346,6 +342,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             attempts: m.attempts,
+            max_attempts: m.max_attempts,
         })
     }
 }
@@ -355,12 +352,12 @@ impl MessageRepository {
         Self { pool }
     }
 
-    pub async fn create(&self, message: &NewMessage) -> Result<Message, Error> {
+    pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
-            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data, max_attempts)
+            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6, $7
             FROM smtp_credentials s
                 JOIN streams ON s.stream_id = streams.id
                 JOIN projects p ON p.id = streams.project_id
@@ -383,14 +380,16 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             "#,
             *message.smtp_credential_id,
             message.status as _,
             message.from_email.as_str(),
             &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
             message.raw_data,
-            message.message_data
+            message.message_data,
+            max_attempts
         )
             .fetch_one(&self.pool)
             .await?
@@ -475,7 +474,8 @@ impl MessageRepository {
                 created_at,
                 updated_at,
                 retry_after,
-                attempts
+                attempts,
+                max_attempts
             FROM messages m
             WHERE organization_id = $1
                 AND ($2::uuid IS NULL OR project_id = $2)
@@ -527,7 +527,8 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             FROM messages  m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -545,10 +546,7 @@ impl MessageRepository {
         .try_into()
     }
 
-    pub async fn find_messages_ready_for_retry(
-        &self,
-        max_attempts: i32,
-    ) -> Result<Vec<Message>, Error> {
+    pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<Message>, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
@@ -569,13 +567,13 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             FROM messages m
             WHERE (m.status = 'held' OR m.status = 'reattempt')
               AND now() > m.retry_after
-              AND m.attempts < $1
+              AND m.attempts < m.max_attempts
             "#,
-            max_attempts
         )
         .fetch_all(&self.pool)
         .await?
@@ -595,8 +593,8 @@ impl MessageRepository {
             MessageRetryUpdate,
             r#"
             UPDATE messages
-            SET retry_after = $5,
-                attempts = $6,
+            SET retry_after = now(),
+                max_attempts = GREATEST(attempts + 1, max_attempts),
                 status = CASE status
                     WHEN 'rejected' THEN 'held'
                     WHEN 'failed' THEN 'reattempt'
@@ -606,14 +604,12 @@ impl MessageRepository {
               AND organization_id = $2
               AND ($3::uuid IS NULL OR project_id = $3)
               AND ($4::uuid IS NULL OR stream_id = $4)
-            RETURNING retry_after, attempts, status as "status: _"
+            RETURNING status as "status: _", retry_after, attempts, max_attempts
             "#,
             *message_id,
             *org_id,
             project_id.map(|p| p.as_uuid()),
             stream_id.map(|s| s.as_uuid()),
-            chrono::Utc::now(),
-            0 // TODO: set to limit - 1, or introduce and increment max attempts?
         )
         .fetch_one(&self.pool)
         .await?)
@@ -699,7 +695,7 @@ mod test {
 
         let new_message = NewMessage::from_builder_message(message, credential.id());
 
-        let message = repository.create(&new_message).await.unwrap();
+        let message = repository.create(&new_message, 5).await.unwrap();
 
         let mut fetched_message = repository
             .find_by_id(org_id, Some(project_id), Some(stream_id), message.id)

@@ -29,6 +29,7 @@ export interface MessageMetadata {
   delivery_status: { [receiver: string]: DeliveryStatus };
   retry_after: string | undefined;
   attempts: number;
+  max_attempts: number;
 }
 
 export interface Message extends MessageMetadata {
