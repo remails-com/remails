@@ -4,20 +4,8 @@ import { IconReload, IconX } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
 import { useStreams } from "../../hooks/useStreams";
-import { Button } from "@mantine/core";
+import { Button, Tooltip } from "@mantine/core";
 import { is_in_the_future } from "../../util";
-
-function canRetryFaster(message: MessageMetadata) {
-  if (message.status == "Processing" || message.status == "Accepted" || message.status == "Delivered") {
-    return false;
-  }
-
-  if (message.retry_after && !is_in_the_future(message.retry_after)) {
-    return false;
-  }
-
-  return true;
-}
 
 export default function MessageRetryButton({
   message,
@@ -65,9 +53,28 @@ export default function MessageRetryButton({
     });
   }
 
+  const status_retryable = !(
+    message.status == "Processing" ||
+    message.status == "Accepted" ||
+    message.status == "Delivered"
+  );
+  const already_scheduled = message.retry_after && !is_in_the_future(message.retry_after);
+
+  const can_retry = status_retryable && !already_scheduled;
+
   return (
-    <Button leftSection={<IconReload />} disabled={!canRetryFaster(message)} onClick={retry}>
-      Retry
-    </Button>
+    <Tooltip
+      label={
+        status_retryable
+          ? already_scheduled
+            ? "Message is already scheduled to retry as soon as possible"
+            : "(Re-)schedule retry"
+          : `Message is ${message.status.toLowerCase()}`
+      }
+    >
+      <Button leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
+        Retry
+      </Button>
+    </Tooltip>
   );
 }
