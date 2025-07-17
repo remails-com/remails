@@ -70,7 +70,7 @@ export default function Login({ setUser }: LoginProps) {
           setGlobalError("Something went wrong");
         } else {
           res.json().then(setUser);
-          navigate("default")
+          navigate("default");
         }
       });
     }
@@ -89,7 +89,7 @@ export default function Login({ setUser }: LoginProps) {
           setGlobalError("Something went wrong");
         } else {
           res.json().then(setUser);
-          navigate("default")
+          navigate("default");
         }
       });
     }
