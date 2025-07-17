@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT true AS \"exists!\" FROM moneybird_webhook\n            ",
+  "query": "\n                SELECT true AS \"exists!\" FROM moneybird_webhook\n                ",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "9ed89a648c85b83380930f022db7f25a2772132d1e1df4236587dd5084f061f1"
+  "hash": "3c4f3748e75e225a15a063a74aa2855585119cee6394c91744bbff3038117274"
 }
