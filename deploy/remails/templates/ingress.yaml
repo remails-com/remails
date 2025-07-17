@@ -21,5 +21,31 @@ spec:
   tls:
     - hosts:
         - {{ .Values.management.server_name }}
+        - www.{{ .Values.management.server_name }}
       secretName: management-tls-cert
-
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: remails-{{ .Values.environment }}-redirect
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://{{ .Values.management.server_name }}"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: www.{{ .Values.management.server_name }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: management
+                port:
+                  name: http
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - {{ .Values.management.server_name }}
+        - www.{{ .Values.management.server_name }}
+      secretName: management-tls-cert
