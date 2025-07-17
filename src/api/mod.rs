@@ -240,6 +240,8 @@ impl ApiServer {
             .await
             .expect("Cannot connect to Moneybird");
 
+        moneybird.register_webhook();
+
         let state = ApiState {
             pool,
             config: ApiConfig {
