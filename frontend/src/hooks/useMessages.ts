@@ -26,27 +26,21 @@ export function useMessages() {
           .then((res) => res.json())
           .then((message) => {
             setCurrentMessage(message);
-            dispatch({
-              type: "set_messages",
-              messages: messages?.map((m) => (m.id == message.id ? message : m)) ?? null,
-            });
+            dispatch({ type: "update_message", messageId: message.id, update: message });
           });
       }
     } else {
       setCurrentMessage(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrganization, currentProject, currentStream, routerState.params.message_id]);
+  }, [currentOrganization, currentProject, currentStream, routerState.params.message_id]); // don't update on messages
 
   function updateMessage(message_id: string, update: Partial<Message>) {
     if (currentMessage?.id == message_id) {
       setCurrentMessage({ ...currentMessage, ...update });
     }
 
-    dispatch({
-      type: "set_messages",
-      messages: messages?.map((m) => (m.id == message_id ? { ...m, ...update } : m)) ?? null,
-    });
+    dispatch({ type: "update_message", messageId: message_id, update: update });
   }
 
   return { messages, currentMessage, updateMessage };

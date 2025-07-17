@@ -114,6 +114,11 @@ export type Action =
       messages: MessageMetadata[] | null;
     }
   | {
+      type: "update_message";
+      messageId: string;
+      update: Partial<Message>;
+    }
+  | {
       type: "remove_message";
       messageId: string;
     }
