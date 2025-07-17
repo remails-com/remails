@@ -3,25 +3,39 @@ import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } fr
 import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
 import { Message, MessageMetadata } from "../../types.ts";
-import { formatDateTime } from "../../util.ts";
+import { formatDateTime, is_in_the_future } from "../../util.ts";
 import { IconHelp, IconPaperclip } from "@tabler/icons-react";
+import MessageRetryButton from "./MessageRetryButton.tsx";
+import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
     return `Delivered ${message.reason}`;
   } else {
-    return (
-      message.status +
-      (message.reason ? `: ${message.reason}` : "") +
-      (message.retry_after ? `, retrying after ${formatDateTime(message.retry_after)}` : "") +
-      (message.attempts > 1 ? ` (${message.attempts} attempts)` : "")
-    );
+    let s = message.status;
+
+    if (message.reason) {
+      s += `: ${message.reason}`;
+    }
+
+    if (message.retry_after) {
+      const retry_after_formatted = is_in_the_future(message.retry_after)
+        ? "after " + formatDateTime(message.retry_after)
+        : "soon";
+      s += `, retrying ${retry_after_formatted}`;
+    }
+
+    if (message.attempts > 1) {
+      s += ` (attempt ${message.attempts} of ${message.max_attempts})`;
+    }
+
+    return s;
   }
 }
 
 export default function MessageDetails() {
-  const { currentMessage } = useMessages();
+  const { currentMessage, updateMessage } = useMessages();
   const [displayMode, setDisplayMode] = useState("text");
 
   if (!currentMessage || !("message_data" in currentMessage && "truncated_raw_data" in currentMessage)) {
@@ -81,7 +95,7 @@ export default function MessageDetails() {
               variant="light"
               size="lg"
               mr="xs"
-              leftSection={<IconPaperclip />}
+              leftSection={<IconPaperclip size={18} />}
               rightSection={<Text fz="xs">{attachment.size}</Text>}
             >
               {attachment.filename}
@@ -122,8 +136,13 @@ export default function MessageDetails() {
           ))}
         </Table.Tbody>
       </Table>
+
+      <Group my="sm" justify="right">
+        <MessageRetryButton message={currentMessage} updateMessage={updateMessage} />
+        <MessageDeleteButton message={currentMessage} />
+      </Group>
+
       <SegmentedControl
-        mt="sm"
         value={displayMode}
         onChange={setDisplayMode}
         data={[

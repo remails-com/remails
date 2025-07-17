@@ -98,6 +98,7 @@ pub struct ApiMessageMetadata {
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
+    max_attempts: i32,
 }
 
 #[derive(Serialize, Default)]
@@ -147,6 +148,14 @@ pub struct NewMessage {
     pub message_data: serde_json::Value,
 }
 
+#[derive(Serialize, Debug)]
+pub struct MessageRetryUpdate {
+    status: MessageStatus,
+    retry_after: Option<DateTime<Utc>>,
+    attempts: i32,
+    max_attempts: i32,
+}
+
 impl Message {
     pub fn id(&self) -> MessageId {
         self.id
@@ -171,7 +180,7 @@ impl Message {
             return;
         }
 
-        if self.attempts < config.max_retries {
+        if self.attempts < config.max_automatic_retries {
             let timeout = config
                 .retry_delay
                 .checked_mul(self.attempts)
@@ -183,13 +192,6 @@ impl Message {
                 MessageStatus::Reattempt => self.status = MessageStatus::Failed,
                 _ => {}
             };
-            self.reason = Some(self.reason.take().map_or(
-                "out of attempts".to_string(),
-                |mut reason| {
-                    reason.push_str(" - out of attempts");
-                    reason
-                },
-            ));
             self.retry_after = None;
         }
     }
@@ -249,6 +251,7 @@ struct PgMessage {
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
+    max_attempts: i32,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -352,6 +355,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             attempts: m.attempts,
+            max_attempts: m.max_attempts,
         })
     }
 }
@@ -361,12 +365,12 @@ impl MessageRepository {
         Self { pool }
     }
 
-    pub async fn create(&self, message: &NewMessage) -> Result<Message, Error> {
+    pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)
-            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data, max_attempts)
+            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6, $7
             FROM smtp_credentials s
                 JOIN streams ON s.stream_id = streams.id
                 JOIN projects p ON p.id = streams.project_id
@@ -389,14 +393,16 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             "#,
             *message.smtp_credential_id,
             message.status as _,
             message.from_email.as_str(),
             &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
             message.raw_data,
-            message.message_data
+            message.message_data,
+            max_attempts
         )
             .fetch_one(&self.pool)
             .await?
@@ -431,7 +437,6 @@ impl MessageRepository {
     }
 
     pub async fn update_message_data_and_status(&self, message: &Message) -> Result<(), Error> {
-        tracing::debug!("updating message data and status");
         sqlx::query!(
             r#"
             UPDATE messages
@@ -482,7 +487,8 @@ impl MessageRepository {
                 created_at,
                 updated_at,
                 retry_after,
-                attempts
+                attempts,
+                max_attempts
             FROM messages m
             WHERE organization_id = $1
                 AND ($2::uuid IS NULL OR project_id = $2)
@@ -534,7 +540,8 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             FROM messages  m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -552,10 +559,33 @@ impl MessageRepository {
         .try_into()
     }
 
-    pub async fn find_messages_ready_for_retry(
+    pub async fn remove(
         &self,
-        max_attempts: i32,
-    ) -> Result<Vec<Message>, Error> {
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<MessageId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM messages
+            WHERE id = $1
+              AND organization_id = $2
+              AND ($3::uuid IS NULL OR project_id = $3)
+              AND ($4::uuid IS NULL OR stream_id = $4)
+            RETURNING id
+            "#,
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
+
+    pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<Message>, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
@@ -576,19 +606,52 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts
+                m.attempts,
+                m.max_attempts
             FROM messages m
             WHERE (m.status = 'held' OR m.status = 'reattempt')
               AND now() > m.retry_after
-              AND m.attempts < $1
+              AND m.attempts < m.max_attempts
             "#,
-            max_attempts
         )
         .fetch_all(&self.pool)
         .await?
         .into_iter()
         .map(TryInto::try_into)
         .collect::<Result<Vec<_>, Error>>()
+    }
+
+    pub async fn update_to_retry_asap(
+        &self,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<MessageRetryUpdate, Error> {
+        Ok(sqlx::query_as!(
+            MessageRetryUpdate,
+            r#"
+            UPDATE messages
+            SET retry_after = now(),
+                max_attempts = GREATEST(attempts + 1, max_attempts),
+                status = CASE status
+                    WHEN 'rejected' THEN 'held'
+                    WHEN 'failed' THEN 'reattempt'
+                    ELSE status
+                END
+            WHERE id = $1
+              AND organization_id = $2
+              AND ($3::uuid IS NULL OR project_id = $3)
+              AND ($4::uuid IS NULL OR stream_id = $4)
+            RETURNING status as "status: _", retry_after, attempts, max_attempts
+            "#,
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
+        )
+        .fetch_one(&self.pool)
+        .await?)
     }
 }
 
@@ -671,7 +734,7 @@ mod test {
 
         let new_message = NewMessage::from_builder_message(message, credential.id());
 
-        let message = repository.create(&new_message).await.unwrap();
+        let message = repository.create(&new_message, 5).await.unwrap();
 
         let mut fetched_message = repository
             .find_by_id(org_id, Some(project_id), Some(stream_id), message.id)
@@ -693,5 +756,43 @@ mod test {
         ];
 
         assert_eq!(fetched_message.metadata.recipients, expected);
+
+        let messages = repository
+            .list_message_metadata(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                MessageFilter {
+                    limit: 5,
+                    status: None,
+                    before: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, message.id);
+
+        repository
+            .remove(org_id, Some(project_id), Some(stream_id), message.id)
+            .await
+            .unwrap();
+
+        let messages = repository
+            .list_message_metadata(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                MessageFilter {
+                    limit: 5,
+                    status: None,
+                    before: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(messages.len(), 0);
     }
 }

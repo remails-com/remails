@@ -135,7 +135,7 @@ async fn setup(
         domain: "test".to_string(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         retry_delay: chrono::Duration::minutes(5),
-        max_retries: 2,
+        max_automatic_retries: 2,
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;

@@ -30,6 +30,15 @@ const actionHandler: {
   set_messages: function (state, action) {
     return { ...state, messages: action.messages };
   },
+  update_message: function (state, action) {
+    return {
+      ...state,
+      messages: state.messages?.map((m) => (m.id == action.messageId ? { ...m, ...action.update } : m)) ?? null,
+    };
+  },
+  remove_message: function (state, action) {
+    return { ...state, messages: state.messages?.filter((m) => m.id !== action.messageId) || [] };
+  },
   set_domains: function (state, action) {
     return { ...state, domains: action.domains };
   },

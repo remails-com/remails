@@ -12,6 +12,7 @@ export function useMessages() {
   const [currentMessage, setCurrentMessage] = useState<Message | MessageMetadata | null>(null);
   const {
     state: { messages, routerState },
+    dispatch,
   } = useRemails();
 
   useEffect(() => {
@@ -23,12 +24,24 @@ export function useMessages() {
           `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${routerState.params.message_id}`
         )
           .then((res) => res.json())
-          .then(setCurrentMessage);
+          .then((message) => {
+            setCurrentMessage(message);
+            dispatch({ type: "update_message", messageId: message.id, update: message });
+          });
       }
     } else {
       setCurrentMessage(null);
     }
-  }, [currentOrganization, currentProject, currentStream, routerState.params.message_id, messages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrganization, currentProject, currentStream, routerState.params.message_id]); // don't update on messages
 
-  return { messages, currentMessage };
+  function updateMessage(message_id: string, update: Partial<Message>) {
+    if (currentMessage?.id == message_id) {
+      setCurrentMessage({ ...currentMessage, ...update });
+    }
+
+    dispatch({ type: "update_message", messageId: message_id, update: update });
+  }
+
+  return { messages, currentMessage, updateMessage };
 }
