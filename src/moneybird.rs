@@ -448,21 +448,18 @@ impl MoneyBird {
             };
 
             let hash = password_auth::generate_hash(webhook.token.danger_as_str());
-            match sqlx::query!(
+            if let Err(err) = sqlx::query!(
                 r#"
-            INSERT INTO moneybird_webhook (moneybird_id, token_hash) VALUES ($1, $2)
-            "#,
+                INSERT INTO moneybird_webhook (moneybird_id, token_hash) VALUES ($1, $2)
+                "#,
                 *webhook.id,
                 hash
             )
             .execute(&self_clone.pool)
             .await
             {
-                Ok(_) => {}
-                Err(err) => {
-                    error!("Error storing Moneybird webhook in database: {}", err);
-                    return;
-                }
+                error!("Error storing Moneybird webhook in database: {}", err);
+                return;
             };
 
             info!(
@@ -542,7 +539,7 @@ impl MoneyBird {
             | Action::SubscriptionEdited
             | Action::SubscriptionResumed
             | Action::SubscriptionUpdated => {
-                trace!(
+                debug!(
                     webhook_id = webhook_id.as_str(),
                     administration_id = payload.administration_id.as_str(),
                     "received {:?} webhook",
@@ -573,14 +570,23 @@ impl MoneyBird {
             "syncing subscription"
         );
 
-        let quota_reset = sqlx::query_scalar!(
+        let Some(quota_reset) = sqlx::query_scalar!(
             r#"
             SELECT quota_reset FROM organizations WHERE moneybird_contact_id = $1
             "#,
             *subscription.contact.id
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            warn!(
+                moneybird_contact_id = subscription.contact.id.as_str(),
+                "Cannot find organization with moneybird contact id"
+            );
+            return Err(Error::Moneybird(
+                "Cannot find organization with moneybird contact id".to_string(),
+            ));
+        };
 
         let subscription_status: SubscriptionStatus = [&subscription].into();
 
