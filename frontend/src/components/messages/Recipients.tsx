@@ -51,8 +51,10 @@ export function Recipients({ message, mr, ml }: RecipientsProps): ReactElement {
           size="lg"
           onClick={(e) => {
             e.stopPropagation();
-            setLog(details?.log ?? { lines: [] });
-            open();
+            if (details.log) {
+              setLog(details.log);
+              open();
+            }
           }}
         >
           {recipient}
