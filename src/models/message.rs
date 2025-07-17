@@ -546,6 +546,32 @@ impl MessageRepository {
         .try_into()
     }
 
+    pub async fn remove(
+        &self,
+        org_id: OrganizationId,
+        project_id: Option<ProjectId>,
+        stream_id: Option<StreamId>,
+        message_id: MessageId,
+    ) -> Result<MessageId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM messages
+            WHERE id = $1
+              AND organization_id = $2
+              AND ($3::uuid IS NULL OR project_id = $3)
+              AND ($4::uuid IS NULL OR stream_id = $4)
+            RETURNING id
+            "#,
+            *message_id,
+            *org_id,
+            project_id.map(|p| p.as_uuid()),
+            stream_id.map(|s| s.as_uuid()),
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
+
     pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<Message>, Error> {
         sqlx::query_as!(
             PgMessage,

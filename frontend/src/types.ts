@@ -114,6 +114,10 @@ export type Action =
       messages: MessageMetadata[] | null;
     }
   | {
+      type: "remove_message";
+      messageId: string;
+    }
+  | {
       type: "set_domains";
       domains: Domain[] | null;
     }

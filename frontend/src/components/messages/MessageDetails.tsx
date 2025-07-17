@@ -1,7 +1,6 @@
 import { useMessages } from "../../hooks/useMessages.ts";
 import {
   Badge,
-  Button,
   Group,
   MantineSpacing,
   Paper,
@@ -16,8 +15,9 @@ import { ReactElement, useState } from "react";
 import { Loader } from "../../Loader.tsx";
 import { DeliveryStatus, Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
-import { IconCheck, IconClock, IconHelp, IconPaperclip, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
 import MessageRetryButton from "./MessageRetryButton.tsx";
+import MessageDeleteButton from "./MessageDeleteButton.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -195,9 +195,7 @@ export default function MessageDetails() {
 
       <Group my="sm" justify="right">
         <MessageRetryButton message={currentMessage} updateMessage={updateMessage} />
-        <Button leftSection={<IconTrash />} variant="outline">
-          Delete
-        </Button>
+        <MessageDeleteButton message={currentMessage} />
       </Group>
 
       <SegmentedControl

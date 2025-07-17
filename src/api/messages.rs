@@ -104,6 +104,33 @@ pub async fn get_message(
     Ok(Json(message))
 }
 
+pub async fn remove_message(
+    State(repo): State<MessageRepository>,
+    Path(SpecificMessagePath {
+        org_id,
+        project_id,
+        stream_id,
+        message_id,
+    }): Path<SpecificMessagePath>,
+    user: ApiUser,
+) -> ApiResult<()> {
+    has_write_access(org_id, project_id, stream_id, Some(message_id), &user)?;
+
+    repo.remove(org_id, project_id, stream_id, message_id)
+        .await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        project_id = project_id.map(|id| id.to_string()),
+        stream_id = stream_id.map(|id| id.to_string()),
+        message_id = message_id.to_string(),
+        "removed message",
+    );
+
+    Ok(Json(()))
+}
+
 pub async fn update_to_retry_asap(
     State(repo): State<MessageRepository>,
     Path(SpecificMessagePath {
