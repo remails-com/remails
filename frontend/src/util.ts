@@ -23,6 +23,10 @@ export function formatNumber(number: number): string {
   return number.toLocaleString("en-US");
 }
 
+export function is_in_the_future(date: number | string | Date) {
+  return new Date(date).getTime() - new Date().getTime() > 0;
+}
+
 export function is_global_admin(roles: Array<Role>): boolean {
   return roles.some((role) => role.type === "super_admin");
 }

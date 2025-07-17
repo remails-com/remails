@@ -23,12 +23,13 @@ export interface MessageMetadata {
   from_email: string;
   created_at: string;
   recipients: string[];
-  status: string;
+  status: "Processing" | "Held" | "Accepted" | "Rejected" | "Delivered" | "Reattempt" | "Failed";
   reason: string | undefined;
   raw_size: string;
   delivery_status: { [receiver: string]: DeliveryStatus };
   retry_after: string | undefined;
   attempts: number;
+  max_attempts: number;
 }
 
 export interface Message extends MessageMetadata {
@@ -111,6 +112,15 @@ export type Action =
   | {
       type: "set_messages";
       messages: MessageMetadata[] | null;
+    }
+  | {
+      type: "update_message";
+      messageId: string;
+      update: Partial<Message>;
+    }
+  | {
+      type: "remove_message";
+      messageId: string;
     }
   | {
       type: "set_domains";

@@ -54,7 +54,7 @@ pub struct HandlerConfig {
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
     pub(crate) retry_delay: Duration,
-    pub(crate) max_retries: i32,
+    pub(crate) max_automatic_retries: i32,
 }
 
 #[cfg(not(test))]
@@ -66,7 +66,7 @@ impl HandlerConfig {
                 .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
             retry_delay: Duration::minutes(5),
-            max_retries: 5,
+            max_automatic_retries: 5,
         }
     }
 
@@ -281,7 +281,7 @@ impl Handler {
 
     pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
         self.message_repository
-            .create(&message)
+            .create(&message, self.config.max_automatic_retries)
             .await
             .inspect(|m| trace!("stored message {}", m.id()))
             .map_err(HandlerError::RepositoryError)
@@ -626,7 +626,7 @@ impl Handler {
     pub async fn retry_all(&self) -> Result<(), HandlerError> {
         let messages = self
             .message_repository
-            .find_messages_ready_for_retry(self.config.max_retries)
+            .find_messages_ready_for_retry()
             .await
             .map_err(HandlerError::RepositoryError)?;
 
@@ -728,7 +728,7 @@ mod test {
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry_delay: Duration::minutes(5),
-            max_retries: 1,
+            max_automatic_retries: 1,
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
@@ -786,7 +786,7 @@ mod test {
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
                 retry_delay: Duration::minutes(5),
-                max_retries: 1,
+                max_automatic_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
@@ -853,7 +853,7 @@ mod test {
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
                 retry_delay: Duration::minutes(5),
-                max_retries: 1,
+                max_automatic_retries: 1,
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
@@ -925,7 +925,7 @@ mod test {
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry_delay: Duration::minutes(60),
-            max_retries: 3,
+            max_automatic_retries: 3,
         };
         let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
         handler.retry_all().await.unwrap();
@@ -945,6 +945,34 @@ mod test {
         assert_eq!(
             get_message_status(message_on_timeout).await,
             MessageStatus::Reattempt
+        );
+
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_out_of_attempts,
+            )
+            .await
+            .unwrap();
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_on_timeout,
+            )
+            .await
+            .unwrap();
+        handler.retry_all().await.unwrap();
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Delivered
         );
     }
 
@@ -975,7 +1003,7 @@ mod test {
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry_delay: Duration::minutes(60),
-            max_retries: 3,
+            max_automatic_retries: 3,
         };
         let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
         handler.retry_all().await.unwrap();
