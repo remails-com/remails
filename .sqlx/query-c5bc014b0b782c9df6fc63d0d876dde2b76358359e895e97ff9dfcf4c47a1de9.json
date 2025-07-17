@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                stream_id,\n                smtp_credential_id,\n                status AS \"status: _\",\n                reason,\n                delivery_status,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                created_at,\n                updated_at,\n                retry_after,\n                attempts\n            FROM messages m\n            WHERE organization_id = $1\n                AND ($2::uuid IS NULL OR project_id = $2)\n                AND ($3::uuid IS NULL OR stream_id = $3)\n                AND ($5::message_status IS NULL OR status = $5)\n                AND ($6::timestamptz IS NULL OR created_at <= $6)\n            ORDER BY created_at DESC\n            LIMIT $4\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                stream_id,\n                smtp_credential_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                created_at,\n                updated_at,\n                retry_after,\n                attempts\n            FROM messages m\n            WHERE organization_id = $1\n                AND ($2::uuid IS NULL OR project_id = $2)\n                AND ($3::uuid IS NULL OR stream_id = $3)\n                AND ($5::message_status IS NULL OR status = $5)\n                AND ($6::timestamptz IS NULL OR created_at <= $6)\n            ORDER BY created_at DESC\n            LIMIT $4\n            ",
   "describe": {
     "columns": [
       {
@@ -55,7 +55,7 @@
       },
       {
         "ordinal": 7,
-        "name": "delivery_status",
+        "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
@@ -149,5 +149,5 @@
       false
     ]
   },
-  "hash": "babe2b078e7cba64bdd3129d9f258131e02596efc0b9a1f8c430a95203e20cc6"
+  "hash": "c5bc014b0b782c9df6fc63d0d876dde2b76358359e895e97ff9dfcf4c47a1de9"
 }

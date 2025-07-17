@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email, recipients, raw_data, message_data)\n            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6\n            FROM smtp_credentials s\n                JOIN streams ON s.stream_id = streams.id\n                JOIN projects p ON p.id = streams.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $1\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts\n            FROM messages m\n            WHERE (m.status = 'held' OR m.status = 'reattempt')\n              AND now() > m.retry_after\n              AND m.attempts < $1\n            ",
   "describe": {
     "columns": [
       {
@@ -55,7 +55,7 @@
       },
       {
         "ordinal": 7,
-        "name": "delivery_status",
+        "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
@@ -106,27 +106,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        {
-          "Custom": {
-            "name": "message_status",
-            "kind": {
-              "Enum": [
-                "processing",
-                "held",
-                "accepted",
-                "rejected",
-                "delivered",
-                "reattempt",
-                "failed"
-              ]
-            }
-          }
-        },
-        "Varchar",
-        "VarcharArray",
-        "Bytea",
-        "Jsonb"
+        "Int4"
       ]
     },
     "nullable": [
@@ -149,5 +129,5 @@
       false
     ]
   },
-  "hash": "9fa103858d929fe86c876916b9ab8dbe71b3f7ba76a08abb61740275d3b62a8b"
+  "hash": "e17a42af9d612308925161801b7291f4054701badcfd75071836d1ef83da04b6"
 }

@@ -104,6 +104,7 @@ impl DnsResolver {
         // The cluster does not support DualStack
         resolver_options.ip_strategy = Ipv4Only;
         resolver_options.negative_max_ttl = Some(std::time::Duration::from_secs(20));
+        resolver_options.attempts = 4;
 
         let mut resolver_config = ResolverConfig::new();
         // protective (DNS4EU)

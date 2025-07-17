@@ -1,21 +1,11 @@
 import { useMessages } from "../../hooks/useMessages.ts";
-import {
-  Badge,
-  Group,
-  MantineSpacing,
-  Paper,
-  SegmentedControl,
-  StyleProp,
-  Table,
-  Text,
-  Title,
-  Tooltip,
-} from "@mantine/core";
-import { ReactElement, useState } from "react";
+import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
+import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { DeliveryStatus, Message, MessageMetadata } from "../../types.ts";
+import { Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime } from "../../util.ts";
-import { IconCheck, IconClock, IconHelp, IconPaperclip, IconX } from "@tabler/icons-react";
+import { IconHelp, IconPaperclip } from "@tabler/icons-react";
+import { Recipients } from "./Recipients.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -28,50 +18,6 @@ export function getFullStatusDescription(message: MessageMetadata) {
       (message.attempts > 1 ? ` (${message.attempts} attempts)` : "")
     );
   }
-}
-
-const deliveryStatus: {
-  [key in DeliveryStatus["type"]]: { color: string; icon?: ReactElement };
-} = {
-  NotSent: { color: "secondary", icon: undefined },
-  Success: { color: "green", icon: <IconCheck size={16} /> },
-  Reattempt: { color: "orange", icon: <IconClock size={16} /> },
-  Failed: { color: "red", icon: <IconX size={16} /> },
-};
-
-export function renderRecipients(
-  message: MessageMetadata,
-  ml?: StyleProp<MantineSpacing>,
-  mr?: StyleProp<MantineSpacing>
-) {
-  return message.recipients.map((recipient: string) => {
-    const status = message.delivery_status[recipient] ?? { type: "NotSent" };
-
-    let tooltip = "Message not (yet) sent";
-    if (status.type == "Failed") {
-      tooltip = "Permanent failure";
-    } else if (status.type == "Reattempt") {
-      tooltip = "Temporary failure";
-    } else if (status.type == "Success") {
-      tooltip = `Delivered on ${status.delivered && formatDateTime(status.delivered)}`;
-    }
-
-    return (
-      <Tooltip label={tooltip} key={recipient}>
-        <Badge
-          color={deliveryStatus[status.type].color}
-          variant="light"
-          ml={ml}
-          mr={mr}
-          rightSection={deliveryStatus[status.type].icon}
-          tt="none"
-          size="lg"
-        >
-          {recipient}
-        </Badge>
-      </Tooltip>
-    );
-  });
 }
 
 export default function MessageDetails() {
@@ -88,14 +34,12 @@ export default function MessageDetails() {
   const text_body = completeMessage.message_data.text_body;
   const raw = completeMessage.truncated_raw_data;
 
-  const recipients = renderRecipients(completeMessage, undefined, "sm");
-
   const table_data = [
     { header: "From", value: completeMessage.from_email },
     {
       header: "Recipients",
       info: 'The recipients who will receive this message based on the "RCPT TO" SMTP header',
-      value: recipients,
+      value: <Recipients message={completeMessage} mr="sm" />,
     },
     {
       header: "Date",

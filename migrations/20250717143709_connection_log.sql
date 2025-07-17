@@ -1,0 +1,1 @@
+ALTER TABLE messages RENAME COLUMN delivery_status TO delivery_details;
