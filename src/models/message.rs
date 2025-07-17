@@ -1,5 +1,6 @@
 use crate::{
     HandlerConfig,
+    handler::ConnectionLog,
     models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
 };
 use chrono::{DateTime, Utc};
@@ -50,7 +51,7 @@ pub struct Message {
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
-    pub delivery_status: HashMap<EmailAddress, DeliveryStatus>,
+    pub delivery_details: HashMap<EmailAddress, DeliveryDetails>,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
@@ -87,7 +88,7 @@ pub struct ApiMessageMetadata {
     id: MessageId,
     status: MessageStatus,
     reason: Option<String>,
-    delivery_status: HashMap<EmailAddress, DeliveryStatus>,
+    delivery_details: HashMap<EmailAddress, DeliveryDetails>,
     smtp_credential_id: Option<SmtpCredentialId>,
     from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
@@ -123,6 +124,18 @@ pub enum DeliveryStatus {
     Success { delivered: DateTime<Utc> },
     Reattempt,
     Failed,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DeliveryDetails {
+    pub status: DeliveryStatus,
+    pub log: ConnectionLog,
+}
+
+impl DeliveryDetails {
+    pub fn new(status: DeliveryStatus, log: ConnectionLog) -> Self {
+        Self { status, log }
+    }
 }
 
 #[derive(Debug)]
@@ -228,7 +241,7 @@ struct PgMessage {
     smtp_credential_id: Option<Uuid>,
     status: MessageStatus,
     reason: Option<String>,
-    delivery_status: serde_json::Value,
+    delivery_details: serde_json::Value,
     from_email: String,
     recipients: Vec<String>,
     raw_data: Vec<u8>,
@@ -253,7 +266,7 @@ impl TryFrom<PgMessage> for Message {
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             status: m.status,
             reason: m.reason,
-            delivery_status: serde_json::from_value(m.delivery_status)?,
+            delivery_details: serde_json::from_value(m.delivery_details)?,
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
                 .recipients
@@ -329,7 +342,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             id: m.id,
             status: m.status,
             reason: m.reason,
-            delivery_status: serde_json::from_value(m.delivery_status)?,
+            delivery_details: serde_json::from_value(m.delivery_details)?,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
@@ -371,7 +384,7 @@ impl MessageRepository {
                 m.smtp_credential_id,
                 m.status as "status: _",
                 m.reason,
-                m.delivery_status,
+                m.delivery_details,
                 m.from_email,
                 m.recipients,
                 m.raw_data,
@@ -397,15 +410,15 @@ impl MessageRepository {
     }
 
     pub async fn update_message_status(&self, message: &mut Message) -> Result<(), Error> {
-        let delivery_status_serialized =
-            serde_json::to_value(&message.delivery_status).map_err(Error::Serialization)?;
+        let delivery_details_serialized =
+            serde_json::to_value(&message.delivery_details).map_err(Error::Serialization)?;
 
         sqlx::query!(
             r#"
             UPDATE messages
             SET status = $2,
                 reason = $3,
-                delivery_status = $4,
+                delivery_details = $4,
                 retry_after = $5,
                 attempts = $6
             WHERE id = $1
@@ -413,7 +426,7 @@ impl MessageRepository {
             *message.id,
             message.status as _,
             message.reason,
-            delivery_status_serialized,
+            delivery_details_serialized,
             message.retry_after,
             message.attempts,
         )
@@ -465,7 +478,7 @@ impl MessageRepository {
                 smtp_credential_id,
                 status AS "status: _",
                 reason,
-                delivery_status,
+                delivery_details,
                 from_email,
                 recipients,
                 ''::bytea AS "raw_data!",
@@ -517,7 +530,7 @@ impl MessageRepository {
                 m.smtp_credential_id,
                 m.status as "status: _",
                 m.reason,
-                m.delivery_status,
+                m.delivery_details,
                 m.from_email,
                 m.recipients,
                 -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.
@@ -584,7 +597,7 @@ impl MessageRepository {
                 m.smtp_credential_id,
                 m.status as "status: _",
                 m.reason,
-                m.delivery_status,
+                m.delivery_details,
                 m.from_email,
                 m.recipients,
                 m.raw_data,

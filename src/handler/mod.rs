@@ -1,9 +1,10 @@
+pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
     dkim::PrivateKey,
-    handler::dns::DnsResolver,
+    handler::{connection_log::LogLevel, dns::DnsResolver},
     models::{
-        DeliveryStatus, DomainRepository, Message, MessageRepository, MessageStatus, NewMessage,
-        OrganizationRepository, QuotaStatus,
+        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageRepository,
+        MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
@@ -21,6 +22,7 @@ use tokio::{
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
+mod connection_log;
 
 pub mod dns;
 
@@ -398,6 +400,7 @@ impl Handler {
         recipient: &EmailAddress,
         message: &Message,
         security: Protection,
+        connection_log: &mut ConnectionLog,
     ) -> Result<(), SendError> {
         let domain = recipient.domain();
 
@@ -428,26 +431,45 @@ impl Handler {
                 Protection::Tls => match smtp.connect().await {
                     Err(err) => Err(err),
                     Ok(mut client) => {
-                        trace!("securely connected to upstream server");
+                        trace!(domain, port, "securely connected to upstream server");
+                        connection_log.log(LogLevel::Info, format!(
+                            "securely connected to '{hostname}' with port {port} over TLS",
+                        ));
                         let result = client.send(message.clone()).await;
                         Self::quit_smtp(client, &hostname).await;
                         result
                     }
                 },
-                Protection::Plaintext => match smtp.connect_plain().await {
-                    Err(err) => Err(err),
-                    Ok(mut client) => {
-                        trace!("INSECURELY connected to upstream server");
-                        let result = client.send(message.clone()).await;
-                        Self::quit_smtp(client, &hostname).await;
-                        result
+                Protection::Plaintext => {
+                    match smtp.connect_plain().await {
+                        Err(err) => Err(err),
+                        Ok(mut client) => {
+                            trace!(domain, port, "INSECURELY connected to upstream server");
+                            connection_log.log(LogLevel::Info,format!(
+                            "INSECURELY connected to '{hostname}' with port {port} without TLS",
+                        ));
+                            let result = client.send(message.clone()).await;
+                            Self::quit_smtp(client, &hostname).await;
+                            result
+                        }
                     }
-                },
+                }
             };
 
-            let Err(err) = result else { return Ok(()) };
+            let Err(err) = result else {
+                debug!(domain, port, "successfully send email");
+                connection_log.log(
+                    LogLevel::Info,
+                    format!("successfully send email using hostname '{hostname}' and port {port}",),
+                );
+                return Ok(());
+            };
 
-            info!("could not use server: {err}");
+            info!(domain, port, "could not use server: {err}");
+            connection_log.log(
+                LogLevel::Warn,
+                format!("could not use {hostname} on port {port}: {err}",),
+            );
 
             match err {
                 mail_send::Error::Io(_) => is_temporary_failure = true,
@@ -491,28 +513,42 @@ impl Handler {
         };
 
         'next_rcpt: for recipient in &message.recipients {
-            match message.delivery_status.get(recipient) {
-                None | Some(DeliveryStatus::Reattempt) => {} // attempt to (re-)send
-                Some(DeliveryStatus::Success { .. }) => continue,
-                Some(DeliveryStatus::Failed) => {
+            match message.delivery_details.get(recipient) {
+                None
+                | Some(DeliveryDetails {
+                    status: DeliveryStatus::Reattempt,
+                    ..
+                }) => {} // attempt to (re-)send
+                Some(DeliveryDetails {
+                    status: DeliveryStatus::Success { .. },
+                    ..
+                }) => continue,
+                Some(DeliveryDetails {
+                    status: DeliveryStatus::Failed,
+                    ..
+                }) => {
                     failures += 1;
                     continue;
                 }
             }
 
             let mut is_temporary_failure = false;
+            let mut connection_log = ConnectionLog::default();
 
             for &protection in order {
                 match self
-                    .send_single_message(recipient, &message, protection)
+                    .send_single_message(recipient, &message, protection, &mut connection_log)
                     .await
                 {
                     Ok(()) => {
-                        message.delivery_status.insert(
+                        message.delivery_details.insert(
                             recipient.clone(),
-                            DeliveryStatus::Success {
-                                delivered: chrono::Utc::now(),
-                            },
+                            DeliveryDetails::new(
+                                DeliveryStatus::Success {
+                                    delivered: chrono::Utc::now(),
+                                },
+                                connection_log,
+                            ),
                         );
                         continue 'next_rcpt;
                     }
@@ -522,13 +558,13 @@ impl Handler {
             }
             failures += 1;
 
-            message.delivery_status.insert(
+            message.delivery_details.insert(
                 recipient.clone(),
                 if is_temporary_failure {
                     should_reattempt = true;
-                    DeliveryStatus::Reattempt
+                    DeliveryDetails::new(DeliveryStatus::Reattempt, connection_log)
                 } else {
-                    DeliveryStatus::Failed
+                    DeliveryDetails::new(DeliveryStatus::Failed, connection_log)
                 },
             );
         }
@@ -544,7 +580,7 @@ impl Handler {
         message.reason = if failures > 0 {
             Some(format!(
                 "failed to deliver to {failures} of {} recipients",
-                message.delivery_status.len()
+                message.delivery_details.len()
             ))
         } else {
             let delivery_time = chrono::Utc::now() - message.created_at;

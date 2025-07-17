@@ -13,10 +13,27 @@ export interface User {
 
 export type WhoamiResponse = User | { error: string };
 
-export type DeliveryStatus = {
-  type: "NotSent" | "Success" | "Reattempt" | "Failed";
-  delivered?: string;
-};
+export type DeliveryStatus =
+  | {
+      type: "Success";
+      delivered: string;
+    }
+  | {
+      type: "NotSent" | "Reattempt" | "Failed";
+    };
+
+export interface DeliveryDetails {
+  status: DeliveryStatus;
+  log: Log;
+}
+
+export interface Log {
+  lines: Array<{
+    time: string;
+    level: string;
+    msg: string;
+  }>;
+}
 
 export interface MessageMetadata {
   id: string;
@@ -26,7 +43,7 @@ export interface MessageMetadata {
   status: "Processing" | "Held" | "Accepted" | "Rejected" | "Delivered" | "Reattempt" | "Failed";
   reason: string | undefined;
   raw_size: string;
-  delivery_status: { [receiver: string]: DeliveryStatus };
+  delivery_details: { [receiver: string]: DeliveryDetails };
   retry_after: string | undefined;
   attempts: number;
   max_attempts: number;

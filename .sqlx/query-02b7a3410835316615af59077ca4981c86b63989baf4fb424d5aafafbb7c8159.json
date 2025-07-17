@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages  m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND ($3::uuid IS NULL OR m.project_id = $3)\n              AND ($4::uuid IS NULL OR m.stream_id = $4)\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages  m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND ($3::uuid IS NULL OR m.project_id = $3)\n              AND ($4::uuid IS NULL OR m.stream_id = $4)\n            ",
   "describe": {
     "columns": [
       {
@@ -55,7 +55,7 @@
       },
       {
         "ordinal": 7,
-        "name": "delivery_status",
+        "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
@@ -139,5 +139,5 @@
       false
     ]
   },
-  "hash": "5cd9a65ffc29e36df03d660c9489109fe15a5a153a7a5df9e09d3422e148d33b"
+  "hash": "02b7a3410835316615af59077ca4981c86b63989baf4fb424d5aafafbb7c8159"
 }

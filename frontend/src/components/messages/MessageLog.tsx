@@ -4,12 +4,13 @@ import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
-import { getFullStatusDescription, renderRecipients } from "./MessageDetails.tsx";
+import { getFullStatusDescription } from "./MessageDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { useState } from "react";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import MessageRetryButton from "./MessageRetryButton.tsx";
+import { Recipients } from "./Recipients.tsx";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -90,7 +91,7 @@ export function MessageLog() {
               {message.from_email}
             </Badge>
             to
-            {renderRecipients(message, "sm")}
+            <Recipients message={message} ml="sm"/>
           </Box>
           <Text fz="xs" c="dimmed" mr="md">
             {formatDateTime(message.created_at)}

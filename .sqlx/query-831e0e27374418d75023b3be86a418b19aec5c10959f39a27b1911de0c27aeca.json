@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_status,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages m\n            WHERE (m.status = 'held' OR m.status = 'reattempt')\n              AND now() > m.retry_after\n              AND m.attempts < m.max_attempts\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                stream_id,\n                smtp_credential_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts\n            FROM messages m\n            WHERE organization_id = $1\n                AND ($2::uuid IS NULL OR project_id = $2)\n                AND ($3::uuid IS NULL OR stream_id = $3)\n                AND ($5::message_status IS NULL OR status = $5)\n                AND ($6::timestamptz IS NULL OR created_at <= $6)\n            ORDER BY created_at DESC\n            LIMIT $4\n            ",
   "describe": {
     "columns": [
       {
@@ -55,7 +55,7 @@
       },
       {
         "ordinal": 7,
-        "name": "delivery_status",
+        "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
@@ -70,18 +70,18 @@
       },
       {
         "ordinal": 10,
-        "name": "raw_data",
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
         "ordinal": 11,
-        "name": "raw_size!",
-        "type_info": "Int4"
+        "name": "message_data",
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 12,
-        "name": "message_data",
-        "type_info": "Jsonb"
+        "name": "raw_size!",
+        "type_info": "Int4"
       },
       {
         "ordinal": 13,
@@ -110,7 +110,29 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        {
+          "Custom": {
+            "name": "message_status",
+            "kind": {
+              "Enum": [
+                "processing",
+                "held",
+                "accepted",
+                "rejected",
+                "delivered",
+                "reattempt",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
     },
     "nullable": [
       false,
@@ -123,9 +145,9 @@
       false,
       false,
       false,
-      false,
       null,
-      true,
+      null,
+      null,
       false,
       false,
       true,
@@ -133,5 +155,5 @@
       false
     ]
   },
-  "hash": "771c790721511928f2fa3d1bdc7d1f5625a6e70e8dea7a809b56e2c295e56605"
+  "hash": "831e0e27374418d75023b3be86a418b19aec5c10959f39a27b1911de0c27aeca"
 }
