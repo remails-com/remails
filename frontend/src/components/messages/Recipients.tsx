@@ -41,7 +41,7 @@ export function Recipients({ message, mr, ml }: RecipientsProps): ReactElement {
     return (
       <Tooltip label={tooltip} key={recipient}>
         <Badge
-          style={{ cursor: "pointer" }}
+          style={{ cursor: details?.log ? "pointer" : "default" }}
           color={deliveryStatus[status.type].color}
           variant="light"
           ml={ml}
@@ -51,7 +51,7 @@ export function Recipients({ message, mr, ml }: RecipientsProps): ReactElement {
           size="lg"
           onClick={(e) => {
             e.stopPropagation();
-            if (details.log) {
+            if (details?.log) {
               setLog(details.log);
               open();
             }
