@@ -280,36 +280,12 @@ impl ApiServer {
                 get(get_sales_link),
             )
             .route(
-                "/organizations/{org_id}/messages",
-                get(list_messages),
-            )
-            .route(
-                "/organizations/{org_id}/messages/{message_id}",
-                get(get_message).delete(remove_message),
-            )
-            .route(
-                "/organizations/{org_id}/messages/{message_id}/retry",
-                put(update_to_retry_asap),
-            )
-            .route(
                 "/organizations/{org_id}/projects",
                 get(list_projects).post(create_project),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}",
                 delete(remove_project).put(update_project),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/messages",
-                get(list_messages),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
-                get(get_message).delete(remove_message),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/messages/{message_id}/retry",
-                put(update_to_retry_asap),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams",
