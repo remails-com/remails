@@ -4,6 +4,7 @@ import {
   IconBuildings,
   IconChartBar,
   IconChevronDown,
+  IconPlus,
   IconServer,
   IconSettings,
   IconWorldWww,
@@ -11,6 +12,8 @@ import {
 import { is_global_admin } from "../util.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
+import { useDisclosure } from "@mantine/hooks";
+import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
 
 export function NavBar({ close }: { close: () => void }) {
   const {
@@ -18,6 +21,7 @@ export function NavBar({ close }: { close: () => void }) {
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
+  const [openedNewOrg, { open: openNewOrg, close: closeNewOrg }] = useDisclosure(false);
 
   if (!user) {
     return null;
@@ -38,6 +42,14 @@ export function NavBar({ close }: { close: () => void }) {
           }}
         />
       )}
+
+      <NewOrganization
+        opened={openedNewOrg}
+        close={closeNewOrg}
+        done={(newOrg) => {
+          navigate("settings", { org_id: newOrg.id });
+        }}
+      />
 
       <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>
         <Menu.Target>
@@ -77,6 +89,9 @@ export function NavBar({ close }: { close: () => void }) {
                 <Text fs="italic">{org.name}</Text>
               </Menu.Item>
             ))}
+          <Menu.Item onClick={() => openNewOrg()} leftSection={<IconPlus />}>
+            New organization
+          </Menu.Item>
         </Menu.Dropdown>
       </Menu>
 
