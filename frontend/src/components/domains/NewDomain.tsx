@@ -23,11 +23,35 @@ interface NewDomainProps {
 
 function validateDomain(domain: string) {
   if (domain.length < 3) {
-    return "Domain must have at least 3 letters";
+    return "Domain must have at least 3 characters";
   }
 
   if (!domain.includes(".")) {
     return "Domain must include a top level domain (TLD)";
+  }
+
+  if (domain.startsWith(".") || domain.endsWith(".")) {
+    return "Domain must not start or end with a dot";
+  }
+
+  if (domain.includes("..")) {
+    return "Domain must not contain consecutive dots";
+  }
+
+  if (domain.includes("://")) {
+    return 'Domain must not include a URL protocol (use "example.com" instead of "https://example.com")';
+  }
+
+  if (domain.includes("/")) {
+    return "Domain must not include a URL path";
+  }
+
+  if (domain.includes("#")) {
+    return "Domain must not include a URL hash";
+  }
+
+  if (domain.includes("?")) {
+    return "Domain must not include any URL search parameters";
   }
 
   return null;
