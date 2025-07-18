@@ -1,15 +1,29 @@
-import { NavLink } from "@mantine/core";
-import { IconBuildings, IconChartBar, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { Box, Button, Menu, NavLink, Text } from "@mantine/core";
+import {
+  IconAffiliate,
+  IconBuildings,
+  IconChartBar,
+  IconChevronDown,
+  IconServer,
+  IconSettings,
+  IconWorldWww,
+} from "@tabler/icons-react";
 import { is_global_admin } from "../util.ts";
 import { useRemails } from "../hooks/useRemails.ts";
+import { useOrganizations } from "../hooks/useOrganizations.ts";
 
 export function NavBar({ close }: { close: () => void }) {
   const {
-    state: { routerState, user },
+    state: { routerState, user, organizations },
     navigate,
   } = useRemails();
+  const { currentOrganization } = useOrganizations();
 
-  const roles = user?.roles || [];
+  if (!user) {
+    return null;
+  }
+
+  const roles = user.roles || [];
 
   return (
     <>
@@ -24,6 +38,48 @@ export function NavBar({ close }: { close: () => void }) {
           }}
         />
       )}
+
+      <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>
+        <Menu.Target>
+          <Button
+            rightSection={<IconChevronDown size={20} stroke={1.8} />}
+            color="#666"
+            variant="outline"
+            justify="space-between"
+            fullWidth
+            px="sm"
+            mb="md"
+          >
+            <Box mr="sm">
+              <IconAffiliate />
+            </Box>
+            {currentOrganization?.name}
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>Select organization</Menu.Label>
+          {organizations
+            ?.filter((all_org) => {
+              return (
+                user.roles.find((role) => {
+                  return role.type === "organization_admin" && role.id === all_org.id;
+                }) || all_org.id === currentOrganization?.id
+              );
+            })
+            .map((org) => (
+              <Menu.Item
+                bg={org.id === currentOrganization?.id ? "var(--mantine-primary-color-light)" : ""}
+                color={org.id === currentOrganization?.id ? "var(--mantine-primary-color-light-color)" : ""}
+                key={org.id}
+                value={org.id}
+                onClick={() => navigate("projects", { org_id: org.id })}
+              >
+                <Text fs="italic">{org.name}</Text>
+              </Menu.Item>
+            ))}
+        </Menu.Dropdown>
+      </Menu>
+
       <NavLink
         label="Projects"
         active={routerState.name.startsWith("projects")}
