@@ -16,6 +16,7 @@ import { useRemails } from "./hooks/useRemails.ts";
 import { Dashboard } from "./layout/Dashboard";
 import Login from "./Login.tsx";
 import { RouteName } from "./routes.ts";
+import UserSettings from "./components/settings/UserSettings.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -35,6 +36,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "domains.domain": <DomainDetails />,
   "domains.domain.dns": <DomainDetails />,
   settings: <Settings />,
+  account: <UserSettings />,
   statistics: <Quota />,
   organizations: <OrganizationsOverview />,
   default: null,

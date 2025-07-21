@@ -1,7 +1,7 @@
-import { AppShell, Box, Burger, Button, Flex, Group, Menu, Text } from "@mantine/core";
+import { AppShell, Box, Burger, Button, Flex, Group, Menu } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import ColorTheme from "./ColorTheme";
-import { IconChevronDown, IconLogout, IconUser, IconUserBolt } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconSettings, IconUser, IconUserBolt } from "@tabler/icons-react";
 import { NavBar } from "./NavBar.tsx";
 import { ReactNode } from "react";
 import { useRemails } from "../hooks/useRemails.ts";
@@ -17,7 +17,7 @@ interface DashboardProps {
 export function Dashboard({ children }: DashboardProps) {
   const [navbarOpened, { toggle, close }] = useDisclosure();
   const {
-    state: { organizations, user },
+    state: { user },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
@@ -30,39 +30,30 @@ export function Dashboard({ children }: DashboardProps) {
     (role) => role.type == "super_admin" || (role.type == "organization_admin" && role.id == currentOrganization?.id)
   );
 
-  const org_switching = (
-    <>
-      <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>
-        <Menu.Target>
-          <Button
-            leftSection={isAdmin ? <IconUserBolt /> : <IconUser />}
-            rightSection={<IconChevronDown size={20} stroke={1.8} />}
-            color="#666"
-            variant="outline"
-          >
-            {user.name}
-          </Button>
-        </Menu.Target>
-        <Menu.Dropdown>
-          {organizations
-            ?.filter((all_org) => {
-              return (
-                user.roles.find((role) => {
-                  return role.type === "organization_admin" && role.id === all_org.id;
-                }) || all_org.id === currentOrganization?.id
-              );
-            })
-            .map((org) => (
-              <Menu.Item key={org.id} value={org.id} onClick={() => navigate("projects", { org_id: org.id })}>
-                <Text fw={org.id === currentOrganization?.id ? 700 : 400}>{org.name}</Text>
-              </Menu.Item>
-            ))}
-        </Menu.Dropdown>
-      </Menu>
-      <Button leftSection={<IconLogout />} variant="light" component="a" href="/api/logout">
-        Logout
-      </Button>
-    </>
+  const user_dropdown = (
+    <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>
+      <Menu.Target>
+        <Button
+          rightSection={<IconChevronDown size={20} stroke={1.8} />}
+          color="#666"
+          variant="outline"
+          fullWidth
+          justify="space-between"
+          px="sm"
+        >
+          <Box mr="sm">{isAdmin ? <IconUserBolt /> : <IconUser />}</Box>
+          {user.name}
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconSettings size={20} stroke={1.8} />} onClick={() => navigate("account")}>
+          User settings
+        </Menu.Item>
+        <Menu.Item leftSection={<IconLogout size={20} stroke={1.8} />} c="remails-red" href="/api/logout" component="a">
+          Log out
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   );
 
   return (
@@ -80,15 +71,16 @@ export function Dashboard({ children }: DashboardProps) {
           <Group h="100%" px="lg">
             <ColorTheme />
             <Group h="100%" visibleFrom="sm">
-              {org_switching}
+              {user_dropdown}
             </Group>
           </Group>
         </Flex>
       </AppShell.Header>
       <AppShell.Navbar p="md">
-        <Group hiddenFrom="sm" pb="lg">
-          {org_switching}
+        <Group hiddenFrom="sm" pb="md">
+          {user_dropdown}
         </Group>
+
         <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>

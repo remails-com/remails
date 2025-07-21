@@ -173,6 +173,10 @@ test("flattenRoutes", () => {
       path: "/{org_id}/settings",
     },
     {
+      name: "account",
+      path: "/{org_id}/account",
+    },
+    {
       name: "statistics",
       path: "/{org_id}/statistics",
     },
