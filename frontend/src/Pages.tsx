@@ -3,7 +3,6 @@ import { JSX } from "react";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
-import NotFound from "./components/NotFound.tsx";
 import OrganizationsOverview from "./components/organizations/OrganizationsOverview.tsx";
 import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
@@ -17,6 +16,7 @@ import Login from "./Login.tsx";
 import { RouteName } from "./routes.ts";
 import UserSettings from "./components/userSettings/UserSettings.tsx";
 import Statistics from "./components/statistics/Statistics.tsx";
+import Error from "./error/Error.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -40,7 +40,6 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   statistics: <Statistics />,
   organizations: <OrganizationsOverview />,
   default: null,
-  not_found: <NotFound />,
   login: null,
 };
 
@@ -57,23 +56,24 @@ function Page() {
 
 export function Pages() {
   const {
-    state: {
-      userFetched,
-      routerState: { name },
-    },
+    state: { userFetched, routerState, nextRouterState, error },
     dispatch,
   } = useRemails();
+
+  if (error) {
+    return <Error error={error} />;
+  }
 
   if (!userFetched) {
     return <NavigationProgress />;
   }
 
-  if (name === "login") {
+  if (routerState.name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
-  if (name === "not_found") {
-    return <NotFound />;
+  if (nextRouterState && nextRouterState.params.org_id != routerState.params.org_id) {
+    return <NavigationProgress />;
   }
 
   return (

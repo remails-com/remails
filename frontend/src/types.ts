@@ -1,3 +1,4 @@
+import { RemailsError } from "./error/error";
 import { RouterState } from "./router";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
@@ -87,6 +88,7 @@ export interface State {
   config: RemailsConfig | null;
   routerState: RouterState;
   nextRouterState: RouterState | null;
+  error: RemailsError | null;
 }
 
 export type Action =
@@ -190,6 +192,10 @@ export type Action =
   | {
       type: "set_config";
       config: RemailsConfig;
+    }
+  | {
+      type: "set_error";
+      error: RemailsError;
     };
 
 export interface Organization {

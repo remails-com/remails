@@ -5,6 +5,7 @@ import { routes } from "../routes.ts";
 import { Navigate, Router } from "../router.ts";
 import { reducer } from "../reducer.ts";
 import apiMiddleware from "../apiMiddleware.ts";
+import { RemailsError } from "../error/error.ts";
 
 export const RemailsContext = createContext<{
   state: State;
@@ -27,6 +28,7 @@ export const RemailsContext = createContext<{
       params: {},
     },
     nextRouterState: null,
+    error: null,
   },
   dispatch: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
@@ -56,6 +58,7 @@ export function useLoadRemails() {
     config: null,
     routerState: router.initialState,
     nextRouterState: null,
+    error: null,
   });
 
   const { navigate } = useRouter(router, state, dispatch, [apiMiddleware]);
@@ -67,7 +70,7 @@ export function useLoadRemails() {
     if (route) {
       navigate(route.name, route.params);
     } else {
-      navigate("not_found");
+      throw new RemailsError(`Route ${window.location.pathname} doesn't exist`, 404);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

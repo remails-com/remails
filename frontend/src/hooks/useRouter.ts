@@ -3,6 +3,7 @@ import { Dispatch, useCallback, useEffect, useRef } from "react";
 import { FullRouterState, RouteParams, Router, RouterState } from "../router";
 import { RouteName } from "../routes";
 import { Action, State } from "../types";
+import { RemailsError } from "../error/error";
 
 export interface NavigationState {
   from: RouterState;
@@ -32,8 +33,8 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
       try {
         routerState = router.navigate(name, params || {});
       } catch (e) {
-        console.error(e);
-        routerState = router.navigate("not_found", {});
+        dispatch({ type: "set_error", error: new RemailsError("route:" + e, 404) });
+        return;
       }
 
       dispatch({
@@ -57,8 +58,12 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
         try {
           routerState = await mw(navState, router, dispatch);
         } catch (e) {
-          console.error(e);
-          routerState = router.navigate("not_found", {});
+          if (e instanceof RemailsError) {
+            dispatch({ type: "set_error", error: e });
+          } else {
+            dispatch({ type: "set_error", error: new RemailsError("mw:" + e, 500) });
+          }
+          return;
         }
       }
 

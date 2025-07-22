@@ -5,14 +5,11 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 import StyledTable from "../StyledTable.tsx";
-import useSelector from "../../hooks/useSelector.ts";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const organizations = useSelector((state) => state.organizations);
-  const currentOrganization = useSelector((state) =>
-    state.organizations?.find((o) => o.id === state.routerState.params.org_id)
-  );
+  const { currentOrganization, organizations } = useOrganizations();
   const { navigate } = useRemails();
 
   const rows = organizations.map((organization) => (

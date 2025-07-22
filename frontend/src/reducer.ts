@@ -81,6 +81,9 @@ const actionHandler: {
   set_user: function (state, action) {
     return { ...state, user: action.user, userFetched: true };
   },
+  set_error: function (state, action) {
+    return { ...state, error: action.error };
+  },
 };
 
 // helper function to make TypeScript recognize the proper types

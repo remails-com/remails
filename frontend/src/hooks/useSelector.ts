@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { RemailsContext } from "./useRemails";
 import { State } from "../types";
 
-export default function useSelector<T>(selector: (state: State) => T): NonNullable<T> {
+export function useSelector<T>(selector: (state: State) => T): NonNullable<T> {
   const { state } = useContext(RemailsContext);
   const selectedState = selector(state);
 
