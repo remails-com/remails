@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit\n            FROM organizations\n            WHERE id = $1\n              AND ($2::uuid[] IS NULL OR id = ANY($2))\n            ",
+  "query": "\n            UPDATE organizations\n            SET name = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_reset,\n                remaining_rate_limit\n            ",
   "describe": {
     "columns": [
       {
@@ -57,7 +57,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "UuidArray"
+        "Varchar"
       ]
     },
     "nullable": [
@@ -73,5 +73,5 @@
       false
     ]
   },
-  "hash": "d34a84a65fbb6041c4b67a9e9f24e8db053e0cf034782e83e1998970a5bdd8cc"
+  "hash": "70cf44f06b67a891a0aee73d85a1699b6bf1ef772834047a82cd3f0c4b29d03a"
 }

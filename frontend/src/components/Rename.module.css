@@ -1,0 +1,8 @@
+.rename {
+  padding: 4px;
+  margin-left: -4px;
+
+  &:hover {
+    outline: 1px solid var(--mantine-primary-color-5);
+  }
+}

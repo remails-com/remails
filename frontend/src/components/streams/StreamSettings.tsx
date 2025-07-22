@@ -29,6 +29,17 @@ export default function StreamSettings() {
     initialValues: {
       name: currentStream?.name || "",
     },
+    validate: {
+      name: (value) => {
+        if (value.length < 3) {
+          return "Name must have at least 3 characters";
+        }
+        if (value.length > 50) {
+          return "Name must be less than 50 characters";
+        }
+        return null;
+      },
+    },
   });
 
   useEffect(() => {
@@ -123,6 +134,7 @@ export default function StreamSettings() {
           <TextInput
             label="Name"
             key={form.key("name")}
+            error={form.errors.name}
             value={form.values.name}
             onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
           />

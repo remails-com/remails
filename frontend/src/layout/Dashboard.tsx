@@ -84,7 +84,7 @@ export function Dashboard({ children }: DashboardProps) {
         <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-        <Box>
+        <Box style={{ position: "relative" }}>
           <Breadcrumbs />
           {children}
         </Box>

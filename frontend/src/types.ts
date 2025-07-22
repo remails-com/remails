@@ -103,6 +103,10 @@ export type Action =
       organization: Organization;
     }
   | {
+      type: "remove_organization";
+      organizationId: string;
+    }
+  | {
       type: "set_projects";
       projects: Project[] | null;
     }

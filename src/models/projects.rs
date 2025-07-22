@@ -71,7 +71,7 @@ impl ProjectRepository {
             RETURNING *
             "#,
             *organization_id,
-            new.name,
+            new.name.trim(),
         )
         .fetch_one(&self.pool)
         .await?)
@@ -106,7 +106,7 @@ impl ProjectRepository {
             "#,
             *organization_id,
             *project_id,
-            update.name,
+            update.name.trim(),
         )
         .fetch_one(&self.pool)
         .await?)

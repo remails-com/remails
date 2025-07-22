@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT s.id,\n                   s.project_id,\n                   s.name,\n                   s.created_at,\n                   s.updated_at\n            FROM streams s\n                JOIN projects p ON s.project_id = p.id \n                     WHERE s.project_id = $1 \n                       AND p.organization_id = $2 \n            ",
+  "query": "\n            UPDATE streams s\n                   SET name = $4\n            FROM projects p\n            WHERE s.id = $3\n              AND s.project_id = $2\n              AND s.project_id = p.id\n              AND p.organization_id = $1\n            returning s.*\n            ",
   "describe": {
     "columns": [
       {
@@ -32,7 +32,9 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Varchar"
       ]
     },
     "nullable": [
@@ -43,5 +45,5 @@
       false
     ]
   },
-  "hash": "3f6ac5fa87deeae3e4e72e67d8bfd253bdc79119b01ffd7a194370df39fa9289"
+  "hash": "77977434790beb6859eebcbb1c75f04fbf94de2b776f80026957d3c49346fddb"
 }

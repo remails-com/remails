@@ -91,7 +91,7 @@ export function MessageLog() {
               {message.from_email}
             </Badge>
             to
-            <Recipients message={message} ml="sm"/>
+            <Recipients message={message} ml="sm" />
           </Box>
           <Text fz="xs" c="dimmed" mr="md">
             {formatDateTime(message.created_at)}

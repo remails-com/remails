@@ -1,4 +1,4 @@
-import { Button, Divider, Flex, Table } from "@mantine/core";
+import { Button, Flex, Table } from "@mantine/core";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useStreams } from "../../hooks/useStreams.ts";
@@ -7,6 +7,8 @@ import { IconEdit, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewStream } from "./NewStream.tsx";
 import { Link } from "../../Link.tsx";
+import InfoAlert from "../InfoAlert.tsx";
+import StyledTable from "../StyledTable.tsx";
 
 export function StreamsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -42,18 +44,13 @@ export function StreamsOverview() {
 
   return (
     <>
+      <InfoAlert stateName="streams">
+        A Stream functions like an independent SMTP server, with its own credentials. You can create multiple Streams
+        within a project to separate traffic for security, performance, or organizational purposes.
+      </InfoAlert>
       <NewStream opened={opened} close={close} />
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Updated</Table.Th>
-            <Table.Th></Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>{rows}</Table.Tbody>
-      </Table>
-      <Divider />
+
+      <StyledTable headers={["Name", "Updated", ""]}>{rows}</StyledTable>
       <Flex justify="center" mt="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Stream

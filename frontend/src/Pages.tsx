@@ -7,16 +7,16 @@ import NotFound from "./components/NotFound.tsx";
 import OrganizationsOverview from "./components/organizations/OrganizationsOverview.tsx";
 import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
-import Settings from "./components/settings/Settings.tsx";
+import OrganizationSettings from "./components/organizations/OrganizationSettings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import CredentialDetails from "./components/smtpCredentials/CredentialDetails.tsx";
-import Quota from "./components/statistics/Quota.tsx";
 import StreamDetails from "./components/streams/StreamDetails.tsx";
 import { useRemails } from "./hooks/useRemails.ts";
 import { Dashboard } from "./layout/Dashboard";
 import Login from "./Login.tsx";
 import { RouteName } from "./routes.ts";
-import UserSettings from "./components/settings/UserSettings.tsx";
+import UserSettings from "./components/userSettings/UserSettings.tsx";
+import Statistics from "./components/statistics/Statistics.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -35,9 +35,9 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,
   "domains.domain.dns": <DomainDetails />,
-  settings: <Settings />,
+  settings: <OrganizationSettings />,
   account: <UserSettings />,
-  statistics: <Quota />,
+  statistics: <Statistics />,
   organizations: <OrganizationsOverview />,
   default: null,
   not_found: <NotFound />,

@@ -1,16 +1,16 @@
 import { useCredentials } from "../../hooks/useCredentials";
 import { Loader } from "../../Loader.tsx";
-import { useRemails } from "../../hooks/useRemails.ts";
 import { Button, Flex, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconEdit, IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewCredential } from "./NewCredential.tsx";
 import { SmtpInfo } from "./SmtpInfo.tsx";
+import EditButton from "../EditButton.tsx";
+import StyledTable from "../StyledTable.tsx";
 
 export function CredentialsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const { navigate } = useRemails();
   const { credentials } = useCredentials();
 
   if (credentials === null) {
@@ -19,7 +19,7 @@ export function CredentialsOverview() {
 
   const rows = credentials.map((credential) => {
     const username_parts = credential.username.split("-", 2);
-    let username = (
+    const username = (
       <>
         <Text span c="dimmed">
           {username_parts[0]}-
@@ -27,11 +27,7 @@ export function CredentialsOverview() {
         <Text span>{username_parts[1]}</Text>
       </>
     );
-    if (username_parts.length === 1) {
-      // Only relevant for testing credentials that do not have the organization ID prepended.
-      // TODO remove this special case once all credentials have the organization ID prepended.
-      username = <>{credential.username}</>;
-    }
+
     return (
       <Table.Tr key={credential.id}>
         <Table.Td>{username}</Table.Td>
@@ -42,16 +38,12 @@ export function CredentialsOverview() {
         </Table.Td>
         <Table.Td>{formatDateTime(credential.updated_at)}</Table.Td>
         <Table.Td align={"right"}>
-          <Button
-            variant="subtle"
-            onClick={() =>
-              navigate("projects.project.streams.stream.credentials.credential", {
-                credential_id: credential.id,
-              })
-            }
-          >
-            <IconEdit />
-          </Button>
+          <EditButton
+            route="projects.project.streams.stream.credentials.credential"
+            params={{
+              credential_id: credential.id,
+            }}
+          />
         </Table.Td>
       </Table.Tr>
     );
@@ -60,17 +52,11 @@ export function CredentialsOverview() {
   return (
     <>
       <NewCredential opened={opened} close={close} />
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th miw="10rem">Username</Table.Th>
-            <Table.Th>Description</Table.Th>
-            <Table.Th miw="10rem">Updated</Table.Th>
-            <Table.Th></Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>{rows}</Table.Tbody>
-      </Table>
+      <StyledTable
+        headers={[{ miw: "10rem", children: "Username" }, "Description", { miw: "10rem", children: "Updated" }, ""]}
+      >
+        {rows}
+      </StyledTable>
       <Flex justify="center" my="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Credential
