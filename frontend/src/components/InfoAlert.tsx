@@ -26,9 +26,14 @@ export default function InfoAlert({ children, stateName }: { children: React.Rea
     );
   }
 
+  // This makes sure the font size remains consistent, while also preventing <p>'s in <p>'s
+  if (typeof children === "string") {
+    children = <Text>{children}</Text>;
+  }
+
   return (
     <Alert icon={<IconInfoCircle />} color="gray" withCloseButton onClose={() => setOpened(false)} mb="sm">
-      <Text>{children}</Text>
+      {children}
     </Alert>
   );
 }

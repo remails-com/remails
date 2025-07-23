@@ -13,11 +13,11 @@ export function SmtpInfo() {
 
   return (
     <>
-      <Text>
+      <Text fz="md">
         These credentials can be used to send emails with your configured domains with the following settings:
       </Text>
       <Group>
-        <Table variant="vertical" style={{ width: "auto" }} mt="sm">
+        <Table variant="vertical" withTableBorder style={{ width: "auto" }} mt="sm">
           <Table.Tbody>
             <Table.Tr>
               <Table.Th>Server</Table.Th>

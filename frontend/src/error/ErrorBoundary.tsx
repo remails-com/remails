@@ -30,7 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         return <Error error={this.state.error} />;
       }
 
-      return <h1>Sorry.. there was an error</h1>;
+      return <Error error={new RemailsError(`Unexpected error: ${this.state.error}`, 500)} />;
     }
 
     return this.props.children;
