@@ -130,104 +130,102 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
   };
 
   return (
-    <>
-      <Modal
-        opened={opened}
-        onClose={() => {
-          setActiveStep(0);
-          form.reset();
-          close();
-        }}
-        title={
-          <Title order={2} component="span">
-            Create New Domain
-          </Title>
-        }
-        size="lg"
-        padding="xl"
-      >
-        <Stepper active={activeStep} onStepClick={setActiveStep}>
-          <Stepper.Step label="Create" allowStepSelect={false}>
-            <form onSubmit={form.onSubmit(save)}>
-              <Stack>
-                <TextInput
-                  label="Domain Name"
-                  key={form.key("domain")}
-                  value={form.values.domain}
-                  placeholder="example.com"
-                  error={form.errors.domain}
-                  onChange={(event) => form.setFieldValue("domain", event.currentTarget.value)}
-                />
-              </Stack>
+    <Modal
+      opened={opened}
+      onClose={() => {
+        setActiveStep(0);
+        form.reset();
+        close();
+      }}
+      title={
+        <Title order={2} component="span">
+          Create New Domain
+        </Title>
+      }
+      size="lg"
+      padding="xl"
+    >
+      <Stepper active={activeStep} onStepClick={setActiveStep}>
+        <Stepper.Step label="Create" allowStepSelect={false}>
+          <form onSubmit={form.onSubmit(save)}>
+            <Stack>
+              <TextInput
+                label="Domain Name"
+                key={form.key("domain")}
+                value={form.values.domain}
+                placeholder="example.com"
+                error={form.errors.domain}
+                onChange={(event) => form.setFieldValue("domain", event.currentTarget.value)}
+              />
+            </Stack>
 
-              <Group justify="space-between" mt="xl">
-                <Button onClick={close} variant="outline">
-                  Cancel
-                </Button>
-                <Button type="submit" loading={form.submitting}>
-                  Next
-                </Button>
-              </Group>
-            </form>
-          </Stepper.Step>
-          <Stepper.Step label="Configure DNS" allowStepSelect={activeStep >= 1}>
-            <DnsRecords domain={newDomain} title_order={3}></DnsRecords>
-            <Group justify="space-between" mt="md">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActiveStep(0);
-                  deleteDomain(newDomain);
-                  close();
-                }}
-              >
+            <Group justify="space-between" mt="xl">
+              <Button onClick={close} variant="outline">
                 Cancel
               </Button>
-              <Group>
-                <Button
-                  onClick={() => {
-                    setActiveStep(0);
-                    form.reset();
-                    close();
-                  }}
-                >
-                  Configure later
-                </Button>
-                <Button
-                  onClick={() => {
-                    setActiveStep(2);
-                  }}
-                >
-                  Verify
-                </Button>
-              </Group>
-            </Group>
-          </Stepper.Step>
-          <Stepper.Step label="Verify" allowStepSelect={activeStep >= 1}>
-            <DnsVerificationContent
-              domainVerified={domainVerified}
-              verificationResult={verificationResult}
-              domain={newDomain?.domain}
-            />
-            <Group justify="space-between" mt="md">
-              <Button disabled={domainVerified === "loading"} variant="outline" onClick={() => verifyDomain(newDomain)}>
-                Retry verification
+              <Button type="submit" loading={form.submitting}>
+                Next
               </Button>
+            </Group>
+          </form>
+        </Stepper.Step>
+        <Stepper.Step label="Configure DNS" allowStepSelect={activeStep >= 1}>
+          <DnsRecords domain={newDomain} title_order={3}></DnsRecords>
+          <Group justify="space-between" mt="md">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActiveStep(0);
+                deleteDomain(newDomain);
+                close();
+              }}
+            >
+              Cancel
+            </Button>
+            <Group>
               <Button
-                disabled={domainVerified === "loading"}
                 onClick={() => {
                   setActiveStep(0);
+                  form.reset();
                   close();
-                  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
-                  navigate(route, { domain_id: newDomain?.id || "" });
                 }}
               >
-                Show {newDomain?.domain}
+                Configure later
+              </Button>
+              <Button
+                onClick={() => {
+                  setActiveStep(2);
+                }}
+              >
+                Verify
               </Button>
             </Group>
-          </Stepper.Step>
-        </Stepper>
-      </Modal>
-    </>
+          </Group>
+        </Stepper.Step>
+        <Stepper.Step label="Verify" allowStepSelect={activeStep >= 1}>
+          <DnsVerificationContent
+            domainVerified={domainVerified}
+            verificationResult={verificationResult}
+            domain={newDomain?.domain}
+          />
+          <Group justify="space-between" mt="md">
+            <Button disabled={domainVerified === "loading"} variant="outline" onClick={() => verifyDomain(newDomain)}>
+              Retry verification
+            </Button>
+            <Button
+              disabled={domainVerified === "loading"}
+              onClick={() => {
+                setActiveStep(0);
+                close();
+                const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
+                navigate(route, { domain_id: newDomain?.id || "" });
+              }}
+            >
+              Show {newDomain?.domain}
+            </Button>
+          </Group>
+        </Stepper.Step>
+      </Stepper>
+    </Modal>
   );
 }

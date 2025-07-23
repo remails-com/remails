@@ -1,5 +1,5 @@
 use crate::{api::oauth, models, models::Error};
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{Json, extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, error};
@@ -26,6 +26,18 @@ pub enum ApiError {
     PreconditionFailed(String),
     #[error("Moneybird: {0}")]
     Moneybird(#[from] crate::moneybird::Error),
+}
+
+impl From<garde::Report> for ApiError {
+    fn from(err: garde::Report) -> Self {
+        Self::BadRequest(err.to_string())
+    }
+}
+
+impl From<JsonRejection> for ApiError {
+    fn from(rejection: JsonRejection) -> Self {
+        Self::BadRequest(rejection.to_string())
+    }
 }
 
 impl IntoResponse for ApiError {

@@ -36,13 +36,15 @@ pub enum Error {
     #[error("AWS Cryptographic key rejected {0}")]
     WrongCryptKey(#[from] aws_lc_rs::error::KeyRejected),
     #[error("Email Authentication error{0}")]
-    MailAuth(#[from] mail_send::mail_auth::Error),
+    MailAuth(#[from] mail_auth::Error),
     #[error("{0}")]
     NotFound(&'static str),
     #[error("conflict")]
     Conflict,
     #[error("invalid utf8")]
     FromUtf8(#[from] std::string::FromUtf8Error),
+    #[error("totp error")]
+    Totp(#[from] totp_rs::TotpUrlError),
 }
 
 impl From<sqlx::Error> for Error {

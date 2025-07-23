@@ -1,16 +1,25 @@
 use crate::{
     api::{
         error::{ApiError, ApiResult},
+        validation::ValidatedJson,
         whoami::WhoamiResponse,
     },
     models::{
         ApiUser, ApiUserId, ApiUserRepository, ApiUserUpdate, Error, Password, PasswordUpdate,
+        TotpCode, TotpFinishEnroll, TotpId,
     },
 };
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::header;
+use tracing::{debug, info};
+
+fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
+    has_write_access(user_id, user)
+}
 
 fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
     if *user.id() == user_id {
@@ -28,6 +37,12 @@ pub async fn update_user(
     has_write_access(user_id, &user)?;
 
     repo.update(update, &user_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "updated user details"
+    );
 
     Ok(Json(
         repo.find_by_id(&user_id)
@@ -48,7 +63,98 @@ pub async fn update_password(
 
     repo.update_password(update, &user_id).await?;
 
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "updated user password"
+    );
+
     Ok(())
+}
+
+pub async fn start_enroll_totp(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+) -> Result<impl IntoResponse, ApiError> {
+    has_write_access(user_id, &user)?;
+
+    let png = repo.start_enroll_totp(&user_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "started enrolling TOTP"
+    );
+
+    let headers = [
+        (header::CONTENT_TYPE, "image/png".to_string()),
+        (
+            header::CACHE_CONTROL,
+            "no-cache, no-store, max-age=0, must-revalidate".to_string(),
+        ),
+        (header::PRAGMA, "no-cache".to_string()),
+        (header::EXPIRES, "0".to_string()),
+    ];
+
+    Ok((headers, png))
+}
+
+pub async fn finish_enroll_totp(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+    ValidatedJson(finish): ValidatedJson<TotpFinishEnroll>,
+) -> ApiResult<TotpCode> {
+    has_write_access(user_id, &user)?;
+
+    let code = repo.finish_enroll_totp(&user_id, finish).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        totp_id = code.id().to_string(),
+        "finished enrolling TOTP"
+    );
+
+    Ok(Json(code))
+}
+
+pub async fn totp_codes(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+) -> ApiResult<Vec<TotpCode>> {
+    has_read_access(user_id, &user)?;
+
+    let codes = repo.totp_codes(&user_id).await?;
+
+    debug!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "retrieved TOTP codes"
+    );
+
+    Ok(Json(codes))
+}
+
+pub async fn delete_totp_code(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id, totp_id)): Path<(ApiUserId, TotpId)>,
+    user: ApiUser,
+) -> ApiResult<TotpId> {
+    has_write_access(user_id, &user)?;
+
+    let id = repo.delete_totp(&user_id, &totp_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        totp_id = id.to_string(),
+        "deleted TOTP code"
+    );
+
+    Ok(Json(id))
 }
 
 #[derive(serde::Deserialize)]
@@ -74,6 +180,12 @@ pub async fn delete_password(
 
     repo.delete_password(update.current_password, &user_id)
         .await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "deleted password"
+    );
 
     Ok(())
 }

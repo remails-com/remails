@@ -1,24 +1,23 @@
-import { Button, Container, Grid, Group, PasswordInput, Stack, Tabs, TextInput, Title, Tooltip } from "@mantine/core";
+import { Button, Container, Group, Stack, Tabs, TextInput, Title } from "@mantine/core";
 import GitHubBadge from "./GitHubBadge";
-import { IconBrandGithub, IconPassword, IconTrash } from "@tabler/icons-react";
+import { IconAuth2fa, IconBrandGithub, IconPassword } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
 import { useForm } from "@mantine/form";
 import { errorNotification } from "../../notify";
+import TotpSetup from "./TotpSetup.tsx";
+import { useDisclosure } from "@mantine/hooks";
+import { PasswordSettings } from "./PasswordSettings.tsx";
+import TotpList from "./TotpList.tsx";
 
 interface BasicFormValues {
   name: string;
   email: string;
 }
 
-interface PasswordForm {
-  old_password: string;
-  new_password1: string;
-  new_password2: string;
-}
-
 export default function UserSettings() {
   const { dispatch, state } = useRemails();
+  const [mfaOpened, { open: openMfa, close: closeMfa }] = useDisclosure(false);
   const user = state.user!;
 
   const basicForm = useForm<BasicFormValues>({
@@ -29,20 +28,6 @@ export default function UserSettings() {
     validate: {
       name: (value) => (value.length < 3 ? "Name must have at least 3 letters" : null),
       email: (value) => (/^\S+@\S+$/.test(value) ? null : "Invalid email"),
-    },
-  });
-
-  const passwordForm = useForm<PasswordForm>({
-    initialValues: {
-      old_password: "",
-      new_password1: "",
-      new_password2: "",
-    },
-    validate: {
-      old_password: (value) =>
-        user.password_enabled && value.length <= 6 ? "Password should include at least 6 characters" : null,
-      new_password1: (value) => (value.length <= 6 ? "Password should include at least 6 characters" : null),
-      new_password2: (value, values) => (values.new_password1 !== value ? "Passwords do not match" : null),
     },
   });
 
@@ -78,64 +63,6 @@ export default function UserSettings() {
         });
       } else {
         errorNotification("User could not be updated");
-        console.error(res);
-      }
-    });
-  };
-
-  const updatePassword = (update: PasswordForm) => {
-    fetch(`/api/api_user/${user.id}/password`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ current_password: update.old_password, new_password: update.new_password1 }),
-    }).then((res) => {
-      if (res.status === 200) {
-        passwordForm.reset();
-        dispatch({ type: "set_user", user: { ...user, password_enabled: true } });
-        notifications.show({
-          title: "Updated",
-          color: "green",
-          message: "",
-        });
-      } else {
-        errorNotification("Password could not be updated");
-        console.error(res);
-      }
-    });
-  };
-
-  const removePassword = (update: PasswordForm) => {
-    if (update.old_password.length <= 6) {
-      passwordForm.setFieldError("old_password", "Password should include at least 6 characters");
-      return;
-    }
-    if (update.new_password1 || update.new_password2) {
-      passwordForm.setFieldError(
-        "new_password1",
-        "Watch out, you clicked to remove your password but provided a new one."
-      );
-      return;
-    }
-
-    fetch(`/api/api_user/${user.id}/password`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ current_password: update.old_password }),
-    }).then((res) => {
-      if (res.status === 200) {
-        passwordForm.reset();
-        dispatch({ type: "set_user", user: { ...user, password_enabled: false } });
-        notifications.show({
-          title: "Removed Password login",
-          color: "green",
-          message: "",
-        });
-      } else {
-        errorNotification("Password could not be removed");
         console.error(res);
       }
     });
@@ -177,70 +104,23 @@ export default function UserSettings() {
             <Tabs.Tab value="password" leftSection={<IconPassword size={14} />}>
               Password
             </Tabs.Tab>
+            <Tabs.Tab value="2fa" leftSection={<IconAuth2fa size={14} />}>
+              Two Factor Authentication
+            </Tabs.Tab>
             <Tabs.Tab value="github" leftSection={<IconBrandGithub size={14} />}>
               GitHub
             </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="password" mt="md">
-            <form onSubmit={passwordForm.onSubmit(updatePassword)}>
-              <Stack>
-                {user.password_enabled && (
-                  <PasswordInput
-                    label="Current password"
-                    key={passwordForm.key("old_password")}
-                    value={passwordForm.values.old_password}
-                    placeholder="Your current password"
-                    error={passwordForm.errors.old_password}
-                    onChange={(event) => passwordForm.setFieldValue("old_password", event.currentTarget.value)}
-                  />
-                )}
-                <PasswordInput
-                  label="New password"
-                  key={passwordForm.key("new_password1")}
-                  value={passwordForm.values.new_password1}
-                  placeholder="Your new password"
-                  error={passwordForm.errors.new_password1}
-                  onChange={(event) => passwordForm.setFieldValue("new_password1", event.currentTarget.value)}
-                />
-                <PasswordInput
-                  label="Repeat the new password"
-                  key={passwordForm.key("new_password2")}
-                  value={passwordForm.values.new_password2}
-                  placeholder="Repeat the new password"
-                  error={passwordForm.errors.new_password2}
-                  onChange={(event) => passwordForm.setFieldValue("new_password2", event.currentTarget.value)}
-                />
-                <Grid justify="space-between">
-                  {user.password_enabled && (
-                    <Grid.Col span={{ base: 12, sm: 6 }}>
-                      <Tooltip
-                        label={
-                          user.github_id
-                            ? "Delete your password. You will not be able to sign in with your email and password anymore"
-                            : "You need to connect with Github first"
-                        }
-                      >
-                        <Button
-                          disabled={!user.github_id}
-                          fullWidth={true}
-                          onClick={() => removePassword(passwordForm.values)}
-                          variant="outline"
-                          leftSection={<IconTrash />}
-                        >
-                          Delete Password
-                        </Button>
-                      </Tooltip>
-                    </Grid.Col>
-                  )}
-                  <Grid.Col span={user.password_enabled ? { base: 12, sm: 6 } : 12}>
-                    <Button type="submit" fullWidth={true}>
-                      {user.password_enabled ? "Update Password" : "Create Password"}
-                    </Button>
-                  </Grid.Col>
-                </Grid>
-              </Stack>
-            </form>
+            <PasswordSettings />
+          </Tabs.Panel>
+          <Tabs.Panel value="2fa" mt="md">
+            <TotpSetup opened={mfaOpened} close={closeMfa} />
+            <Stack>
+              <TotpList />
+              <Button onClick={openMfa}>Add Authenticator App</Button>
+            </Stack>
           </Tabs.Panel>
 
           <Tabs.Panel value="github" mt="md">

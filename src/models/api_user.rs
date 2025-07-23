@@ -1,12 +1,18 @@
 use crate::models::{Error, OrganizationId};
+use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use totp_rs::{Algorithm, Secret, TOTP};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+pub struct TotpId(Uuid);
 
 #[derive(From, derive_more::Debug, Deserialize, FromStr)]
 #[debug("*****")]
@@ -45,6 +51,14 @@ pub struct NewApiUser {
     pub github_user_id: Option<i64>,
 }
 
+#[derive(Serialize, sqlx::Type, Debug, Clone, Copy)]
+#[sqlx(type_name = "totp_state", rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
+enum TotpState {
+    Enabled,
+    Enrolling,
+}
+
 #[derive(Debug)]
 pub struct ApiUser {
     id: ApiUserId,
@@ -68,6 +82,27 @@ pub struct ApiUserUpdate {
 pub struct PasswordUpdate {
     pub new_password: Password,
     pub current_password: Password,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct TotpFinishEnroll {
+    #[garde(pattern("^[0-9]{6}$"))]
+    code: String,
+    #[garde(length(max = 100))]
+    description: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TotpCode {
+    id: TotpId,
+    description: String,
+    last_used: Option<DateTime<Utc>>,
+}
+
+impl TotpCode {
+    pub fn id(&self) -> &TotpId {
+        &self.id
+    }
 }
 
 impl ApiUser {
@@ -176,6 +211,127 @@ impl ApiUserRepository {
         tx.commit().await?;
 
         Ok(self.find_by_id(&user_id.into()).await?.unwrap())
+    }
+
+    pub async fn start_enroll_totp(&self, user_id: &ApiUserId) -> Result<Vec<u8>, Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let email = sqlx::query_scalar!(r#"SELECT email FROM api_users WHERE id = $1"#, **user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        // Make sure there is only one TOTP token enrolling at a time
+        sqlx::query!(
+            r#"
+            DELETE FROM totp WHERE user_id = $1 AND state = 'enrolling';
+            "#,
+            **user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        let totp = TOTP::new(
+            Algorithm::SHA256,
+            6,
+            1,
+            30,
+            Secret::generate_secret().to_bytes().unwrap(),
+            Some("Remails".to_string()),
+            email,
+        )?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO totp (id, description, user_id, url)
+            VALUES (gen_random_uuid(), 'Not yet activated' , $1, $2)
+            "#,
+            **user_id,
+            totp.get_url()
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        let png = totp.get_qr_png().map_err(Error::Internal);
+        tx.commit().await?;
+        png
+    }
+
+    pub async fn finish_enroll_totp(
+        &self,
+        user_id: &ApiUserId,
+        finish: TotpFinishEnroll,
+    ) -> Result<TotpCode, Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let url = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM totp WHERE user_id = $1 AND state = 'enrolling'
+            "#,
+            **user_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let totp = TOTP::from_url(url)?;
+
+        if !totp.check(&finish.code, Utc::now().timestamp() as u64) {
+            return Err(Error::BadRequest("Invalid TOTP code".to_string()));
+        }
+
+        let code = sqlx::query_as!(
+            TotpCode,
+            r#"
+            UPDATE totp SET state = 'enabled',
+                            description = $2
+            WHERE user_id = $1
+              AND state = 'enrolling'
+            RETURNING
+                id,
+                description,
+                last_used
+            "#,
+            **user_id,
+            finish.description
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(code)
+    }
+
+    pub async fn totp_codes(&self, user_id: &ApiUserId) -> Result<Vec<TotpCode>, Error> {
+        Ok(sqlx::query_as!(
+            TotpCode,
+            r#"
+            SELECT id, description, last_used FROM totp
+            WHERE state = 'enabled'
+              AND user_id = $1
+            "#,
+            **user_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn delete_totp(
+        &self,
+        user_id: &ApiUserId,
+        totp_id: &TotpId,
+    ) -> Result<TotpId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM totp
+            WHERE id = $2
+              AND user_id = $1
+            RETURNING id
+            "#,
+            **user_id,
+            **totp_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 
     pub async fn find_by_github_id(&self, github_id: i64) -> Result<Option<ApiUser>, Error> {
@@ -334,10 +490,10 @@ impl ApiUserRepository {
             "#,
             **id
         )
-        .fetch_optional(&self.pool)
-        .await?
-        .map(TryInto::try_into)
-        .transpose()
+            .fetch_optional(&self.pool)
+            .await?
+            .map(TryInto::try_into)
+            .transpose()
     }
 
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
@@ -358,10 +514,10 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-        .fetch_optional(&self.pool)
-        .await?
-        .map(TryInto::try_into)
-        .transpose()
+            .fetch_optional(&self.pool)
+            .await?
+            .map(TryInto::try_into)
+            .transpose()
     }
 
     pub async fn check_password(

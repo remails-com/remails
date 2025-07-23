@@ -16,6 +16,7 @@ export const RemailsContext = createContext<{
   state: {
     user: null,
     userFetched: false,
+    totpCodes: null,
     organizations: null,
     projects: null,
     streams: null,
@@ -52,6 +53,7 @@ export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
     user: null,
     userFetched: false,
+    totpCodes: null,
     organizations: null,
     projects: null,
     streams: null,

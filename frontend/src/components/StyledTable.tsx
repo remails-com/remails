@@ -12,7 +12,7 @@ export default function StyledTable({ headers, children }: StyledTableProps) {
   }
 
   return (
-    <>
+    <div>
       <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -24,6 +24,6 @@ export default function StyledTable({ headers, children }: StyledTableProps) {
         <Table.Tbody>{children}</Table.Tbody>
       </Table>
       <Divider />
-    </>
+    </div>
   );
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM totp WHERE user_id = $1 AND state = 'enrolling';\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d82b61cb8ec1a2ceef64f1ac0a9b94915f401d5acba4b2f5686eb614a3f07ab8"
+}

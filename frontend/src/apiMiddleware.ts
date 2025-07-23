@@ -54,6 +54,10 @@ export default async function apiMiddleware(
     dispatch({ type: "set_config", config: await get("/api/config") });
   }
 
+  if (navState.state.totpCodes === null && user) {
+    dispatch({ type: "set_totp_codes", totpCodes: await get(`/api/api_user/${user.id}/totp`) });
+  }
+
   let organizations = navState.state.organizations;
   if (navState.state.organizations === null || navState.to.params.force == "reload-orgs") {
     organizations = await get<Organization[]>("/api/organizations");
