@@ -9,6 +9,7 @@ import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { RemailsLogo } from "../components/RemailsLogo.tsx";
 import { VersionInfo } from "./VersionInfo.tsx";
+import { Link } from "../Link.tsx";
 
 interface DashboardProps {
   children: ReactNode;
@@ -66,7 +67,9 @@ export function Dashboard({ children }: DashboardProps) {
         <Flex align="center" h="100%" justify="space-between">
           <Group h="100%" px="lg" wrap="nowrap">
             <Burger opened={navbarOpened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <RemailsLogo />
+            <Link to="projects">
+              <RemailsLogo />
+            </Link>
           </Group>
           <Group h="100%" px="lg">
             <ColorTheme />
@@ -84,7 +87,7 @@ export function Dashboard({ children }: DashboardProps) {
         <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-        <Box>
+        <Box style={{ position: "relative" }}>
           <Breadcrumbs />
           {children}
         </Box>

@@ -11,6 +11,7 @@ import { useState } from "react";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import { Recipients } from "./Recipients.tsx";
+import InfoAlert from "../InfoAlert.tsx";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -91,7 +92,7 @@ export function MessageLog() {
               {message.from_email}
             </Badge>
             to
-            <Recipients message={message} ml="sm"/>
+            <Recipients message={message} ml="sm" />
           </Box>
           <Text fz="xs" c="dimmed" mr="md">
             {formatDateTime(message.created_at)}
@@ -149,6 +150,11 @@ export function MessageLog() {
 
   return (
     <>
+      <InfoAlert stateName="messages">
+        This page shows a list of all messages sent through this Stream. Use it to check delivery status, inspect
+        metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
+        message.
+      </InfoAlert>
       <Group justify="space-between" align="flex-end">
         <Group>
           <NativeSelect

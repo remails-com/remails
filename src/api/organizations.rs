@@ -13,6 +13,17 @@ use axum::{
 use http::StatusCode;
 use tracing::{debug, info};
 
+fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
+    has_write_access(user, org)
+}
+
+fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
+    if user.org_admin().contains(org) || user.is_super_admin() {
+        return Ok(());
+    }
+    Err(ApiError::Forbidden)
+}
+
 impl From<&ApiUser> for OrganizationFilter {
     fn from(user: &ApiUser) -> Self {
         if user.is_super_admin() {
@@ -46,11 +57,9 @@ pub async fn get_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<Organization> {
-    let filter = (&user).into();
-    let organization = repo
-        .get_by_id(id, &filter)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    has_read_access(&user, &id)?;
+
+    let organization = repo.get_by_id(id).await?.ok_or(ApiError::NotFound)?;
 
     debug!(
         user_id = user.id().to_string(),
@@ -93,9 +102,9 @@ pub async fn remove_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<OrganizationId> {
-    let filter = (&user).into();
+    has_write_access(&user, &id)?;
 
-    let organization_id = repo.remove(id, &filter).await?;
+    let organization_id = repo.remove(id).await?;
 
     info!(
         user_id = user.id().to_string(),
@@ -104,4 +113,23 @@ pub async fn remove_organization(
     );
 
     Ok(Json(organization_id))
+}
+
+pub async fn update_organization(
+    Path(id): Path<OrganizationId>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser,
+    Json(update): Json<NewOrganization>,
+) -> ApiResult<Organization> {
+    has_write_access(&user, &id)?;
+
+    let organization = repo.update(id, update).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = organization.id().to_string(),
+        "updated organization",
+    );
+
+    Ok(Json(organization))
 }

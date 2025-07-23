@@ -76,12 +76,12 @@ impl StreamRepository {
         let project = sqlx::query_as!(
             Stream,
             r#"
-            INSERT INTO streams (id, project_id, name) 
+            INSERT INTO streams (id, project_id, name)
             VALUES (gen_random_uuid(), $1, $2)
             RETURNING *
             "#,
             *project_id,
-            new.name
+            new.name.trim()
         )
         .fetch_one(&self.pool)
         .await?;
@@ -109,9 +109,9 @@ impl StreamRepository {
                    s.created_at,
                    s.updated_at
             FROM streams s
-                JOIN projects p ON s.project_id = p.id 
-                     WHERE s.project_id = $1 
-                       AND p.organization_id = $2 
+                JOIN projects p ON s.project_id = p.id
+                     WHERE s.project_id = $1
+                       AND p.organization_id = $2
             "#,
             *project_id,
             *organization_id
@@ -130,19 +130,19 @@ impl StreamRepository {
         Ok(sqlx::query_as!(
             Stream,
             r#"
-            UPDATE streams s 
-                   SET name = $4 
-            FROM projects p 
+            UPDATE streams s
+                   SET name = $4
+            FROM projects p
             WHERE s.id = $3
-              AND s.project_id = $2 
-              AND s.project_id = p.id 
+              AND s.project_id = $2
+              AND s.project_id = p.id
               AND p.organization_id = $1
             returning s.*
             "#,
             *organization_id,
             *project_id,
             *stream_id,
-            update.name
+            update.name.trim()
         )
         .fetch_one(&self.pool)
         .await?)
@@ -156,9 +156,9 @@ impl StreamRepository {
     ) -> Result<StreamId, Error> {
         Ok(sqlx::query_scalar!(
             r#"
-            DELETE FROM streams s 
-                   USING projects p 
-                   WHERE s.project_id = p.id 
+            DELETE FROM streams s
+                   USING projects p
+                   WHERE s.project_id = p.id
                      AND s.id = $1
                      AND s.project_id = $2
                      AND p.organization_id = $3

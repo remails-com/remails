@@ -123,7 +123,37 @@ impl OrganizationRepository {
                       rate_limit_reset,
                       remaining_rate_limit
             "#,
-            organization.name,
+            organization.name.trim(),
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn update(
+        &self,
+        id: OrganizationId,
+        organization: NewOrganization,
+    ) -> Result<Organization, Error> {
+        Ok(sqlx::query_as!(
+            Organization,
+            r#"
+            UPDATE organizations
+            SET name = $2
+            WHERE id = $1
+            RETURNING
+                id,
+                name,
+                total_message_quota,
+                used_message_quota,
+                quota_reset,
+                created_at,
+                updated_at,
+                moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                rate_limit_reset,
+                remaining_rate_limit
+            "#,
+            *id,
+            organization.name.trim(),
         )
         .fetch_one(&self.pool)
         .await?)
@@ -154,12 +184,7 @@ impl OrganizationRepository {
         .await?)
     }
 
-    pub async fn get_by_id(
-        &self,
-        id: OrganizationId,
-        filter: &OrganizationFilter,
-    ) -> Result<Option<Organization>, Error> {
-        let orgs = filter.org_uuids();
+    pub async fn get_by_id(&self, id: OrganizationId) -> Result<Option<Organization>, Error> {
         Ok(sqlx::query_as!(
             Organization,
             r#"
@@ -175,30 +200,21 @@ impl OrganizationRepository {
                    remaining_rate_limit
             FROM organizations
             WHERE id = $1
-              AND ($2::uuid[] IS NULL OR id = ANY($2))
             "#,
             *id,
-            orgs.as_deref(),
         )
         .fetch_optional(&self.pool)
         .await?)
     }
 
-    pub async fn remove(
-        &self,
-        id: OrganizationId,
-        filter: &OrganizationFilter,
-    ) -> Result<OrganizationId, Error> {
-        let orgs = filter.org_uuids();
+    pub async fn remove(&self, id: OrganizationId) -> Result<OrganizationId, Error> {
         Ok(sqlx::query_scalar!(
             r#"
             DELETE FROM organizations
             WHERE id = $1
-              AND ($2::uuid[] IS NULL OR id = ANY($2))
             RETURNING id
             "#,
             *id,
-            orgs.as_deref(),
         )
         .fetch_one(&self.pool)
         .await?
@@ -257,11 +273,11 @@ mod test {
         let orgs = repo.list(&Default::default()).await.unwrap();
         assert_eq!(orgs, vec![org1.clone(), org2.clone()]);
 
-        repo.remove(org1.id, &Default::default()).await.unwrap();
+        repo.remove(org1.id).await.unwrap();
         let orgs = repo.list(&Default::default()).await.unwrap();
         assert_eq!(orgs, vec![org2.clone()]);
 
-        let not_found = repo.get_by_id(org1.id, &Default::default()).await.unwrap();
+        let not_found = repo.get_by_id(org1.id).await.unwrap();
         assert_eq!(None, not_found);
     }
 }

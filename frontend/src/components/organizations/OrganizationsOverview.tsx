@@ -6,6 +6,7 @@ import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
+import StyledTable from "../StyledTable.tsx";
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -51,17 +52,8 @@ export default function OrganizationsOverview() {
         close={close}
         done={(newOrg) => navigate("organizations", { org_id: newOrg.id })}
       />
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>ID</Table.Th>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Updated</Table.Th>
-            <Table.Th></Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>{rows}</Table.Tbody>
-      </Table>
+      <StyledTable headers={["ID", "Name", "Updated", ""]}>{rows}</StyledTable>
+
       <Flex justify="center" mt="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>
           New Organization

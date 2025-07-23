@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO streams (id, project_id, name) \n            VALUES (gen_random_uuid(), $1, $2)\n            RETURNING *\n            ",
+  "query": "\n            SELECT s.id,\n                   s.project_id,\n                   s.name,\n                   s.created_at,\n                   s.updated_at\n            FROM streams s\n                JOIN projects p ON s.project_id = p.id\n                     WHERE s.project_id = $1\n                       AND p.organization_id = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -32,7 +32,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Varchar"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -43,5 +43,5 @@
       false
     ]
   },
-  "hash": "2664d2e613ce12ed31df9b7d143d1442ea3430ff11e9219d31a0483de873dd20"
+  "hash": "76558ecc1d49cc1ac1c0708fb0385f6db65d96e1953aae0264346ac6c152c9b5"
 }

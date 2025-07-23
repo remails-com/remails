@@ -33,6 +33,7 @@ export function NavBar({ close }: { close: () => void }) {
     <>
       {is_global_admin(roles) && (
         <NavLink
+          mb="md"
           label="Organizations"
           active={routerState.name === "organizations"}
           leftSection={<IconBuildings size={20} stroke={1.8} />}

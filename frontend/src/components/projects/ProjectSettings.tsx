@@ -1,15 +1,15 @@
 import { useForm } from "@mantine/form";
-import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { Button, Group, List, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
-import { useEffect } from "react";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { Loader } from "../../Loader.tsx";
+import { useDomains } from "../../hooks/useDomains.ts";
 
 interface FormValues {
   name: string;
@@ -21,6 +21,7 @@ export default function ProjectSettings() {
 
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
+  const { domains } = useDomains();
 
   const canDelete = streams && streams.length === 0;
 
@@ -28,13 +29,18 @@ export default function ProjectSettings() {
     initialValues: {
       name: currentProject?.name || "",
     },
+    validate: {
+      name: (value) => {
+        if (value.length < 3) {
+          return "Name must have at least 3 characters";
+        }
+        if (value.length > 50) {
+          return "Name must be less than 50 characters";
+        }
+        return null;
+      },
+    },
   });
-
-  useEffect(() => {
-    form.setValues({ name: currentProject?.name || "" });
-    form.resetDirty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject]);
 
   if (!currentProject || !currentOrganization) {
     return <Loader />;
@@ -43,10 +49,26 @@ export default function ProjectSettings() {
   const confirmDeleteProject = (project: Project) => {
     modals.openConfirmModal({
       title: "Please confirm your action",
+      size: "lg",
       children: (
-        <Text>
-          Are you sure you want to delete project <strong>{project.name}</strong>? This action cannot be undone
-        </Text>
+        <>
+          <Text>
+            Are you sure you want to delete project <strong>{project.name}</strong>?
+          </Text>
+          {domains && (
+            <>
+              <Text>This will also delete the following domains configured in this project:</Text>
+              <List>
+                {domains.map((domain) => (
+                  <List.Item key={domain.id}>
+                    <Text fw="bold">{domain.domain}</Text>
+                  </List.Item>
+                ))}
+              </List>
+            </>
+          )}
+          <Text mt="sm">This action cannot be undone.</Text>
+        </>
       ),
       labels: { confirm: "Confirm", cancel: "Cancel" },
       onCancel: () => {},
@@ -115,6 +137,7 @@ export default function ProjectSettings() {
         <Stack>
           <TextInput
             label="Name"
+            error={form.errors.name}
             key={form.key("name")}
             value={form.values.name}
             onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
