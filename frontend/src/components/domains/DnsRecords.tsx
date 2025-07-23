@@ -32,17 +32,17 @@ export function DnsRecords({
         {config.dkim_selector}._domainkey.{domain.domain}
       </Code>{" "}
       to:
-      <CopyableCode mt="xs">{dkim_entry}</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{dkim_entry}</CopyableCode>
       <Title order={title_order} mt="md">
         2. Remails SPF
       </Title>
       Set a TXT record for <Code>{domain.domain}</Code> to:
-      <CopyableCode mt="xs">{config.preferred_spf_record ?? ""}</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{config.preferred_spf_record ?? ""}</CopyableCode>
       <Title order={title_order} mt="md">
         3. DMARC Configuration
       </Title>
       Set a TXT record for <Code>_dmarc.{domain.domain}</Code> to:
-      <CopyableCode mt="xs">v=DMARC1; p=reject</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>v=DMARC1; p=reject</CopyableCode>
     </>
   );
 }

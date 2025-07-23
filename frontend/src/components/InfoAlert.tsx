@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert } from "@mantine/core";
+import { Alert, Text, Tooltip } from "@mantine/core";
 import { IconHelp, IconInfoCircle } from "@tabler/icons-react";
 import { useLocalStorage } from "@mantine/hooks";
 
@@ -11,21 +11,24 @@ export default function InfoAlert({ children, stateName }: { children: React.Rea
 
   if (!opened) {
     return (
-      <IconHelp
-        style={{
-          position: "absolute",
-          cursor: "pointer",
-          top: 0,
-          right: 0,
-        }}
-        onClick={() => setOpened(!opened)}
-      />
+      <Tooltip label={"Show more information"}>
+        <IconHelp
+          style={{
+            position: "absolute",
+            cursor: "pointer",
+            top: 0,
+            right: 0,
+          }}
+          color="gray"
+          onClick={() => setOpened(!opened)}
+        />
+      </Tooltip>
     );
   }
 
   return (
     <Alert icon={<IconInfoCircle />} color="gray" withCloseButton onClose={() => setOpened(false)} mb="sm">
-      {children}
+      <Text>{children}</Text>
     </Alert>
   );
 }

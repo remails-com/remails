@@ -8,6 +8,7 @@ import { NewCredential } from "./NewCredential.tsx";
 import { SmtpInfo } from "./SmtpInfo.tsx";
 import EditButton from "../EditButton.tsx";
 import StyledTable from "../StyledTable.tsx";
+import InfoAlert from "../InfoAlert.tsx";
 
 export function CredentialsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -51,6 +52,11 @@ export function CredentialsOverview() {
 
   return (
     <>
+      <InfoAlert stateName={"smtp-cred"}>
+        Create SMTP credentials for this Stream. Each set of credentials is unique to the Stream and can be used to
+        authenticate email sending. You can create multiple credentials per Stream if needed.
+        <SmtpInfo />
+      </InfoAlert>
       <NewCredential opened={opened} close={close} />
       <StyledTable
         headers={[{ miw: "10rem", children: "Username" }, "Description", { miw: "10rem", children: "Updated" }, ""]}
@@ -62,7 +68,6 @@ export function CredentialsOverview() {
           New Credential
         </Button>
       </Flex>
-      <SmtpInfo />
     </>
   );
 }

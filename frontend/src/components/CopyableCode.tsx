@@ -1,23 +1,25 @@
 import {
   ActionIcon,
   Code,
+  CodeProps,
   CSSProperties,
   Input,
-  MantineSpacing,
-  StyleProp,
+  InputWrapperProps,
   Tooltip,
   useComputedColorScheme,
 } from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
+import React from "react";
 
 interface CopyableCodeProps {
   children: string;
   label?: React.ReactNode;
-  mt?: StyleProp<MantineSpacing>;
+  props?: InputWrapperProps;
+  p?: CodeProps["p"];
 }
 
-export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
+export function CopyableCode({ children, label, props, p }: CopyableCodeProps) {
   const clipboard = useClipboard({ timeout: 1000 });
 
   const computedColorScheme = useComputedColorScheme();
@@ -35,9 +37,9 @@ export function CopyableCode({ children, label, mt }: CopyableCodeProps) {
   };
 
   return (
-    <Input.Wrapper mt={mt} label={label}>
+    <Input.Wrapper label={label} {...props}>
       <Tooltip label={clipboard.copied ? "Copied!" : "Click to copy"} position="bottom" offset={-6}>
-        <Code block style={style} onClick={() => clipboard.copy(children)}>
+        <Code p={p} block style={style} onClick={() => clipboard.copy(children)}>
           <ActionIcon
             variant="light"
             color={clipboard.copied ? "teal" : "blue"}
