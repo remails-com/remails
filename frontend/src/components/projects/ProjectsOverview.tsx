@@ -40,7 +40,7 @@ export default function ProjectsOverview() {
   return (
     <>
       <InfoAlert stateName="projects">
-        Projects are used to group related work — such as different applications or environments. Each project can have
+        Projects are used to group related work, such as different applications or environments. Each project can have
         its own Streams and Domains to keep things organized.
       </InfoAlert>
       <NewProject opened={opened} close={close} />

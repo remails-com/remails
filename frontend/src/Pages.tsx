@@ -1,4 +1,3 @@
-import { NavigationProgress } from "@mantine/nprogress";
 import { JSX } from "react";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
@@ -56,7 +55,7 @@ function Page() {
 
 export function Pages() {
   const {
-    state: { userFetched, routerState, nextRouterState, error },
+    state: { userFetched, routerState, error },
     dispatch,
   } = useRemails();
 
@@ -65,20 +64,15 @@ export function Pages() {
   }
 
   if (!userFetched) {
-    return <NavigationProgress />;
+    return null;
   }
 
   if (routerState.name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
-  if (nextRouterState && nextRouterState.params.org_id != routerState.params.org_id) {
-    return <NavigationProgress />;
-  }
-
   return (
     <Dashboard>
-      <NavigationProgress />
       <Page />
     </Dashboard>
   );

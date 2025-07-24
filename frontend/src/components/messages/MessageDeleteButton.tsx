@@ -31,8 +31,8 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
         message: "Message was deleted",
         color: "green",
       });
-      dispatch({ type: "remove_message", messageId: message.id });
       navigate("projects.project.streams.stream.messages");
+      dispatch({ type: "remove_message", messageId: message.id });
     } else {
       notifications.show({
         title: "Error",

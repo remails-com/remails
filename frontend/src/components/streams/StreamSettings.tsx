@@ -79,8 +79,8 @@ export default function StreamSettings() {
         message: `Stream ${stream.name} deleted`,
         color: "green",
       });
-      dispatch({ type: "remove_stream", streamId: stream.id });
       navigate("projects.project.streams");
+      dispatch({ type: "remove_stream", streamId: stream.id });
     } else {
       notifications.show({
         title: "Error",

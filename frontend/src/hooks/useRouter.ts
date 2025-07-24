@@ -63,6 +63,11 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
           } else {
             dispatch({ type: "set_error", error: new RemailsError("mw:" + e, 500) });
           }
+          dispatch({
+            type: "set_next_router_state",
+            nextRouterState: null,
+          });
+          nprogress.complete();
           return;
         }
       }

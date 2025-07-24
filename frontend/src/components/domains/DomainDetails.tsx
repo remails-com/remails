@@ -61,9 +61,12 @@ export default function DomainDetails() {
         message: `Domain ${domain.domain} deleted`,
         color: "green",
       });
-      dispatch({ type: "remove_domain", domainId: domain.id });
-
       navigate(domain_route);
+      if (currentProject) {
+        dispatch({ type: "remove_domain", domainId: domain.id });
+      } else {
+        dispatch({ type: "remove_organization_domain", domainId: domain.id });
+      }
     } else {
       notifications.show({
         title: "Error",

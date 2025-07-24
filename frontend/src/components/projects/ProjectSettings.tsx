@@ -86,8 +86,8 @@ export default function ProjectSettings() {
         message: `Project ${project.name} deleted`,
         color: "green",
       });
-      dispatch({ type: "remove_project", projectId: project.id });
       navigate("projects");
+      dispatch({ type: "remove_project", projectId: project.id });
     } else {
       notifications.show({
         title: "Error",
