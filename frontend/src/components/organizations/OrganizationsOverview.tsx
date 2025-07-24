@@ -1,21 +1,16 @@
 import { Button, Flex, Table, Text, Tooltip } from "@mantine/core";
-import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
-import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 import StyledTable from "../StyledTable.tsx";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
-  const { organizations, currentOrganization } = useOrganizations();
+  const { currentOrganization, organizations } = useOrganizations();
   const { navigate } = useRemails();
-
-  if (!organizations) {
-    return <Loader />;
-  }
 
   const rows = organizations.map((organization) => (
     <Table.Tr

@@ -106,10 +106,6 @@ export const routes = [
     path: "/",
   },
   {
-    name: "not_found",
-    path: "/404",
-  },
-  {
     name: "login",
     path: "/login",
   },

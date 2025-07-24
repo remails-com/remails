@@ -53,8 +53,10 @@ export function CredentialsOverview() {
   return (
     <>
       <InfoAlert stateName={"smtp-cred"}>
-        Create SMTP credentials for this Stream. Each set of credentials is unique to the Stream and can be used to
-        authenticate email sending. You can create multiple credentials per Stream if needed.
+        <Text mb="sm">
+          Create SMTP credentials for this Stream. Each set of credentials is unique to the Stream and can be used to
+          authenticate email sending. You can create multiple credentials per Stream if needed.
+        </Text>
         <SmtpInfo />
       </InfoAlert>
       <NewCredential opened={opened} close={close} />

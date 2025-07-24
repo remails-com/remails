@@ -2,6 +2,7 @@ import { Dispatch } from "react";
 import { NavigationState } from "./hooks/useRouter";
 import { Action, Organization, User, WhoamiResponse } from "./types";
 import { FullRouterState, Router } from "./router";
+import { RemailsError } from "./error/error";
 
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path, {
@@ -12,7 +13,7 @@ async function get<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${path}: ${response.status} ${response.statusText}`);
+    throw new RemailsError(`Failed to fetch ${path} (${response.status} ${response.statusText})`, response.status);
   }
 
   return (await response.json()) as T;
@@ -72,8 +73,9 @@ export default async function apiMiddleware(
   if (orgChanged) {
     dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
     dispatch({
-      type: "set_organization_domains",
-      organizationDomains: await get(`/api/organizations/${newOrgId}/domains`),
+      type: "set_domains",
+      domains: await get(`/api/organizations/${newOrgId}/domains`),
+      from_organization: true,
     });
   }
 
@@ -85,6 +87,7 @@ export default async function apiMiddleware(
     dispatch({
       type: "set_domains",
       domains: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`),
+      from_organization: false,
     });
   }
 

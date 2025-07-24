@@ -1,3 +1,4 @@
+import { RemailsError } from "./error/error";
 import { RouterState } from "./router";
 
 export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
@@ -87,6 +88,7 @@ export interface State {
   config: RemailsConfig | null;
   routerState: RouterState;
   nextRouterState: RouterState | null;
+  error: RemailsError | null;
 }
 
 export type Action =
@@ -146,26 +148,17 @@ export type Action =
   | {
       type: "set_domains";
       domains: Domain[] | null;
+      from_organization: boolean;
     }
   | {
       type: "add_domain";
       domain: Domain;
+      from_organization: boolean;
     }
   | {
       type: "remove_domain";
       domainId: string;
-    }
-  | {
-      type: "set_organization_domains";
-      organizationDomains: Domain[] | null;
-    }
-  | {
-      type: "add_organization_domain";
-      organizationDomain: Domain;
-    }
-  | {
-      type: "remove_organization_domain";
-      domainId: string;
+      from_organization: boolean;
     }
   | {
       type: "set_credentials";
@@ -190,6 +183,10 @@ export type Action =
   | {
       type: "set_config";
       config: RemailsConfig;
+    }
+  | {
+      type: "set_error";
+      error: RemailsError;
     };
 
 export interface Organization {

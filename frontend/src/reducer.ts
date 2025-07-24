@@ -43,22 +43,28 @@ const actionHandler: {
     return { ...state, messages: state.messages?.filter((m) => m.id !== action.messageId) || [] };
   },
   set_domains: function (state, action) {
-    return { ...state, domains: action.domains };
+    if (action.from_organization) {
+      return { ...state, organizationDomains: action.domains };
+    } else {
+      return { ...state, domains: action.domains };
+    }
   },
   add_domain: function (state, action) {
-    return { ...state, domains: [...(state.domains || []), action.domain] };
+    if (action.from_organization) {
+      return { ...state, organizationDomains: [...(state.organizationDomains || []), action.domain] };
+    } else {
+      return { ...state, domains: [...(state.domains || []), action.domain] };
+    }
   },
   remove_domain: function (state, action) {
-    return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
-  },
-  set_organization_domains: function (state, action) {
-    return { ...state, organizationDomains: action.organizationDomains };
-  },
-  add_organization_domain: function (state, action) {
-    return { ...state, organizationDomains: [...(state.organizationDomains || []), action.organizationDomain] };
-  },
-  remove_organization_domain: function (state, action) {
-    return { ...state, organizationDomains: state.organizationDomains?.filter((d) => d.id !== action.domainId) || [] };
+    if (action.from_organization) {
+      return {
+        ...state,
+        organizationDomains: state.organizationDomains?.filter((d) => d.id !== action.domainId) || [],
+      };
+    } else {
+      return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
+    }
   },
   set_credentials: function (state, action) {
     return { ...state, credentials: action.credentials };
@@ -80,6 +86,9 @@ const actionHandler: {
   },
   set_user: function (state, action) {
     return { ...state, user: action.user, userFetched: true };
+  },
+  set_error: function (state, action) {
+    return { ...state, error: action.error };
   },
 };
 

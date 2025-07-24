@@ -69,8 +69,8 @@ export default function CredentialDetails() {
         message: `Credential with username ${credential.username} deleted`,
         color: "green",
       });
+      navigate("projects.project.streams.stream.credentials", {});
       dispatch({ type: "remove_credential", credentialId: credential.id });
-      navigate("projects.project.streams.stream.credentials");
     } else {
       notifications.show({
         title: "Error",

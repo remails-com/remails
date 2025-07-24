@@ -18,7 +18,7 @@ interface DashboardProps {
 export function Dashboard({ children }: DashboardProps) {
   const [navbarOpened, { toggle, close }] = useDisclosure();
   const {
-    state: { user },
+    state: { user, nextRouterState },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
@@ -88,7 +88,7 @@ export function Dashboard({ children }: DashboardProps) {
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <Box style={{ position: "relative" }}>
-          <Breadcrumbs />
+          {!nextRouterState && <Breadcrumbs />}
           {children}
         </Box>
 

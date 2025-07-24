@@ -4,6 +4,7 @@ import { useOrganizations } from "./useOrganizations.ts";
 import { useProjects } from "./useProjects.ts";
 import { useStreams } from "./useStreams.ts";
 import { Message, MessageMetadata } from "../types.ts";
+import { RemailsError } from "../error/error.ts";
 
 export function useMessages() {
   const { currentOrganization } = useOrganizations();
@@ -23,7 +24,18 @@ export function useMessages() {
         fetch(
           `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${routerState.params.message_id}`
         )
-          .then((res) => res.json())
+          .then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              const error = new RemailsError(
+                `Could not load message with ID ${routerState.params.message_id} (${res.status} ${res.statusText})`,
+                res.status
+              );
+              dispatch({ type: "set_error", error });
+              throw error;
+            }
+          })
           .then((message) => {
             setCurrentMessage(message);
             dispatch({ type: "update_message", messageId: message.id, update: message });

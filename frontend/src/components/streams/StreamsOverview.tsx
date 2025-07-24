@@ -1,5 +1,4 @@
 import { Button, Flex, Table } from "@mantine/core";
-import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -14,10 +13,6 @@ export function StreamsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
   const { navigate } = useRemails();
   const { streams } = useStreams();
-
-  if (streams === null) {
-    return <Loader />;
-  }
 
   const rows = streams.map((stream) => (
     <Table.Tr key={stream.id}>
