@@ -73,8 +73,9 @@ export default async function apiMiddleware(
   if (orgChanged) {
     dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
     dispatch({
-      type: "set_organization_domains",
-      organizationDomains: await get(`/api/organizations/${newOrgId}/domains`),
+      type: "set_domains",
+      domains: await get(`/api/organizations/${newOrgId}/domains`),
+      from_organization: true,
     });
   }
 
@@ -86,6 +87,7 @@ export default async function apiMiddleware(
     dispatch({
       type: "set_domains",
       domains: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`),
+      from_organization: false,
     });
   }
 

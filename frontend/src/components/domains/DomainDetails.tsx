@@ -62,11 +62,7 @@ export default function DomainDetails() {
         color: "green",
       });
       navigate(domain_route);
-      if (currentProject) {
-        dispatch({ type: "remove_domain", domainId: domain.id });
-      } else {
-        dispatch({ type: "remove_organization_domain", domainId: domain.id });
-      }
+      dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !currentProject });
     } else {
       notifications.show({
         title: "Error",

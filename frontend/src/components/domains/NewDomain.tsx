@@ -101,13 +101,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
       if (res.status === 201) {
         res.json().then((newDomain) => {
           setNewDomain(newDomain);
-
-          if (projectId) {
-            dispatch({ type: "add_domain", domain: newDomain });
-          } else {
-            dispatch({ type: "add_organization_domain", organizationDomain: newDomain });
-          }
-
+          dispatch({ type: "add_domain", domain: newDomain, from_organization: !projectId });
           setActiveStep(1);
         });
       } else if (res.status === 409) {
@@ -132,12 +126,6 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
     fetch(`${domainsApi}/${domain.id}`, {
       method: "DELETE",
     }).then((r) => {
-      if (projectId) {
-        dispatch({ type: "remove_domain", domainId: domain.id });
-      } else {
-        dispatch({ type: "remove_organization_domain", domainId: domain.id });
-      }
-
       if (r.status !== 200) {
         notifications.show({
           title: "Error",
@@ -146,7 +134,9 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
           autoClose: 20000,
           icon: <IconX size={20} />,
         });
+        return;
       }
+      dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !projectId });
     });
   };
 

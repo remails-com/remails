@@ -148,26 +148,17 @@ export type Action =
   | {
       type: "set_domains";
       domains: Domain[] | null;
+      from_organization: boolean;
     }
   | {
       type: "add_domain";
       domain: Domain;
+      from_organization: boolean;
     }
   | {
       type: "remove_domain";
       domainId: string;
-    }
-  | {
-      type: "set_organization_domains";
-      organizationDomains: Domain[] | null;
-    }
-  | {
-      type: "add_organization_domain";
-      organizationDomain: Domain;
-    }
-  | {
-      type: "remove_organization_domain";
-      domainId: string;
+      from_organization: boolean;
     }
   | {
       type: "set_credentials";
