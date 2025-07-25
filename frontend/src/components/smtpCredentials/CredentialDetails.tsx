@@ -8,9 +8,10 @@ import { useEffect } from "react";
 import { Loader } from "../../Loader.tsx";
 import { SmtpCredential } from "../../types.ts";
 import { modals } from "@mantine/modals";
-import { Button, Grid, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { Button, Container, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconTrash, IconX } from "@tabler/icons-react";
+import { IconKey, IconTrash, IconX } from "@tabler/icons-react";
+import EntityHeader from "../EntityHeader.tsx";
 
 interface FormValues {
   description: string;
@@ -117,9 +118,9 @@ export default function CredentialDetails() {
   };
 
   return (
-    <Grid gutter="xl">
-      <Grid.Col span={{ base: 12, md: 6, lg: 3 }}>
-        <h2>SMTP credential Details</h2>
+    <>
+      <Container size="sm" ml="0" pl="0">
+        <EntityHeader name={currentCredential?.username || ""} entityType="SMTP Credential" Icon={IconKey} />
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
             <TextInput variant="filled" label="Username" value={currentCredential?.username || ""} readOnly />
@@ -150,7 +151,7 @@ export default function CredentialDetails() {
             </Group>
           </Stack>
         </form>
-      </Grid.Col>
-    </Grid>
+      </Container>
+    </>
   );
 }

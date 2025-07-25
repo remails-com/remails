@@ -1,6 +1,6 @@
-import { ActionIcon, Box, FocusTrap, Group, TextInput, Title } from "@mantine/core";
+import { ActionIcon, FocusTrap, Group, TextInput, ThemeIcon, Title, Tooltip } from "@mantine/core";
 import { useClickOutside, useDisclosure } from "@mantine/hooks";
-import { IconCheck, IconX } from "@tabler/icons-react";
+import { IconCheck, IconEdit, IconX } from "@tabler/icons-react";
 import classes from "./Rename.module.css";
 import { useForm } from "@mantine/form";
 
@@ -53,7 +53,9 @@ export default function Rename({ name: initial, save }: RenameProps) {
           <FocusTrap>
             <TextInput
               key={form.key("name")}
-              size="lg"
+              size="xs"
+              pt="1px"
+              styles={{ input: { fontSize: "16px" } }}
               error={form.errors.name}
               value={form.values.name}
               radius="md"
@@ -62,30 +64,34 @@ export default function Rename({ name: initial, save }: RenameProps) {
               }}
             />
           </FocusTrap>
-          <ActionIcon style={{ flexGrow: 0, marginTop: "3px" }} size="xl" variant="outline" type="submit">
-            <IconCheck />
-          </ActionIcon>
-          <ActionIcon
-            style={{ flexGrow: 0, marginTop: "3px" }}
-            size="xl"
-            variant="outline"
-            onClick={() => {
-              stopEdit();
-              form.setFieldValue("name", initial);
-            }}
-          >
-            <IconX />
-          </ActionIcon>
+          <Tooltip label="Save name">
+            <ActionIcon size="30" variant="filled" type="submit">
+              <IconCheck />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Cancel">
+            <ActionIcon
+              size="30"
+              variant="filled"
+              onClick={() => {
+                stopEdit();
+                form.setFieldValue("name", initial);
+              }}
+            >
+              <IconX />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </form>
     );
   }
 
   return (
-    <Box className={classes.rename} bdrs="md">
-      <Title style={{ cursor: "pointer" }} order={2} onClick={edit}>
-        {form.values.name}
-      </Title>
-    </Box>
+    <Group className={classes.rename} bdrs="md" justify="space-between" onClick={edit}>
+      <Title order={3}>{form.values.name}</Title>
+      <ThemeIcon variant="transparent">
+        <IconEdit className={classes.editIcon} />
+      </ThemeIcon>
+    </Group>
   );
 }

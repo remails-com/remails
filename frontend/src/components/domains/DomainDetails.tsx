@@ -5,7 +5,7 @@ import { useDomains } from "../../hooks/useDomains.ts";
 import { Domain } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconLabel, IconTrash, IconWorldSearch, IconX } from "@tabler/icons-react";
+import { IconLabel, IconTrash, IconWorldSearch, IconWorldWww, IconX } from "@tabler/icons-react";
 import { Button, Group, Modal, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { DnsRecords } from "./DnsRecords.tsx";
 import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
@@ -14,6 +14,7 @@ import { useDisclosure } from "@mantine/hooks";
 import Tabs from "../../layout/Tabs.tsx";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { formatDateTime } from "../../util.ts";
+import EntityHeader from "../EntityHeader.tsx";
 
 export default function DomainDetails() {
   const { currentOrganization } = useOrganizations();
@@ -76,95 +77,102 @@ export default function DomainDetails() {
   };
 
   return (
-    <Tabs
-      tabs={[
-        {
-          route: `${domain_route}.domain`,
-          name: "Details",
-          icon: <IconWorldSearch size={14} />,
-          content: (
-            <>
-              <h2>Details</h2>
-              <Stack>
-                <TextInput label="Domain" value={currentDomain.domain} readOnly={true} variant="filled" />
-              </Stack>
-              <h3>DNS status</h3>
-              <DnsVerificationResult
-                domain={currentDomain.domain}
-                domainVerified={domainVerified}
-                verificationResult={verificationResult}
-              />
-              Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "never"}
-              <Group mt="xl">
-                <Tooltip label="Delete Domain">
-                  <Button
-                    leftSection={<IconTrash />}
-                    variant="outline"
-                    onClick={() => confirmDeleteDomain(currentDomain)}
-                  >
-                    Delete domain
-                  </Button>
-                </Tooltip>
-              </Group>
-            </>
-          ),
-          notSoWide: true,
-        },
-        {
-          route: `${domain_route}.domain.dns`,
-          name: "DNS records",
-          icon: <IconLabel size={14} />,
-          content: (
-            <>
-              <h2>DNS records</h2>
-              <DnsRecords domain={currentDomain} title_order={4}></DnsRecords>
-
-              <Group mt="xl">
-                <Tooltip label="Verify DNS records">
-                  <Button
-                    onClick={() => {
-                      reverifyDomain(currentDomain);
-                      open();
-                    }}
-                  >
-                    Verify DNS
-                  </Button>
-                </Tooltip>
-              </Group>
-
-              <Modal
-                opened={opened}
-                onClose={close}
-                title={
-                  <Title order={2} component="span">
-                    Verify DNS records
-                  </Title>
-                }
-                size="lg"
-                padding="xl"
-                centered
-              >
-                <DnsVerificationContent
+    <>
+      <EntityHeader
+        name={currentDomain.domain}
+        entityType={currentProject ? "Project Domain" : "Organization Domain"}
+        Icon={IconWorldWww}
+      />
+      <Tabs
+        tabs={[
+          {
+            route: `${domain_route}.domain`,
+            name: "Details",
+            icon: <IconWorldSearch size={14} />,
+            content: (
+              <>
+                <h2>Details</h2>
+                <Stack>
+                  <TextInput label="Domain" value={currentDomain.domain} readOnly={true} variant="filled" />
+                </Stack>
+                <h3>DNS status</h3>
+                <DnsVerificationResult
                   domain={currentDomain.domain}
                   domainVerified={domainVerified}
                   verificationResult={verificationResult}
                 />
-                <Group mt="md" justify="space-between">
-                  <Button
-                    disabled={domainVerified === "loading"}
-                    variant="outline"
-                    onClick={() => reverifyDomain(currentDomain)}
-                  >
-                    Retry verification
-                  </Button>
-                  <Button onClick={close}>Done</Button>
+                Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "never"}
+                <Group mt="xl">
+                  <Tooltip label="Delete Domain">
+                    <Button
+                      leftSection={<IconTrash />}
+                      variant="outline"
+                      onClick={() => confirmDeleteDomain(currentDomain)}
+                    >
+                      Delete domain
+                    </Button>
+                  </Tooltip>
                 </Group>
-              </Modal>
-            </>
-          ),
-          notSoWide: true,
-        },
-      ]}
-    />
+              </>
+            ),
+            notSoWide: true,
+          },
+          {
+            route: `${domain_route}.domain.dns`,
+            name: "DNS records",
+            icon: <IconLabel size={14} />,
+            content: (
+              <>
+                <h2>DNS records</h2>
+                <DnsRecords domain={currentDomain} title_order={4}></DnsRecords>
+
+                <Group mt="xl">
+                  <Tooltip label="Verify DNS records">
+                    <Button
+                      onClick={() => {
+                        reverifyDomain(currentDomain);
+                        open();
+                      }}
+                    >
+                      Verify DNS
+                    </Button>
+                  </Tooltip>
+                </Group>
+
+                <Modal
+                  opened={opened}
+                  onClose={close}
+                  title={
+                    <Title order={2} component="span">
+                      Verify DNS records
+                    </Title>
+                  }
+                  size="lg"
+                  padding="xl"
+                  centered
+                >
+                  <DnsVerificationContent
+                    domain={currentDomain.domain}
+                    domainVerified={domainVerified}
+                    verificationResult={verificationResult}
+                  />
+                  <Group mt="md" justify="space-between">
+                    <Button
+                      disabled={domainVerified === "loading"}
+                      variant="outline"
+                      onClick={() => reverifyDomain(currentDomain)}
+                    >
+                      Retry verification
+                    </Button>
+                    <Button onClick={close}>Done</Button>
+                  </Group>
+                </Modal>
+              </>
+            ),
+            notSoWide: true,
+          },
+        ]}
+      />
+    </>
   );
 }

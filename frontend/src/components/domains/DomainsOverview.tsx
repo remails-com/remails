@@ -56,8 +56,8 @@ export default function DomainsOverview() {
         </InfoAlert>
       ) : (
         <InfoAlert stateName="global-domains">
-          Top-level domains are available across all projects. Use this to manage domains centrally if they’re shared
-          between multiple projects.
+          Organization domains are available across all projects in the organization. Use this to manage domains
+          centrally if they’re shared between multiple projects.
         </InfoAlert>
       )}
       <NewDomain opened={opened} close={close} projectId={currentProject?.id || null} />

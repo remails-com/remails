@@ -1,6 +1,5 @@
 import { Box, Button, Menu, NavLink, Text } from "@mantine/core";
 import {
-  IconAffiliate,
   IconBuildings,
   IconChartBar,
   IconChevronDown,
@@ -64,7 +63,7 @@ export function NavBar({ close }: { close: () => void }) {
             mb="md"
           >
             <Box mr="sm">
-              <IconAffiliate />
+              <IconBuildings />
             </Box>
             {currentOrganization?.name}
           </Button>

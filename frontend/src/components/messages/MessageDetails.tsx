@@ -1,13 +1,14 @@
 import { useMessages } from "../../hooks/useMessages.ts";
-import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Group, Paper, SegmentedControl, Table, Text, Tooltip } from "@mantine/core";
 import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
 import { Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
-import { IconHelp, IconPaperclip } from "@tabler/icons-react";
+import { IconHelp, IconMessage, IconPaperclip } from "@tabler/icons-react";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
+import EntityHeader from "../EntityHeader.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -107,13 +108,7 @@ export default function MessageDetails() {
 
   return (
     <>
-      {subject ? (
-        <Title>{subject}</Title>
-      ) : (
-        <Title c="dimmed" fs="italic">
-          No Subject
-        </Title>
-      )}
+      <EntityHeader name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>

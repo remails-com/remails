@@ -1,8 +1,18 @@
 .rename {
-  padding: 4px;
+  padding-inline: 4px;
   margin-left: -4px;
+  cursor: pointer;
 
   &:hover {
-    outline: 1px solid var(--mantine-primary-color-5);
+    outline: 1px solid var(--mantine-color-remails-red-text);
+    min-width: 14em;
+
+    .editIcon {
+      opacity: 100%;
+    }
   }
+}
+
+.editIcon {
+  opacity: 0;
 }
