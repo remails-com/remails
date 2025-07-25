@@ -12,6 +12,7 @@ import { Button, Container, Group, Stack, Text, Textarea, TextInput, Tooltip } f
 import { notifications } from "@mantine/notifications";
 import { IconKey, IconTrash, IconX } from "@tabler/icons-react";
 import EntityHeader from "../EntityHeader.tsx";
+import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
 
 interface FormValues {
   description: string;
@@ -119,8 +120,9 @@ export default function CredentialDetails() {
 
   return (
     <>
+      <EntityHeader name={currentCredential?.username || ""} entityType="SMTP Credential" Icon={IconKey} divider />
+      <Breadcrumbs />
       <Container size="sm" ml="0" pl="0">
-        <EntityHeader name={currentCredential?.username || ""} entityType="SMTP Credential" Icon={IconKey} />
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
             <TextInput variant="filled" label="Username" value={currentCredential?.username || ""} readOnly />

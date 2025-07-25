@@ -9,6 +9,7 @@ import MessageRetryButton from "./MessageRetryButton.tsx";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import EntityHeader from "../EntityHeader.tsx";
+import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -50,6 +51,7 @@ export default function MessageDetails() {
   const raw = completeMessage.truncated_raw_data;
 
   const table_data = [
+    { header: "Subject", value: subject ?? "no subject set" },
     { header: "From", value: completeMessage.from_email },
     {
       header: "Recipients",
@@ -108,7 +110,8 @@ export default function MessageDetails() {
 
   return (
     <>
-      <EntityHeader name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} />
+      <EntityHeader name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} divider />
+      <Breadcrumbs />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>

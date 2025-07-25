@@ -9,6 +9,7 @@ import { Link } from "../../Link.tsx";
 import EditButton from "../EditButton.tsx";
 import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
+import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 
 export default function ProjectsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -39,6 +40,7 @@ export default function ProjectsOverview() {
 
   return (
     <>
+      <OrganizationHeader />
       <InfoAlert stateName="projects">
         Projects are used to group related work, such as different applications or environments. Each project can have
         its own Streams and Domains to keep things organized.

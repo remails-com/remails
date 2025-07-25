@@ -11,6 +11,7 @@ import InfoAlert from "../InfoAlert.tsx";
 import StyledTable from "../StyledTable.tsx";
 import VerificationBadge from "./VerificationBadge.tsx";
 import EditButton from "../EditButton.tsx";
+import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 
 export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -49,6 +50,7 @@ export default function DomainsOverview() {
 
   return (
     <>
+      {!currentProject && <OrganizationHeader />}
       {currentProject ? (
         <InfoAlert stateName="project-domains">
           Domains added here can be used by any Stream in this project. Each domain must be verified via DNS (SPF, DKIM,

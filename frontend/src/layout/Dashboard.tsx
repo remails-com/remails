@@ -6,7 +6,6 @@ import { NavBar } from "./NavBar.tsx";
 import { ReactNode } from "react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
-import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { RemailsLogo } from "../components/RemailsLogo.tsx";
 import { VersionInfo } from "./VersionInfo.tsx";
 import { Link } from "../Link.tsx";
@@ -18,7 +17,7 @@ interface DashboardProps {
 export function Dashboard({ children }: DashboardProps) {
   const [navbarOpened, { toggle, close }] = useDisclosure();
   const {
-    state: { user, nextRouterState },
+    state: { user },
     navigate,
   } = useRemails();
   const { currentOrganization } = useOrganizations();
@@ -87,10 +86,7 @@ export function Dashboard({ children }: DashboardProps) {
         <NavBar close={close} />
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-        <Box style={{ position: "relative" }}>
-          {!nextRouterState && <Breadcrumbs />}
-          {children}
-        </Box>
+        <Box style={{ position: "relative" }}>{children}</Box>
 
         <Group mt="xl" justify="right">
           <VersionInfo />

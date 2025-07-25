@@ -2,6 +2,7 @@ import { Container, Tabs as MTabs } from "@mantine/core";
 import React from "react";
 import { useRemails } from "../hooks/useRemails";
 import { RouteName } from "../routes";
+import { Breadcrumbs } from "./Breadcrumbs";
 
 type Tab = {
   route: RouteName;
@@ -27,13 +28,14 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
 
   return (
     <MTabs value={tab_route} onChange={setActiveTab}>
-      <MTabs.List mb="md" mx="-lg" px="lg">
+      <MTabs.List mb="md" mx="-lg" px="lg" bg="var(--mantine-color-gray-light)">
         {tabs.map((t) => (
           <MTabs.Tab size="lg" value={t.route} leftSection={t.icon} key={t.route}>
             {t.name}
           </MTabs.Tab>
         ))}
       </MTabs.List>
+      <Breadcrumbs />
 
       {tabs.map((t) => (
         <MTabs.Panel value={t.route} key={t.route}>
