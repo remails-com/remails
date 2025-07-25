@@ -149,10 +149,6 @@ test("flattenRoutes", () => {
       path: "/{org_id}/projects/{proj_id}/domains/{domain_id}",
     },
     {
-      name: "projects.project.domains.domain.dns",
-      path: "/{org_id}/projects/{proj_id}/domains/{domain_id}/dns",
-    },
-    {
       name: "projects.project.settings",
       path: "/{org_id}/projects/{proj_id}/settings",
     },
@@ -163,10 +159,6 @@ test("flattenRoutes", () => {
     {
       name: "domains.domain",
       path: "/{org_id}/domains/{domain_id}",
-    },
-    {
-      name: "domains.domain.dns",
-      path: "/{org_id}/domains/{domain_id}/dns",
     },
     {
       name: "settings",

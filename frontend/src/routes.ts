@@ -52,12 +52,6 @@ export const routes = [
               {
                 name: "domain",
                 path: "/{domain_id}",
-                children: [
-                  {
-                    name: "dns",
-                    path: "/dns",
-                  },
-                ],
               },
             ],
           },
@@ -76,12 +70,6 @@ export const routes = [
       {
         name: "domain",
         path: "/{domain_id}",
-        children: [
-          {
-            name: "dns",
-            path: "/dns",
-          },
-        ],
       },
     ],
   },

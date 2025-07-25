@@ -38,7 +38,7 @@ export function CopyableCode({ children, label, props, p }: CopyableCodeProps) {
 
   return (
     <Input.Wrapper label={label} {...props}>
-      <Tooltip label={clipboard.copied ? "Copied!" : "Click to copy"} position="bottom" offset={-6}>
+      <Tooltip label={clipboard.copied ? "Copied!" : "Click to copy"}>
         <Code p={p} block style={style} onClick={() => clipboard.copy(children)}>
           <ActionIcon
             variant="light"
