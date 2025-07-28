@@ -6,7 +6,7 @@ import { Domain, VerifyResult } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconTrash, IconWorldWww, IconX } from "@tabler/icons-react";
-import { Badge, Button, Code, Group, Loader, Popover, Spoiler, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
+import { Badge, Button, Code, Group, Loader, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
 import { dkimValue, dmarcValue } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { formatDateTime } from "../../util.ts";
@@ -182,11 +182,7 @@ export default function DomainDetails() {
             name: "DKIM",
             recordName: `${config?.dkim_selector}._domainkey.${currentDomain.domain}`,
             recordType: "TXT",
-            recordValue: (
-              <Spoiler maxHeight={50} showLabel="Expand" hideLabel="Hide">
-                <CopyableCode>{dkimValue(currentDomain)}</CopyableCode>
-              </Spoiler>
-            ),
+            recordValue: <CopyableCode>{dkimValue(currentDomain)}</CopyableCode>,
             verifyResult: verificationResult?.dkim,
           },
           {
