@@ -8,8 +8,7 @@ import { IconHelp, IconMessage, IconPaperclip } from "@tabler/icons-react";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
-import EntityHeader from "../EntityHeader.tsx";
-import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
+import Header from "../Header.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -110,8 +109,7 @@ export default function MessageDetails() {
 
   return (
     <>
-      <EntityHeader name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} divider />
-      <Breadcrumbs />
+      <Header name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} divider />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>

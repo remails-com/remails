@@ -2,7 +2,6 @@ import { Container, Tabs as MTabs } from "@mantine/core";
 import React from "react";
 import { useRemails } from "../hooks/useRemails";
 import { RouteName } from "../routes";
-import { Breadcrumbs } from "./Breadcrumbs";
 
 type Tab = {
   route: RouteName;
@@ -35,7 +34,6 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
           </MTabs.Tab>
         ))}
       </MTabs.List>
-      <Breadcrumbs />
 
       {tabs.map((t) => (
         <MTabs.Panel value={t.route} key={t.route}>

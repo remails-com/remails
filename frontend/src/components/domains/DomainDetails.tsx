@@ -10,10 +10,9 @@ import { Badge, Button, Code, Group, Loader, Popover, Table, Text, ThemeIcon, To
 import { dkimValue, dmarcValue } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { formatDateTime } from "../../util.ts";
-import EntityHeader from "../EntityHeader.tsx";
+import Header from "../Header.tsx";
 import { CopyableCode } from "../CopyableCode.tsx";
 import React, { useState } from "react";
-import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
 
 function VerifyResultBadge({ verifyResult }: { verifyResult: VerifyResult | undefined }) {
   const [opened, setOpened] = useState(false);
@@ -168,13 +167,12 @@ export default function DomainDetails() {
 
   return (
     <>
-      <EntityHeader
+      <Header
         name={currentDomain.domain}
         entityType={currentProject ? "Project Domain" : "Organization Domain"}
         Icon={IconWorldWww}
         divider
       />
-      <Breadcrumbs />
       <h3>Required DNS records</h3>
       <DnsTable
         rows={[

@@ -11,8 +11,7 @@ import { modals } from "@mantine/modals";
 import { Button, Container, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconKey, IconTrash, IconX } from "@tabler/icons-react";
-import EntityHeader from "../EntityHeader.tsx";
-import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
+import Header from "../Header.tsx";
 
 interface FormValues {
   description: string;
@@ -120,8 +119,7 @@ export default function CredentialDetails() {
 
   return (
     <>
-      <EntityHeader name={currentCredential?.username || ""} entityType="SMTP Credential" Icon={IconKey} divider />
-      <Breadcrumbs />
+      <Header name={currentCredential?.username || ""} entityType="SMTP Credential" Icon={IconKey} divider />
       <Container size="sm" ml="0" pl="0">
         <form onSubmit={form.onSubmit(save)}>
           <Stack>

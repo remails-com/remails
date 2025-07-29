@@ -4,8 +4,7 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { notifications } from "@mantine/notifications";
 import { IconBuildings, IconX } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
-import EntityHeader from "../EntityHeader.tsx";
-import { Breadcrumbs } from "../../layout/Breadcrumbs.tsx";
+import Header from "../Header.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
@@ -47,14 +46,13 @@ export default function OrganizationSettings() {
 
   return (
     <>
-      <EntityHeader
+      <Header
         name={currentOrganization.name}
         entityType="Organization"
         Icon={IconBuildings}
         saveRename={save}
         divider
       />
-      <Breadcrumbs />
       <Container size="xs" mt="md" pl="0" ml="0">
         <Title order={3} mb="md">
           Your subscription
