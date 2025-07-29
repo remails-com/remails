@@ -1,11 +1,15 @@
 import { Code, Title, TitleOrder } from "@mantine/core";
-import { Domain } from "../../types";
+import { Domain, RemailsConfig } from "../../types";
 import { CopyableCode } from "../CopyableCode";
 import { useRemails } from "../../hooks/useRemails";
 
-export function dkimValue(domain: Domain) {
+export function dkimRecord(domain: Domain) {
   const dkim_key_type = domain.dkim_key_type == "ed25519" ? "ed25519" : "rsa";
   return `v=DKIM1; k=${dkim_key_type}; p=${domain.dkim_public_key}`;
+}
+
+export function spfRecord(config: RemailsConfig) {
+  return `v=spf1 ${config.spf_include} -all`;
 }
 
 export const dmarcValue = "v=DMARC1; p=reject;";
@@ -36,12 +40,12 @@ export function DnsRecords({
         {config.dkim_selector}._domainkey.{domain.domain}
       </Code>{" "}
       to:
-      <CopyableCode props={{ mt: "xs" }}>{dkimValue(domain)}</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{dkimRecord(domain)}</CopyableCode>
       <Title order={title_order} mt="md">
         2. Remails SPF
       </Title>
       Set a TXT record for <Code>{domain.domain}</Code> to:
-      <CopyableCode props={{ mt: "xs" }}>{config.preferred_spf_record ?? ""}</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{spfRecord(config)}</CopyableCode>
       <Title order={title_order} mt="md">
         3. DMARC Configuration
       </Title>

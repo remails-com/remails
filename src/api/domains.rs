@@ -61,9 +61,7 @@ pub async fn create_domain(
 
     let domain = repo.create(new, org_id, project_id).await?;
 
-    let status = resolver
-        .verify_domain(&domain, &config.preferred_spf_record)
-        .await?;
+    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
     let domain = ApiDomain::verified(domain, status);
 
@@ -89,9 +87,7 @@ pub async fn list_domains(
     let mut verified_domains = Vec::with_capacity(domains.len());
 
     for domain in domains {
-        let status = resolver
-            .verify_domain(&domain, &config.preferred_spf_record)
-            .await?;
+        let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
         verified_domains.push(ApiDomain::verified(domain, status));
     }
@@ -120,9 +116,7 @@ pub async fn get_domain(
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
-    let status = resolver
-        .verify_domain(&domain, &config.preferred_spf_record)
-        .await?;
+    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
     let domain = ApiDomain::verified(domain, status);
 
@@ -175,9 +169,7 @@ pub(super) async fn verify_domain(
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
-    let status = resolver
-        .verify_domain(&domain, &config.preferred_spf_record)
-        .await?;
+    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
     Ok(Json(status))
 }

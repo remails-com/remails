@@ -34,6 +34,7 @@ pub struct DnsResolver {
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) enum VerifyResultStatus {
     Success,
+    Info,
     Warning,
     Error,
 }
@@ -46,16 +47,23 @@ pub struct VerifyResult {
 }
 
 impl VerifyResult {
-    pub fn error(reason: impl Into<String>) -> Self {
+    pub fn error(reason: impl Into<String>, value: Option<String>) -> Self {
         VerifyResult {
             status: VerifyResultStatus::Error,
             reason: reason.into(),
-            value: None,
+            value,
         }
     }
     pub fn warning(reason: impl Into<String>, value: Option<String>) -> Self {
         VerifyResult {
             status: VerifyResultStatus::Warning,
+            reason: reason.into(),
+            value,
+        }
+    }
+    pub fn info(reason: impl Into<String>, value: Option<String>) -> Self {
+        VerifyResult {
+            status: VerifyResultStatus::Info,
             reason: reason.into(),
             value,
         }
@@ -266,20 +274,35 @@ impl DnsResolver {
         }
     }
 
-    pub async fn verify_spf(&self, domain: &str, preferred_spf_record: &str) -> VerifyResult {
+    pub async fn verify_spf(&self, domain: &str, spf_include: &str) -> VerifyResult {
         let domain = domain.trim_matches('.');
         let record = format!("{domain}.");
         let spf_data = match self.get_singular_dns_record(&record, "v=spf1").await {
             Ok(spf_data) => spf_data,
-            Err(reason) => return VerifyResult::error(reason),
+            Err(reason) => return VerifyResult::error(reason, None),
         };
         trace!("spf data: {spf_data:?}");
 
-        if spf_data == preferred_spf_record {
-            VerifyResult::success("correct!")
-        } else {
-            VerifyResult::warning("currently configured differently:", Some(spf_data))
+        if spf_data == format!("v=spf1 {spf_include} -all") {
+            return VerifyResult::success("correct!");
         }
+
+        if !spf_data.split(' ').any(|x| x == spf_include) {
+            return VerifyResult::warning(
+                format!("SPF record is missing \"{spf_include}\":"),
+                Some(spf_data),
+            );
+        }
+
+        let last = spf_data.split(' ').next_back();
+        if last != Some("-all") && last != Some("~all") {
+            return VerifyResult::warning(
+                "SPF record should end with -all (or ~all):",
+                Some(spf_data),
+            );
+        }
+
+        VerifyResult::info("currently configured as:", Some(spf_data))
     }
 
     pub async fn verify_dmarc(&self, domain: &str) -> VerifyResult {
@@ -287,14 +310,17 @@ impl DnsResolver {
         let record = format!("_dmarc.{domain}.");
         let dmarc_data = match self.get_singular_dns_record(&record, "v=DMARC1").await {
             Ok(dmarc_data) => dmarc_data,
-            Err(reason) => return VerifyResult::error(reason),
+            Err(reason) => return VerifyResult::warning(reason, None),
         };
         trace!("dmarc data: {dmarc_data:?}");
 
-        if dmarc_data == "v=DMARC1; p=reject" {
+        // normalize dmarc record
+        let dmarc_data = dmarc_data.trim_end_matches(";").replace("; ", ";");
+
+        if dmarc_data == "v=DMARC1;p=reject" {
             VerifyResult::success("correct!")
         } else {
-            VerifyResult::warning("currently configured differently:", Some(dmarc_data))
+            VerifyResult::info("currently configured differently:", Some(dmarc_data))
         }
     }
 
@@ -317,7 +343,7 @@ impl DnsResolver {
     pub async fn verify_domain(
         &self,
         domain: &Domain,
-        preferred_spf_record: &str,
+        spf_include: &str,
     ) -> Result<DomainVerificationStatus, Error> {
         Ok(DomainVerificationStatus {
             timestamp: Utc::now(),
@@ -325,7 +351,7 @@ impl DnsResolver {
                 .verify_dkim(&domain.domain, domain.dkim_key.pub_key()?.as_ref())
                 .await
                 .into(),
-            spf: self.verify_spf(&domain.domain, preferred_spf_record).await,
+            spf: self.verify_spf(&domain.domain, spf_include).await,
             dmarc: self.verify_dmarc(&domain.domain).await,
             a: self.any_a_record(&domain.domain).await,
         })

@@ -1,5 +1,5 @@
 import { Box, Code, Flex, List, LoadingOverlay, Text, ThemeIcon } from "@mantine/core";
-import { IconCheck, IconExclamationMark, IconX } from "@tabler/icons-react";
+import { IconCheck, IconExclamationMark, IconInfoSmall, IconX } from "@tabler/icons-react";
 import { DomainVerificationResult, DomainVerificationStatus, VerifyResult } from "../../types";
 import { ReactElement } from "react";
 
@@ -13,6 +13,11 @@ const icons: { [key in VerifyResult["status"]]: ReactElement } = {
   Success: (
     <ThemeIcon color="teal" size={24} radius="xl">
       <IconCheck size={16} />
+    </ThemeIcon>
+  ),
+  Info: (
+    <ThemeIcon color="blue" size={24} radius="xl">
+      <IconInfoSmall size={24} />
     </ThemeIcon>
   ),
   Warning: (

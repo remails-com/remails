@@ -29,7 +29,7 @@ smtp:
   ehlo_domain: "sending.remails.net"
   rate_limit_max_messages: "120"
   rate_limit_minutes: "1"
-  preferred_spf_record: "v=spf1 include:spf.remails.net -all"
+  spf_include: "include:spf.remails.net"
   dkim_selector: "remails"
   ports:
     - 465
