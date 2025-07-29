@@ -3,7 +3,7 @@ import { CredentialsOverview } from "../smtpCredentials/CredentialsOverview.tsx"
 import { MessageLog } from "../messages/MessageLog.tsx";
 import StreamSettings from "./StreamSettings.tsx";
 import Tabs from "../../layout/Tabs.tsx";
-import EntityHeader from "../EntityHeader.tsx";
+import Header from "../Header.tsx";
 import { useStreams } from "../../hooks/useStreams.ts";
 
 export default function StreamDetails() {
@@ -11,7 +11,7 @@ export default function StreamDetails() {
 
   return (
     <>
-      <EntityHeader name={currentStream?.name ?? ""} entityType="Stream" Icon={IconAccessPoint} />
+      <Header name={currentStream?.name ?? ""} entityType="Stream" Icon={IconAccessPoint} />
       <Tabs
         tabs={[
           {
