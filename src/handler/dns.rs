@@ -166,7 +166,10 @@ impl DnsResolver {
     #[cfg(test)]
     pub fn mock(domain: &'static str, port: u16) -> Self {
         Self {
-            resolver: mock::Resolver(domain, port),
+            resolver: mock::Resolver {
+                host: (domain, port),
+                txt: "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+            },
             dkim_selector: "remails-testing".to_string(),
         }
     }
@@ -355,5 +358,130 @@ impl DnsResolver {
             dmarc: self.verify_dmarc(&domain.domain).await,
             a: self.any_a_record(&domain.domain).await,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use sqlx::PgPool;
+
+    use crate::models::DomainRepository;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn dkim_verification() {
+        let domain = "localhost";
+        let mut dns = DnsResolver::mock(domain, 0);
+
+        let dkim_key = Base64Unpadded::decode_vec(
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB"
+        ).unwrap();
+
+        dns.verify_dkim(domain, &dkim_key).await.unwrap();
+
+        dns.resolver.txt = "v=DKIM1; k=rsa; p=wrongDkimKey";
+        dns.verify_dkim(domain, &dkim_key)
+            .await
+            .expect_err("should error");
+    }
+
+    #[tokio::test]
+    async fn spf_verification() {
+        let domain = "localhost";
+        let mut dns = DnsResolver::mock(domain, 0);
+
+        dns.resolver.txt = ""; // spf record does not exist
+        assert!(matches!(
+            dns.verify_spf(domain, "include:test.com").await.status,
+            VerifyResultStatus::Error
+        ));
+
+        dns.resolver.txt = "v=spf1 include:test.com -all";
+        assert!(matches!(
+            dns.verify_spf(domain, "include:test.com").await.status,
+            VerifyResultStatus::Success
+        ));
+
+        dns.resolver.txt = "v=spf1 include:test.com include:spf.remails.com ~all";
+        assert!(matches!(
+            dns.verify_spf(domain, "include:test.com").await.status,
+            VerifyResultStatus::Info
+        ));
+
+        dns.resolver.txt = "v=spf1 include:spf.remails.com -all";
+        assert!(matches!(
+            dns.verify_spf(domain, "include:test.com").await.status,
+            VerifyResultStatus::Warning
+        ));
+
+        dns.resolver.txt = "v=spf1 include:test.com +all";
+        assert!(matches!(
+            dns.verify_spf(domain, "include:test.com").await.status,
+            VerifyResultStatus::Warning
+        ));
+    }
+
+    #[tokio::test]
+    async fn dmarc_verification() {
+        let domain = "localhost";
+        let mut dns = DnsResolver::mock(domain, 0);
+        dns.resolver.txt = ""; // dmarc record does not exist
+        assert!(matches!(
+            dns.verify_dmarc(domain).await.status,
+            VerifyResultStatus::Warning
+        ));
+
+        dns.resolver.txt = "v=DMARC1; p=reject";
+        assert!(matches!(
+            dns.verify_dmarc(domain).await.status,
+            VerifyResultStatus::Success
+        ));
+
+        dns.resolver.txt = "v=DMARC1; p=reject;";
+        assert!(matches!(
+            dns.verify_dmarc(domain).await.status,
+            VerifyResultStatus::Success
+        ));
+
+        dns.resolver.txt = "v=DMARC1;p=reject";
+        assert!(matches!(
+            dns.verify_dmarc(domain).await.status,
+            VerifyResultStatus::Success
+        ));
+
+        dns.resolver.txt = "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s";
+        assert!(matches!(
+            dns.verify_dmarc(domain).await.status,
+            VerifyResultStatus::Info
+        ));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+    ))]
+    async fn domain_verification(pool: PgPool) {
+        let domains = DomainRepository::new(pool);
+        let domain = domains
+            .get_domain_by_id(
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let dns = DnsResolver::mock("test-org-1.com", 0);
+
+        let res = dns
+            .verify_domain(&domain, "include:test.com")
+            .await
+            .unwrap();
+
+        // The mock DNS resolver only contains the DKIM record
+        assert!(matches!(res.dkim.status, VerifyResultStatus::Success));
+        assert!(matches!(res.spf.status, VerifyResultStatus::Error));
+        assert!(matches!(res.dmarc.status, VerifyResultStatus::Warning));
+        assert!(matches!(res.a.status, VerifyResultStatus::Success));
     }
 }
