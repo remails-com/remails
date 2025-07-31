@@ -6,13 +6,20 @@ import { Domain, VerifyResult } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconTrash, IconWorldWww, IconX } from "@tabler/icons-react";
-import { Badge, Button, Code, Group, Loader, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
-import { dkimValue, dmarcValue } from "./DnsRecords.tsx";
+import { Badge, Button, Code, Group, Loader, Paper, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
+import { dkimRecord, dmarcValue, spfRecord } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { formatDateTime } from "../../util.ts";
 import Header from "../Header.tsx";
 import { CopyableCode } from "../CopyableCode.tsx";
 import React, { useState } from "react";
+
+const badgeColors: { [key in VerifyResult["status"]]: string } = {
+  Success: "green",
+  Info: "blue",
+  Warning: "orange",
+  Error: "remails-red",
+};
 
 function VerifyResultBadge({ verifyResult }: { verifyResult: VerifyResult | undefined }) {
   const [opened, setOpened] = useState(false);
@@ -22,16 +29,14 @@ function VerifyResultBadge({ verifyResult }: { verifyResult: VerifyResult | unde
   }
 
   if (verifyResult.status == "Success") {
-    return <Badge color="green">OK</Badge>;
+    return <Badge color={badgeColors[verifyResult.status]}>OK</Badge>;
   }
-
-  const color = verifyResult.status == "Warning" ? "orange" : "remails-red";
 
   return (
     <Popover position="bottom" withArrow shadow="md" opened={opened} onChange={setOpened}>
       <Popover.Target>
         <Badge
-          color={color}
+          color={badgeColors[verifyResult.status]}
           component="button"
           style={{ cursor: "pointer" }}
           onClick={() => setOpened((o) => !o)}
@@ -71,33 +76,35 @@ type DnsRow = {
 
 function DnsTable({ rows }: { rows: DnsRow[] }) {
   return (
-    <Table.ScrollContainer minWidth={640}>
-      <Table withTableBorder verticalSpacing="xs" mb="md">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th style={{ width: "10%" }}></Table.Th>
-            <Table.Th style={{ width: "25%" }}>Name</Table.Th>
-            <Table.Th style={{ width: "10%" }}>Type</Table.Th>
-            <Table.Th style={{ width: "45%" }}>Recommended value</Table.Th>
-            <Table.Th style={{ width: "10%" }}>Status</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.map(({ name, recordName, recordValue, recordType, verifyResult }) => (
-            <Table.Tr key={name} bg={verifyResult?.status == "Error" ? "var(--mantine-color-remails-red-light)" : ""}>
-              <Table.Th>{name}</Table.Th>
-              <Table.Td>
-                <Code style={{ wordBreak: "break-word" }}>{recordName}</Code>
-              </Table.Td>
-              <Table.Td>{recordType}</Table.Td>
-              <Table.Td>{recordValue}</Table.Td>
-              <Table.Td>
-                <VerifyResultBadge verifyResult={verifyResult} />
-              </Table.Td>
+    <Table.ScrollContainer minWidth={640} mb="md">
+      <Paper shadow="xs">
+        <Table withTableBorder verticalSpacing="xs">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th style={{ width: "10%" }}></Table.Th>
+              <Table.Th style={{ width: "25%" }}>Name</Table.Th>
+              <Table.Th style={{ width: "10%" }}>Type</Table.Th>
+              <Table.Th style={{ width: "45%" }}>Recommended value</Table.Th>
+              <Table.Th style={{ width: "10%" }}>Status</Table.Th>
             </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.map(({ name, recordName, recordValue, recordType, verifyResult }) => (
+              <Table.Tr key={name} bg={verifyResult?.status == "Error" ? "var(--mantine-color-remails-red-light)" : ""}>
+                <Table.Th>{name}</Table.Th>
+                <Table.Td>
+                  <Code style={{ wordBreak: "break-word" }}>{recordName}</Code>
+                </Table.Td>
+                <Table.Td>{recordType}</Table.Td>
+                <Table.Td>{recordValue}</Table.Td>
+                <Table.Td>
+                  <VerifyResultBadge verifyResult={verifyResult} />
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Paper>
     </Table.ScrollContainer>
   );
 }
@@ -117,7 +124,7 @@ export default function DomainDetails() {
     : `/api/organizations/${currentOrganization?.id}/domains`;
   const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, currentDomain);
 
-  if (!currentDomain || !currentOrganization) {
+  if (!currentDomain || !currentOrganization || !config) {
     return null;
   }
 
@@ -178,16 +185,16 @@ export default function DomainDetails() {
         rows={[
           {
             name: "DKIM",
-            recordName: `${config?.dkim_selector}._domainkey.${currentDomain.domain}`,
+            recordName: `${config.dkim_selector}._domainkey.${currentDomain.domain}`,
             recordType: "TXT",
-            recordValue: <CopyableCode>{dkimValue(currentDomain)}</CopyableCode>,
+            recordValue: <CopyableCode>{dkimRecord(currentDomain)}</CopyableCode>,
             verifyResult: verificationResult?.dkim,
           },
           {
             name: "SPF",
             recordName: currentDomain.domain,
             recordType: "TXT",
-            recordValue: <CopyableCode>{config?.preferred_spf_record ?? ""}</CopyableCode>,
+            recordValue: <CopyableCode>{spfRecord(config)}</CopyableCode>,
             verifyResult: verificationResult?.spf,
           },
         ]}

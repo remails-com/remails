@@ -71,7 +71,7 @@ export interface RemailsConfig {
   environment: string;
   smtp_domain_name: string;
   smtp_ports: number[];
-  preferred_spf_record: string;
+  spf_include: string;
   dkim_selector: string;
 }
 
@@ -214,7 +214,7 @@ export interface Stream {
 }
 
 export interface VerifyResult {
-  status: "Success" | "Warning" | "Error";
+  status: "Success" | "Info" | "Warning" | "Error";
   reason: string;
   value: string | null;
 }
