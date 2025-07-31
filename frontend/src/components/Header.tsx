@@ -14,8 +14,12 @@ interface HeaderProps {
 export default function Header({ name, entityType, saveRename, Icon, divider = false }: HeaderProps) {
   return (
     <>
-      <Group bg="gray.2" p="lg" mx="-lg" mt="-lg">
-        <Stack gap="xs" w="100%">
+      <Group bg="var(--mantine-color-gray-light)" px="lg" py="md" pt="xs" mx="-lg" mt="-lg">
+        <Stack gap="md" w="100%">
+          <Box w="100%">
+            <Breadcrumbs />
+            <Divider mt="xs" mx="-lg" />
+          </Box>
           <Flex gap="sm">
             <ThemeIcon variant="light" size="xl">
               <Icon size="32" stroke="1.5" />
@@ -33,9 +37,6 @@ export default function Header({ name, entityType, saveRename, Icon, divider = f
               )}
             </Stack>
           </Flex>
-          <Box bg="gray.1" p="xs" w="100%">
-            <Breadcrumbs />
-          </Box>
         </Stack>
       </Group>
       {divider && <Divider mx="-lg" mb="md" />}
