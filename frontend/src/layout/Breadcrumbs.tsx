@@ -83,6 +83,7 @@ export function Breadcrumbs() {
 
   return (
     <MantineBreadcrumbs
+      mr="xl"
       separator={
         <Text component="span" size="sm" c="dimmed">
           /

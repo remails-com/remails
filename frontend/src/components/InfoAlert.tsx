@@ -16,7 +16,7 @@ export default function InfoAlert({ children, stateName }: { children: React.Rea
           style={{
             position: "absolute",
             cursor: "pointer",
-            top: 0,
+            top: "-11px",
             right: 0,
           }}
           color="gray"
