@@ -2,25 +2,115 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDomains } from "../../hooks/useDomains.ts";
-import { Domain } from "../../types.ts";
+import { Domain, VerifyResult } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconLabel, IconTrash, IconWorldSearch, IconX } from "@tabler/icons-react";
-import { Button, Group, Modal, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { DnsRecords } from "./DnsRecords.tsx";
-import { DnsVerificationResult } from "./DnsVerificationResult.tsx";
+import { IconInfoCircle, IconTrash, IconWorldWww, IconX } from "@tabler/icons-react";
+import { Badge, Button, Code, Group, Loader, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
+import { dkimValue, dmarcValue } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
-import { useDisclosure } from "@mantine/hooks";
-import Tabs from "../../layout/Tabs.tsx";
-import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { formatDateTime } from "../../util.ts";
+import Header from "../Header.tsx";
+import { CopyableCode } from "../CopyableCode.tsx";
+import React, { useState } from "react";
+
+function VerifyResultBadge({ verifyResult }: { verifyResult: VerifyResult | undefined }) {
+  const [opened, setOpened] = useState(false);
+
+  if (!verifyResult) {
+    return <Loader color="gray" type="dots" size="sm" />;
+  }
+
+  if (verifyResult.status == "Success") {
+    return <Badge color="green">OK</Badge>;
+  }
+
+  const color = verifyResult.status == "Warning" ? "orange" : "remails-red";
+
+  return (
+    <Popover position="bottom" withArrow shadow="md" opened={opened} onChange={setOpened}>
+      <Popover.Target>
+        <Badge
+          color={color}
+          component="button"
+          style={{ cursor: "pointer" }}
+          onClick={() => setOpened((o) => !o)}
+          onMouseEnter={() => setOpened(true)}
+          onMouseLeave={() => setOpened(false)}
+        >
+          {verifyResult.status}
+        </Badge>
+      </Popover.Target>
+      <Popover.Dropdown maw="30em">
+        <Text size="sm">
+          <Text component="span" fw="bold">
+            {verifyResult.status}:
+          </Text>{" "}
+          {verifyResult.reason}
+        </Text>
+        {verifyResult.value && (
+          <>
+            <Code block style={{ whiteSpace: "pre-wrap" }} my="2">
+              {verifyResult?.value}
+            </Code>
+            <Text size="sm">Please verify this is configured as intended</Text>
+          </>
+        )}
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+type DnsRow = {
+  name: string;
+  recordName: string;
+  recordValue: React.ReactNode;
+  recordType: string;
+  verifyResult: VerifyResult | undefined;
+};
+
+function DnsTable({ rows }: { rows: DnsRow[] }) {
+  return (
+    <Table.ScrollContainer minWidth={640}>
+      <Table withTableBorder verticalSpacing="xs" mb="md">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={{ width: "10%" }}></Table.Th>
+            <Table.Th style={{ width: "25%" }}>Name</Table.Th>
+            <Table.Th style={{ width: "10%" }}>Type</Table.Th>
+            <Table.Th style={{ width: "45%" }}>Recommended value</Table.Th>
+            <Table.Th style={{ width: "10%" }}>Status</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map(({ name, recordName, recordValue, recordType, verifyResult }) => (
+            <Table.Tr key={name} bg={verifyResult?.status == "Error" ? "var(--mantine-color-remails-red-light)" : ""}>
+              <Table.Th>{name}</Table.Th>
+              <Table.Td>
+                <Code style={{ wordBreak: "break-word" }}>{recordName}</Code>
+              </Table.Td>
+              <Table.Td>{recordType}</Table.Td>
+              <Table.Td>{recordValue}</Table.Td>
+              <Table.Td>
+                <VerifyResultBadge verifyResult={verifyResult} />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
 
 export default function DomainDetails() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentDomain } = useDomains();
-  const { dispatch, navigate } = useRemails();
-  const [opened, { open, close }] = useDisclosure(false);
+  const {
+    dispatch,
+    navigate,
+    state: { config },
+  } = useRemails();
 
   const domainsApi = currentProject
     ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
@@ -76,95 +166,77 @@ export default function DomainDetails() {
   };
 
   return (
-    <Tabs
-      tabs={[
-        {
-          route: `${domain_route}.domain`,
-          name: "Details",
-          icon: <IconWorldSearch size={14} />,
-          content: (
-            <>
-              <h2>Details</h2>
-              <Stack>
-                <TextInput label="Domain" value={currentDomain.domain} readOnly={true} variant="filled" />
-              </Stack>
-              <h3>DNS status</h3>
-              <DnsVerificationResult
-                domain={currentDomain.domain}
-                domainVerified={domainVerified}
-                verificationResult={verificationResult}
-              />
-              Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "never"}
-              <Group mt="xl">
-                <Tooltip label="Delete Domain">
-                  <Button
-                    leftSection={<IconTrash />}
-                    variant="outline"
-                    onClick={() => confirmDeleteDomain(currentDomain)}
-                  >
-                    Delete domain
-                  </Button>
+    <>
+      <Header
+        name={currentDomain.domain}
+        entityType={currentProject ? "Project Domain" : "Organization Domain"}
+        Icon={IconWorldWww}
+        divider
+      />
+      <h3>Required DNS records</h3>
+      <DnsTable
+        rows={[
+          {
+            name: "DKIM",
+            recordName: `${config?.dkim_selector}._domainkey.${currentDomain.domain}`,
+            recordType: "TXT",
+            recordValue: <CopyableCode>{dkimValue(currentDomain)}</CopyableCode>,
+            verifyResult: verificationResult?.dkim,
+          },
+          {
+            name: "SPF",
+            recordName: currentDomain.domain,
+            recordType: "TXT",
+            recordValue: <CopyableCode>{config?.preferred_spf_record ?? ""}</CopyableCode>,
+            verifyResult: verificationResult?.spf,
+          },
+        ]}
+      />
+
+      <h3>Recommended DNS records</h3>
+      <DnsTable
+        rows={[
+          {
+            name: "DMARC",
+            recordName: `_dmarc.${currentDomain.domain}`,
+            recordType: "TXT",
+            recordValue: <CopyableCode>{dmarcValue}</CopyableCode>,
+            verifyResult: verificationResult?.dmarc,
+          },
+          {
+            name: "A",
+            recordName: currentDomain.domain,
+            recordType: "TXT",
+            recordValue: (
+              <Group gap="xs">
+                any
+                <Tooltip label="Some mail services may require an A record to be set for the sender domain">
+                  <ThemeIcon variant="transparent" c="dimmed" size="sm">
+                    <IconInfoCircle />
+                  </ThemeIcon>
                 </Tooltip>
               </Group>
-            </>
-          ),
-          notSoWide: true,
-        },
-        {
-          route: `${domain_route}.domain.dns`,
-          name: "DNS records",
-          icon: <IconLabel size={14} />,
-          content: (
-            <>
-              <h2>DNS records</h2>
-              <DnsRecords domain={currentDomain} title_order={4}></DnsRecords>
+            ),
+            verifyResult: verificationResult?.a,
+          },
+        ]}
+      />
 
-              <Group mt="xl">
-                <Tooltip label="Verify DNS records">
-                  <Button
-                    onClick={() => {
-                      reverifyDomain(currentDomain);
-                      open();
-                    }}
-                  >
-                    Verify DNS
-                  </Button>
-                </Tooltip>
-              </Group>
-
-              <Modal
-                opened={opened}
-                onClose={close}
-                title={
-                  <Title order={2} component="span">
-                    Verify DNS records
-                  </Title>
-                }
-                size="lg"
-                padding="xl"
-                centered
-              >
-                <DnsVerificationContent
-                  domain={currentDomain.domain}
-                  domainVerified={domainVerified}
-                  verificationResult={verificationResult}
-                />
-                <Group mt="md" justify="space-between">
-                  <Button
-                    disabled={domainVerified === "loading"}
-                    variant="outline"
-                    onClick={() => reverifyDomain(currentDomain)}
-                  >
-                    Retry verification
-                  </Button>
-                  <Button onClick={close}>Done</Button>
-                </Group>
-              </Modal>
-            </>
-          ),
-          notSoWide: true,
-        },
-      ]}
-    />
+      <Text mt="md">
+        Note that changes to DNS records may take some time to propagate. If verification fails, try again in a few
+        minutes.
+      </Text>
+      <Text c="dimmed" size="sm">
+        Last verified: {verificationResult ? formatDateTime(verificationResult?.timestamp) : "loading..."}
+      </Text>
+      <Group mt="xl" justify="space-between">
+        <Button disabled={domainVerified === "loading"} onClick={() => reverifyDomain(currentDomain)}>
+          Retry DNS verification
+        </Button>
+        <Button leftSection={<IconTrash />} variant="outline" onClick={() => confirmDeleteDomain(currentDomain)}>
+          Delete domain
+        </Button>
+      </Group>
+    </>
   );
 }

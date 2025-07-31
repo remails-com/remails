@@ -1,10 +1,10 @@
-import { Container, Stack, Title } from "@mantine/core";
+import { Container, Title } from "@mantine/core";
 import SubscriptionCard from "./SubscriptionCard.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
-import Rename from "../Rename.tsx";
 import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
+import { IconBuildings, IconX } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
+import Header from "../Header.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
@@ -45,12 +45,20 @@ export default function OrganizationSettings() {
   };
 
   return (
-    <Container size="xs" mt="md" pl="0" ml="0">
-      <Stack>
-        <Rename name={currentOrganization.name} save={save}></Rename>
-        <Title order={3}>Your subscription</Title>
+    <>
+      <Header
+        name={currentOrganization.name}
+        entityType="Organization"
+        Icon={IconBuildings}
+        saveRename={save}
+        divider
+      />
+      <Container size="xs" mt="md" pl="0" ml="0">
+        <Title order={3} mb="md">
+          Your subscription
+        </Title>
         <SubscriptionCard />
-      </Stack>
-    </Container>
+      </Container>
+    </>
   );
 }

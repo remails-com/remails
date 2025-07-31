@@ -1,4 +1,4 @@
-import { Anchor, Breadcrumbs as MantineBreadcrumbs, Text } from "@mantine/core";
+import { Breadcrumbs as MantineBreadcrumbs, Text, Button, Box } from "@mantine/core";
 import { useCredentials } from "../hooks/useCredentials.ts";
 import { useDomains } from "../hooks/useDomains.ts";
 import { useMessages } from "../hooks/useMessages.ts";
@@ -9,9 +9,25 @@ import { useStreams } from "../hooks/useStreams.ts";
 import { RouteName } from "../routes.ts";
 import { JSX } from "react";
 
-interface BreadcrumbItem {
-  title: string | JSX.Element;
+interface SegmentProps {
+  children: React.ReactNode;
+  last?: boolean;
   route: RouteName;
+}
+
+function Segment({ children, last, route }: SegmentProps) {
+  const { navigate } = useRemails();
+  const props = { fz: "xs", c: "dark.3", px: "xs" };
+
+  if (last) {
+    return <Box {...props}>{children}</Box>;
+  }
+
+  return (
+    <Button {...props} td="underline" size="xs" h={20} variant="transparent" onClick={() => navigate(route)}>
+      {children}
+    </Button>
+  );
 }
 
 export function Breadcrumbs() {
@@ -22,7 +38,6 @@ export function Breadcrumbs() {
   const { currentMessage } = useMessages();
   const { currentOrganization } = useOrganizations();
   const {
-    navigate,
     state: { routerState },
   } = useRemails();
 
@@ -30,52 +45,52 @@ export function Breadcrumbs() {
     return null;
   }
 
-  const items: BreadcrumbItem[] = [];
+  const items: JSX.Element[] = [];
 
-  items.push({ title: <Text fs="italic">{currentOrganization.name}</Text>, route: "projects" });
+  items.push(<Segment route="projects">{currentOrganization.name}</Segment>);
 
   const route_parts = routerState.name.split(".");
 
   for (let i = 0; i < route_parts.length; i++) {
     const route = route_parts.slice(0, i + 1).join(".") as RouteName;
+    const isLast = i === route_parts.length - 1;
 
-    let title: string | JSX.Element = route_parts[i];
+    let title: string | undefined = route_parts[i];
 
     // set user-defined name as breadcrumb title
     if (route == "projects.project") {
-      title = <Text fs="italic">{currentProject?.name}</Text>;
-    }
-    if (route == "projects.project.streams.stream") {
-      title = <Text fs="italic">{currentStream?.name}</Text>;
-    }
-    if (route == "projects.project.streams.stream.messages.message") {
+      title = currentProject?.name;
+    } else if (route == "projects.project.streams.stream") {
+      title = currentStream?.name;
+    } else if (route == "projects.project.streams.stream.messages.message") {
       let subject: string | null = null;
       if (currentMessage && "message_data" in currentMessage) {
         subject = currentMessage?.message_data?.subject;
       }
-      title = <Text fs="italic">{subject ?? "no subject"}</Text>;
-    }
-    if (route == "projects.project.streams.stream.credentials.credential") {
-      title = <Text fs="italic">{currentCredential?.username}</Text>;
-    }
-    if (route == "domains.domain" || route == "projects.project.domains.domain") {
-      title = <Text fs="italic">{currentDomain?.domain}</Text>;
+      title = subject ?? "no subject";
+    } else if (route == "projects.project.streams.stream.credentials.credential") {
+      title = currentCredential?.username;
+    } else if (route == "domains.domain" || route == "projects.project.domains.domain") {
+      title = currentDomain?.domain;
     }
 
-    items.push({ title, route });
+    items.push(
+      <Segment key={route} last={isLast} route={route}>
+        {title}
+      </Segment>
+    );
   }
 
-  const anchors = items.map((item, i, arr) =>
-    i == arr.length - 1 ? (
-      <Text c="dimmed" span>
-        {item.title}
-      </Text>
-    ) : (
-      <Anchor key={item.route} onClick={() => navigate(item.route)}>
-        {item.title}
-      </Anchor>
-    )
+  return (
+    <MantineBreadcrumbs
+      mr="xl"
+      separator={
+        <Text component="span" size="sm" c="dimmed">
+          /
+        </Text>
+      }
+    >
+      {items}
+    </MantineBreadcrumbs>
   );
-
-  return <MantineBreadcrumbs mb="lg">{anchors}</MantineBreadcrumbs>;
 }

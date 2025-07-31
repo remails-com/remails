@@ -1,13 +1,14 @@
 import { useMessages } from "../../hooks/useMessages.ts";
-import { Badge, Group, Paper, SegmentedControl, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Group, Paper, SegmentedControl, Table, Text, Tooltip } from "@mantine/core";
 import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
 import { Message, MessageMetadata } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
-import { IconHelp, IconPaperclip } from "@tabler/icons-react";
+import { IconHelp, IconMessage, IconPaperclip } from "@tabler/icons-react";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
+import Header from "../Header.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -49,6 +50,7 @@ export default function MessageDetails() {
   const raw = completeMessage.truncated_raw_data;
 
   const table_data = [
+    { header: "Subject", value: subject ?? "no subject set" },
     { header: "From", value: completeMessage.from_email },
     {
       header: "Recipients",
@@ -107,13 +109,7 @@ export default function MessageDetails() {
 
   return (
     <>
-      {subject ? (
-        <Title>{subject}</Title>
-      ) : (
-        <Title c="dimmed" fs="italic">
-          No Subject
-        </Title>
-      )}
+      <Header name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} divider />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>

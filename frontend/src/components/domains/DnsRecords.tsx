@@ -3,6 +3,13 @@ import { Domain } from "../../types";
 import { CopyableCode } from "../CopyableCode";
 import { useRemails } from "../../hooks/useRemails";
 
+export function dkimValue(domain: Domain) {
+  const dkim_key_type = domain.dkim_key_type == "ed25519" ? "ed25519" : "rsa";
+  return `v=DKIM1; k=${dkim_key_type}; p=${domain.dkim_public_key}`;
+}
+
+export const dmarcValue = "v=DMARC1; p=reject;";
+
 export function DnsRecords({
   domain,
   title_order = 3,
@@ -18,9 +25,6 @@ export function DnsRecords({
     return null;
   }
 
-  const dkim_key_type = domain.dkim_key_type == "ed25519" ? "ed25519" : "rsa";
-  const dkim_entry = `v=DKIM1; k=${dkim_key_type}; p=${domain.dkim_public_key}`;
-
   return (
     <>
       Please make sure to configure the following DNS records for the <Code>{domain.domain}</Code> domain.
@@ -32,7 +36,7 @@ export function DnsRecords({
         {config.dkim_selector}._domainkey.{domain.domain}
       </Code>{" "}
       to:
-      <CopyableCode props={{ mt: "xs" }}>{dkim_entry}</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{dkimValue(domain)}</CopyableCode>
       <Title order={title_order} mt="md">
         2. Remails SPF
       </Title>
@@ -42,7 +46,7 @@ export function DnsRecords({
         3. DMARC Configuration
       </Title>
       Set a TXT record for <Code>_dmarc.{domain.domain}</Code> to:
-      <CopyableCode props={{ mt: "xs" }}>v=DMARC1; p=reject</CopyableCode>
+      <CopyableCode props={{ mt: "xs" }}>{dmarcValue}</CopyableCode>
     </>
   );
 }
