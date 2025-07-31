@@ -68,7 +68,7 @@ export function NewStream({ opened, close }: NewStreamProps) {
 
     const newStream = await res.json();
     dispatch({ type: "add_stream", stream: newStream });
-    navigate("projects.project.streams.stream", { stream_id: newStream.id });
+    navigate("projects.project.streams.stream.credentials", { stream_id: newStream.id });
     notifications.show({
       title: "Stream created",
       message: `Stream ${newStream.name} created`,
