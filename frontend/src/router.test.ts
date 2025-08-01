@@ -184,5 +184,9 @@ test("flattenRoutes", () => {
       name: "login",
       path: "/login",
     },
+    {
+      name: "invite",
+      path: "/invite/{new_org_id}/{invite_id}/{password}",
+    },
   ]);
 });
