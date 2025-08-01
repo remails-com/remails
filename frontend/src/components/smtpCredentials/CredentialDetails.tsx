@@ -10,8 +10,9 @@ import { SmtpCredential } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { Button, Container, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconKey, IconTrash, IconX } from "@tabler/icons-react";
+import { IconKey, IconTrash } from "@tabler/icons-react";
 import Header from "../Header.tsx";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   description: string;
@@ -73,13 +74,7 @@ export default function CredentialDetails() {
       navigate("projects.project.streams.stream.credentials", {});
       dispatch({ type: "remove_credential", credentialId: credential.id });
     } else {
-      notifications.show({
-        title: "Error",
-        message: `Credential with username ${credential.username} could not be deleted`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Credential with username ${credential.username} could not be deleted`);
       console.error(res);
     }
   };
@@ -96,13 +91,7 @@ export default function CredentialDetails() {
       }
     );
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: `SMTP credential could not be updated`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("SMTP credential could not be updated");
       console.error(res);
       return;
     }

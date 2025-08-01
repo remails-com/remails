@@ -2,13 +2,14 @@ import { Button, Container, Title } from "@mantine/core";
 import SubscriptionCard from "./SubscriptionCard.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { notifications } from "@mantine/notifications";
-import { IconBuildings, IconUserPlus, IconX } from "@tabler/icons-react";
+import { IconBuildings, IconUserPlus } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import Header from "../Header.tsx";
 import { useState } from "react";
 import { CreatedInvite } from "../../types.ts";
 import NewInvite from "./NewInvite.tsx";
 import { useDisclosure } from "@mantine/hooks";
+import { errorNotification } from "../../notify.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
@@ -30,13 +31,7 @@ export default function OrganizationSettings() {
       body: JSON.stringify(values),
     });
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: "Organization could not be updated",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Organization could not be updated");
       console.error(res);
       return;
     }
@@ -60,13 +55,7 @@ export default function OrganizationSettings() {
     });
 
     if (res.status !== 201) {
-      notifications.show({
-        title: "Error",
-        message: "Could not create invite",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Could not create invite");
       console.error(res);
       return;
     }

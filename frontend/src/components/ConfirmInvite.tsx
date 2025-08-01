@@ -4,9 +4,8 @@ import { RemailsLogo } from "./RemailsLogo.tsx";
 import { useEffect, useState } from "react";
 import { RemailsError } from "../error/error.ts";
 import { Invite } from "../types.ts";
-import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
+import { errorNotification } from "../notify.tsx";
 
 export function ConfirmInvite() {
   const {
@@ -41,13 +40,7 @@ export function ConfirmInvite() {
     });
 
     if (res.status !== 201) {
-      notifications.show({
-        title: "Error",
-        message: "Could not accept invite",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Could not accept invite");
       console.error(res);
       return;
     }

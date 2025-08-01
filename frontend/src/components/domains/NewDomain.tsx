@@ -2,14 +2,13 @@ import { Button, Group, Modal, Stack, Stepper, TextInput, Title } from "@mantine
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconX } from "@tabler/icons-react";
-import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { Domain } from "../../types.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { DnsRecords } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   domain: string;
@@ -107,13 +106,8 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
       } else if (res.status === 409) {
         form.setFieldError("domain", "This domain is already configured");
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification(`Domain ${values.domain} could not be created`);
+        console.error(res);
       }
     });
   };
@@ -127,13 +121,8 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
       method: "DELETE",
     }).then((r) => {
       if (r.status !== 200) {
-        notifications.show({
-          title: "Error",
-          message: `Something went wrong`,
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification(`Domain ${domain.domain} could not be deleted`);
+        console.error(r);
         return;
       }
       dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !projectId });

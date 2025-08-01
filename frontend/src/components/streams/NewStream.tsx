@@ -3,9 +3,9 @@ import { useRemails } from "../../hooks/useRemails.ts";
 import { useForm } from "@mantine/form";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   name: string;
@@ -56,13 +56,8 @@ export function NewStream({ opened, close }: NewStreamProps) {
       form.setFieldError("name", "Stream with this name already exists");
       return;
     } else if (res.status !== 201) {
-      notifications.show({
-        title: "Error",
-        message: "Something went wrong",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Stream ${values.name} could not be created`);
+      console.error(res);
       return;
     }
 

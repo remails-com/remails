@@ -3,13 +3,14 @@ import { Button, Group, List, Stack, Text, TextInput, Tooltip } from "@mantine/c
 import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconTrash, IconX } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { Loader } from "../../Loader.tsx";
 import { useDomains } from "../../hooks/useDomains.ts";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   name: string;
@@ -89,13 +90,7 @@ export default function ProjectSettings() {
       navigate("projects");
       dispatch({ type: "remove_project", projectId: project.id });
     } else {
-      notifications.show({
-        title: "Error",
-        message: `Project ${project.name} could not be deleted`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Project ${project.name} could not be deleted`);
       console.error(res);
     }
   };
@@ -109,13 +104,7 @@ export default function ProjectSettings() {
       body: JSON.stringify(values),
     });
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: `Project could not be updated`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Project ${currentProject.name} could not be updated`);
       console.error(res);
       return;
     }

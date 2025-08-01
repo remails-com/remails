@@ -2,8 +2,8 @@ import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   name: string;
@@ -54,13 +54,8 @@ export function NewProject({ opened, close }: NewProjectProps) {
         form.setFieldError("name", "Project with this name already exists");
         return;
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification(`Project ${values.name} could not be created`);
+        console.error(res);
       }
     });
   };

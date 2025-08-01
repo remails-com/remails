@@ -1,8 +1,7 @@
 import { useOrganizations } from "./useOrganizations.ts";
 import { SubscriptionStatus } from "../types.ts";
 import { useEffect, useState } from "react";
-import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
+import { errorNotification } from "../notify.tsx";
 
 export function useSubscription() {
   const { currentOrganization } = useOrganizations();
@@ -16,13 +15,8 @@ export function useSubscription() {
           if (res.status === 200) {
             return res.json();
           } else {
-            notifications.show({
-              title: "Error",
-              message: "Failed to load the current subscription",
-              color: "red",
-              autoClose: 20000,
-              icon: <IconX size={20} />,
-            });
+            errorNotification("Failed to load the current subscription");
+            console.error(res);
             return null;
           }
         })

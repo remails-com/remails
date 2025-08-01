@@ -6,10 +6,10 @@ import { useRemails } from "../../hooks/useRemails.ts";
 import { SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
 import { Alert, Button, Group, Modal, Stack, Stepper, Textarea, TextInput } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconInfoCircle, IconX } from "@tabler/icons-react";
+import { IconInfoCircle } from "@tabler/icons-react";
 import { CopyableCode } from "../CopyableCode.tsx";
 import { SmtpInfo } from "./SmtpInfo.tsx";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   username: string;
@@ -65,13 +65,8 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
       form.setFieldError("username", "This username already exists");
       return;
     } else if (res.status !== 201) {
-      notifications.show({
-        title: "Error",
-        message: "Something went wrong",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("SMTP credential could not be created");
+      console.error(res);
       return;
     }
     const newCredential = await res.json();
