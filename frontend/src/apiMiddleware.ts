@@ -24,7 +24,7 @@ export default async function apiMiddleware(
   router: Router,
   dispatch: Dispatch<Action>
 ): Promise<FullRouterState> {
-  let newOrgId = navState.to.params.org_id;
+  let newOrgId = navState.to.params.org_id ?? null;
   let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
 
   let user: WhoamiResponse | null = navState.state.user;

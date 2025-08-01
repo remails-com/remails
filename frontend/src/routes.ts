@@ -97,6 +97,10 @@ export const routes = [
     name: "login",
     path: "/login",
   },
+  {
+    name: "invite",
+    path: "/invite/{new_org_id}/{invite_id}/{password}",
+  },
 ] as const satisfies Route[];
 
 // Recursive type to get all the route names from the Route[]
