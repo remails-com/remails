@@ -55,7 +55,8 @@ pub struct GithubOauthService {
 
 #[derive(Debug, Deserialize)]
 struct GitHubUser {
-    pub name: String,
+    pub name: Option<String>,
+    pub login: String,
     pub id: i64,
 }
 
@@ -178,7 +179,7 @@ impl GithubOauthService {
             .user_repository
             .create(NewApiUser {
                 email,
-                name: github_user.name,
+                name: github_user.name.unwrap_or(github_user.login),
                 password: None,
                 roles: vec![],
                 github_user_id: Some(github_user.id),
