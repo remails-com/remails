@@ -185,17 +185,17 @@ impl Handler {
         // check From domain (can be a different subdomain)
         if let Some(from) = parsed_msg.from() {
             for addr in from.iter() {
-                if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>()) {
-                    if !Self::is_subdomain(addr.domain(), &domain.domain) {
-                        return Ok(Err((
-                            MessageStatus::Rejected,
-                            format!(
-                                "From domain ({}) is not a valid (sub-)domain of {}",
-                                addr.domain(),
-                                domain.domain
-                            ),
-                        )));
-                    }
+                if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>())
+                    && !Self::is_subdomain(addr.domain(), &domain.domain)
+                {
+                    return Ok(Err((
+                        MessageStatus::Rejected,
+                        format!(
+                            "From domain ({}) is not a valid (sub-)domain of {}",
+                            addr.domain(),
+                            domain.domain
+                        ),
+                    )));
                 }
             }
         };
@@ -204,17 +204,16 @@ impl Handler {
         if let Some(Ok(return_path)) = parsed_msg
             .return_address()
             .map(|p| p.parse::<EmailAddress>())
+            && !Self::is_subdomain(return_path.domain(), &domain.domain)
         {
-            if !Self::is_subdomain(return_path.domain(), &domain.domain) {
-                return Ok(Err((
-                    MessageStatus::Rejected,
-                    format!(
-                        "Return-Path domain ({}) is not a valid (sub-)domain of {}",
-                        return_path.domain(),
-                        domain.domain
-                    ),
-                )));
-            }
+            return Ok(Err((
+                MessageStatus::Rejected,
+                format!(
+                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
+                    return_path.domain(),
+                    domain.domain
+                ),
+            )));
         };
 
         // check dkim key

@@ -301,7 +301,7 @@ impl SmtpSession {
         }
     }
 
-    fn decode_plain_auth(data: &mut [u8]) -> Result<AttemptedAuth, AttemptedAuthError> {
+    fn decode_plain_auth(data: &mut [u8]) -> Result<AttemptedAuth<'_>, AttemptedAuthError> {
         // we may need to trim off a trailing CR/LF
         let ascii_len = data.trim_ascii_end().len();
         let data = &mut data[..ascii_len];

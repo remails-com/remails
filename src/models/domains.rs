@@ -56,7 +56,7 @@ pub enum DkimKey {
 impl DkimKey {
     pub fn pub_key(
         &self,
-    ) -> Result<aws_lc_rs::encoding::PublicKeyX509Der, aws_lc_rs::error::Unspecified> {
+    ) -> Result<aws_lc_rs::encoding::PublicKeyX509Der<'_>, aws_lc_rs::error::Unspecified> {
         match self {
             DkimKey::Ed25519(k) => k.public_key().as_der(),
             DkimKey::RsaSha256(k) => k.public_key().as_der(),
@@ -372,12 +372,12 @@ impl DomainRepository {
         org_id: OrganizationId,
         proj_id: Option<ProjectId>,
     ) -> Result<Vec<Domain>, Error> {
-        if let Some(proj_id) = proj_id {
-            if !projects::check_org_match(org_id, proj_id, &self.pool).await? {
-                return Err(Error::BadRequest(
-                    "Project ID does not match organization ID".to_string(),
-                ));
-            }
+        if let Some(proj_id) = proj_id
+            && !projects::check_org_match(org_id, proj_id, &self.pool).await?
+        {
+            return Err(Error::BadRequest(
+                "Project ID does not match organization ID".to_string(),
+            ));
         }
 
         sqlx::query_as!(

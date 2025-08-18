@@ -219,21 +219,19 @@ where
                         None
                     }
                     identifier => {
-                        if let Some(end_date) = s.end_date {
-                            if end_date < Utc::now().date_naive() {
-                                return Some(SubscriptionStatus::Expired(Subscription {
-                                    subscription_id: s.id.clone(),
-                                    product: identifier.clone(),
-                                    title: s.product.title.clone(),
-                                    description: s.product.description.clone(),
-                                    recurring_sales_invoice_id: s
-                                        .recurring_sales_invoice_id
-                                        .clone(),
-                                    start_date: s.start_date,
-                                    end_date,
-                                    sales_invoices_url: s.contact.sales_invoices_url.clone(),
-                                }));
-                            }
+                        if let Some(end_date) = s.end_date
+                            && end_date < Utc::now().date_naive()
+                        {
+                            return Some(SubscriptionStatus::Expired(Subscription {
+                                subscription_id: s.id.clone(),
+                                product: identifier.clone(),
+                                title: s.product.title.clone(),
+                                description: s.product.description.clone(),
+                                recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
+                                start_date: s.start_date,
+                                end_date,
+                                sales_invoices_url: s.contact.sales_invoices_url.clone(),
+                            }));
                         }
 
                         Some(SubscriptionStatus::Active(Subscription {
