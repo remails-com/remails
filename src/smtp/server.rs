@@ -195,12 +195,11 @@ impl SmtpServer {
                         tokio::spawn(async {
                             if let Err(err) = task().await {
                                 let error_string = err.to_string();
-                                if let ConnectionError::Accept(e) = err {
-                                    if e.kind() == io::ErrorKind::UnexpectedEof || e.kind() == io::ErrorKind::ConnectionReset {
+                                if let ConnectionError::Accept(e) = err
+                                    && (e.kind() == io::ErrorKind::UnexpectedEof || e.kind() == io::ErrorKind::ConnectionReset) {
                                         trace!("failed to handle connection: {error_string}");
                                         return
                                     }
-                                }
                                 error!("failed to handle connection: {error_string}");
                             }
                         });

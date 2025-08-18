@@ -11,7 +11,6 @@ pub(crate) use domains::*;
 pub(crate) use message::*;
 pub(crate) use organization::*;
 pub(crate) use projects::*;
-use serde::Serialize;
 pub(crate) use smtp_credential::*;
 pub(crate) use streams::*;
 use thiserror::Error;
@@ -59,11 +58,4 @@ impl From<sqlx::Error> for Error {
         }
         Error::Database(sql)
     }
-}
-
-#[derive(Serialize, Debug)]
-pub struct Paginated<T> {
-    pub records: Vec<T>,
-    pub total: Option<i64>,
-    pub total_pages: Option<i64>,
 }
