@@ -11,6 +11,7 @@ export const RemailsContext = createContext<{
   state: State;
   dispatch: ActionDispatch<[Action]>;
   navigate: Navigate;
+  match: Router["match"];
 }>({
   state: {
     user: null,
@@ -34,6 +35,9 @@ export const RemailsContext = createContext<{
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
   navigate: () => {
+    throw new Error("RemailsContext must be used within RemailsProvider");
+  },
+  match: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
 });
@@ -79,5 +83,6 @@ export function useLoadRemails() {
     state,
     dispatch,
     navigate,
+    match: router.match.bind(router),
   };
 }
