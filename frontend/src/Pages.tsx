@@ -34,6 +34,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,
   settings: <OrganizationSettings />,
+  "settings.invites": <OrganizationSettings />,
   account: <UserSettings />,
   statistics: <Statistics />,
   organizations: <OrganizationsOverview />,

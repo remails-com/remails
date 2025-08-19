@@ -165,6 +165,10 @@ test("flattenRoutes", () => {
       path: "/{org_id}/settings",
     },
     {
+      name: "settings.invites",
+      path: "/{org_id}/settings/invites",
+    },
+    {
       name: "account",
       path: "/{org_id}/account",
     },

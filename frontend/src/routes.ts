@@ -76,6 +76,12 @@ export const routes = [
   {
     name: "settings",
     path: "/{org_id}/settings",
+    children: [
+      {
+        name: "invites",
+        path: "/invites",
+      },
+    ],
   },
   {
     name: "account",

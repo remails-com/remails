@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Divider, Grid, Skeleton, Stack, Text, Tooltip } from "@mantine/core";
+import { Badge, Button, Card, Container, Divider, Grid, Skeleton, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { useSubscription } from "../../hooks/useSubscription.tsx";
 import { SubscriptionStatus } from "../../types.ts";
 import React from "react";
@@ -74,8 +74,13 @@ export default function SubscriptionCard() {
   );
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
-      <Stack gap="md">{subscription === null ? details_skeleton : details(subscription)}</Stack>
-    </Card>
+    <Container size="xs" mt="md" pl="0" ml="0">
+      <Title order={3} mb="md">
+        Your subscription
+      </Title>
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">{subscription === null ? details_skeleton : details(subscription)}</Stack>
+      </Card>
+    </Container>
   );
 }
