@@ -1,7 +1,7 @@
 import { Dispatch } from "react";
 import { NavigationState } from "./hooks/useRouter";
-import { Action, Organization, User, WhoamiResponse } from "./types";
-import { FullRouterState, Router } from "./router";
+import { Action, Organization, WhoamiResponse } from "./types";
+import { FullRouterState, RouteParams, Router } from "./router";
 import { RemailsError } from "./error/error";
 
 async function get<T>(path: string): Promise<T> {
@@ -33,11 +33,21 @@ export default async function apiMiddleware(
 
     if (user === null || "error" in user) {
       dispatch({ type: "set_user", user: null });
-      // If the user is not logged in, redirect to the login page
-      return router.navigate("login", { type: navState.to.params.type });
+
+      if (navState.to.name === "login") {
+        return navState.to;
+      } else {
+        // If the user is not logged in, redirect to the login page
+        const params: RouteParams = {};
+        if (navState.to.name !== "default") {
+          params["redirect"] = navState.to.fullPath;
+        }
+
+        return router.navigate("login", params);
+      }
     }
 
-    dispatch({ type: "set_user", user: user as User });
+    dispatch({ type: "set_user", user });
   }
 
   if (navState.state.config === null) {

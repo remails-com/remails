@@ -28,12 +28,10 @@ export default function Login({ setUser }: LoginProps) {
   const {
     state: { routerState },
     navigate,
+    match,
   } = useRemails();
 
-  let type: "login" | "register" = "login";
-  if (routerState.params.type === "register") {
-    type = "register";
-  }
+  const type: "login" | "register" = routerState.params.type === "register" ? "register" : "login";
 
   const [globalError, setGlobalError] = useState<string | null>(null);
 
@@ -54,6 +52,16 @@ export default function Login({ setUser }: LoginProps) {
     },
   });
 
+  const redirect = () => {
+    if (routerState.params.redirect) {
+      const page = match(routerState.params.redirect);
+      if (page) {
+        return navigate(page.name, page.params);
+      }
+    }
+    return navigate("default");
+  };
+
   const submit = ({ email, name, password, terms }: SignUpRequest) => {
     setGlobalError(null);
     if (type === "login") {
@@ -70,7 +78,7 @@ export default function Login({ setUser }: LoginProps) {
           setGlobalError("Something went wrong");
         } else {
           res.json().then(setUser);
-          navigate("default");
+          redirect();
         }
       });
     }
@@ -89,11 +97,15 @@ export default function Login({ setUser }: LoginProps) {
           setGlobalError("Something went wrong");
         } else {
           res.json().then(setUser);
-          navigate("default");
+          redirect();
         }
       });
     }
   };
+
+  const github_login = routerState.params.redirect
+    ? `/api/login/github?redirect=${encodeURIComponent(routerState.params.redirect)}`
+    : "/api/login/github";
 
   return (
     <Center mih="100vh">
@@ -109,7 +121,7 @@ export default function Login({ setUser }: LoginProps) {
             variant="filled"
             color="black"
             component="a"
-            href="/api/login/github"
+            href={github_login}
           >
             Github
           </Button>
@@ -167,7 +179,9 @@ export default function Login({ setUser }: LoginProps) {
               component="button"
               type="button"
               c="dimmed"
-              onClick={() => navigate(routerState.name, { type: type === "register" ? "login" : "register" })}
+              onClick={() =>
+                navigate(routerState.name, { ...routerState.params, type: type === "register" ? "login" : "register" })
+              }
               size="xs"
             >
               {type === "register" ? "Already have an account? Login" : "Don't have an account? Register"}

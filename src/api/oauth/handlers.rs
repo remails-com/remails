@@ -22,6 +22,30 @@ use serde::Deserialize;
 use std::{fmt::Debug, time::Duration};
 use tracing::error;
 
+static REDIRECT_COOKIE_NAME: &str = "redirect";
+
+#[derive(Debug, Deserialize)]
+pub(super) struct RedirectParam {
+    redirect: Option<String>,
+}
+
+fn set_cookie_attributes(cookie: &mut Cookie) {
+    cookie.set_http_only(true);
+    cookie.set_secure(true);
+    cookie.set_same_site(SameSite::Lax);
+    cookie.set_path("/");
+}
+
+fn new_cookie<'a>(name: &'a str, value: String) -> Cookie<'a> {
+    let mut cookie = Cookie::new(name, value);
+
+    // Set cookie attributes
+    set_cookie_attributes(&mut cookie);
+    cookie.set_max_age(cookie::time::Duration::minutes(5));
+
+    cookie
+}
+
 /// Handles the login request.
 /// Generates the authorization URL and CSRF token, sets the CSRF token as a cookie,
 /// and redirects the user to the authorization URL.
@@ -41,6 +65,7 @@ use tracing::error;
 /// Returns an `Error` if there is an issue generating the CSRF token or setting the cookie.
 pub(super) async fn oauth_login<T>(
     State(oauth_service): State<T>,
+    Query(redirect): Query<RedirectParam>,
     cookie_storage: SecureCookieStorage,
 ) -> Result<impl IntoResponse, Error>
 where
@@ -59,18 +84,13 @@ where
     // Serialize the CSRF token as a string
     let csrf_cookie_value = serde_json::to_string(&csrf_token)?;
 
-    // Create a new CSRF token cookie
-    let mut csrf_cookie = Cookie::new(CSRF_COOKIE_NAME, csrf_cookie_value);
+    // Create a new CSRF token cookie and add it to the cookie jar
+    let mut cookie_storage = cookie_storage.add(new_cookie(CSRF_COOKIE_NAME, csrf_cookie_value));
 
-    // Set cookie attributes
-    csrf_cookie.set_http_only(true);
-    csrf_cookie.set_secure(true);
-    csrf_cookie.set_same_site(SameSite::Lax);
-    csrf_cookie.set_max_age(cookie::time::Duration::minutes(5));
-    csrf_cookie.set_path("/");
-
-    // Add the CSRF token cookie to the cookie jar
-    let cookie_storage = cookie_storage.add(csrf_cookie);
+    // Store redirect path in temporary cookie
+    if let Some(redirect) = redirect.redirect {
+        cookie_storage = cookie_storage.add(new_cookie(REDIRECT_COOKIE_NAME, redirect));
+    }
 
     // Return the updated cookie jar and a redirect response to the authorization URL
     Ok((cookie_storage, Redirect::to(auth_url.to_string().as_str())))
@@ -136,12 +156,7 @@ where
         .get(CSRF_COOKIE_NAME)
         .ok_or(Error::MissingCSRFCookie)?
         .clone();
-
-    // Set cookie attributes
-    csrf_cookie.set_same_site(SameSite::Lax);
-    csrf_cookie.set_http_only(true);
-    csrf_cookie.set_secure(true);
-    csrf_cookie.set_path("/");
+    set_cookie_attributes(&mut csrf_cookie);
 
     // Deserialize the CSRF token from the cookie value
     let csrf_token: CsrfToken = serde_json::from_str(csrf_cookie.value())?;
@@ -161,5 +176,13 @@ where
     cookie_storage = cookie_storage.remove(csrf_cookie);
 
     // Return the updated cookie jar and a redirect response to the home page
-    Ok((cookie_storage, Redirect::to("/")).into_response())
+    if let Some(mut redirect_cookie) = cookie_storage.get(REDIRECT_COOKIE_NAME) {
+        set_cookie_attributes(&mut redirect_cookie);
+        let redirect = redirect_cookie.value().to_owned();
+        cookie_storage = cookie_storage.remove(redirect_cookie);
+        tracing::info!("Redirecting to {}", redirect);
+        Ok((cookie_storage, Redirect::to(&redirect)).into_response())
+    } else {
+        Ok((cookie_storage, Redirect::to("/")).into_response())
+    }
 }
