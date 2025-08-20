@@ -34,13 +34,6 @@ pub struct InvitePath {
     org_id: OrganizationId,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SpecificInvitePath {
-    org_id: OrganizationId,
-    invite_id: InviteId,
-    password: String,
-}
-
 pub async fn create_invite(
     State(repo): State<InviteRepository>,
     Path(InvitePath { org_id }): Path<InvitePath>,
@@ -79,11 +72,7 @@ pub async fn get_org_invites(
 
 pub async fn get_invite(
     State(repo): State<InviteRepository>,
-    Path(SpecificInvitePath {
-        org_id,
-        invite_id,
-        password,
-    }): Path<SpecificInvitePath>,
+    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, String)>,
     user: ApiUser,
 ) -> ApiResult<ApiInvite> {
     debug!(
@@ -100,13 +89,27 @@ pub async fn get_invite(
     Ok(Json(invite))
 }
 
+pub async fn remove_invite(
+    State(repo): State<InviteRepository>,
+    Path((org_id, invite_id)): Path<(OrganizationId, InviteId)>,
+    user: ApiUser,
+) -> ApiResult<InviteId> {
+    has_write_access(&user, &org_id)?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "remove invite"
+    );
+
+    let id = repo.remove_by_id(invite_id, org_id).await?;
+
+    Ok(Json(id))
+}
+
 pub async fn accept_invite(
     State((invites, organizations)): State<(InviteRepository, OrganizationRepository)>,
-    Path(SpecificInvitePath {
-        org_id,
-        invite_id,
-        password,
-    }): Path<SpecificInvitePath>,
+    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, String)>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, ApiError> {
     debug!(

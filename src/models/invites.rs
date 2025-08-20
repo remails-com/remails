@@ -146,19 +146,20 @@ impl InviteRepository {
         &self,
         invite_id: InviteId,
         org_id: OrganizationId,
-    ) -> Result<(), Error> {
-        sqlx::query!(
+    ) -> Result<InviteId, Error> {
+        let id = sqlx::query_scalar!(
             r#"
             DELETE FROM organization_invites
             WHERE id = $1 AND organization_id = $2
+            RETURNING id
             "#,
             *invite_id,
             *org_id
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(InviteId(id))
     }
 }
 
@@ -199,7 +200,10 @@ mod test {
             invite_repo.remove_by_id(invite.id, org_id2).await,
             Err(Error::NotFound(_))
         ));
-        invite_repo.remove_by_id(invite.id, org_id).await.unwrap();
+        assert_eq!(
+            invite_repo.remove_by_id(invite.id, org_id).await.unwrap(),
+            invite.id,
+        );
 
         let invites = invite_repo.get_by_org(org_id).await.unwrap();
         assert_eq!(invites.len(), 0);
