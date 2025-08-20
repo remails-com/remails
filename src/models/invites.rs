@@ -23,7 +23,7 @@ pub struct CreatedInvite {
 }
 
 #[derive(Serialize)]
-pub struct ApiCreatedInvite {
+pub struct CreatedInviteWithPassword {
     id: InviteId,
     password: String,
     organization_id: OrganizationId,
@@ -37,6 +37,7 @@ pub struct ApiInvite {
     id: InviteId,
     organization_id: OrganizationId,
     organization_name: String,
+    #[serde(skip)]
     password_hash: String,
     created_by: ApiUserId,
     created_by_name: String,
@@ -69,7 +70,7 @@ impl InviteRepository {
         org_id: OrganizationId,
         created_by: ApiUserId,
         expires: DateTime<Utc>,
-    ) -> Result<ApiCreatedInvite, Error> {
+    ) -> Result<CreatedInviteWithPassword, Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
@@ -88,7 +89,7 @@ impl InviteRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(ApiCreatedInvite {
+        Ok(CreatedInviteWithPassword {
             id: invite.id,
             password,
             organization_id: invite.organization_id,
@@ -96,6 +97,25 @@ impl InviteRepository {
             created_at: invite.created_at,
             expires_at: invite.expires_at,
         })
+    }
+
+    pub async fn get_by_org(&self, org_id: OrganizationId) -> Result<Vec<ApiInvite>, Error> {
+        Ok(sqlx::query_as!(
+            ApiInvite,
+            r#"
+            SELECT i.id, i.organization_id, o.name AS organization_name,
+                i.password_hash,
+                i.created_by, a.name AS created_by_name, 
+                i.created_at, i.expires_at
+            FROM organization_invites i
+            JOIN organizations o ON o.id = i.organization_id
+            JOIN api_users a ON a.id = i.created_by
+            WHERE i.organization_id = $1
+            "#,
+            *org_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub async fn get_by_id(
@@ -139,5 +159,49 @@ impl InviteRepository {
         .await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use sqlx::PgPool;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn invite_lifecycle(db: PgPool) {
+        let invite_repo = InviteRepository::new(db);
+        let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(); // test org 1
+        let created_by: ApiUserId = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // test user 1
+
+        // create invite
+        let invite = invite_repo
+            .create(org_id, created_by, Utc::now() + chrono::Duration::days(3))
+            .await
+            .unwrap();
+
+        let invites = invite_repo.get_by_org(org_id).await.unwrap();
+        assert_eq!(invites.len(), 1);
+        assert_eq!(invites[0].id, invite.id);
+
+        // invite retrieval
+        let retrieved_invite = invite_repo.get_by_id(invite.id, org_id).await.unwrap();
+        assert_eq!(retrieved_invite.id, invite.id);
+
+        // wrong organization retrieval
+        let org_id2: OrganizationId = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+        assert!(matches!(
+            invite_repo.get_by_id(invite.id, org_id2).await,
+            Err(Error::NotFound(_))
+        ));
+
+        // remove invite
+        assert!(matches!(
+            invite_repo.remove_by_id(invite.id, org_id2).await,
+            Err(Error::NotFound(_))
+        ));
+        invite_repo.remove_by_id(invite.id, org_id).await.unwrap();
+
+        let invites = invite_repo.get_by_org(org_id).await.unwrap();
+        assert_eq!(invites.len(), 0);
     }
 }

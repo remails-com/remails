@@ -15,6 +15,13 @@ use crate::{
     },
 };
 
+fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
+    if user.org_admin().contains(org) || user.is_super_admin() {
+        return Ok(());
+    }
+    Err(ApiError::Forbidden)
+}
+
 fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
     if user.org_admin().contains(org) || user.is_super_admin() {
         return Ok(());
@@ -41,7 +48,7 @@ pub async fn create_invite(
 ) -> Result<impl IntoResponse, ApiError> {
     has_write_access(&user, &org_id)?;
 
-    let expires = Utc::now() + TimeDelta::days(3);
+    let expires = Utc::now() + TimeDelta::days(7);
     let invite = repo.create(org_id, *user.id(), expires).await?;
 
     debug!(
@@ -51,6 +58,23 @@ pub async fn create_invite(
     );
 
     Ok((StatusCode::CREATED, Json(invite)))
+}
+
+pub async fn get_org_invites(
+    State(repo): State<InviteRepository>,
+    Path(InvitePath { org_id }): Path<InvitePath>,
+    user: ApiUser,
+) -> ApiResult<Vec<ApiInvite>> {
+    has_read_access(&user, &org_id)?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "get org invites"
+    );
+
+    let invites = repo.get_by_org(org_id).await?;
+    Ok(Json(invites))
 }
 
 pub async fn get_invite(
