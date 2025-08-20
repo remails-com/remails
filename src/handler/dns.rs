@@ -313,7 +313,7 @@ impl DnsResolver {
         let record = format!("_dmarc.{domain}.");
         let dmarc_data = match self.get_singular_dns_record(&record, "v=DMARC1").await {
             Ok(dmarc_data) => dmarc_data,
-            Err(reason) => return VerifyResult::warning(reason, None),
+            Err(reason) => return VerifyResult::info(reason, None),
         };
         trace!("dmarc data: {dmarc_data:?}");
 
@@ -336,10 +336,10 @@ impl DnsResolver {
                 if ips.iter().next().is_some() {
                     VerifyResult::success("available")
                 } else {
-                    VerifyResult::warning("no A record set", None)
+                    VerifyResult::info("no A record set", None)
                 }
             }
-            Err(_) => VerifyResult::warning("could not retrieve DNS record", None),
+            Err(_) => VerifyResult::info("could not retrieve DNS record", None),
         }
     }
 
@@ -429,7 +429,7 @@ mod test {
         dns.resolver.txt = ""; // dmarc record does not exist
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
-            VerifyResultStatus::Warning
+            VerifyResultStatus::Info
         ));
 
         dns.resolver.txt = "v=DMARC1; p=reject";
@@ -481,7 +481,7 @@ mod test {
         // The mock DNS resolver only contains the DKIM record
         assert!(matches!(res.dkim.status, VerifyResultStatus::Success));
         assert!(matches!(res.spf.status, VerifyResultStatus::Error));
-        assert!(matches!(res.dmarc.status, VerifyResultStatus::Warning));
+        assert!(matches!(res.dmarc.status, VerifyResultStatus::Info));
         assert!(matches!(res.a.status, VerifyResultStatus::Success));
     }
 }
