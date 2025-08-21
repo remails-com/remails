@@ -73,6 +73,9 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = message_handler.retry_all().await {
                 error!("Error retrying: {e}")
             };
+            if let Err(e) = message_handler.periodic_clean_up().await {
+                error!("Error during clean up: {e}")
+            }
         }
     });
 

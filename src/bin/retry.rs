@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let message_handler = Handler::new(pool.clone(), handler_config.into(), shutdown);
 
     message_handler.retry_all().await?;
+    message_handler.periodic_clean_up().await?;
 
     Ok(())
 }

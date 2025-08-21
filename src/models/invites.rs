@@ -161,6 +161,25 @@ impl InviteRepository {
 
         Ok(InviteId(id))
     }
+
+    pub async fn remove_expired_before(&self, before: DateTime<Utc>) -> Result<(), Error> {
+        let rows = sqlx::query!(
+            r#"
+            DELETE FROM organization_invites
+            WHERE expires_at < $1
+            "#,
+            before
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows > 0 {
+            tracing::debug!("Removed {} expired invites", rows);
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -180,6 +199,19 @@ mod test {
             .await
             .unwrap();
 
+        let invites = invite_repo.get_by_org(org_id).await.unwrap();
+        assert_eq!(invites.len(), 1);
+        assert_eq!(invites[0].id, invite.id);
+
+        // add expired invite
+        invite_repo
+            .create(org_id, created_by, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!(invite_repo.get_by_org(org_id).await.unwrap().len(), 2);
+
+        // remove expired invite
+        invite_repo.remove_expired_before(Utc::now()).await.unwrap();
         let invites = invite_repo.get_by_org(org_id).await.unwrap();
         assert_eq!(invites.len(), 1);
         assert_eq!(invites[0].id, invite.id);
