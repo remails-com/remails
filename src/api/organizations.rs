@@ -1,9 +1,6 @@
 use crate::{
     api::error::{ApiError, ApiResult},
-    models::{
-        ApiUser, NewOrganization, Organization, OrganizationFilter, OrganizationId,
-        OrganizationRepository,
-    },
+    models::{ApiUser, NewOrganization, Organization, OrganizationId, OrganizationRepository},
 };
 use axum::{
     Json,
@@ -18,30 +15,22 @@ fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError>
 }
 
 fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.org_admin().contains(org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
-}
-
-impl From<&ApiUser> for OrganizationFilter {
-    fn from(user: &ApiUser) -> Self {
-        if user.is_super_admin() {
-            OrganizationFilter::default()
-        } else {
-            OrganizationFilter {
-                orgs: Some(user.org_admin()),
-            }
-        }
-    }
 }
 
 pub async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<Vec<Organization>> {
-    let filter = (&user).into();
-    let organizations = repo.list(&filter).await?;
+    let filter = if user.is_super_admin() {
+        None // show all organizations
+    } else {
+        Some(user.viewable_organizations())
+    };
+    let organizations = repo.list(filter).await?;
 
     debug!(
         user_id = user.id().to_string(),

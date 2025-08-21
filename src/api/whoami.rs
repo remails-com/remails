@@ -21,7 +21,7 @@ impl From<ApiUser> for WhoamiResponse {
     fn from(user: ApiUser) -> Self {
         WhoamiResponse {
             id: *user.id(),
-            roles: user.roles(),
+            roles: user.roles().clone(),
             github_id: user.github_user_id().map(|id| id.to_string()),
             password_enabled: user.password_enabled(),
             name: user.name,

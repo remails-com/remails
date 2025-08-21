@@ -11,21 +11,21 @@ use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(
-    org: OrganizationId,
-    proj: ProjectId,
-    stream: Option<StreamId>,
+    org: &OrganizationId,
+    proj: &ProjectId,
+    stream: Option<&StreamId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
     has_write_access(org, proj, stream, user)
 }
 
 fn has_write_access(
-    org: OrganizationId,
-    _proj: ProjectId,
-    _stream: Option<StreamId>,
+    org: &OrganizationId,
+    _proj: &ProjectId,
+    _stream: Option<&StreamId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
@@ -36,7 +36,7 @@ pub async fn list_streams(
     user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<Vec<Stream>> {
-    has_read_access(org, proj, None, &user)?;
+    has_read_access(&org, &proj, None, &user)?;
 
     let streams = repo.list(org, proj).await?;
 
@@ -57,7 +57,7 @@ pub async fn create_stream(
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
     Json(new): Json<NewStream>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(org, proj, None, &user)?;
+    has_write_access(&org, &proj, None, &user)?;
 
     let stream = repo.create(new, org, proj).await?;
 
@@ -79,7 +79,7 @@ pub async fn update_stream(
     Path((org, proj, stream)): Path<(OrganizationId, ProjectId, StreamId)>,
     Json(update): Json<NewStream>,
 ) -> ApiResult<Stream> {
-    has_write_access(org, proj, Some(stream), &user)?;
+    has_write_access(&org, &proj, Some(&stream), &user)?;
 
     let stream = repo.update(org, proj, stream, update).await?;
 
@@ -100,7 +100,7 @@ pub async fn remove_stream(
     user: ApiUser,
     Path((org, proj, stream)): Path<(OrganizationId, ProjectId, StreamId)>,
 ) -> ApiResult<StreamId> {
-    has_write_access(org, proj, Some(stream), &user)?;
+    has_write_access(&org, &proj, Some(&stream), &user)?;
 
     let stream_id = repo.remove(org, proj, stream).await?;
 

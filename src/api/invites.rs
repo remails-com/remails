@@ -16,14 +16,14 @@ use crate::{
 };
 
 fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.org_admin().contains(org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
 }
 
 fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.org_admin().contains(org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)

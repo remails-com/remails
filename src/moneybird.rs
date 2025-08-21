@@ -897,7 +897,7 @@ impl MoneyBird {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::{OrganizationFilter, OrganizationRepository};
+    use crate::models::OrganizationRepository;
     use chrono::Datelike;
 
     impl<T> Default for Subscription<T>
@@ -981,10 +981,7 @@ mod test {
         moneybird.reset_all_quotas().await.unwrap();
 
         let org_repo = OrganizationRepository::new(db);
-        let orgs = org_repo
-            .list(&OrganizationFilter { orgs: None })
-            .await
-            .unwrap();
+        let orgs = org_repo.list(None).await.unwrap();
 
         for org in orgs {
             match org.id().as_uuid().to_string().as_str() {

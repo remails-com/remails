@@ -11,19 +11,19 @@ use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(
-    org: OrganizationId,
-    project: Option<ProjectId>,
+    org: &OrganizationId,
+    project: Option<&ProjectId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
     has_write_access(org, project, user)
 }
 
 fn has_write_access(
-    org: OrganizationId,
-    _project: Option<ProjectId>,
+    org: &OrganizationId,
+    _project: Option<&ProjectId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
@@ -34,7 +34,7 @@ pub async fn list_projects(
     Path(org): Path<OrganizationId>,
     user: ApiUser,
 ) -> ApiResult<Vec<Project>> {
-    has_read_access(org, None, &user)?;
+    has_read_access(&org, None, &user)?;
 
     let projects = repo.list(org).await?;
 
@@ -54,7 +54,7 @@ pub async fn update_project(
     user: ApiUser,
     Json(update): Json<NewProject>,
 ) -> ApiResult<Project> {
-    has_write_access(org, Some(proj), &user)?;
+    has_write_access(&org, Some(&proj), &user)?;
 
     let project = repo.update(org, proj, update).await?;
 
@@ -74,7 +74,7 @@ pub async fn create_project(
     Path(org): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(org, None, &user)?;
+    has_write_access(&org, None, &user)?;
 
     let project = repo.create(new, org).await?;
 
@@ -94,7 +94,7 @@ pub async fn remove_project(
     user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
-    has_write_access(org, Some(proj), &user)?;
+    has_write_access(&org, Some(&proj), &user)?;
 
     let project_id = repo.remove(proj, org).await?;
 

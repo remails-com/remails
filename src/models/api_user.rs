@@ -60,8 +60,8 @@ pub struct PasswordUpdate {
 }
 
 impl ApiUser {
-    pub fn roles(&self) -> Vec<ApiUserRole> {
-        self.roles.clone()
+    pub fn roles(&self) -> &Vec<ApiUserRole> {
+        &self.roles
     }
     pub fn id(&self) -> &ApiUserId {
         &self.id

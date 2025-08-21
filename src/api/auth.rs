@@ -29,13 +29,27 @@ impl ApiUser {
             .any(|r| matches!(r, ApiUserRole::SuperAdmin))
     }
 
-    pub fn org_admin(&self) -> Vec<OrganizationId> {
-        self.roles().iter().fold(Vec::new(), |mut acc, role| {
-            if let ApiUserRole::OrganizationAdmin { id: org } = role {
-                acc.push(*org);
-            };
-            acc
+    pub fn is_org_admin(&self, org_id: &OrganizationId) -> bool {
+        self.roles().iter().any(|role| {
+            if let ApiUserRole::OrganizationAdmin { id } = role {
+                id == org_id
+            } else {
+                false
+            }
         })
+    }
+
+    pub fn viewable_organizations(&self) -> Vec<uuid::Uuid> {
+        self.roles()
+            .iter()
+            .filter_map(|role| {
+                if let ApiUserRole::OrganizationAdmin { id } = role {
+                    Some(**id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
