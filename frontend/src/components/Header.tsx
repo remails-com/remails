@@ -2,6 +2,7 @@ import { Divider, Group, Stack, Text, ThemeIcon, Title, Flex, Box } from "@manti
 import { Icon, IconProps } from "@tabler/icons-react";
 import Rename from "./Rename";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
+import classes from "./Header.module.css";
 
 interface HeaderProps {
   name: string;
@@ -14,7 +15,7 @@ interface HeaderProps {
 export default function Header({ name, entityType, saveRename, Icon, divider = false }: HeaderProps) {
   return (
     <>
-      <Group bg="var(--mantine-color-gray-light)" px="lg" py="md" pt="xs" mx="-lg" mt="-lg">
+      <Group className={classes.header} px="lg" py="md" pt="xs" mx="-lg" mt="-lg">
         <Stack gap="md" w="100%">
           <Box w="100%">
             <Breadcrumbs />
