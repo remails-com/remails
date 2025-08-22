@@ -1,5 +1,6 @@
 mod api_user;
 mod domains;
+mod invites;
 mod message;
 mod organization;
 mod projects;
@@ -8,6 +9,7 @@ mod streams;
 
 pub(crate) use api_user::*;
 pub(crate) use domains::*;
+pub(crate) use invites::*;
 pub(crate) use message::*;
 pub(crate) use organization::*;
 pub(crate) use projects::*;

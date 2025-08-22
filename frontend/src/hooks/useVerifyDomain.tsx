@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import { Domain, DomainVerificationResult, DomainVerificationStatus } from "../types";
-import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
+import { errorNotification } from "../notify";
 
 export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
   const [verificationResult, setVerificationResult] = useState<DomainVerificationResult | null>(
@@ -23,20 +22,15 @@ export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
         () =>
           fetch(`${domainsApi}/${domain.id}/verify`, {
             method: "POST",
-          }).then((r) => {
-            if (r.status !== 200) {
-              notifications.show({
-                title: "Error",
-                message: `Something went wrong`,
-                color: "red",
-                autoClose: 20000,
-                icon: <IconX size={20} />,
-              });
+          }).then((res) => {
+            if (res.status !== 200) {
+              errorNotification(`Domain ${domain.domain} could not be verified`);
+              console.error(res);
               setDomainVerified("failed");
               return;
             }
 
-            r.json().then((data) => {
+            res.json().then((data) => {
               setDomainVerified("verified");
               setVerificationResult(data);
             });

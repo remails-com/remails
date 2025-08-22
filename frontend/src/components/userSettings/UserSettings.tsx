@@ -1,9 +1,10 @@
 import { Button, Container, Grid, Group, PasswordInput, Stack, Tabs, TextInput, Title, Tooltip } from "@mantine/core";
 import GitHubBadge from "./GitHubBadge";
-import { IconBrandGithub, IconPassword, IconTrash, IconX } from "@tabler/icons-react";
+import { IconBrandGithub, IconPassword, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
 import { useForm } from "@mantine/form";
+import { errorNotification } from "../../notify";
 
 interface BasicFormValues {
   name: string;
@@ -76,13 +77,8 @@ export default function UserSettings() {
           });
         });
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification("User could not be updated");
+        console.error(res);
       }
     });
   };
@@ -104,13 +100,8 @@ export default function UserSettings() {
           message: "",
         });
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification("Password could not be updated");
+        console.error(res);
       }
     });
   };
@@ -144,13 +135,8 @@ export default function UserSettings() {
           message: "",
         });
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification("Password could not be removed");
+        console.error(res);
       }
     });
   };

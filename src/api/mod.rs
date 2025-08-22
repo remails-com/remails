@@ -3,6 +3,7 @@ use crate::{
     api::{
         auth::{logout, password_login, password_register},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
+        invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
         messages::{get_message, list_messages, remove_message, update_to_retry_asap},
         oauth::GithubOauthService,
         organizations::{
@@ -19,8 +20,8 @@ use crate::{
     },
     handler::dns::DnsResolver,
     models::{
-        ApiUserRepository, DomainRepository, MessageRepository, OrganizationRepository,
-        ProjectRepository, SmtpCredentialRepository, StreamRepository,
+        ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
+        OrganizationRepository, ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
     moneybird::MoneyBird,
 };
@@ -49,6 +50,7 @@ mod auth;
 mod config;
 pub mod domains;
 mod error;
+mod invites;
 mod messages;
 mod oauth;
 mod organizations;
@@ -180,6 +182,21 @@ impl FromRef<ApiState> for (DomainRepository, DnsResolver, RemailsConfig) {
 impl FromRef<ApiState> for ApiUserRepository {
     fn from_ref(state: &ApiState) -> Self {
         ApiUserRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for InviteRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        InviteRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for (InviteRepository, OrganizationRepository) {
+    fn from_ref(state: &ApiState) -> Self {
+        (
+            InviteRepository::new(state.pool.clone()),
+            OrganizationRepository::new(state.pool.clone()),
+        )
     }
 }
 
@@ -342,6 +359,9 @@ impl ApiServer {
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
             .route("/register/password", post(password_register))
+            .route("/invite/{org_id}", get(get_org_invites).post(create_invite))
+            .route("/invite/{org_id}/{invite_id}", delete(remove_invite))
+            .route("/invite/{org_id}/{invite_id}/{password}", get(get_invite).post(accept_invite))
             .fallback(api_fallback)
             .merge(oauth_router)
             .layer((

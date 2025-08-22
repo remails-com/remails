@@ -1,0 +1,8 @@
+:root[data-mantine-color-scheme="dark"] .header {
+  background-color: var(--mantine-color-gray-light);
+  background-color: color-mix(in srgb, var(--mantine-color-black) 50%, transparent);
+}
+
+:root[data-mantine-color-scheme="light"] .header {
+  background-color: var(--mantine-color-gray-1);
+}

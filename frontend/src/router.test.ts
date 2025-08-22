@@ -165,6 +165,10 @@ test("flattenRoutes", () => {
       path: "/{org_id}/settings",
     },
     {
+      name: "settings.invites",
+      path: "/{org_id}/settings/invites",
+    },
+    {
       name: "account",
       path: "/{org_id}/account",
     },
@@ -183,6 +187,10 @@ test("flattenRoutes", () => {
     {
       name: "login",
       path: "/login",
+    },
+    {
+      name: "invite",
+      path: "/invite/{new_org_id}/{invite_id}/{password}",
     },
   ]);
 });

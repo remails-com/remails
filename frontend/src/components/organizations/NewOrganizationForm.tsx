@@ -2,8 +2,8 @@ import { Button, Group, Stack, TextInput } from "@mantine/core";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconX } from "@tabler/icons-react";
 import { Organization } from "../../types.ts";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   name: string;
@@ -34,13 +34,8 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
     });
   }
 
-  notifications.show({
-    title: "Error",
-    message: "Something went wrong",
-    color: "red",
-    autoClose: 20000,
-    icon: <IconX size={20} />,
-  });
+  errorNotification(`Organization ${name} could not be created`);
+  console.error(res);
 
   return { status: res.status, newOrg: null };
 }

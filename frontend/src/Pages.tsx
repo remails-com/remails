@@ -16,6 +16,7 @@ import { RouteName } from "./routes.ts";
 import UserSettings from "./components/userSettings/UserSettings.tsx";
 import Statistics from "./components/statistics/Statistics.tsx";
 import Error from "./error/Error.tsx";
+import { ConfirmInvite } from "./components/ConfirmInvite.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -33,18 +34,21 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,
   settings: <OrganizationSettings />,
+  "settings.invites": <OrganizationSettings />,
   account: <UserSettings />,
   statistics: <Statistics />,
   organizations: <OrganizationsOverview />,
   default: null,
   login: null,
+  invite: <ConfirmInvite />,
 };
 
 function Page() {
   const {
     state: { organizations, routerState },
   } = useRemails();
-  if (organizations?.length === 0) {
+
+  if (organizations?.length === 0 && routerState.name != "invite") {
     return <Setup />;
   }
 

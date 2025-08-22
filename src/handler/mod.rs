@@ -3,8 +3,8 @@ use crate::{
     dkim::PrivateKey,
     handler::{connection_log::LogLevel, dns::DnsResolver},
     models::{
-        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageRepository,
-        MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
+        DeliveryDetails, DeliveryStatus, DomainRepository, InviteRepository, Message,
+        MessageRepository, MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
@@ -90,6 +90,7 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    invite_repository: InviteRepository,
     workers: Arc<Semaphore>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
@@ -105,6 +106,7 @@ impl Handler {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
+            invite_repository: InviteRepository::new(pool.clone()),
             workers: Arc::new(Semaphore::new(100)),
             shutdown,
             config,
@@ -701,6 +703,15 @@ impl Handler {
                 status => error!("Can't retry message with status {status:?}"),
             }
         }
+
+        Ok(())
+    }
+
+    pub async fn periodic_clean_up(&self) -> Result<(), HandlerError> {
+        self.invite_repository
+            .remove_expired_before(chrono::Utc::now())
+            .await
+            .map_err(HandlerError::RepositoryError)?;
 
         Ok(())
     }

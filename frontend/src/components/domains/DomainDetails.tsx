@@ -5,11 +5,12 @@ import { useDomains } from "../../hooks/useDomains.ts";
 import { Domain, VerifyResult } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconInfoCircle, IconTrash, IconWorldWww, IconX } from "@tabler/icons-react";
+import { IconInfoCircle, IconTrash, IconWorldWww } from "@tabler/icons-react";
 import { Badge, Button, Code, Group, Loader, Paper, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
 import { dkimRecord, dmarcValue, spfRecord } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
 import { formatDateTime } from "../../util.ts";
+import { errorNotification } from "../../notify.tsx";
 import Header from "../Header.tsx";
 import { CopyableCode } from "../CopyableCode.tsx";
 import React, { useState } from "react";
@@ -161,13 +162,7 @@ export default function DomainDetails() {
       navigate(domain_route);
       dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !currentProject });
     } else {
-      notifications.show({
-        title: "Error",
-        message: `Domain ${domain.domain} could not be deleted`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Domain ${domain.domain} could not be deleted`);
       console.error(res);
     }
   };

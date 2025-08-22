@@ -289,3 +289,22 @@ export interface Subscription {
   end_date: string | null;
   sales_invoices_url: string;
 }
+
+export type Invite = {
+  id: string;
+  organization_id: string;
+  organization_name: string;
+  created_by: string;
+  created_by_name: string;
+  created_at: string;
+  expires_at: string;
+};
+
+export type CreatedInvite = {
+  id: string;
+  password: string;
+  organization_id: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+};

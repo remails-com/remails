@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Text, Tooltip } from "@mantine/core";
-import { IconTrash, IconX } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import { MessageMetadata } from "../../types";
 import { modals } from "@mantine/modals";
 import { useOrganizations } from "../../hooks/useOrganizations";
@@ -7,6 +7,7 @@ import { useProjects } from "../../hooks/useProjects";
 import { useStreams } from "../../hooks/useStreams";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
+import { errorNotification } from "../../notify.tsx";
 
 export default function MessageDeleteButton({ message, small }: { message: MessageMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
@@ -34,13 +35,7 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
       navigate("projects.project.streams.stream.messages");
       dispatch({ type: "remove_message", messageId: message.id });
     } else {
-      notifications.show({
-        title: "Error",
-        message: `Message could not be deleted`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Message could not be deleted");
       console.error(res);
     }
   };

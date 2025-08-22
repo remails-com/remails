@@ -1,6 +1,6 @@
 import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconTrash, IconX } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import { useEffect } from "react";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Project } from "../../types.ts";
@@ -11,6 +11,7 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { Loader } from "../../Loader.tsx";
+import { errorNotification } from "../../notify.tsx";
 
 interface FormValues {
   name: string;
@@ -82,13 +83,7 @@ export default function StreamSettings() {
       navigate("projects.project.streams");
       dispatch({ type: "remove_stream", streamId: stream.id });
     } else {
-      notifications.show({
-        title: "Error",
-        message: `Stream ${stream.name} could not be deleted`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification(`Stream ${stream.name} could not be deleted`);
       console.error(res);
     }
   };
@@ -105,13 +100,7 @@ export default function StreamSettings() {
       }
     );
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: `Streams could not be updated`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Stream could not be updated");
       console.error(res);
       return;
     }

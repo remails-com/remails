@@ -1,10 +1,12 @@
-import { Container, Title } from "@mantine/core";
 import SubscriptionCard from "./SubscriptionCard.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { notifications } from "@mantine/notifications";
-import { IconBuildings, IconX } from "@tabler/icons-react";
+import { IconBuildings, IconReceiptEuro, IconUserPlus } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import Header from "../Header.tsx";
+import { errorNotification } from "../../notify.tsx";
+import Tabs from "../../layout/Tabs.tsx";
+import Invites from "./Invites.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
@@ -14,7 +16,7 @@ export default function OrganizationSettings() {
     return null;
   }
 
-  const save = async (values: { name: string }) => {
+  const saveName = async (values: { name: string }) => {
     const res = await fetch(`/api/organizations/${currentOrganization.id}`, {
       method: "PUT",
       headers: {
@@ -23,13 +25,7 @@ export default function OrganizationSettings() {
       body: JSON.stringify(values),
     });
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: `Organization could not be updated`,
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Organization could not be updated");
       console.error(res);
       return;
     }
@@ -46,19 +42,23 @@ export default function OrganizationSettings() {
 
   return (
     <>
-      <Header
-        name={currentOrganization.name}
-        entityType="Organization"
-        Icon={IconBuildings}
-        saveRename={save}
-        divider
+      <Header name={currentOrganization.name} entityType="Organization" Icon={IconBuildings} saveRename={saveName} />
+      <Tabs
+        tabs={[
+          {
+            route: "settings",
+            name: "Subscription",
+            icon: <IconReceiptEuro size={14} />,
+            content: <SubscriptionCard />,
+          },
+          {
+            route: "settings.invites",
+            name: "Invites",
+            icon: <IconUserPlus size={14} />,
+            content: <Invites />,
+          },
+        ]}
       />
-      <Container size="xs" mt="md" pl="0" ml="0">
-        <Title order={3} mb="md">
-          Your subscription
-        </Title>
-        <SubscriptionCard />
-      </Container>
     </>
   );
 }

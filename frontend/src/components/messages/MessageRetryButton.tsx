@@ -1,11 +1,12 @@
 import { notifications } from "@mantine/notifications";
 import { Message, MessageMetadata } from "../../types";
-import { IconReload, IconX } from "@tabler/icons-react";
+import { IconReload } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
 import { useStreams } from "../../hooks/useStreams";
 import { ActionIcon, Button, Tooltip } from "@mantine/core";
 import { is_in_the_future } from "../../util";
+import { errorNotification } from "../../notify.tsx";
 
 export default function MessageRetryButton({
   message,
@@ -34,13 +35,8 @@ export default function MessageRetryButton({
       },
     });
     if (res.status !== 200) {
-      notifications.show({
-        title: "Error",
-        message: "Something went wrong",
-        color: "red",
-        autoClose: 20000,
-        icon: <IconX size={20} />,
-      });
+      errorNotification("Message could not be retried");
+      console.error(res);
       return;
     }
     const update = await res.json();
