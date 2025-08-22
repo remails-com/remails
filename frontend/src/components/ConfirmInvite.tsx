@@ -20,11 +20,10 @@ export function ConfirmInvite() {
   const [invite, setInvite] = useState<Invite | null>(null);
 
   useEffect(() => {
-    fetch(`/api/invite/${params["new_org_id"]}/${params["invite_id"]}/${params["password"]}`).then((res) => {
-      console.log(res);
+    fetch(`/api/invite/${params.new_org_id}/${params.invite_id}/${params.password}`).then((res) => {
       if (!res.ok) {
         const error = new RemailsError(
-          `Could not get invite for organization ${params["new_org_id"]} (${res.status} ${res.statusText})`,
+          `Could not get invite for organization ${params.new_org_id} (${res.status} ${res.statusText})`,
           res.status
         );
         dispatch({ type: "set_error", error });
@@ -35,7 +34,7 @@ export function ConfirmInvite() {
   }, [dispatch, params]);
 
   const accept = async () => {
-    const res = await fetch(`/api/invite/${params["new_org_id"]}/${params["invite_id"]}/${params["password"]}`, {
+    const res = await fetch(`/api/invite/${params.new_org_id}/${params.invite_id}/${params.password}`, {
       method: "POST",
     });
 

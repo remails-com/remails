@@ -40,7 +40,7 @@ export default async function apiMiddleware(
         // If the user is not logged in, redirect to the login page
         const params: RouteParams = {};
         if (navState.to.name !== "default") {
-          params["redirect"] = navState.to.fullPath;
+          params.redirect = navState.to.fullPath;
         }
 
         return router.navigate("login", params);

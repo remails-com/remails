@@ -73,18 +73,17 @@ export default function Invites() {
     });
   };
 
-  const rows =
-    invites?.map((invite) => (
-      <Table.Tr key={invite.id}>
-        <Table.Td>{formatDateTime(invite.expires_at)}</Table.Td>
-        <Table.Td>{invite.created_by_name}</Table.Td>
-        <Table.Td align={"right"}>
-          <ActionIcon variant="light" onClick={() => confirmDeleteInvite(invite.id)} size={30}>
-            <IconTrash />
-          </ActionIcon>
-        </Table.Td>
-      </Table.Tr>
-    )) ?? [];
+  const rows = invites?.map((invite) => (
+    <Table.Tr key={invite.id}>
+      <Table.Td>{formatDateTime(invite.expires_at)}</Table.Td>
+      <Table.Td>{invite.created_by_name}</Table.Td>
+      <Table.Td align={"right"}>
+        <ActionIcon variant="light" onClick={() => confirmDeleteInvite(invite.id)} size={30}>
+          <IconTrash />
+        </ActionIcon>
+      </Table.Td>
+    </Table.Tr>
+  ));
 
   return (
     <>

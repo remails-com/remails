@@ -3,11 +3,11 @@ import React from "react";
 
 interface StyledTableProps {
   headers: Array<TableThProps | string>;
-  children: React.ReactNode[];
+  children?: React.ReactNode[];
 }
 
 export default function StyledTable({ headers, children }: StyledTableProps) {
-  if (children.length === 0) {
+  if (!children || children.length === 0) {
     return null;
   }
 
