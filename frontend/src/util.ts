@@ -1,5 +1,3 @@
-import { Role } from "./types.ts";
-
 export function formatDateTime(date: number | string | Date): string {
   return new Date(date).toLocaleString("en-US", {
     day: "numeric",
@@ -25,8 +23,4 @@ export function formatNumber(number: number): string {
 
 export function is_in_the_future(date: number | string | Date) {
   return new Date(date).getTime() - new Date().getTime() > 0;
-}
-
-export function is_global_admin(roles: Array<Role>): boolean {
-  return roles.some((role) => role.type === "super_admin");
 }

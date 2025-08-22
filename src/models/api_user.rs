@@ -19,12 +19,20 @@ impl Password {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case", tag = "type")]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "role", rename_all = "lowercase")]
 #[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
-pub enum ApiUserRole {
-    SuperAdmin,
-    OrganizationAdmin { id: OrganizationId },
+pub enum Role {
+    Admin,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, PartialOrd, Ord, Eq))]
+#[serde(rename_all = "snake_case")]
+pub struct OrgRole {
+    pub role: Role,
+    pub org_id: OrganizationId,
 }
 
 #[derive(Debug)]
@@ -32,7 +40,8 @@ pub struct NewApiUser {
     pub email: EmailAddress,
     pub name: String,
     pub password: Option<Password>,
-    pub roles: Vec<ApiUserRole>,
+    pub global_role: Option<Role>,
+    pub org_roles: Vec<OrgRole>,
     pub github_user_id: Option<i64>,
 }
 
@@ -41,7 +50,8 @@ pub struct ApiUser {
     id: ApiUserId,
     pub name: String,
     pub email: EmailAddress,
-    roles: Vec<ApiUserRole>,
+    pub global_role: Option<Role>,
+    pub org_roles: Vec<OrgRole>,
     #[allow(unused)]
     github_user_id: Option<i64>,
     password_enabled: bool,
@@ -60,9 +70,6 @@ pub struct PasswordUpdate {
 }
 
 impl ApiUser {
-    pub fn roles(&self) -> &Vec<ApiUserRole> {
-        &self.roles
-    }
     pub fn id(&self) -> &ApiUserId {
         &self.id
     }
@@ -74,17 +81,20 @@ impl ApiUser {
     }
 }
 
-#[derive(Debug, Clone, Copy, sqlx::Type)]
-#[sqlx(type_name = "role", rename_all = "lowercase")]
-enum PgRole {
-    Admin,
-}
-
-#[derive(Debug, Clone, Copy, sqlx::Type)]
+#[derive(Debug, Clone, sqlx::Type)]
 #[sqlx(type_name = "org_role")]
 struct PgOrgRole {
     org_id: Option<OrganizationId>,
-    role: Option<PgRole>,
+    role: Option<Role>,
+}
+
+impl From<PgOrgRole> for Option<OrgRole> {
+    fn from(role: PgOrgRole) -> Self {
+        Some(OrgRole {
+            org_id: role.org_id?,
+            role: role.role?,
+        })
+    }
 }
 
 struct PgApiUser {
@@ -92,7 +102,7 @@ struct PgApiUser {
     name: String,
     email: String,
     organization_roles: Vec<PgOrgRole>,
-    global_roles: Vec<Option<PgRole>>,
+    global_role: Option<Role>,
     github_user_id: Option<i64>,
     password_enabled: bool,
 }
@@ -101,31 +111,17 @@ impl TryFrom<PgApiUser> for ApiUser {
     type Error = Error;
 
     fn try_from(u: PgApiUser) -> Result<Self, Self::Error> {
-        let mut roles: Vec<ApiUserRole> = u
+        let org_roles = u
             .organization_roles
             .into_iter()
-            .filter_map(|role| {
-                role.role.zip(role.org_id).map(|(role, org_id)| match role {
-                    PgRole::Admin => ApiUserRole::OrganizationAdmin { id: org_id },
-                })
-            })
+            .filter_map(|role| role.into())
             .collect();
-        roles.append(
-            &mut u
-                .global_roles
-                .into_iter()
-                .filter_map(|role| {
-                    role.map(|r| match r {
-                        PgRole::Admin => ApiUserRole::SuperAdmin,
-                    })
-                })
-                .collect(),
-        );
         Ok(Self {
             id: u.id,
             name: u.name,
             email: u.email.parse()?,
-            roles,
+            global_role: u.global_role,
+            org_roles,
             github_user_id: u.github_user_id,
             password_enabled: u.password_enabled,
         })
@@ -149,55 +145,33 @@ impl ApiUserRepository {
 
         let user_id = sqlx::query_scalar!(
             r#"
-            INSERT INTO api_users (id, email, name, password_hash, github_user_id)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4)
+            INSERT INTO api_users (id, email, name, password_hash, github_user_id, global_role)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
             RETURNING id
             "#,
             user.email.as_str(),
             user.name,
             password_hash,
-            user.github_user_id
+            user.github_user_id,
+            user.global_role as Option<Role>
         )
         .fetch_one(&mut *tx)
         .await?;
 
-        let (organization_roles, global_roles) = user.roles.into_iter().fold(
-            (Vec::new(), Vec::new()),
-            |(mut orgs, mut global), role| {
-                match role {
-                    ApiUserRole::SuperAdmin => global.push(PgRole::Admin),
-                    ApiUserRole::OrganizationAdmin { id: org } => orgs.push((org, PgRole::Admin)),
-                }
-                (orgs, global)
-            },
-        );
-
-        for org_role in organization_roles {
+        for OrgRole { role, org_id } in user.org_roles {
             sqlx::query!(
                 r#"
                 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
                 VALUES ($1, $2, $3)
                 "#,
                 user_id,
-                *org_role.0,
-                org_role.1 as PgRole
+                *org_id,
+                role as Role
             )
             .execute(&mut *tx)
             .await?;
         }
 
-        for global_role in global_roles {
-            sqlx::query!(
-                r#"
-                INSERT INTO api_users_global_roles (api_user_id, role)
-                VALUES ($1, $2)
-                "#,
-                user_id,
-                global_role as PgRole
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
         tx.commit().await?;
 
         Ok(self.find_by_id(&user_id.into()).await?.unwrap())
@@ -212,11 +186,10 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE github_user_id = $1
             GROUP BY u.id
             "#,
@@ -351,11 +324,10 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE u.id = $1
             GROUP BY u.id
             "#,
@@ -376,11 +348,10 @@ impl ApiUserRepository {
                    u.name,
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
-                   array_agg(distinct g.role) AS "global_roles!: Vec<Option<PgRole>>",
+                   u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!"
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
-                LEFT JOIN api_users_global_roles g ON u.id = g.api_user_id
             WHERE u.email = $1
             GROUP BY u.id
             "#,
@@ -419,16 +390,17 @@ impl ApiUserRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{ApiUser, ApiUserRepository, ApiUserRole, NewApiUser};
+    use super::*;
     use sqlx::PgPool;
 
     impl ApiUser {
-        pub fn new(roles: Vec<ApiUserRole>) -> Self {
+        pub fn new(global_role: Option<Role>, org_roles: Vec<OrgRole>) -> Self {
             Self {
                 id: "0b8c948a-8f0c-4b63-a70e-78a9a186f7a2".parse().unwrap(),
                 name: "Test Api User".to_string(),
                 email: "test@test.com".parse().unwrap(),
-                roles,
+                global_role,
+                org_roles,
                 github_user_id: None,
                 password_enabled: false,
             }
@@ -437,16 +409,17 @@ mod test {
 
     impl PartialEq<NewApiUser> for ApiUser {
         fn eq(&self, other: &NewApiUser) -> bool {
-            let mut other_roles = other.roles.clone();
-            other_roles.sort();
+            let mut other_org_roles = other.org_roles.clone();
+            other_org_roles.sort();
 
-            let mut self_roles = self.roles.clone();
-            self_roles.sort();
+            let mut self_org_roles = self.org_roles.clone();
+            self_org_roles.sort();
 
             self.github_user_id == other.github_user_id
                 && self.email == other.email
                 && self.name == other.name
-                && self_roles == other_roles
+                && self.global_role == other.global_role
+                && self_org_roles == other_org_roles
         }
     }
 
@@ -456,7 +429,8 @@ mod test {
                 email: self.email.clone(),
                 name: self.name.clone(),
                 password: None,
-                roles: self.roles.clone(),
+                global_role: self.global_role.clone(),
+                org_roles: self.org_roles.clone(),
                 github_user_id: self.github_user_id,
             }
         }
@@ -470,12 +444,11 @@ mod test {
             email: "test@email.com".parse().unwrap(),
             name: "Test User".to_string(),
             password: None,
-            roles: vec![
-                ApiUserRole::SuperAdmin,
-                ApiUserRole::OrganizationAdmin {
-                    id: "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                },
-            ],
+            global_role: Some(Role::Admin),
+            org_roles: vec![OrgRole {
+                role: Role::Admin,
+                org_id: "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+            }],
             github_user_id: Some(123),
         };
 
@@ -487,7 +460,8 @@ mod test {
             email: "test2@email.com".parse().unwrap(),
             name: "Test User 2".to_string(),
             password: None,
-            roles: vec![],
+            global_role: None,
+            org_roles: vec![],
             github_user_id: None,
         };
 

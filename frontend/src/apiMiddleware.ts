@@ -61,14 +61,8 @@ export default async function apiMiddleware(
   }
 
   // navigate to the first organization if none is selected
-  if (
-    navState.to.name === "default" &&
-    user?.roles &&
-    user?.roles.length > 0 &&
-    organizations &&
-    organizations.length > 0
-  ) {
-    newOrgId = user?.roles.find((r) => r.type === "organization_admin")?.id || organizations[0].id;
+  if (navState.to.name === "default" && user?.org_roles && organizations && organizations.length > 0) {
+    newOrgId = user?.org_roles.find((r) => r.role === "admin")?.org_id || organizations[0].id;
     navState.to = router.navigate("projects", {
       org_id: newOrgId,
     });

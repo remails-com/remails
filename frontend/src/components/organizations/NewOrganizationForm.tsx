@@ -59,7 +59,7 @@ export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
         done(newOrg);
         dispatch({
           type: "set_user",
-          user: { ...user, roles: [...user.roles, { type: "organization_admin", id: newOrg.id }] },
+          user: { ...user, org_roles: [...user.org_roles, { role: "admin", org_id: newOrg.id }] },
         });
         dispatch({ type: "add_organization", organization: newOrg });
       }

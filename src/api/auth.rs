@@ -1,8 +1,6 @@
 use crate::{
     api::{ApiState, error::ApiError, whoami::WhoamiResponse},
-    models::{
-        ApiUser, ApiUserId, ApiUserRepository, ApiUserRole, NewApiUser, OrganizationId, Password,
-    },
+    models::{ApiUser, ApiUserId, ApiUserRepository, NewApiUser, OrganizationId, Password, Role},
 };
 use axum::{
     Json, RequestPartsExt,
@@ -24,31 +22,21 @@ static SESSION_COOKIE_NAME: &str = "SESSION";
 
 impl ApiUser {
     pub fn is_super_admin(&self) -> bool {
-        self.roles()
-            .iter()
-            .any(|r| matches!(r, ApiUserRole::SuperAdmin))
+        self.global_role
+            .as_ref()
+            .is_some_and(|role| *role == Role::Admin)
     }
 
     pub fn is_org_admin(&self, org_id: &OrganizationId) -> bool {
-        self.roles().iter().any(|role| {
-            if let ApiUserRole::OrganizationAdmin { id } = role {
-                id == org_id
-            } else {
-                false
-            }
-        })
+        self.org_roles
+            .iter()
+            .any(|org_role| org_role.org_id == *org_id && org_role.role == Role::Admin)
     }
 
     pub fn viewable_organizations(&self) -> Vec<uuid::Uuid> {
-        self.roles()
+        self.org_roles
             .iter()
-            .filter_map(|role| {
-                if let ApiUserRole::OrganizationAdmin { id } = role {
-                    Some(**id)
-                } else {
-                    None
-                }
-            })
+            .map(|org_role| *org_role.org_id)
             .collect()
     }
 }
@@ -171,7 +159,8 @@ pub(super) async fn password_register(
         email: register_attempt.email,
         name: register_attempt.name.trim().to_string(),
         password: Some(register_attempt.password),
-        roles: vec![],
+        global_role: None,
+        org_roles: vec![],
         github_user_id: None,
     };
 
@@ -243,10 +232,14 @@ where
             if let Some(header) = parts.headers.get("X-Test-Login") {
                 trace!("Test log in based on `X-Test-Login` header");
                 match header.to_str().unwrap() {
-                    "admin" => Ok(ApiUser::new(vec![ApiUserRole::SuperAdmin])),
-                    token => Ok(ApiUser::new(vec![ApiUserRole::OrganizationAdmin {
-                        id: token.parse().unwrap(),
-                    }])),
+                    "admin" => Ok(ApiUser::new(Some(Role::Admin), vec![])),
+                    token => Ok(ApiUser::new(
+                        None,
+                        vec![crate::models::OrgRole {
+                            role: Role::Admin,
+                            org_id: token.parse().unwrap(),
+                        }],
+                    )),
                 }
             } else {
                 warn!("No valid X-Test-Login header");
