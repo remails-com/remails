@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::json;
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct WhoamiResponse {
     pub id: ApiUserId,
     pub name: String,

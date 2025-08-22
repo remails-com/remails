@@ -10,3 +10,6 @@ VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', 'test-api@user-2', 'Test API Use
 
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', '5d55aec5-136a-407c-952f-5348d4398204', 'admin');
+
+INSERT INTO api_users (id, email, name)
+VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3');

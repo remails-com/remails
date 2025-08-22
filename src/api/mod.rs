@@ -474,3 +474,57 @@ async fn append_default_headers(
 
     res
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use http::Method;
+    use std::net::{Ipv4Addr, SocketAddrV4};
+    use tower::{ServiceExt, util::Oneshot};
+
+    use crate::models::ApiUserId;
+
+    use super::*;
+
+    pub struct TestServer {
+        server: ApiServer,
+        user: ApiUserId,
+    }
+
+    impl TestServer {
+        pub async fn new(pool: PgPool, user: ApiUserId) -> Self {
+            let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
+            let shutdown = CancellationToken::new();
+            let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
+            TestServer { server, user }
+        }
+
+        pub fn set_user(&mut self, user: ApiUserId) {
+            self.user = user;
+        }
+
+        pub fn request(
+            &self,
+            method: Method,
+            uri: String,
+            body: Body,
+        ) -> Oneshot<Router, Request<Body>> {
+            let request = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("X-Test-Login-ID", self.user.to_string())
+                .body(body)
+                .unwrap();
+
+            self.server.router.clone().oneshot(request)
+        }
+    }
+
+    pub async fn deserialize_body<T>(body: Body) -> T
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let bytes = axum::body::to_bytes(body, 8192).await.unwrap();
+        serde_json::from_slice(&bytes).expect("Failed to deserialize response body")
+    }
+}

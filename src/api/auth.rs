@@ -3,20 +3,24 @@ use crate::{
     models::{ApiUser, ApiUserId, ApiUserRepository, NewApiUser, OrganizationId, Password, Role},
 };
 use axum::{
-    Json, RequestPartsExt,
-    extract::{ConnectInfo, FromRef, FromRequestParts, OptionalFromRequestParts, State},
+    Json,
+    extract::{FromRef, FromRequestParts, OptionalFromRequestParts, State},
     http::{StatusCode, request::Parts},
     response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
 };
+#[cfg(not(test))]
+use axum::{RequestPartsExt, extract::ConnectInfo};
 use axum_extra::extract::PrivateCookieJar;
 use chrono::{DateTime, Duration, Utc};
 use cookie::{Cookie, SameSite};
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr};
+use std::convert::Infallible;
 #[cfg(not(test))]
-use tracing::debug;
-use tracing::{error, trace, warn};
+use std::net::SocketAddr;
+#[cfg(not(test))]
+use tracing::{debug, error};
+use tracing::{trace, warn};
 
 static SESSION_COOKIE_NAME: &str = "SESSION";
 
@@ -217,15 +221,18 @@ where
 
     #[cfg_attr(test, allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
-            error!("could not determine client IP address");
+        #[cfg(not(test))]
+        {
+            let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
+                error!("could not determine client IP address");
 
-            return Err(ApiError::BadRequest(
-                "could not determine client IP address".to_string(),
-            ));
-        };
-        let ip = connection.ip();
-        trace!("authentication attempt from {ip}");
+                return Err(ApiError::BadRequest(
+                    "could not determine client IP address".to_string(),
+                ));
+            };
+            let ip = connection.ip();
+            trace!("authentication attempt from {ip}");
+        }
 
         #[cfg(test)]
         {
@@ -241,6 +248,14 @@ where
                         }],
                     )),
                 }
+            } else if let Some(header) = parts.headers.get("X-Test-Login-ID") {
+                trace!("Test log in based on `X-Test-Login-ID` header");
+                let user_id: ApiUserId = header.to_str().unwrap().parse().unwrap();
+                let user = ApiUserRepository::from_ref(state)
+                    .find_by_id(&user_id)
+                    .await?
+                    .ok_or(ApiError::Unauthorized)?;
+                Ok(user)
             } else {
                 warn!("No valid X-Test-Login header");
                 Err(ApiError::Unauthorized)
