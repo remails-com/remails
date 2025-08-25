@@ -61,7 +61,7 @@ jobs:
           path: frontend/dist/
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: stable
 
