@@ -162,7 +162,6 @@ mod tests {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let user_c = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // is not in any org
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let _org_2 = "5d55aec5-136a-407c-952f-5348d4398204";
         let mut server = TestServer::new(pool.clone(), user_a).await;
 
         // start with no invites
@@ -209,23 +208,20 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // get the previously create invite
-        let response = server.get(invite_endpoint.clone()).await.unwrap();
+        let response = server.get(&invite_endpoint).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let invite: ApiInvite = deserialize_body(response.into_body()).await;
         assert_eq!(invite.organization_id().to_string(), org_1);
         assert_eq!(*invite.created_by(), user_a);
 
         // use invite
-        let response = server
-            .post(invite_endpoint.clone(), Body::empty())
-            .await
-            .unwrap();
+        let response = server.post(&invite_endpoint, Body::empty()).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
         let organization: Organization = deserialize_body(response.into_body()).await;
         assert_eq!(organization.id().to_string(), org_1);
 
         // user_b should now be an admin of org_1
-        let response = server.get("/api/whoami".to_owned()).await.unwrap();
+        let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
         assert_eq!(whoami.id, user_b);
@@ -242,12 +238,9 @@ mod tests {
 
         // user_c can't get or use the same invite
         server.set_user(user_c);
-        let response = server
-            .post(invite_endpoint.clone(), Body::empty())
-            .await
-            .unwrap();
+        let response = server.post(&invite_endpoint, Body::empty()).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let response = server.get(invite_endpoint).await.unwrap();
+        let response = server.get(&invite_endpoint).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

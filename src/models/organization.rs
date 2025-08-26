@@ -54,7 +54,7 @@ impl Organization {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NewOrganization {
-    name: String,
+    pub name: String,
 }
 
 #[derive(Clone)]

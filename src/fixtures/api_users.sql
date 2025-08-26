@@ -13,3 +13,6 @@ VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', '5d55aec5-136a-407c-952f-5348d43
 
 INSERT INTO api_users (id, email, name)
 VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3');
+
+INSERT INTO api_users (id, email, name, global_role)
+VALUES ('deadbeef-4e43-4a66-bbb9-fbcd4a933a34', 'sudo@remails', 'Super Admin', 'admin');

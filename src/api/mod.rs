@@ -503,15 +503,15 @@ mod tests {
             self.user = user;
         }
 
-        pub fn request(
+        pub fn request<U: AsRef<str>>(
             &self,
             method: Method,
-            uri: String,
+            uri: U,
             body: Body,
         ) -> Oneshot<Router, Request<Body>> {
             let request = Request::builder()
                 .method(method)
-                .uri(uri)
+                .uri(uri.as_ref())
                 .header("X-Test-Login-ID", self.user.to_string())
                 .header("Content-Type", "application/json")
                 .body(body)
@@ -520,19 +520,19 @@ mod tests {
             self.server.router.clone().oneshot(request)
         }
 
-        pub fn get(&self, uri: String) -> Oneshot<Router, Request<Body>> {
+        pub fn get<U: AsRef<str>>(&self, uri: U) -> Oneshot<Router, Request<Body>> {
             self.request(Method::GET, uri, Body::empty())
         }
 
-        pub fn post(&self, uri: String, body: Body) -> Oneshot<Router, Request<Body>> {
+        pub fn post<U: AsRef<str>>(&self, uri: U, body: Body) -> Oneshot<Router, Request<Body>> {
             self.request(Method::POST, uri, body)
         }
 
-        pub fn put(&self, uri: String, body: Body) -> Oneshot<Router, Request<Body>> {
+        pub fn put<U: AsRef<str>>(&self, uri: U, body: Body) -> Oneshot<Router, Request<Body>> {
             self.request(Method::PUT, uri, body)
         }
 
-        pub fn delete(&self, uri: String) -> Oneshot<Router, Request<Body>> {
+        pub fn delete<U: AsRef<str>>(&self, uri: U) -> Oneshot<Router, Request<Body>> {
             self.request(Method::DELETE, uri, Body::empty())
         }
     }
