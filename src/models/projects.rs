@@ -29,6 +29,7 @@ impl ProjectId {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct Project {
     id: ProjectId,
     organization_id: OrganizationId,
@@ -44,8 +45,9 @@ impl Project {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct NewProject {
-    name: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]

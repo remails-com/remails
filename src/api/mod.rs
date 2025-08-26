@@ -513,11 +513,36 @@ mod tests {
                 .method(method)
                 .uri(uri)
                 .header("X-Test-Login-ID", self.user.to_string())
+                .header("Content-Type", "application/json")
                 .body(body)
                 .unwrap();
 
             self.server.router.clone().oneshot(request)
         }
+
+        pub fn get(&self, uri: String) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::GET, uri, Body::empty())
+        }
+
+        pub fn post(&self, uri: String, body: Body) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::POST, uri, body)
+        }
+
+        pub fn put(&self, uri: String, body: Body) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::PUT, uri, body)
+        }
+
+        pub fn delete(&self, uri: String) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::DELETE, uri, Body::empty())
+        }
+    }
+
+    pub fn serialize_body<T>(body: T) -> Body
+    where
+        T: serde::Serialize,
+    {
+        let json = serde_json::to_string(&body).unwrap();
+        Body::from(json)
     }
 
     pub async fn deserialize_body<T>(body: Body) -> T

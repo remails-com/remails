@@ -142,7 +142,7 @@ pub async fn accept_invite(
 
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, http::Method};
+    use axum::body::Body;
     use http::StatusCode;
     use sqlx::PgPool;
 
@@ -166,17 +166,14 @@ mod tests {
         let mut server = TestServer::new(pool.clone(), user_a).await;
 
         // start with no invites
-        let response = server
-            .request(Method::GET, format!("/api/invite/{org_1}"), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let invites: Vec<ApiInvite> = deserialize_body(response.into_body()).await;
         assert_eq!(invites.len(), 0);
 
         // create a new invite
         let response = server
-            .request(Method::POST, format!("/api/invite/{org_1}"), Body::empty())
+            .post(format!("/api/invite/{org_1}"), Body::empty())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
@@ -186,10 +183,7 @@ mod tests {
         assert_eq!(*created_invite.created_by(), user_a);
 
         // new invite created
-        let response = server
-            .request(Method::GET, format!("/api/invite/{org_1}"), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let invites: Vec<ApiInvite> = deserialize_body(response.into_body()).await;
         assert_eq!(invites.len(), 1);
@@ -204,24 +198,18 @@ mod tests {
         server.set_user(user_b);
 
         // can't get all invites for other organizations
-        let response = server
-            .request(Method::GET, format!("/api/invite/{org_1}"), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // can't create invite for other organizations
         let response = server
-            .request(Method::POST, format!("/api/invite/{org_1}"), Body::empty())
+            .post(format!("/api/invite/{org_1}"), Body::empty())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // get the previously create invite
-        let response = server
-            .request(Method::GET, invite_endpoint.clone(), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(invite_endpoint.clone()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let invite: ApiInvite = deserialize_body(response.into_body()).await;
         assert_eq!(invite.organization_id().to_string(), org_1);
@@ -229,7 +217,7 @@ mod tests {
 
         // use invite
         let response = server
-            .request(Method::POST, invite_endpoint.clone(), Body::empty())
+            .post(invite_endpoint.clone(), Body::empty())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
@@ -237,10 +225,7 @@ mod tests {
         assert_eq!(organization.id().to_string(), org_1);
 
         // user_b should now be an admin of org_1
-        let response = server
-            .request(Method::GET, "/api/whoami".to_owned(), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get("/api/whoami".to_owned()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
         assert_eq!(whoami.id, user_b);
@@ -250,10 +235,7 @@ mod tests {
         }));
 
         // now user_b can see the invites of org_1
-        let response = server
-            .request(Method::GET, format!("/api/invite/{org_1}"), Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let invites: Vec<ApiInvite> = deserialize_body(response.into_body()).await;
         assert_eq!(invites.len(), 0); // invite was removed after use
@@ -261,14 +243,11 @@ mod tests {
         // user_c can't get or use the same invite
         server.set_user(user_c);
         let response = server
-            .request(Method::POST, invite_endpoint.clone(), Body::empty())
+            .post(invite_endpoint.clone(), Body::empty())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let response = server
-            .request(Method::GET, invite_endpoint, Body::empty())
-            .await
-            .unwrap();
+        let response = server.get(invite_endpoint).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
