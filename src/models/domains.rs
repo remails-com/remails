@@ -43,7 +43,7 @@ impl Debug for DomainParent {
 #[derive(sqlx::Type, Serialize, Deserialize, Debug)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
-enum DkimKeyType {
+pub enum DkimKeyType {
     RsaSha256,
     Ed25519,
 }
@@ -114,6 +114,7 @@ impl Debug for DkimKey {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ApiDomain {
     id: DomainId,
     parent_id: DomainParent,
@@ -215,9 +216,10 @@ impl ApiDomain {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct NewDomain {
-    domain: String,
-    dkim_key_type: DkimKeyType,
+    pub domain: String,
+    pub dkim_key_type: DkimKeyType,
 }
 
 #[derive(Clone)]
