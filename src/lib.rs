@@ -30,6 +30,7 @@ mod moneybird;
 pub use moneybird::*;
 
 #[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub enum Environment {
     Staging,
     Production,

@@ -120,7 +120,7 @@ mod tests {
     async fn test_project_lifecycle(pool: PgPool) {
         let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let server = TestServer::new(pool.clone(), user_a).await;
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
         // start with no projects
         let response = server
@@ -207,7 +207,7 @@ mod tests {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
-        let server = TestServer::new(pool.clone(), user_b).await;
+        let server = TestServer::new(pool.clone(), Some(user_b)).await;
 
         // can't list projects
         let response = server

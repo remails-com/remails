@@ -131,7 +131,7 @@ mod tests {
         let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        let server = TestServer::new(pool.clone(), user_a).await;
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
         // start without streams
         let response = server
@@ -233,7 +233,7 @@ mod tests {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
-        let server = TestServer::new(pool.clone(), user_b).await;
+        let server = TestServer::new(pool.clone(), Some(user_b)).await;
 
         // can't list streams
         let response = server

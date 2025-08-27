@@ -212,7 +212,7 @@ mod tests {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
-        let server = TestServer::new(pool.clone(), user_1).await;
+        let server = TestServer::new(pool.clone(), Some(user_1)).await;
 
         // list messages
         let response = server
@@ -287,7 +287,7 @@ mod tests {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
-        let server = TestServer::new(pool.clone(), user_2).await;
+        let server = TestServer::new(pool.clone(), Some(user_2)).await;
 
         // can't list messages
         let response = server

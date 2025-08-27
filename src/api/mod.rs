@@ -71,6 +71,7 @@ pub enum ApiServerError {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RemailsConfig {
     pub version: String,
     pub environment: Environment,
@@ -492,18 +493,18 @@ mod tests {
 
     pub struct TestServer {
         server: ApiServer,
-        user: ApiUserId,
+        user: Option<ApiUserId>,
     }
 
     impl TestServer {
-        pub async fn new(pool: PgPool, user: ApiUserId) -> Self {
+        pub async fn new(pool: PgPool, user: Option<ApiUserId>) -> Self {
             let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
             let shutdown = CancellationToken::new();
             let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
             TestServer { server, user }
         }
 
-        pub fn set_user(&mut self, user: ApiUserId) {
+        pub fn set_user(&mut self, user: Option<ApiUserId>) {
             self.user = user;
         }
 
@@ -513,13 +514,16 @@ mod tests {
             uri: U,
             body: Body,
         ) -> Oneshot<Router, Request<Body>> {
-            let request = Request::builder()
+            let mut request = Request::builder()
                 .method(method)
                 .uri(uri.as_ref())
-                .header("X-Test-Login-ID", self.user.to_string())
-                .header("Content-Type", "application/json")
-                .body(body)
-                .unwrap();
+                .header("Content-Type", "application/json");
+
+            if let Some(user) = &self.user {
+                request = request.header("X-Test-Login-ID", user.to_string());
+            }
+
+            let request = request.body(body).unwrap();
 
             self.server.router.clone().oneshot(request)
         }
@@ -555,5 +559,23 @@ mod tests {
     {
         let bytes = axum::body::to_bytes(body, 8192).await.unwrap();
         serde_json::from_slice(&bytes).expect("Failed to deserialize response body")
+    }
+
+    #[sqlx::test]
+    async fn test_util_endpoints(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        // can access health check
+        let response = server.get("/api/healthy").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        assert!(bytes.iter().eq(b"{\"healthy\":true,\"status\":\"OK\"}"));
+
+        // can access Remails config
+        let response = server.get("/api/config").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: RemailsConfig = deserialize_body(response.into_body()).await;
     }
 }

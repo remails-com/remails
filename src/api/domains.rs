@@ -188,7 +188,7 @@ mod tests {
 
     async fn test_domain_lifecycle(pool: PgPool, endpoint: String) {
         let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
-        let server = TestServer::new(pool.clone(), user_a).await;
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
         // start without domains
         let response = server.get(format!("{endpoint}/domains")).await.unwrap();
@@ -274,7 +274,7 @@ mod tests {
 
     async fn test_domains_no_access(pool: PgPool, endpoint: String, domain_id: &str) {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is only member of org 2
-        let server = TestServer::new(pool.clone(), user_b).await;
+        let server = TestServer::new(pool.clone(), Some(user_b)).await;
 
         // can't list domains for other organizations
         let response = server.get(format!("{endpoint}/domains")).await.unwrap();

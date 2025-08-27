@@ -142,7 +142,7 @@ mod tests {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
-        let mut server = TestServer::new(pool.clone(), user_1).await;
+        let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
 
         // users should be able to list their organizations
         let response = server.get("/api/organizations").await.unwrap();
@@ -154,7 +154,7 @@ mod tests {
 
         // users without organizations don't see any organizations
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // has no organizations
-        server.set_user(user_3);
+        server.set_user(Some(user_3));
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
@@ -162,17 +162,22 @@ mod tests {
 
         // super admin should be able to list all organizations
         let super_admin = "deadbeef-4e43-4a66-bbb9-fbcd4a933a34".parse().unwrap();
-        server.set_user(super_admin);
+        server.set_user(Some(super_admin));
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
         assert_eq!(organizations.len(), 6);
+
+        // not logged in users can't list organizations
+        server.set_user(None);
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_organization_lifecycle(pool: PgPool) {
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // has no organizations
-        let server = TestServer::new(pool.clone(), user_3).await;
+        let server = TestServer::new(pool.clone(), Some(user_3)).await;
 
         // start with no organizations
         let response = server.get("/api/organizations").await.unwrap();
@@ -267,7 +272,7 @@ mod tests {
     async fn test_organization_no_access(pool: PgPool) {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let server = TestServer::new(pool.clone(), user_b).await;
+        let mut server = TestServer::new(pool.clone(), Some(user_b)).await;
 
         // can't get organization
         let response = server
@@ -294,5 +299,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // not logged in users can't create organization
+        server.set_user(None);
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

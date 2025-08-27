@@ -162,7 +162,7 @@ mod tests {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let user_c = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // is not in any org
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let mut server = TestServer::new(pool.clone(), user_a).await;
+        let mut server = TestServer::new(pool.clone(), Some(user_a)).await;
 
         // start with no invites
         let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
@@ -194,7 +194,7 @@ mod tests {
         );
 
         // switch to other user
-        server.set_user(user_b);
+        server.set_user(Some(user_b));
 
         // can't get all invites for other organizations
         let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(invites.len(), 0); // invite was removed after use
 
         // user_c can't get or use the same invite
-        server.set_user(user_c);
+        server.set_user(Some(user_c));
         let response = server.post(&invite_endpoint, Body::empty()).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let response = server.get(&invite_endpoint).await.unwrap();
