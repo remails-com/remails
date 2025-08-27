@@ -29,12 +29,14 @@ pub struct SmtpCredential {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct SmtpCredentialRequest {
     pub(crate) description: String,
     pub(crate) username: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct SmtpCredentialUpdateRequest {
     pub(crate) description: String,
 }
@@ -60,6 +62,16 @@ impl SmtpCredentialResponse {
     pub fn username(&self) -> String {
         self.username.clone()
     }
+
+    #[cfg(test)]
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    #[cfg(test)]
+    pub fn stream_id(&self) -> StreamId {
+        self.stream_id
+    }
 }
 
 impl SmtpCredential {
@@ -77,6 +89,11 @@ impl SmtpCredential {
 
     pub fn username(&self) -> &str {
         &self.username
+    }
+
+    #[cfg(test)]
+    pub fn description(&self) -> &str {
+        &self.description
     }
 }
 
