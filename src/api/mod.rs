@@ -29,6 +29,7 @@ use axum::{
     Json, Router,
     extract::{FromRef, Request, State},
     middleware,
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
 use base64ct::Encoding;
@@ -47,7 +48,6 @@ use tracing::{
 
 mod api_users;
 mod auth;
-mod config;
 pub mod domains;
 mod error;
 mod invites;
@@ -274,7 +274,7 @@ impl ApiServer {
         };
 
         let mut router = Router::new()
-            .route("/config", get(config::config))
+            .route("/config", get(config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/webhook/moneybird", post(moneybird_webhook))
@@ -447,6 +447,10 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
             })
         }
     }
+}
+
+pub async fn config(State(config): State<RemailsConfig>) -> Response {
+    Json(config).into_response()
 }
 
 async fn append_default_headers(
