@@ -182,3 +182,148 @@ pub async fn update_to_retry_asap(
 
     Ok(axum::Json(update))
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use http::StatusCode;
+    use sqlx::PgPool;
+
+    use crate::{
+        api::tests::{TestServer, deserialize_body},
+        models::MessageStatus,
+    };
+
+    use super::*;
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_messages_lifecycle(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
+        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
+        let server = TestServer::new(pool.clone(), user_1).await;
+
+        // list messages
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        let messages_in_fixture = 5;
+        assert_eq!(messages.len(), messages_in_fixture);
+
+        // get specific message
+        let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let message: ApiMessage = deserialize_body(response.into_body()).await;
+        assert_eq!(*message.status(), MessageStatus::Processing);
+        assert_eq!(message.id().to_string(), message_1);
+
+        // update message to retry asap
+        let response = server
+            .put(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}/retry"
+            ), Body::empty())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: MessageRetryUpdate = deserialize_body(response.into_body()).await;
+
+        // remove message
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // check if message is deleted
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        assert_eq!(messages.len(), messages_in_fixture - 1);
+        assert!(!messages.iter().any(|m| m.id == message_1.parse().unwrap()));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_messages_no_access(pool: PgPool) {
+        let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
+        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
+        let server = TestServer::new(pool.clone(), user_2).await;
+
+        // can't list messages
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't get specific message
+        let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't update message to retry asap
+        let response = server
+            .put(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}/retry"
+            ), Body::empty())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't remove message
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+}
