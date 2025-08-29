@@ -508,7 +508,7 @@ mod tests {
             self.user = user;
         }
 
-        pub fn request<U: AsRef<str>>(
+        fn request<U: AsRef<str>>(
             &self,
             method: Method,
             uri: U,
@@ -542,6 +542,14 @@ mod tests {
 
         pub fn delete<U: AsRef<str>>(&self, uri: U) -> Oneshot<Router, Request<Body>> {
             self.request(Method::DELETE, uri, Body::empty())
+        }
+
+        pub fn delete_with_body<U: AsRef<str>>(
+            &self,
+            uri: U,
+            body: Body,
+        ) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::DELETE, uri, body)
         }
     }
 

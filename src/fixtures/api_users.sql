@@ -11,8 +11,8 @@ VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', 'test-api@user-2', 'Test API Use
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', '5d55aec5-136a-407c-952f-5348d4398204', 'admin');
 
-INSERT INTO api_users (id, email, name)
-VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3');
+INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
+VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3', '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
 
 INSERT INTO api_users (id, email, name, global_role)
 VALUES ('deadbeef-4e43-4a66-bbb9-fbcd4a933a34', 'sudo@remails', 'Super Admin', 'admin');

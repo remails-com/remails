@@ -58,6 +58,7 @@ pub struct ApiUser {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct ApiUserUpdate {
     pub name: String,
     pub email: EmailAddress,
