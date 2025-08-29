@@ -484,7 +484,10 @@ async fn append_default_headers(
 mod tests {
     use axum::body::Body;
     use http::Method;
-    use std::net::{Ipv4Addr, SocketAddrV4};
+    use std::{
+        collections::HashMap,
+        net::{Ipv4Addr, SocketAddrV4},
+    };
     use tower::{ServiceExt, util::Oneshot};
 
     use crate::models::ApiUserId;
@@ -493,7 +496,7 @@ mod tests {
 
     pub struct TestServer {
         server: ApiServer,
-        user: Option<ApiUserId>,
+        pub headers: HashMap<&'static str, String>,
     }
 
     impl TestServer {
@@ -501,11 +504,20 @@ mod tests {
             let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
             let shutdown = CancellationToken::new();
             let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
-            TestServer { server, user }
+            let mut headers = HashMap::new();
+            headers.insert("Content-Type", "application/json".to_string());
+            if let Some(user) = user {
+                headers.insert("X-Test-Login-ID", user.to_string());
+            }
+            TestServer { server, headers }
         }
 
         pub fn set_user(&mut self, user: Option<ApiUserId>) {
-            self.user = user;
+            if let Some(user) = user {
+                self.headers.insert("X-Test-Login-ID", user.to_string());
+            } else {
+                self.headers.remove("X-Test-Login-ID");
+            }
         }
 
         fn request<U: AsRef<str>>(
@@ -514,13 +526,10 @@ mod tests {
             uri: U,
             body: Body,
         ) -> Oneshot<Router, Request<Body>> {
-            let mut request = Request::builder()
-                .method(method)
-                .uri(uri.as_ref())
-                .header("Content-Type", "application/json");
+            let mut request = Request::builder().method(method).uri(uri.as_ref());
 
-            if let Some(user) = &self.user {
-                request = request.header("X-Test-Login-ID", user.to_string());
+            for (&name, value) in self.headers.iter() {
+                request = request.header(name, value);
             }
 
             let request = request.body(body).unwrap();

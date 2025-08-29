@@ -19,8 +19,8 @@ use std::convert::Infallible;
 #[cfg(not(test))]
 use std::net::SocketAddr;
 #[cfg(not(test))]
-use tracing::{debug, error};
-use tracing::{trace, warn};
+use tracing::error;
+use tracing::{debug, trace, warn};
 
 static SESSION_COOKIE_NAME: &str = "SESSION";
 
@@ -100,7 +100,6 @@ pub struct UserCookie {
     expires_at: DateTime<Utc>,
 }
 
-#[cfg(not(test))]
 impl UserCookie {
     pub fn id(&self) -> &ApiUserId {
         &self.id
@@ -230,15 +229,14 @@ where
                     "could not determine client IP address".to_string(),
                 ));
             };
-            let ip = connection.ip();
-            trace!("authentication attempt from {ip}");
+            trace!("authentication attempt from {}", connection.ip());
         }
 
         #[cfg(test)]
         {
             if let Some(header) = parts.headers.get("X-Test-Login") {
                 trace!("Test log in based on `X-Test-Login` header");
-                match header.to_str().unwrap() {
+                return match header.to_str().unwrap() {
                     "admin" => Ok(ApiUser::new(Some(Role::Admin), vec![])),
                     token => Ok(ApiUser::new(
                         None,
@@ -247,7 +245,7 @@ where
                             org_id: token.parse().unwrap(),
                         }],
                     )),
-                }
+                };
             } else if let Some(header) = parts.headers.get("X-Test-Login-ID") {
                 trace!("Test log in based on `X-Test-Login-ID` header");
                 let user_id: ApiUserId = header.to_str().unwrap().parse().unwrap();
@@ -255,42 +253,36 @@ where
                     .find_by_id(&user_id)
                     .await?
                     .ok_or(ApiError::Unauthorized)?;
-                Ok(user)
-            } else {
-                warn!("No valid X-Test-Login header");
-                Err(ApiError::Unauthorized)
+                return Ok(user);
             }
         }
 
-        #[cfg(not(test))]
-        {
-            let api_state: ApiState = FromRef::from_ref(state);
-            let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+        let api_state: ApiState = FromRef::from_ref(state);
+        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
 
-            let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
 
-            match serde_json::from_str::<UserCookie>(session_cookie.value()) {
-                Ok(user) => {
-                    if user.expires_at() < &Utc::now() {
-                        warn!(
-                            user_id = user.id().to_string(),
-                            "Received expired user cookie"
-                        );
-                        Err(ApiError::Unauthorized)?
-                    }
-                    trace!(
+        match serde_json::from_str::<UserCookie>(session_cookie.value()) {
+            Ok(user) => {
+                if user.expires_at() < &Utc::now() {
+                    warn!(
                         user_id = user.id().to_string(),
-                        "extracted user from session cookie"
+                        "Received expired user cookie"
                     );
-                    Ok(ApiUserRepository::from_ref(state)
-                        .find_by_id(user.id())
-                        .await?
-                        .ok_or(ApiError::Unauthorized)?)
+                    Err(ApiError::Unauthorized)?
                 }
-                Err(err) => {
-                    debug!("Invalid session cookie: {err:?}");
-                    Err(ApiError::Unauthorized)
-                }
+                trace!(
+                    user_id = user.id().to_string(),
+                    "extracted user from session cookie"
+                );
+                Ok(ApiUserRepository::from_ref(state)
+                    .find_by_id(user.id())
+                    .await?
+                    .ok_or(ApiError::Unauthorized)?)
+            }
+            Err(err) => {
+                debug!("Invalid session cookie: {err:?}");
+                Err(ApiError::Unauthorized)
             }
         }
     }
@@ -313,5 +305,94 @@ where
                 .await
                 .ok(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    use crate::api::tests::{TestServer, serialize_body};
+
+    use super::*;
+
+    fn get_session_cookie(response: Response<Body>) -> String {
+        let cookies = response.headers().get_all("set-cookie");
+        let cookies = cookies.iter().collect::<Vec<_>>();
+        assert_eq!(cookies.len(), 1);
+        let mut parts = cookies[0].to_str().unwrap().split(';');
+        let session = parts
+            .find(|s| s.trim().starts_with(&format!("{SESSION_COOKIE_NAME}=")))
+            .unwrap();
+        session.trim().to_string()
+    }
+
+    #[sqlx::test]
+    async fn test_password_login(pool: PgPool) {
+        let mut server = TestServer::new(pool, None).await;
+
+        // can't get organizations
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // register with password
+        let response = server
+            .post(
+                "/api/register/password",
+                serialize_body(json!({
+                    "name": "New User",
+                    "email": "test-api@new-user",
+                    "password": "unsecure",
+                    "terms": true
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let session = get_session_cookie(response);
+
+        // now you can get organizations
+        server.headers.insert("Cookie", session);
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // logout
+        let response = server.get("/api/logout").await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let session = get_session_cookie(response);
+        assert_eq!(session, format!("{SESSION_COOKIE_NAME}=")); // empty session
+
+        // now you can't get organizations anymore
+        server.headers.insert("Cookie", session);
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // login with password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-api@new-user",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+
+        // now you can get organizations again
+        server.headers.insert("Cookie", session);
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // invalid session cookies won't work
+        server
+            .headers
+            .insert("Cookie", "invalid_session".to_string());
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }
