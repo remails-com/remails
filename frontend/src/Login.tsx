@@ -3,7 +3,6 @@ import {
   Anchor,
   Button,
   Center,
-  Checkbox,
   Divider,
   Group,
   Paper,
@@ -42,13 +41,11 @@ export default function Login({ setUser }: LoginProps) {
       email: "",
       name: "",
       password: "",
-      terms: false,
     },
     validate: {
       name: (val) => (type === "register" && val.trim().length === 0 ? "Name cannot be empty" : null),
       email: (val) => (/^\S+@\S+$/.test(val) ? null : "Invalid email"),
       password: (val) => (val.length <= 6 ? "Password should include at least 6 characters" : null),
-      terms: (val) => type === "register" && !val,
     },
   });
 
@@ -62,7 +59,7 @@ export default function Login({ setUser }: LoginProps) {
     return navigate("default");
   };
 
-  const submit = ({ email, name, password, terms }: SignUpRequest) => {
+  const submit = ({ email, name, password }: SignUpRequest) => {
     setGlobalError(null);
     if (type === "login") {
       fetch("/api/login/password", {
@@ -89,7 +86,7 @@ export default function Login({ setUser }: LoginProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, name, password, terms }),
+        body: JSON.stringify({ email, name, password }),
       }).then((res) => {
         if (res.status === 409) {
           form.setFieldError("email", "This email is already registered, try logging in instead");
@@ -109,9 +106,9 @@ export default function Login({ setUser }: LoginProps) {
 
   return (
     <Center mih="100vh">
-      <Paper radius="md" p="xl" withBorder>
+      <Paper radius="md" p="xl" withBorder w="400">
         <RemailsLogo style={{ height: 45 }} />
-        <Text size="md">Welcome! {type} with:</Text>
+        <Text size="md">Welcome! {type == "login" ? "Login" : "Register"} with:</Text>
 
         <Group grow mb="md" mt="md">
           <Button
@@ -127,12 +124,14 @@ export default function Login({ setUser }: LoginProps) {
           </Button>
         </Group>
 
-        <Divider label="Or continue with email:" labelPosition="center" my="lg" />
+        {/* TODO: increase label size */}
+        <Divider label={<Text size="sm">or continue with email:</Text>} labelPosition="center" my="lg" />
 
         <form onSubmit={form.onSubmit(submit)}>
           <Stack>
             {type === "register" && (
               <TextInput
+                required
                 label="Name"
                 placeholder="Your name"
                 value={form.values.name}
@@ -162,15 +161,6 @@ export default function Login({ setUser }: LoginProps) {
               radius="md"
             />
 
-            {type === "register" && (
-              <Checkbox
-                label="I accept terms and conditions"
-                checked={form.values.terms}
-                onChange={(event) => form.setFieldValue("terms", event.currentTarget.checked)}
-                error={form.errors.terms}
-              />
-            )}
-
             {globalError && <Alert icon={xIcon}>{globalError}</Alert>}
           </Stack>
 
@@ -178,11 +168,12 @@ export default function Login({ setUser }: LoginProps) {
             <Anchor
               component="button"
               type="button"
-              c="dimmed"
               onClick={() =>
                 navigate(routerState.name, { ...routerState.params, type: type === "register" ? "login" : "register" })
               }
-              size="xs"
+              // c="dimmed"
+              // fw="bold"
+              size="sm"
             >
               {type === "register" ? "Already have an account? Login" : "Don't have an account? Register"}
             </Anchor>
@@ -190,6 +181,20 @@ export default function Login({ setUser }: LoginProps) {
               {upperFirst(type)}
             </Button>
           </Group>
+
+          {type === "register" && (
+            <Text c="dimmed" size="sm" mt="xl">
+              By signing up and using Remails you agree to our{" "}
+              <Anchor href="https://www.remails.com/legal/terms.html" target="_blank">
+                Terms and Conditions
+              </Anchor>{" "}
+              and our{" "}
+              <Anchor href="https://www.remails.com/legal/privacy-statement.html" target="_blank">
+                Privacy Policy
+              </Anchor>
+              .
+            </Text>
+          )}
         </form>
       </Paper>
     </Center>
