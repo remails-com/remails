@@ -8,7 +8,6 @@ import {
   IconSettings,
   IconWorldWww,
 } from "@tabler/icons-react";
-import { is_global_admin } from "../util.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useDisclosure } from "@mantine/hooks";
@@ -26,11 +25,9 @@ export function NavBar({ close }: { close: () => void }) {
     return null;
   }
 
-  const roles = user.roles || [];
-
   return (
     <>
-      {is_global_admin(roles) && (
+      {user.global_role === "admin" && (
         <NavLink
           mb="md"
           label="Organizations"
@@ -73,8 +70,8 @@ export function NavBar({ close }: { close: () => void }) {
           {organizations
             ?.filter((all_org) => {
               return (
-                user.roles.find((role) => {
-                  return role.type === "organization_admin" && role.id === all_org.id;
+                user.org_roles.find((role) => {
+                  return role.role === "admin" && role.org_id === all_org.id;
                 }) || all_org.id === currentOrganization?.id
               );
             })

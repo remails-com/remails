@@ -1,9 +1,6 @@
 use crate::{
     api::error::{ApiError, ApiResult},
-    models::{
-        ApiUser, NewOrganization, Organization, OrganizationFilter, OrganizationId,
-        OrganizationRepository,
-    },
+    models::{ApiUser, NewOrganization, Organization, OrganizationId, OrganizationRepository},
 };
 use axum::{
     Json,
@@ -18,30 +15,22 @@ fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError>
 }
 
 fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.org_admin().contains(org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
-}
-
-impl From<&ApiUser> for OrganizationFilter {
-    fn from(user: &ApiUser) -> Self {
-        if user.is_super_admin() {
-            OrganizationFilter::default()
-        } else {
-            OrganizationFilter {
-                orgs: Some(user.org_admin()),
-            }
-        }
-    }
 }
 
 pub async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<Vec<Organization>> {
-    let filter = (&user).into();
-    let organizations = repo.list(&filter).await?;
+    let filter = if user.is_super_admin() {
+        None // show all organizations
+    } else {
+        Some(user.viewable_organizations())
+    };
+    let organizations = repo.list(filter).await?;
 
     debug!(
         user_id = user.id().to_string(),
@@ -132,4 +121,196 @@ pub async fn update_organization(
     );
 
     Ok(Json(organization))
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+
+    use crate::{
+        api::{
+            tests::{TestServer, deserialize_body, serialize_body},
+            whoami::WhoamiResponse,
+        },
+        models::{OrgRole, Role},
+    };
+
+    use super::*;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_list_organizations(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+        let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
+
+        // users should be able to list their organizations
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(organizations.len(), 2);
+        assert!(organizations.iter().any(|o| o.id() == org_1));
+        assert!(organizations.iter().any(|o| o.id() == org_2));
+
+        // users without organizations don't see any organizations
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // has no organizations
+        server.set_user(Some(user_3));
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(organizations.len(), 0);
+
+        // super admin should be able to list all organizations
+        let super_admin = "deadbeef-4e43-4a66-bbb9-fbcd4a933a34".parse().unwrap();
+        server.set_user(Some(super_admin));
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(organizations.len(), 6);
+
+        // not logged in users can't list organizations
+        server.set_user(None);
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_organization_lifecycle(pool: PgPool) {
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // has no organizations
+        let server = TestServer::new(pool.clone(), Some(user_3)).await;
+
+        // start with no organizations
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(organizations.len(), 0);
+
+        // create an organization
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created_org: Organization = deserialize_body(response.into_body()).await;
+        assert_eq!(created_org.name, "Test Org");
+
+        // get organization
+        let response = server
+            .get(format!("/api/organizations/{}", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organization: Organization = deserialize_body(response.into_body()).await;
+        assert_eq!(organization.id(), created_org.id());
+        assert_eq!(organization.name, "Test Org");
+
+        // whoami should contain admin role for created organization
+        let response = server.get("/api/whoami").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        assert_eq!(whoami.id, user_3);
+        assert_eq!(whoami.org_roles.len(), 1);
+        assert_eq!(
+            whoami.org_roles[0],
+            OrgRole {
+                role: Role::Admin,
+                org_id: created_org.id()
+            }
+        );
+
+        // update organization
+        let response = server
+            .put(
+                format!("/api/organizations/{}", created_org.id()),
+                serialize_body(&NewOrganization {
+                    name: "Updated Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let updated_org: Organization = deserialize_body(response.into_body()).await;
+        assert_eq!(updated_org.id(), created_org.id());
+        assert_eq!(updated_org.name, "Updated Org");
+
+        // get organization
+        let response = server
+            .get(format!("/api/organizations/{}", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organization: Organization = deserialize_body(response.into_body()).await;
+        assert_eq!(organization.id(), created_org.id());
+        assert_eq!(organization.name, "Updated Org");
+
+        // remove organization
+        let response = server
+            .delete(format!("/api/organizations/{}", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify organization is removed
+        let response = server
+            .get(format!("/api/organizations/{}", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(organizations.len(), 0);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_organization_no_access(pool: PgPool) {
+        let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let mut server = TestServer::new(pool.clone(), Some(user_b)).await;
+
+        // can't get organization
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't update organization
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}"),
+                serialize_body(&NewOrganization {
+                    name: "Updated Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't remove organization
+        let response = server
+            .delete(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // not logged in users can't create organization
+        server.set_user(None);
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
 }

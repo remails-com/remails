@@ -54,25 +54,12 @@ impl Organization {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NewOrganization {
-    name: String,
+    pub name: String,
 }
 
 #[derive(Clone)]
 pub struct OrganizationRepository {
     pool: sqlx::PgPool,
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct OrganizationFilter {
-    pub(crate) orgs: Option<Vec<OrganizationId>>,
-}
-
-impl OrganizationFilter {
-    fn org_uuids(&self) -> Option<Vec<Uuid>> {
-        self.orgs
-            .as_deref()
-            .map(|o| o.iter().map(|o| o.as_uuid()).collect())
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -159,8 +146,7 @@ impl OrganizationRepository {
         .await?)
     }
 
-    pub async fn list(&self, filter: &OrganizationFilter) -> Result<Vec<Organization>, Error> {
-        let orgs = filter.org_uuids();
+    pub async fn list(&self, filter: Option<Vec<Uuid>>) -> Result<Vec<Organization>, Error> {
         Ok(sqlx::query_as!(
             Organization,
             r#"
@@ -178,7 +164,7 @@ impl OrganizationRepository {
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY name
             "#,
-            orgs.as_deref(),
+            filter.as_deref(),
         )
         .fetch_all(&self.pool)
         .await?)
@@ -270,11 +256,11 @@ mod test {
             .unwrap();
         assert_eq!(org2.name, "TestOrg2");
 
-        let orgs = repo.list(&Default::default()).await.unwrap();
+        let orgs = repo.list(None).await.unwrap();
         assert_eq!(orgs, vec![org1.clone(), org2.clone()]);
 
         repo.remove(org1.id).await.unwrap();
-        let orgs = repo.list(&Default::default()).await.unwrap();
+        let orgs = repo.list(None).await.unwrap();
         assert_eq!(orgs, vec![org2.clone()]);
 
         let not_found = repo.get_by_id(org1.id).await.unwrap();

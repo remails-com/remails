@@ -18,21 +18,21 @@ use serde::Deserialize;
 use tracing::{debug, info};
 
 fn has_write_access(
-    org: OrganizationId,
-    _proj: Option<ProjectId>,
-    _domain: Option<DomainId>,
+    org: &OrganizationId,
+    _proj: Option<&ProjectId>,
+    _domain: Option<&DomainId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
 }
 
 fn has_read_access(
-    org: OrganizationId,
-    proj: Option<ProjectId>,
-    domain: Option<DomainId>,
+    org: &OrganizationId,
+    proj: Option<&ProjectId>,
+    domain: Option<&DomainId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
     has_write_access(org, proj, domain, user)
@@ -57,7 +57,7 @@ pub async fn create_domain(
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(org_id, project_id, None, &user)?;
+    has_write_access(&org_id, project_id.as_ref(), None, &user)?;
 
     let domain = repo.create(new, org_id, project_id).await?;
 
@@ -80,7 +80,7 @@ pub async fn list_domains(
     user: ApiUser,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
 ) -> ApiResult<Vec<ApiDomain>> {
-    has_read_access(org_id, project_id, None, &user)?;
+    has_read_access(&org_id, project_id.as_ref(), None, &user)?;
 
     let domains = repo.list(org_id, project_id).await?;
 
@@ -112,7 +112,7 @@ pub async fn get_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<ApiDomain> {
-    has_read_access(org_id, project_id, Some(domain_id), &user)?;
+    has_read_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
@@ -141,7 +141,7 @@ pub async fn delete_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<DomainId> {
-    has_write_access(org_id, project_id, Some(domain_id), &user)?;
+    has_write_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
 
     let domain_id = repo.remove(org_id, project_id, domain_id).await?;
 
@@ -165,11 +165,179 @@ pub(super) async fn verify_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<DomainVerificationStatus> {
-    has_write_access(org_id, project_id, Some(domain_id), &user)?;
+    has_write_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
     let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
     Ok(Json(status))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use sqlx::PgPool;
+
+    use crate::{
+        api::tests::{TestServer, deserialize_body, serialize_body},
+        models::DkimKeyType,
+    };
+
+    use super::*;
+
+    async fn test_domain_lifecycle(pool: PgPool, endpoint: String) {
+        let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
+
+        // start without domains
+        let response = server.get(format!("{endpoint}/domains")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
+        assert_eq!(domains.len(), 0);
+
+        // create a new domain
+        let response = server
+            .post(
+                format!("{endpoint}/domains"),
+                serialize_body(NewDomain {
+                    domain: "remails.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created_domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(created_domain.domain(), "remails.com");
+
+        // list domains
+        let response = server.get(format!("{endpoint}/domains")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
+        assert_eq!(domains.len(), 1);
+        assert_eq!(domains[0].domain(), "remails.com");
+        assert_eq!(domains[0].id(), created_domain.id());
+
+        // get domain
+        let response = server
+            .get(format!("{endpoint}/domains/{}", created_domain.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.id(), created_domain.id());
+
+        // verify domain
+        let response = server
+            .post(
+                format!("{endpoint}/domains/{}/verify", created_domain.id()),
+                Body::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: DomainVerificationStatus = deserialize_body(response.into_body()).await;
+
+        // remove domain
+        let response = server
+            .delete(format!("{endpoint}/domains/{}", created_domain.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify domain is removed
+        let response = server.get(format!("{endpoint}/domains")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
+        assert_eq!(domains.len(), 0);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects")
+    ))]
+    async fn test_project_domains_lifecycle(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
+        let endpoint = format!("/api/organizations/{org_1}/projects/{proj_1}");
+        test_domain_lifecycle(pool, endpoint).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_org_domains_lifecycle(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let endpoint = format!("/api/organizations/{org_1}");
+        test_domain_lifecycle(pool, endpoint).await;
+    }
+
+    async fn test_domains_no_access(pool: PgPool, endpoint: String, domain_id: &str) {
+        let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is only member of org 2
+        let server = TestServer::new(pool.clone(), Some(user_b)).await;
+
+        // can't list domains for other organizations
+        let response = server.get(format!("{endpoint}/domains")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't create domain for other organizations
+        let response = server
+            .post(
+                format!("{endpoint}/domains"),
+                serialize_body(NewDomain {
+                    domain: "remails.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't get domain for other organizations
+        let response = server
+            .get(format!("{endpoint}/domains/{domain_id}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't delete domain for other organizations
+        let response = server
+            .delete(format!("{endpoint}/domains/{domain_id}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't verify domain for other organizations
+        let response = server
+            .post(
+                format!("{endpoint}/domains/{domain_id}/verify"),
+                Body::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects", "proj_domains")
+    ))]
+    async fn test_project_domains_no_access(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
+        let endpoint = format!("/api/organizations/{org_1}/projects/{proj_1}");
+        let proj_domain = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a"; // test-org-1-project-1.com
+        test_domains_no_access(pool, endpoint, proj_domain).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "org_domains")
+    ))]
+    async fn test_org_domains_no_access(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let endpoint = format!("/api/organizations/{org_1}");
+        let org_domain = "ed28baa5-57f7-413f-8c77-7797ba6a8780"; // test-org-1.com
+        test_domains_no_access(pool, endpoint, org_domain).await;
+    }
 }

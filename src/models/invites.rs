@@ -23,6 +23,7 @@ pub struct CreatedInvite {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct CreatedInviteWithPassword {
     id: InviteId,
     password: String,
@@ -32,7 +33,27 @@ pub struct CreatedInviteWithPassword {
     expires_at: DateTime<Utc>,
 }
 
+#[cfg(test)]
+impl CreatedInviteWithPassword {
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn id(&self) -> &InviteId {
+        &self.id
+    }
+
+    pub fn organization_id(&self) -> &OrganizationId {
+        &self.organization_id
+    }
+
+    pub fn created_by(&self) -> &ApiUserId {
+        &self.created_by
+    }
+}
+
 #[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ApiInvite {
     id: InviteId,
     organization_id: OrganizationId,
@@ -52,6 +73,21 @@ impl ApiInvite {
 
     pub fn is_expired(&self) -> bool {
         self.expires_at < Utc::now()
+    }
+
+    #[cfg(test)]
+    pub fn id(&self) -> &InviteId {
+        &self.id
+    }
+
+    #[cfg(test)]
+    pub fn organization_id(&self) -> &OrganizationId {
+        &self.organization_id
+    }
+
+    #[cfg(test)]
+    pub fn created_by(&self) -> &ApiUserId {
+        &self.created_by
     }
 }
 

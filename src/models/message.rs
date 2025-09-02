@@ -63,6 +63,7 @@ pub struct Message {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ApiMessage {
     #[serde(flatten)]
     metadata: ApiMessageMetadata,
@@ -73,6 +74,10 @@ pub struct ApiMessage {
 
 #[cfg(test)]
 impl ApiMessage {
+    pub fn id(&self) -> MessageId {
+        self.metadata.id
+    }
+
     pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
         self.metadata.smtp_credential_id
     }
@@ -85,7 +90,7 @@ impl ApiMessage {
 #[cfg_attr(test, derive(Deserialize))]
 #[derive(Serialize)]
 pub struct ApiMessageMetadata {
-    id: MessageId,
+    pub id: MessageId,
     status: MessageStatus,
     reason: Option<String>,
     delivery_details: HashMap<EmailAddress, DeliveryDetails>,
@@ -102,6 +107,7 @@ pub struct ApiMessageMetadata {
 }
 
 #[derive(Serialize, Default)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ApiMessageData {
     pub subject: Option<String>,
     /// An RFC3339 String
@@ -111,6 +117,7 @@ pub struct ApiMessageData {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct Attachment {
     pub filename: String,
     pub mime: String,
@@ -149,6 +156,7 @@ pub struct NewMessage {
 }
 
 #[derive(Serialize, Debug)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct MessageRetryUpdate {
     status: MessageStatus,
     retry_after: Option<DateTime<Utc>>,

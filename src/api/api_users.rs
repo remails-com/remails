@@ -77,3 +77,234 @@ pub async fn delete_password(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use http::StatusCode;
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    use crate::api::tests::{TestServer, deserialize_body, serialize_body};
+
+    use super::*;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    fn test_update_user(pool: PgPool) {
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef"; // not in any organization
+        let user_3_id: ApiUserId = user_3.parse().unwrap();
+        let users = ApiUserRepository::new(pool.clone());
+        let server = TestServer::new(pool, Some(user_3_id)).await;
+
+        // verify starting state
+        let response = server.get("/api/whoami").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        assert_eq!(whoami.id.to_string(), user_3);
+        assert_eq!(whoami.name, "Test API User 3");
+        assert_eq!(whoami.email.as_str(), "test-api@user-3");
+        assert_eq!(whoami.github_id, None);
+        assert!(whoami.password_enabled);
+
+        // update user information
+        let response = server
+            .put(
+                format!("/api/api_user/{user_3}"),
+                serialize_body(ApiUserUpdate {
+                    name: "Updated API User 3".to_string(),
+                    email: "updated-api@user-3".parse().unwrap(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        assert_eq!(whoami.id.to_string(), user_3);
+        assert_eq!(whoami.name, "Updated API User 3");
+        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.github_id, None);
+        assert!(whoami.password_enabled);
+
+        // verify state
+        let response = server.get("/api/whoami").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        assert_eq!(whoami.id.to_string(), user_3);
+        assert_eq!(whoami.name, "Updated API User 3");
+        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.github_id, None);
+        assert!(whoami.password_enabled);
+
+        // current password works
+        users
+            .check_password(
+                &"updated-api@user-3".parse().unwrap(),
+                "unsecure".to_string().into(),
+            )
+            .await
+            .unwrap();
+
+        // update password
+        let response = server
+            .put(
+                format!("/api/api_user/{user_3}/password"),
+                // we use json directly here because we don't allow serializing passwords
+                serialize_body(json!({
+                    "current_password": "unsecure",
+                    "new_password": "new-unsecure-password",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify old password is now incorrect, and new password works
+        assert!(matches!(
+            users
+                .check_password(
+                    &"updated-api@user-3".parse().unwrap(),
+                    "unsecure".to_string().into(),
+                )
+                .await,
+            Err(Error::NotFound(_))
+        ));
+        users
+            .check_password(
+                &"updated-api@user-3".parse().unwrap(),
+                "new-unsecure-password".to_string().into(),
+            )
+            .await
+            .unwrap();
+
+        // can't delete password without alternative login method
+        let response = server
+            .delete_with_body(
+                format!("/api/api_user/{user_3}/password"),
+                serialize_body(json!({"current_password": "new-unsecure-password"})),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+
+        // can delete password with alternative login method
+        users.add_github_id(&user_3_id, 37).await.unwrap();
+        let response = server
+            .delete_with_body(
+                format!("/api/api_user/{user_3}/password"),
+                serialize_body(json!({"current_password": "new-unsecure-password"})),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify state
+        let response = server.get("/api/whoami").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        assert_eq!(whoami.id.to_string(), user_3);
+        assert_eq!(whoami.name, "Updated API User 3");
+        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.github_id, Some("37".to_string()));
+        assert!(!whoami.password_enabled);
+    }
+
+    async fn test_update_user_no_access(
+        pool: PgPool,
+        user: Option<ApiUserId>,
+        password: &str,
+        user_status_code: StatusCode,
+        password_status_code: StatusCode,
+    ) {
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef"; // not in any organization
+        let user_3_id: ApiUserId = user_3.parse().unwrap();
+        let users = ApiUserRepository::new(pool.clone());
+        let server = TestServer::new(pool, user).await;
+
+        // can't update user
+        let response = server
+            .put(
+                format!("/api/api_user/{user_3}"),
+                serialize_body(ApiUserUpdate {
+                    name: "Updated API User 3".to_string(),
+                    email: "updated-api@user-3".parse().unwrap(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), user_status_code);
+
+        // verify user remains unchanged
+        if !user_status_code.is_success() {
+            let user = users.find_by_id(&user_3_id).await.unwrap().unwrap();
+            assert_eq!(user.name, "Test API User 3");
+            assert_eq!(user.email, "test-api@user-3".parse().unwrap());
+        }
+
+        // can't update password
+        let response = server
+            .put(
+                format!("/api/api_user/{user_3}/password"),
+                serialize_body(json!({
+                    "current_password": password,
+                    "new_password": "new-unsecure-password",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), password_status_code);
+
+        // can't delete password (with alternative login method enabled)
+        users.add_github_id(&user_3_id, 37).await.unwrap();
+        let response = server
+            .delete_with_body(
+                format!("/api/api_user/{user_3}/password"),
+                serialize_body(json!({"current_password": password})),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), password_status_code);
+
+        // verify password remains unchanged
+        let user = users.find_by_id(&user_3_id).await.unwrap().unwrap();
+        assert!(user.password_enabled());
+        users
+            .check_password(&user.email, "unsecure".to_string().into())
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_update_user_no_access_not_logged_in(pool: PgPool) {
+        test_update_user_no_access(
+            pool,
+            None,
+            "unsecure",
+            StatusCode::UNAUTHORIZED,
+            StatusCode::UNAUTHORIZED,
+        )
+        .await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_update_user_no_access_wrong_user(pool: PgPool) {
+        test_update_user_no_access(
+            pool,
+            Some("9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap()), // user_1 instead of user_3
+            "unsecure",
+            StatusCode::FORBIDDEN,
+            StatusCode::FORBIDDEN,
+        )
+        .await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_update_user_no_access_wrong_password(pool: PgPool) {
+        test_update_user_no_access(
+            pool,
+            Some("54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap()), // user_3
+            "wrong-password",
+            StatusCode::OK,
+            StatusCode::BAD_REQUEST,
+        )
+        .await;
+    }
+}

@@ -10,8 +10,8 @@ use axum::{
 use tracing::debug;
 use url::Url;
 
-fn has_read_access(org: OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) || user.is_super_admin() {
+fn has_read_access(org: &OrganizationId, user: &ApiUser) -> Result<(), ApiError> {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
@@ -22,7 +22,7 @@ pub async fn get_subscription(
     user: ApiUser,
     Path(org): Path<OrganizationId>,
 ) -> ApiResult<SubscriptionStatus> {
-    has_read_access(org, &user)?;
+    has_read_access(&org, &user)?;
 
     debug!(
         user_id = user.id().to_string(),
@@ -38,7 +38,7 @@ pub async fn get_sales_link(
     user: ApiUser,
     Path(org): Path<OrganizationId>,
 ) -> ApiResult<Url> {
-    has_read_access(org, &user)?;
+    has_read_access(&org, &user)?;
 
     debug!(
         user_id = user.id().to_string(),

@@ -26,9 +26,9 @@ export function Dashboard({ children }: DashboardProps) {
     return null;
   }
 
-  const isAdmin = user.roles.some(
-    (role) => role.type == "super_admin" || (role.type == "organization_admin" && role.id == currentOrganization?.id)
-  );
+  const isAdmin =
+    user.global_role == "admin" ||
+    user.org_roles.some((role) => role.role == "admin" && role.org_id == currentOrganization?.id);
 
   const user_dropdown = (
     <Menu width={260} position="bottom-start" transitionProps={{ transition: "fade-down" }} withinPortal>

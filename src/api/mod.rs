@@ -29,6 +29,7 @@ use axum::{
     Json, Router,
     extract::{FromRef, Request, State},
     middleware,
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
 use base64ct::Encoding;
@@ -47,7 +48,6 @@ use tracing::{
 
 mod api_users;
 mod auth;
-mod config;
 pub mod domains;
 mod error;
 mod invites;
@@ -71,6 +71,7 @@ pub enum ApiServerError {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RemailsConfig {
     pub version: String,
     pub environment: Environment,
@@ -274,7 +275,7 @@ impl ApiServer {
         };
 
         let mut router = Router::new()
-            .route("/config", get(config::config))
+            .route("/config", get(config))
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/webhook/moneybird", post(moneybird_webhook))
@@ -449,6 +450,10 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
     }
 }
 
+pub async fn config(State(config): State<RemailsConfig>) -> Response {
+    Json(config).into_response()
+}
+
 async fn append_default_headers(
     State(config): State<ApiConfig>,
     req: Request,
@@ -473,4 +478,121 @@ async fn append_default_headers(
     }
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use http::Method;
+    use std::{
+        collections::HashMap,
+        net::{Ipv4Addr, SocketAddrV4},
+    };
+    use tower::{ServiceExt, util::Oneshot};
+
+    use crate::models::ApiUserId;
+
+    use super::*;
+
+    pub struct TestServer {
+        server: ApiServer,
+        pub headers: HashMap<&'static str, String>,
+    }
+
+    impl TestServer {
+        pub async fn new(pool: PgPool, user: Option<ApiUserId>) -> Self {
+            let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
+            let shutdown = CancellationToken::new();
+            let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
+            let mut headers = HashMap::new();
+            headers.insert("Content-Type", "application/json".to_string());
+            if let Some(user) = user {
+                headers.insert("X-Test-Login-ID", user.to_string());
+            }
+            TestServer { server, headers }
+        }
+
+        pub fn set_user(&mut self, user: Option<ApiUserId>) {
+            if let Some(user) = user {
+                self.headers.insert("X-Test-Login-ID", user.to_string());
+            } else {
+                self.headers.remove("X-Test-Login-ID");
+            }
+        }
+
+        fn request<U: AsRef<str>>(
+            &self,
+            method: Method,
+            uri: U,
+            body: Body,
+        ) -> Oneshot<Router, Request<Body>> {
+            let mut request = Request::builder().method(method).uri(uri.as_ref());
+
+            for (&name, value) in self.headers.iter() {
+                request = request.header(name, value);
+            }
+
+            let request = request.body(body).unwrap();
+
+            self.server.router.clone().oneshot(request)
+        }
+
+        pub fn get<U: AsRef<str>>(&self, uri: U) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::GET, uri, Body::empty())
+        }
+
+        pub fn post<U: AsRef<str>>(&self, uri: U, body: Body) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::POST, uri, body)
+        }
+
+        pub fn put<U: AsRef<str>>(&self, uri: U, body: Body) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::PUT, uri, body)
+        }
+
+        pub fn delete<U: AsRef<str>>(&self, uri: U) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::DELETE, uri, Body::empty())
+        }
+
+        pub fn delete_with_body<U: AsRef<str>>(
+            &self,
+            uri: U,
+            body: Body,
+        ) -> Oneshot<Router, Request<Body>> {
+            self.request(Method::DELETE, uri, body)
+        }
+    }
+
+    pub fn serialize_body<T>(body: T) -> Body
+    where
+        T: serde::Serialize,
+    {
+        let json = serde_json::to_string(&body).unwrap();
+        Body::from(json)
+    }
+
+    pub async fn deserialize_body<T>(body: Body) -> T
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let bytes = axum::body::to_bytes(body, 8192).await.unwrap();
+        serde_json::from_slice(&bytes).expect("Failed to deserialize response body")
+    }
+
+    #[sqlx::test]
+    async fn test_util_endpoints(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        // can access health check
+        let response = server.get("/api/healthy").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        assert!(bytes.iter().eq(b"{\"healthy\":true,\"status\":\"OK\"}"));
+
+        // can access Remails config
+        let response = server.get("/api/config").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: RemailsConfig = deserialize_body(response.into_body()).await;
+    }
 }

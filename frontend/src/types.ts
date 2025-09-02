@@ -1,11 +1,13 @@
 import { RemailsError } from "./error/error";
 import { RouterState } from "./router";
 
-export type Role = { type: "super_admin" } | { type: "organization_admin"; id: string };
+export type Role = "admin";
+export type OrgRole = { role: Role; org_id: string };
 
 export interface User {
   id: string;
-  roles: Role[];
+  global_role: Role | null;
+  org_roles: OrgRole[];
   name: string;
   email: string;
   github_id: string | null;

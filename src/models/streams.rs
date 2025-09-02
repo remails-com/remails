@@ -19,6 +19,7 @@ impl StreamId {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct Stream {
     id: StreamId,
     project_id: ProjectId,
@@ -34,8 +35,9 @@ impl Stream {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct NewStream {
-    name: String,
+    pub name: String,
 }
 
 pub struct StreamRepository {

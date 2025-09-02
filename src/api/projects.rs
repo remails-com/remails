@@ -11,19 +11,19 @@ use http::StatusCode;
 use tracing::{debug, info};
 
 fn has_read_access(
-    org: OrganizationId,
-    project: Option<ProjectId>,
+    org: &OrganizationId,
+    project: Option<&ProjectId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
     has_write_access(org, project, user)
 }
 
 fn has_write_access(
-    org: OrganizationId,
-    _project: Option<ProjectId>,
+    org: &OrganizationId,
+    _project: Option<&ProjectId>,
     user: &ApiUser,
 ) -> Result<(), ApiError> {
-    if user.org_admin().contains(&org) || user.is_super_admin() {
+    if user.is_org_admin(org) || user.is_super_admin() {
         return Ok(());
     }
     Err(ApiError::Forbidden)
@@ -34,7 +34,7 @@ pub async fn list_projects(
     Path(org): Path<OrganizationId>,
     user: ApiUser,
 ) -> ApiResult<Vec<Project>> {
-    has_read_access(org, None, &user)?;
+    has_read_access(&org, None, &user)?;
 
     let projects = repo.list(org).await?;
 
@@ -54,7 +54,7 @@ pub async fn update_project(
     user: ApiUser,
     Json(update): Json<NewProject>,
 ) -> ApiResult<Project> {
-    has_write_access(org, Some(proj), &user)?;
+    has_write_access(&org, Some(&proj), &user)?;
 
     let project = repo.update(org, proj, update).await?;
 
@@ -74,7 +74,7 @@ pub async fn create_project(
     Path(org): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(org, None, &user)?;
+    has_write_access(&org, None, &user)?;
 
     let project = repo.create(new, org).await?;
 
@@ -94,7 +94,7 @@ pub async fn remove_project(
     user: ApiUser,
     Path((org, proj)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
-    has_write_access(org, Some(proj), &user)?;
+    has_write_access(&org, Some(&proj), &user)?;
 
     let project_id = repo.remove(proj, org).await?;
 
@@ -106,4 +106,145 @@ pub async fn remove_project(
     );
 
     Ok(Json(project_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+
+    use crate::api::tests::{TestServer, deserialize_body, serialize_body};
+
+    use super::*;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_project_lifecycle(pool: PgPool) {
+        let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
+
+        // start with no projects
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let projects: Vec<Project> = deserialize_body(response.into_body()).await;
+        assert_eq!(projects.len(), 0);
+
+        // create a project
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let project: Project = deserialize_body(response.into_body()).await;
+        assert_eq!(project.name, "Test Project");
+
+        // list projects
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let projects: Vec<Project> = deserialize_body(response.into_body()).await;
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "Test Project");
+
+        // update project
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/projects/{}", project.id()),
+                serialize_body(&NewProject {
+                    name: "Updated Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let project: Project = deserialize_body(response.into_body()).await;
+        assert_eq!(project.name, "Updated Project");
+
+        // list projects
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let projects: Vec<Project> = deserialize_body(response.into_body()).await;
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "Updated Project");
+
+        // remove project
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{}",
+                project.id()
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // list projects
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let projects: Vec<Project> = deserialize_body(response.into_body()).await;
+        assert_eq!(projects.len(), 0);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects")
+    ))]
+    async fn test_project_no_access(pool: PgPool) {
+        let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
+        let server = TestServer::new(pool.clone(), Some(user_b)).await;
+
+        // can't list projects
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't create projects
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't update projects
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_1}"),
+                serialize_body(&NewProject {
+                    name: "Updated Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't remove projects
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/projects/{proj_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
 }
