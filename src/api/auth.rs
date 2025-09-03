@@ -145,7 +145,6 @@ pub(super) struct PasswordRegister {
     name: String,
     email: EmailAddress,
     password: Password,
-    terms: bool,
 }
 
 pub(super) async fn password_register(
@@ -153,11 +152,6 @@ pub(super) async fn password_register(
     mut cookie_storage: SecureCookieStorage,
     Json(register_attempt): Json<PasswordRegister>,
 ) -> Result<Response, ApiError> {
-    if !register_attempt.terms {
-        return Err(ApiError::BadRequest(
-            "You must accept the terms and conditions".to_string(),
-        ));
-    }
     let new = NewApiUser {
         email: register_attempt.email,
         name: register_attempt.name.trim().to_string(),
@@ -344,8 +338,7 @@ mod tests {
                 serialize_body(json!({
                     "name": "New User",
                     "email": "test-api@new-user",
-                    "password": "unsecure",
-                    "terms": true
+                    "password": "unsecure"
                 })),
             )
             .await
