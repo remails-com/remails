@@ -1,6 +1,6 @@
 import { Dispatch } from "react";
 import { NavigationState } from "./hooks/useRouter";
-import { Action, Organization, WhoamiResponse } from "./types";
+import { Action, Organization, User, WhoamiResponse } from "./types";
 import { FullRouterState, RouteParams, Router } from "./router";
 import { RemailsError } from "./error/error";
 
@@ -27,11 +27,11 @@ export default async function apiMiddleware(
   let newOrgId = navState.to.params.org_id ?? null;
   let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
 
-  let user: WhoamiResponse | null = navState.state.user;
+  let user: User;
   if (navState.state.user === null || navState.to.params.force == "reload-orgs") {
-    user = await get<WhoamiResponse>("/api/whoami");
+    const updated_user = await get<WhoamiResponse>("/api/whoami");
 
-    if (user === null || "error" in user) {
+    if (updated_user === null || "error" in updated_user) {
       dispatch({ type: "set_user", user: null });
 
       if (navState.to.name === "login") {
@@ -47,7 +47,25 @@ export default async function apiMiddleware(
       }
     }
 
-    dispatch({ type: "set_user", user });
+    if (updated_user.login_status === "mfa_pending") {
+      // If the user has to finish MFA, redirect to the MFA page
+      const params: RouteParams = navState.state.routerState.params;
+      if (navState.to.name !== "mfa") {
+        params.redirect = navState.to.fullPath;
+      }
+
+      return router.navigate("mfa", params);
+    }
+
+    dispatch({ type: "set_user", user: updated_user });
+    user = updated_user;
+  } else {
+    console.log("state has user");
+    user = navState.state.user;
+  }
+
+  if (!user) {
+    throw new RemailsError("Something went wrong", 400);
   }
 
   if (navState.state.config === null) {

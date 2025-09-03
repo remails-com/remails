@@ -5,7 +5,7 @@ export type Navigate = (name: RouteName, params?: RouteParams) => void;
 
 export interface RouterState {
   name: RouteName;
-  params: { [k: string]: string };
+  params: RouteParams;
 }
 
 export interface FullRouterState extends RouterState {

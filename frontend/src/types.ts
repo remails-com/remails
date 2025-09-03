@@ -20,7 +20,10 @@ export interface TotpCode {
   last_used: string;
 }
 
-export type WhoamiResponse = User | { error: string };
+export type WhoamiResponse =
+  | (User & { login_status: "logged_in" })
+  | { login_status: "mfa_pending" }
+  | { error: string };
 
 export type DeliveryStatus =
   | {

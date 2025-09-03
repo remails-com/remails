@@ -17,6 +17,7 @@ import UserSettings from "./components/userSettings/UserSettings.tsx";
 import Statistics from "./components/statistics/Statistics.tsx";
 import Error from "./error/Error.tsx";
 import { ConfirmInvite } from "./components/ConfirmInvite.tsx";
+import Mfa from "./Mfa.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -40,6 +41,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   organizations: <OrganizationsOverview />,
   default: null,
   login: null,
+  mfa: null,
   invite: <ConfirmInvite />,
 };
 
@@ -65,12 +67,16 @@ export function Pages() {
     return <Error error={error} />;
   }
 
-  if (!userFetched) {
-    return null;
-  }
-
   if (routerState.name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
+  }
+
+  if (routerState.name === "mfa") {
+    return <Mfa setUser={(user) => dispatch({ type: "set_user", user })} />
+  }
+
+  if (!userFetched) {
+    return null;
   }
 
   return (

@@ -1,7 +1,7 @@
 use crate::{
     api::{
         ApiState,
-        auth::{SecureCookieStorage, login},
+        auth::{LoginState, SecureCookieStorage, login},
         oauth::{CSRF_COOKIE_NAME, Error, OAuthService},
     },
     models::ApiUser,
@@ -170,7 +170,7 @@ where
         .fetch_user(token.access_token(), logged_in_api_user)
         .await?;
 
-    cookie_storage = login(&api_user, cookie_storage)?;
+    cookie_storage = login(&api_user, LoginState::LoggedIn, cookie_storage)?;
 
     // Remove the CSRF token cookie
     cookie_storage = cookie_storage.remove(csrf_cookie);

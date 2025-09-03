@@ -60,6 +60,13 @@ impl IntoResponse for ApiError {
                 }
                 Error::Conflict => (StatusCode::CONFLICT, "Conflict".to_string()),
                 Error::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+                Error::TooManyRequests => {
+                    debug!("Too many requests");
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "Too many requests".to_string(),
+                    )
+                }
                 _ => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Database error".to_string(),

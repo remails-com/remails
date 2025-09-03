@@ -221,6 +221,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(u) => u,
+            WhoamiResponse::MfaPending => {
+                panic!("Should not have MFA pending here")
+            }
+        };
         assert_eq!(whoami.id, user_2);
         assert!(whoami.org_roles.contains(&OrgRole {
             role: Role::Admin,

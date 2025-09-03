@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users\n            SET totp_try_counter       = CASE\n                                             WHEN totp_try_counter_reset < now() THEN 0\n                                             ELSE totp_try_counter + 1 END,\n                totp_try_counter_reset = CASE\n                                             WHEN totp_try_counter_reset < now() THEN now() + '1 min'\n                                             ELSE totp_try_counter_reset END\n            WHERE id = $1\n            RETURNING totp_try_counter;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "totp_try_counter",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "397eeaa283658be73de74dd35904b6f585923abe515c12803f6eb92afef89c09"
+}

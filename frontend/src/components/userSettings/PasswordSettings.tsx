@@ -1,8 +1,9 @@
 import { notifications } from "@mantine/notifications";
-import { IconTrash, IconX } from "@tabler/icons-react";
+import { IconTrash, } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { Button, Grid, PasswordInput, Stack, Tooltip } from "@mantine/core";
+import { errorNotification } from "../../notify.tsx";
 
 interface PasswordForm {
   old_password: string;
@@ -46,13 +47,7 @@ export function PasswordSettings() {
           message: "",
         });
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification("Something went wrong");
       }
     });
   };
@@ -86,13 +81,7 @@ export function PasswordSettings() {
           message: "",
         });
       } else {
-        notifications.show({
-          title: "Error",
-          message: "Something went wrong",
-          color: "red",
-          autoClose: 20000,
-          icon: <IconX size={20} />,
-        });
+        errorNotification("Something went wrong");
       }
     });
   };

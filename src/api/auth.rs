@@ -95,8 +95,15 @@ impl SecureCookieStorage {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum LoginState {
+    MfaPending,
+    LoggedIn,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UserCookie {
     id: ApiUserId,
+    state: LoginState,
     expires_at: DateTime<Utc>,
 }
 
@@ -109,10 +116,11 @@ impl UserCookie {
     }
 }
 
-impl From<&ApiUser> for UserCookie {
-    fn from(user: &ApiUser) -> Self {
+impl UserCookie {
+    fn from_api_user(user: &ApiUser, login_state: LoginState) -> Self {
         Self {
             id: *user.id(),
+            state: login_state,
             expires_at: Utc::now() + Duration::days(7),
         }
     }
@@ -135,9 +143,41 @@ pub(super) async fn password_login(
         .find_by_email(&login_attempt.email)
         .await?
         .ok_or(ApiError::NotFound)?;
-    cookie_storage = login(&user, cookie_storage)?;
-    let whoami = WhoamiResponse::from(user);
+
+    let whoami;
+    if repo.mfa_enabled(user.id()).await? {
+        cookie_storage = login(&user, LoginState::MfaPending, cookie_storage)?;
+        whoami = WhoamiResponse::MfaPending;
+    } else {
+        cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+        whoami = WhoamiResponse::logged_in(user);
+    }
+
     Ok((StatusCode::OK, cookie_storage, Json(whoami)).into_response())
+}
+
+pub(super) async fn totp_login(
+    State(repo): State<ApiUserRepository>,
+    mut cookie_storage: SecureCookieStorage,
+    user: MfaPending,
+    Json(totp_code): Json<String>,
+) -> Result<Response, ApiError> {
+    if repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
+        let user = repo
+            .find_by_id(&user.id())
+            .await?
+            .ok_or(ApiError::Unauthorized)?;
+        cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+
+        Ok((
+            StatusCode::OK,
+            cookie_storage,
+            Json(WhoamiResponse::logged_in(user)),
+        )
+            .into_response())
+    } else {
+        Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response())
+    }
 }
 
 #[derive(Deserialize)]
@@ -163,17 +203,18 @@ pub(super) async fn password_register(
 
     let user = repo.create(new).await?;
 
-    cookie_storage = login(&user, cookie_storage)?;
-    let whoami = WhoamiResponse::from(user);
+    cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+    let whoami = WhoamiResponse::logged_in(user);
     Ok((StatusCode::CREATED, cookie_storage, Json(whoami)).into_response())
 }
 
 pub(super) fn login(
     user: &ApiUser,
+    login_state: LoginState,
     cookie_storage: SecureCookieStorage,
 ) -> Result<SecureCookieStorage, serde_json::Error> {
     // Serialize the user data as a string
-    let cookie: UserCookie = user.into();
+    let cookie = UserCookie::from_api_user(user, login_state);
     let session_cookie_value = serde_json::to_string(&cookie)?;
 
     // Create a new session cookie
@@ -202,6 +243,59 @@ pub(super) async fn logout(storage: SecureCookieStorage) -> impl IntoResponse {
     }
 
     (jar, Redirect::to("/"))
+}
+
+pub struct MfaPending(ApiUserId);
+
+impl MfaPending {
+    pub fn id(&self) -> ApiUserId {
+        self.0
+    }
+}
+
+impl<S> FromRequestParts<S> for MfaPending
+where
+    S: Send + Sync,
+    ApiState: FromRef<S>,
+    ApiUserRepository: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let api_state: ApiState = FromRef::from_ref(state);
+        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+
+        match serde_json::from_str::<UserCookie>(session_cookie.value()) {
+            Ok(cookie) => {
+                if cookie.expires_at() < &Utc::now() {
+                    warn!(
+                        user_id = cookie.id().to_string(),
+                        "Received expired user cookie"
+                    );
+                    Err(ApiError::Unauthorized)?
+                }
+                if !matches!(cookie.state, LoginState::MfaPending) {
+                    warn!(
+                        user_id = cookie.id().to_string(),
+                        "Received user cookie that is not in `MfaPending` state but {:?}",
+                        cookie.state
+                    );
+                    Err(ApiError::Unauthorized)?
+                }
+                trace!(
+                    user_id = cookie.id().to_string(),
+                    "extracted user from session cookie"
+                );
+                Ok(MfaPending(cookie.id))
+            }
+            Err(err) => {
+                debug!("Invalid session cookie: {err:?}");
+                Err(ApiError::Unauthorized)
+            }
+        }
+    }
 }
 
 impl<S> FromRequestParts<S> for ApiUser
@@ -265,6 +359,13 @@ where
                     );
                     Err(ApiError::Unauthorized)?
                 }
+                if !matches!(user.state, LoginState::LoggedIn) {
+                    warn!(
+                        user_id = user.id().to_string(),
+                        "Received user cookie that is not in `LoggedIn` state but {:?}", user.state
+                    );
+                    Err(ApiError::Unauthorized)?
+                }
                 trace!(
                     user_id = user.id().to_string(),
                     "extracted user from session cookie"
@@ -296,6 +397,26 @@ where
     ) -> Result<Option<Self>, Self::Rejection> {
         Ok(
             <ApiUser as FromRequestParts<S>>::from_request_parts(parts, state)
+                .await
+                .ok(),
+        )
+    }
+}
+
+impl<S> OptionalFromRequestParts<S> for MfaPending
+where
+    S: Send + Sync,
+    ApiState: FromRef<S>,
+    ApiUserRepository: FromRef<S>,
+{
+    type Rejection = (StatusCode, &'static str);
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        Ok(
+            <MfaPending as FromRequestParts<S>>::from_request_parts(parts, state)
                 .await
                 .ok(),
         )

@@ -45,6 +45,8 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
     #[error("totp error")]
     Totp(#[from] totp_rs::TotpUrlError),
+    #[error("too many requests, try again later")]
+    TooManyRequests,
 }
 
 impl From<sqlx::Error> for Error {

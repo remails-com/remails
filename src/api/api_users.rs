@@ -44,13 +44,12 @@ pub async fn update_user(
         "updated user details"
     );
 
-    Ok(Json(
+    Ok(Json(WhoamiResponse::logged_in(
         repo.find_by_id(&user_id)
             .await
             .transpose()
-            .ok_or(Error::NotFound("User not found"))??
-            .into(),
-    ))
+            .ok_or(Error::NotFound("User not found"))??,
+    )))
 }
 
 pub async fn update_password(
@@ -201,7 +200,7 @@ mod tests {
     use super::*;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
-    fn test_update_user(pool: PgPool) {
+    async fn test_update_user(pool: PgPool) {
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef"; // not in any organization
         let user_3_id: ApiUserId = user_3.parse().unwrap();
         let users = ApiUserRepository::new(pool.clone());
@@ -211,6 +210,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Test API User 3");
         assert_eq!(whoami.email.as_str(), "test-api@user-3");
@@ -230,6 +235,13 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
+
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -240,6 +252,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -312,6 +330,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");

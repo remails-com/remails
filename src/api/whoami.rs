@@ -1,4 +1,7 @@
-use crate::models::{ApiUser, ApiUserId, OrgRole, Role};
+use crate::{
+    api::auth::MfaPending,
+    models::{ApiUser, ApiUserId, OrgRole, Role},
+};
 use axum::{
     Json,
     response::{IntoResponse, Response},
@@ -9,7 +12,7 @@ use serde_json::json;
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize))]
-pub struct WhoamiResponse {
+pub struct Whoami {
     pub id: ApiUserId,
     pub name: String,
     pub global_role: Option<Role>,
@@ -19,9 +22,17 @@ pub struct WhoamiResponse {
     pub password_enabled: bool,
 }
 
-impl From<ApiUser> for WhoamiResponse {
-    fn from(user: ApiUser) -> Self {
-        WhoamiResponse {
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+#[serde(tag = "login_status", rename_all = "snake_case")]
+pub enum WhoamiResponse {
+    LoggedIn(Whoami),
+    MfaPending,
+}
+
+impl WhoamiResponse {
+    pub fn logged_in(user: ApiUser) -> Self {
+        Self::LoggedIn(Whoami {
             id: *user.id(),
             global_role: user.global_role.clone(),
             org_roles: user.org_roles.clone(),
@@ -29,13 +40,21 @@ impl From<ApiUser> for WhoamiResponse {
             password_enabled: user.password_enabled(),
             name: user.name,
             email: user.email,
-        }
+        })
     }
 }
 
-pub async fn whoami(user: Option<ApiUser>) -> Response {
-    match user {
-        Some(user) => Json(WhoamiResponse::from(user)).into_response(),
-        None => Json(json!({"error": "Not logged in"})).into_response(),
+pub async fn whoami(user: Option<ApiUser>, mfa_pending: Option<MfaPending>) -> Response {
+    match (user, mfa_pending) {
+        (Some(user), None) => Json(WhoamiResponse::logged_in(user)).into_response(),
+        (None, Some(_)) => Json(WhoamiResponse::MfaPending).into_response(),
+        (None, None) => Json(json!({"error": "Not logged in"})).into_response(),
+        (Some(_), Some(_)) => {
+            debug_assert!(
+                false,
+                "Logged in user and MFA pending should not be possible at the same time."
+            );
+            Json(json!({"error": "Not logged in"})).into_response()
+        }
     }
 }

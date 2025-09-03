@@ -300,6 +300,81 @@ impl ApiUserRepository {
         Ok(code)
     }
 
+    pub async fn mfa_enabled(&self, user_id: &ApiUserId) -> Result<bool, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM totp WHERE user_id = $1 AND state = 'enabled') as "exists!"
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn check_totp_code(&self, user_id: &ApiUserId, code: &str) -> Result<bool, Error> {
+        self.check_and_increase_totp_try_counter(user_id).await?;
+
+        struct Totp {
+            id: TotpId,
+            url: String,
+        }
+
+        let totps = sqlx::query_as!(
+            Totp,
+            r#"
+            SELECT id, url FROM totp WHERE user_id = $1 AND state = 'enabled'
+            "#,
+            **user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let now = Utc::now().timestamp() as u64;
+
+        for Totp { id, url } in totps {
+            let totp = TOTP::from_url(url)?;
+
+            if totp.check(code, now) {
+                sqlx::query!(
+                    "
+                    UPDATE totp SET last_used = now() where id = $1
+                    ",
+                    *id
+                )
+                .execute(&self.pool)
+                .await?;
+
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    async fn check_and_increase_totp_try_counter(&self, user_id: &ApiUserId) -> Result<(), Error> {
+        let counter = sqlx::query_scalar!(
+            r#"
+            UPDATE api_users
+            SET totp_try_counter       = CASE
+                                             WHEN totp_try_counter_reset < now() THEN 0
+                                             ELSE totp_try_counter + 1 END,
+                totp_try_counter_reset = CASE
+                                             WHEN totp_try_counter_reset < now() THEN now() + '1 min'
+                                             ELSE totp_try_counter_reset END
+            WHERE id = $1
+            RETURNING totp_try_counter;
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool).await?;
+
+        if counter > 3 {
+            Err(Error::TooManyRequests)
+        } else {
+            Ok(())
+        }
+    }
+
     pub async fn totp_codes(&self, user_id: &ApiUserId) -> Result<Vec<TotpCode>, Error> {
         Ok(sqlx::query_as!(
             TotpCode,

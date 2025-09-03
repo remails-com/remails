@@ -5,7 +5,7 @@ use crate::{
             delete_password, delete_totp_code, finish_enroll_totp, start_enroll_totp, totp_codes,
             update_password, update_user,
         },
-        auth::{logout, password_login, password_register},
+        auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
         messages::{get_message, list_messages, remove_message, update_to_retry_asap},
@@ -375,6 +375,7 @@ impl ApiServer {
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
+            .route("/login/totp", post(totp_login))
             .route("/register/password", post(password_register))
             .route("/invite/{org_id}", get(get_org_invites).post(create_invite))
             .route("/invite/{org_id}/{invite_id}", delete(remove_invite))
