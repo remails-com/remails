@@ -121,7 +121,7 @@ export function NavBar({ close }: { close: () => void }) {
       />
       <NavLink
         label="Settings"
-        active={routerState.name === "settings"}
+        active={routerState.name.startsWith("settings")}
         leftSection={<IconSettings size={20} stroke={1.8} />}
         onClick={() => {
           navigate("settings");
