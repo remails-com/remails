@@ -35,7 +35,7 @@ use axum::{
 use base64ct::Encoding;
 use http::{HeaderName, HeaderValue, StatusCode};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::{PgPool, postgres::PgListener};
 use std::{env, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -261,7 +261,7 @@ impl ApiServer {
         moneybird.register_webhook();
 
         let state = ApiState {
-            pool,
+            pool: pool.clone(),
             config: ApiConfig {
                 session_key,
                 remails_config: Default::default(),
@@ -390,6 +390,20 @@ impl ApiServer {
             state.config.clone(),
             append_default_headers,
         ));
+
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            info!("Postgres notification listener starting...");
+            let mut listener = PgListener::connect_with(&pool).await.unwrap();
+            listener.listen("table_update").await.unwrap();
+            loop {
+                let notification = listener.recv().await;
+                match notification {
+                    Ok(n) => info!("Received notification: {:?}", n),
+                    Err(e) => error!("Error receiving notification: {:?}", e),
+                }
+            }
+        });
 
         ApiServer {
             socket,
