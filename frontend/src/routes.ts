@@ -78,8 +78,8 @@ export const routes = [
     path: "/{org_id}/settings",
     children: [
       {
-        name: "invites",
-        path: "/invites",
+        name: "members",
+        path: "/members",
       },
     ],
   },

@@ -1,6 +1,111 @@
 import { expect, test } from "vitest";
-import { flattenRoutes, Router } from "./router";
-import { routes } from "./routes";
+import { flattenRoutes, Route, Router } from "./router";
+
+// Constant routes for router unit tests
+const routes = [
+  {
+    name: "projects",
+    path: "/{org_id}/projects",
+    children: [
+      {
+        name: "project",
+        path: "/{proj_id}",
+        children: [
+          {
+            name: "streams",
+            path: "/streams",
+            children: [
+              {
+                name: "stream",
+                path: "/{stream_id}",
+                children: [
+                  {
+                    name: "messages",
+                    path: "/messages",
+                    children: [
+                      {
+                        name: "message",
+                        path: "/{message_id}",
+                      },
+                    ],
+                  },
+                  {
+                    name: "credentials",
+                    path: "/credentials",
+                    children: [
+                      {
+                        name: "credential",
+                        path: "/{credential_id}",
+                      },
+                    ],
+                  },
+                  {
+                    name: "settings",
+                    path: "/settings",
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: "domains",
+            path: "/domains",
+            children: [
+              {
+                name: "domain",
+                path: "/{domain_id}",
+              },
+            ],
+          },
+          {
+            name: "settings",
+            path: "/settings",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "domains",
+    path: "/{org_id}/domains",
+    children: [
+      {
+        name: "domain",
+        path: "/{domain_id}",
+      },
+    ],
+  },
+  {
+    name: "settings",
+    path: "/{org_id}/settings",
+    children: [
+      {
+        name: "members",
+        path: "/members",
+      },
+    ],
+  },
+  {
+    name: "account",
+    path: "/{org_id}/account",
+  },
+  {
+    name: "statistics",
+    path: "/{org_id}/statistics",
+  },
+  {
+    name: "organizations",
+    path: "/{org_id}/organizations",
+  },
+  {
+    name: "default",
+    path: "/",
+  },
+  {
+    name: "login",
+    path: "/login",
+  },
+] as const satisfies Route[];
 
 test("Match a path", () => {
   const router = new Router(routes);
@@ -165,8 +270,8 @@ test("flattenRoutes", () => {
       path: "/{org_id}/settings",
     },
     {
-      name: "settings.invites",
-      path: "/{org_id}/settings/invites",
+      name: "settings.members",
+      path: "/{org_id}/settings/members",
     },
     {
       name: "account",
@@ -187,10 +292,6 @@ test("flattenRoutes", () => {
     {
       name: "login",
       path: "/login",
-    },
-    {
-      name: "invite",
-      path: "/invite/{new_org_id}/{invite_id}/{password}",
     },
   ]);
 });

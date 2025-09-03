@@ -1,21 +1,22 @@
-import { ActionIcon, Button, Flex, Table, Text } from "@mantine/core";
+import { ActionIcon, Button, Flex, Table, Text, Title } from "@mantine/core";
 import { IconTrash, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
 import { CreatedInvite } from "../../types";
 import { useState } from "react";
-import { useOrganizations } from "../../hooks/useOrganizations";
+import { useInvites, useMembers, useOrganizations } from "../../hooks/useOrganizations";
 import { errorNotification } from "../../notify";
-import { useInvites } from "../../hooks/useInvites";
 import StyledTable from "../StyledTable";
 import { formatDateTime } from "../../util";
 import { useSelector } from "../../hooks/useSelector";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import InfoAlert from "../InfoAlert";
 
-export default function Invites() {
+export default function Members() {
   const { currentOrganization } = useOrganizations();
   const { invites, setInvites } = useInvites();
+  const { members } = useMembers();
   const user = useSelector((state) => state.user);
 
   const [opened, { open, close }] = useDisclosure(false);
@@ -73,7 +74,7 @@ export default function Invites() {
     });
   };
 
-  const rows = invites?.map((invite) => (
+  const invite_rows = invites?.map((invite) => (
     <Table.Tr key={invite.id}>
       <Table.Td>{formatDateTime(invite.expires_at)}</Table.Td>
       <Table.Td>{invite.created_by_name}</Table.Td>
@@ -85,9 +86,31 @@ export default function Invites() {
     </Table.Tr>
   ));
 
+  const member_rows = members?.map((member) => (
+    <Table.Tr key={member.user_id}>
+      <Table.Td>{member.name}</Table.Td>
+      <Table.Td>{member.email}</Table.Td>
+      <Table.Td>{member.role}</Table.Td>
+      <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
+    </Table.Tr>
+  ));
+
   return (
     <>
-      <StyledTable headers={["Expires", "Created by", ""]}>{rows}</StyledTable>
+      <InfoAlert stateName="organization-members">
+        This section shows all Remails accounts that have access to this organization. Admins can invite new members to
+        this organization by creating and sharing invite links.
+      </InfoAlert>
+
+      <Title order={3} mb="md">
+        Organization members
+      </Title>
+      <StyledTable headers={["Name", "Email", "Role", "Updated"]}>{member_rows}</StyledTable>
+
+      <Title order={3} mb="md" mt="xl">
+        Organization invites
+      </Title>
+      <StyledTable headers={["Expires", "Created by", ""]}>{invite_rows}</StyledTable>
       <Flex justify="center" mt="md">
         <Button onClick={createInvite} leftSection={<IconUserPlus />}>
           New invite link

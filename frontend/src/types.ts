@@ -309,3 +309,12 @@ export type CreatedInvite = {
   created_at: string;
   expires_at: string;
 };
+
+export type OrganizationMember = {
+  user_id: string;
+  email: string;
+  name: string;
+  role: Role;
+  added_at: string;
+  updated_at: string;
+};
