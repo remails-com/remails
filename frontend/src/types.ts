@@ -262,7 +262,6 @@ export interface PasswordLoginRequest {
 
 export interface SignUpRequest extends PasswordLoginRequest {
   name: string;
-  terms: boolean;
 }
 
 export type ProductIdentifier =
