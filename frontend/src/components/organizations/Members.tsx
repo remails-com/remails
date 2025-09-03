@@ -11,6 +11,7 @@ import { formatDateTime } from "../../util";
 import { useSelector } from "../../hooks/useSelector";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import InfoAlert from "../InfoAlert";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
@@ -96,6 +97,11 @@ export default function Members() {
 
   return (
     <>
+      <InfoAlert stateName="organization-members">
+        This section shows all Remails accounts that have access to this organization. Admins can invite new members to
+        this organization by creating and sharing invite links.
+      </InfoAlert>
+
       <Title order={3} mb="md">
         Organization members
       </Title>
