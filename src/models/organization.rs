@@ -1,5 +1,5 @@
 use crate::{
-    models::{ApiUserId, Error},
+    models::{ApiUserId, Error, Role},
     moneybird::MoneybirdContactId,
 };
 use chrono::{DateTime, Utc};
@@ -55,6 +55,24 @@ impl Organization {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NewOrganization {
     pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct OrganizationMember {
+    user_id: ApiUserId,
+    email: String,
+    name: String,
+    role: Role,
+    added_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+impl OrganizationMember {
+    pub fn user_id(&self) -> ApiUserId {
+        self.user_id
+    }
 }
 
 #[derive(Clone)]
@@ -219,6 +237,24 @@ impl OrganizationRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn list_members(
+        &self,
+        org_id: OrganizationId,
+    ) -> Result<Vec<OrganizationMember>, Error> {
+        Ok(sqlx::query_as!(
+            OrganizationMember,
+            r#"
+            SELECT o.api_user_id as "user_id", u.email, u.name, o.role as "role: Role", o.created_at as "added_at", o.updated_at
+            FROM api_users_organizations o
+            JOIN api_users u ON o.api_user_id = u.id
+            WHERE o.organization_id = $1
+            "#,
+            *org_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 }
 

@@ -1,6 +1,9 @@
 use crate::{
     api::error::{ApiError, ApiResult},
-    models::{ApiUser, NewOrganization, Organization, OrganizationId, OrganizationRepository},
+    models::{
+        ApiUser, NewOrganization, Organization, OrganizationId, OrganizationMember,
+        OrganizationRepository,
+    },
 };
 use axum::{
     Json,
@@ -123,6 +126,25 @@ pub async fn update_organization(
     Ok(Json(organization))
 }
 
+pub async fn list_members(
+    Path(org_id): Path<OrganizationId>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser,
+) -> ApiResult<Vec<OrganizationMember>> {
+    has_read_access(&user, &org_id)?;
+
+    let members = repo.list_members(org_id).await?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "listed {} members",
+        members.len()
+    );
+
+    Ok(Json(members))
+}
+
 #[cfg(test)]
 mod tests {
     use sqlx::PgPool;
@@ -223,6 +245,16 @@ mod tests {
             }
         );
 
+        // organization should contain the user as admin
+        let response = server
+            .get(format!("/api/organizations/{}/members", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].user_id(), user_3);
+
         // update organization
         let response = server
             .put(
@@ -296,6 +328,13 @@ mod tests {
         // can't remove organization
         let response = server
             .delete(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // can't get organization members
+        let response = server
+            .get(format!("/api/organizations/{org_1}/members"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);

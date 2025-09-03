@@ -7,8 +7,8 @@ use crate::{
         messages::{get_message, list_messages, remove_message, update_to_retry_asap},
         oauth::GithubOauthService,
         organizations::{
-            create_organization, get_organization, list_organizations, remove_organization,
-            update_organization,
+            create_organization, get_organization, list_members, list_organizations,
+            remove_organization, update_organization,
         },
         projects::{create_project, list_projects, remove_project, update_project},
         smtp_credentials::{
@@ -356,6 +356,10 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
                 post(verify_domain),
+            )
+            .route(
+                "/organizations/{org_id}/members",
+                get(list_members),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
