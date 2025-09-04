@@ -1,8 +1,8 @@
 use crate::{
     api::error::{ApiError, ApiResult},
     models::{
-        ApiUser, NewOrganization, Organization, OrganizationId, OrganizationMember,
-        OrganizationRepository,
+        ApiUser, ApiUserId, NewOrganization, Organization, OrganizationId, OrganizationMember,
+        OrganizationRepository, Role,
     },
 };
 use axum::{
@@ -145,6 +145,43 @@ pub async fn list_members(
     Ok(Json(members))
 }
 
+pub async fn remove_member(
+    Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser,
+) -> ApiResult<()> {
+    // admins can remove any member, non-admin users can remove themselves
+    has_write_access(&user, &org_id).or(has_read_access(&user, &org_id).and(
+        (user_id == *user.id())
+            .then_some(())
+            .ok_or(ApiError::Forbidden),
+    ))?;
+
+    if user.is_org_admin(&org_id) {
+        let members = repo.list_members(org_id).await?;
+        let any_other_admins = members
+            .iter()
+            .any(|m| *m.role() == Role::Admin && *m.user_id() != user_id);
+        if !any_other_admins {
+            return Err(ApiError::PreconditionFailed(
+                "Last remaining admin cannot leave organization, delete the organization instead"
+                    .to_owned(),
+            ));
+        }
+    }
+
+    repo.remove_member(org_id, user_id).await?;
+
+    info!(
+        removed_user_id = user_id.to_string(),
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "removed user from organization",
+    );
+
+    Ok(Json(()))
+}
+
 #[cfg(test)]
 mod tests {
     use sqlx::PgPool;
@@ -253,7 +290,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
         assert_eq!(members.len(), 1);
-        assert_eq!(members[0].user_id(), user_3);
+        assert_eq!(*members[0].user_id(), user_3);
 
         // update organization
         let response = server
@@ -302,9 +339,10 @@ mod tests {
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_organization_no_access(pool: PgPool) {
-        let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235"; // is admin of org 1 and 2
+        let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let mut server = TestServer::new(pool.clone(), Some(user_b)).await;
+        let mut server = TestServer::new(pool.clone(), Some(user_2)).await;
 
         // can't get organization
         let response = server
@@ -339,6 +377,13 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
+        // can't remove organization member
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/members/{user_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
         // not logged in users can't create organization
         server.set_user(None);
         let response = server
@@ -351,5 +396,65 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_organization_members(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let org_2 = "5d55aec5-136a-407c-952f-5348d4398204";
+        let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
+
+        // org 1 has only 1 member
+        let response = server
+            .get(format!("/api/organizations/{org_1}/members"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert_eq!(members.len(), 1);
+        assert_eq!(*members[0].user_id(), user_1);
+
+        // can't remove themselves from org 1 as they are the last remaining admin
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/members/{user_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+
+        // org 2 has 2 admins
+        let response = server
+            .get(format!("/api/organizations/{org_2}/members"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert_eq!(members.len(), 2);
+
+        // can remove themselves from org 2
+        let response = server
+            .delete(format!("/api/organizations/{org_2}/members/{user_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // now they lost access to org 2
+        let response = server
+            .get(format!("/api/organizations/{org_2}/members"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // org 2 now contains only 1 member
+        server.set_user(Some(user_2));
+        let response = server
+            .get(format!("/api/organizations/{org_2}/members"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert_eq!(members.len(), 1);
+        assert_eq!(*members[0].user_id(), user_2);
     }
 }

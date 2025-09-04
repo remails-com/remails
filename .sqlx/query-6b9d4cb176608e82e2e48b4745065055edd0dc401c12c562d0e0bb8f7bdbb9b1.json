@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM api_users_organizations\n            WHERE organization_id = $1 AND api_user_id = $2\n            RETURNING api_user_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "api_user_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b9d4cb176608e82e2e48b4745065055edd0dc401c12c562d0e0bb8f7bdbb9b1"
+}

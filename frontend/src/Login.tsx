@@ -124,7 +124,6 @@ export default function Login({ setUser }: LoginProps) {
           </Button>
         </Group>
 
-        {/* TODO: increase label size */}
         <Divider label={<Text size="sm">or continue with email:</Text>} labelPosition="center" my="lg" />
 
         <form onSubmit={form.onSubmit(submit)}>
