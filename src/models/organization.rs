@@ -68,10 +68,13 @@ pub struct OrganizationMember {
     updated_at: DateTime<Utc>,
 }
 
-#[cfg(test)]
 impl OrganizationMember {
-    pub fn user_id(&self) -> ApiUserId {
-        self.user_id
+    pub fn user_id(&self) -> &ApiUserId {
+        &self.user_id
+    }
+
+    pub fn role(&self) -> &Role {
+        &self.role
     }
 }
 
@@ -256,6 +259,25 @@ impl OrganizationRepository {
         .fetch_all(&self.pool)
         .await?)
     }
+
+    pub async fn remove_member(
+        &self,
+        org_id: OrganizationId,
+        user_id: ApiUserId,
+    ) -> Result<ApiUserId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM api_users_organizations
+            WHERE organization_id = $1 AND api_user_id = $2
+            RETURNING api_user_id
+            "#,
+            *org_id,
+            *user_id,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
 }
 
 #[cfg(test)]
@@ -301,5 +323,29 @@ mod test {
 
         let not_found = repo.get_by_id(org1.id).await.unwrap();
         assert_eq!(None, not_found);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn organization_remove_member(db: PgPool) {
+        let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+
+        let repo = OrganizationRepository::new(db);
+
+        // org 2 contains two members: user_1 and user_2
+        let members = repo.list_members(org_2).await.unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().any(|m| m.user_id == user_1));
+        assert!(members.iter().any(|m| m.user_id == user_2));
+
+        // remove user_1 from org 2
+        let removed_user = repo.remove_member(org_2, user_1).await.unwrap();
+        assert_eq!(removed_user, user_1);
+
+        // now org 2 should only contain 1 member: user_2
+        let members = repo.list_members(org_2).await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].user_id, user_2);
     }
 }

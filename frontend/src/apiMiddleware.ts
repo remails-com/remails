@@ -28,7 +28,7 @@ export default async function apiMiddleware(
   let orgChanged = newOrgId !== navState.from.params.org_id && newOrgId !== null;
 
   let user: WhoamiResponse | null = navState.state.user;
-  if (navState.state.user === null) {
+  if (navState.state.user === null || navState.to.params.force == "reload-orgs") {
     user = await get<WhoamiResponse>("/api/whoami");
 
     if (user === null || "error" in user) {
@@ -55,7 +55,7 @@ export default async function apiMiddleware(
   }
 
   let organizations = navState.state.organizations;
-  if (navState.state.organizations === null) {
+  if (navState.state.organizations === null || navState.to.params.force == "reload-orgs") {
     organizations = await get<Organization[]>("/api/organizations");
     dispatch({ type: "set_organizations", organizations });
   }
