@@ -794,4 +794,51 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_password_rate_limit(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        // login with the wrong password four times
+        for _ in 0..4 {
+            let response = server
+                .post(
+                    "/api/login/password",
+                    serialize_body(json!({
+                        "email": "test-totp-rate-limit@user-4",
+                        "password": "wrong"
+                    })),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
+
+        // the fifth time, the correct password doesn't work either
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp-rate-limit@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // One minute later, the password works again
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp-rate-limit@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

@@ -593,17 +593,45 @@ impl ApiUserRepository {
         email: &EmailAddress,
         password: Password,
     ) -> Result<(), Error> {
-        let hash = sqlx::query_scalar!(
+        struct HashAndCounter {
+            hash: Option<String>,
+            counter: i32,
+        }
+
+        let res = sqlx::query_as!(
+            HashAndCounter,
             r#"
-            SELECT password_hash FROM api_users WHERE email = $1
+            UPDATE api_users
+            SET password_try_counter       = CASE
+                                             WHEN password_try_counter_reset < now() THEN 0
+                                             ELSE password_try_counter + 1 END,
+                password_try_counter_reset = CASE
+                                             WHEN password_try_counter_reset < now() THEN now() + '1 min'
+                                             ELSE password_try_counter_reset END
+            WHERE email = $1
+            RETURNING password_try_counter as counter, password_hash as hash
             "#,
             email.as_str()
         )
         .fetch_optional(&self.pool)
-        .await?
-        .flatten();
+        .await?;
 
-        if let Some(hash) = hash {
+        if let Some(HashAndCounter {
+            hash: Some(hash),
+            counter,
+        }) = res
+        {
+            if counter > 3 {
+                // TODO, we might wan't to send an email to the user telling their account got temporarily blocked (see #222)
+                // Note, we must not show any other behaviour to the outside world to avoid leaking if an account exists
+                tracing::warn!(
+                    attempts = counter,
+                    "Too many failed password attempts for user {}",
+                    email
+                );
+                return Err(Error::NotFound("User not found or wrong password"));
+            }
+
             password_auth::verify_password(password.0, &hash)
                 .inspect_err(|err| tracing::trace!("wrong password for {}: {}", email, err))
                 .map_err(|_| Error::NotFound("User not found or wrong password"))?;
