@@ -1,5 +1,6 @@
 INSERT INTO api_users (id, email, name, password_hash)
-VALUES ('9244a050-7d72-451a-9248-4b43d5108235', 'admin@example.com', 'Test API User 1', '$argon2id$v=19$m=16,t=2,p=1$TEVEQWk2eGJMRDJZalZJbg$VUjsIMHx9udxdHJq/vHRUQ');
+VALUES ('9244a050-7d72-451a-9248-4b43d5108235', 'admin@example.com', 'Test API User 1',
+        '$argon2id$v=19$m=16,t=2,p=1$TEVEQWk2eGJMRDJZalZJbg$VUjsIMHx9udxdHJq/vHRUQ');
 
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('9244a050-7d72-451a-9248-4b43d5108235', '44729d9f-a7dc-4226-b412-36a7537f5176', 'admin'),
@@ -12,7 +13,21 @@ INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', '5d55aec5-136a-407c-952f-5348d4398204', 'admin');
 
 INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
-VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3', '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3',
+        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
 
 INSERT INTO api_users (id, email, name, global_role)
 VALUES ('deadbeef-4e43-4a66-bbb9-fbcd4a933a34', 'sudo@remails', 'Super Admin', 'admin');
+
+INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
+VALUES ('820128b1-e08f-404d-ad08-e679a7d6b515', 'test-totp@user-4', 'TOTP API User user 4',
+        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+
+INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
+VALUES ('672be18f-a89e-4a1d-adaa-45a0b4e2f350', 'test-totp-rate-limit@user-4',
+        'TOTP API User user for rate limit testing',
+        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+INSERT INTO totp (id, description, user_id, url, state, last_used)
+VALUES ('448f8b7c-e6b9-4038-ab73-bc35826fd5da', '', '672be18f-a89e-4a1d-adaa-45a0b4e2f350',
+        'otpauth://totp/Remails:test-totp-rate-limit%40user-4?secret=CP32OBJWEI6FDV3Z7UDMAQT5YDYUS36L&algorithm=SHA256&issuer=Remails',
+        'enabled', null)

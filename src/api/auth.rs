@@ -425,13 +425,15 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        api::tests::{TestServer, deserialize_body, serialize_body},
+        models::TotpCode,
+    };
     use axum::body::Body;
     use serde_json::json;
     use sqlx::PgPool;
-
-    use crate::api::tests::{TestServer, serialize_body};
-
-    use super::*;
+    use totp_rs::TOTP;
 
     fn get_session_cookie(response: Response<Body>) -> String {
         let cookies = response.headers().get_all("set-cookie");
@@ -508,5 +510,288 @@ mod tests {
             .insert("Cookie", "invalid_session".to_string());
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_totp_login(pool: PgPool) {
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        // login with password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+        server.headers.insert("Cookie", session);
+
+        // Not allowed to set up TOTP for other accounts
+        let response = server
+            .get("/api/api_user/54432300-128a-46a0-8a83-fe39ce3ce5ef/totp/enroll")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Start 2FA TOTP setup
+        let response = server
+            .get("/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp/enroll")
+            .await
+            .unwrap();
+
+        // Verify we get an QR code
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get_all("content-type")
+                .iter()
+                .collect::<Vec<_>>(),
+            vec!["image/png"]
+        );
+
+        // get QR code content from the database
+        let totp_url = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM totp WHERE user_id = '820128b1-e08f-404d-ad08-e679a7d6b515' AND state = 'enrolling'
+            "#
+        ).fetch_one(&pool).await.unwrap();
+
+        // 2FA code is not shown as usable yet
+        let response = server
+            .get("/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        assert_eq!(codes.len(), 0);
+
+        // finish 2FA sign up
+        let code = TOTP::from_url(totp_url)
+            .unwrap()
+            .generate_current()
+            .unwrap();
+        let response = server
+            .post(
+                "/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp/enroll",
+                serialize_body(json!({
+                    "code": code,
+                    "description": "test code",
+                })),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify 2FA code is shown now with the correct description but without a date for "last used"
+        let response = server
+            .get("/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        assert_eq!(codes[0].description, "test code");
+        assert!(codes[0].last_used.is_none());
+
+        // logout
+        let response = server.get("/api/logout").await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let session = get_session_cookie(response);
+        assert_eq!(session, format!("{SESSION_COOKIE_NAME}=")); // empty session
+        server.headers.insert("Cookie", session);
+
+        // login with password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+        server.headers.insert("Cookie", session);
+
+        // requires 2FA before actually logged in
+        let whoami = server.get("/api/whoami").await.unwrap();
+        assert_eq!(whoami.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(whoami.into_body()).await;
+        assert!(matches!(whoami, WhoamiResponse::MfaPending));
+
+        // Cannot yet access any "real" API routes
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = server
+            .get("/api/api_user/54432300-128a-46a0-8a83-fe39ce3ce5ef/totp")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // A wrong 2FA code is not accepted
+        let response = server
+            .post(
+                "/api/login/totp",
+                serialize_body(serde_json::Value::String("12345".to_string())),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Still can't access API routes
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Finsh login with TOTP
+        let response = server
+            .post(
+                "/api/login/totp",
+                serialize_body(serde_json::Value::String(code)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+        server.headers.insert("Cookie", session);
+
+        // Can access API routes
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify 2FA code is shown now with the correct description and date for "last used"
+        let response = server
+            .get("/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        assert_eq!(codes.len(), 1);
+        assert_eq!(codes[0].description, "test code");
+        assert!(codes[0].last_used.is_some());
+
+        // Can delete TOTP code to disable 2FA
+        let response = server
+            .delete(format!(
+                "/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp/{}",
+                codes[0].id()
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // check that TOTP code deleted
+        let response = server
+            .get("/api/api_user/820128b1-e08f-404d-ad08-e679a7d6b515/totp")
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        assert_eq!(codes.len(), 0);
+
+        // logout
+        let response = server.get("/api/logout").await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let session = get_session_cookie(response);
+        assert_eq!(session, format!("{SESSION_COOKIE_NAME}=")); // empty session
+        server.headers.insert("Cookie", session);
+
+        // login with password does not require 2FA anymore
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+        server.headers.insert("Cookie", session);
+
+        let whoami = server.get("/api/whoami").await.unwrap();
+        assert_eq!(whoami.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(whoami.into_body()).await;
+        assert!(matches!(whoami, WhoamiResponse::LoggedIn(_)));
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_totp_rate_limit(pool: PgPool) {
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        // get TOTP code secret from the database
+        let totp_url = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM totp WHERE user_id = '672be18f-a89e-4a1d-adaa-45a0b4e2f350' AND state = 'enabled'
+            "#
+        ).fetch_one(&pool).await.unwrap();
+        let totp = TOTP::from_url(totp_url).unwrap();
+
+        // login with password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp-rate-limit@user-4",
+                    "password": "unsecure"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = get_session_cookie(response);
+        server.headers.insert("Cookie", session);
+
+        // Four attempts that return "Unauthorized"
+        for _ in 0..4 {
+            let response = server
+                .post(
+                    "/api/login/totp",
+                    serialize_body(serde_json::Value::String("123456".to_string())),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        // The fifth attempt returns "Too many requests"
+        let response = server
+            .post(
+                "/api/login/totp",
+                serialize_body(serde_json::Value::String("123456".to_string())),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // Also, the correct code won't work right away anymore
+        let response = server
+            .post(
+                "/api/login/totp",
+                serialize_body(serde_json::Value::String(totp.generate_current().unwrap())),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // One minute later, the code should work again
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        let response = server
+            .post(
+                "/api/login/totp",
+                serialize_body(serde_json::Value::String(totp.generate_current().unwrap())),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

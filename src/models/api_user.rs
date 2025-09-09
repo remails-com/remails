@@ -51,14 +51,6 @@ pub struct NewApiUser {
     pub github_user_id: Option<i64>,
 }
 
-#[derive(Serialize, sqlx::Type, Debug, Clone, Copy)]
-#[sqlx(type_name = "totp_state", rename_all = "lowercase")]
-#[serde(rename_all = "snake_case")]
-enum TotpState {
-    Enabled,
-    Enrolling,
-}
-
 #[derive(Debug)]
 pub struct ApiUser {
     id: ApiUserId,
@@ -93,10 +85,11 @@ pub struct TotpFinishEnroll {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct TotpCode {
-    id: TotpId,
-    description: String,
-    last_used: Option<DateTime<Utc>>,
+    pub id: TotpId,
+    pub description: String,
+    pub last_used: Option<DateTime<Utc>>,
 }
 
 impl TotpCode {
