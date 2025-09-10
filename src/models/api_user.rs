@@ -690,7 +690,7 @@ mod test {
                 email: self.email.clone(),
                 name: self.name.clone(),
                 password: None,
-                global_role: self.global_role.clone(),
+                global_role: self.global_role,
                 org_roles: self.org_roles.clone(),
                 github_user_id: self.github_user_id,
             }

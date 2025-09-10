@@ -233,40 +233,56 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    async fn test_invites_no_access(server: &mut TestServer, status_code: StatusCode) {
+    async fn test_invites_no_access(
+        server: &mut TestServer,
+        read_status_code: StatusCode,
+        write_status_code: StatusCode,
+    ) {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let active_invite: InviteId = "32bba198-fdd8-4cb7-8b82-85857dd2527f".parse().unwrap();
 
         // can't get all invites for other organizations
         let response = server.get(format!("/api/invite/{org_1}")).await.unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), read_status_code);
 
         // can't create invite for other organizations
         let response = server
             .post(format!("/api/invite/{org_1}"), Body::empty())
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), write_status_code);
 
         // can't delete invite
         let response = server
             .delete(format!("/api/invite/{}/{}", org_1, active_invite))
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), write_status_code);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_invites_no_access_wrong_user(pool: PgPool) {
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // is not in any org
         let mut server = TestServer::new(pool, Some(user_3)).await;
-        test_invites_no_access(&mut server, StatusCode::FORBIDDEN).await;
+        test_invites_no_access(&mut server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
+    async fn test_invites_no_access_non_admin(pool: PgPool) {
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // maintainer of org 1
+        let mut server = TestServer::new(pool, Some(user_4)).await;
+        test_invites_no_access(&mut server, StatusCode::OK, StatusCode::FORBIDDEN).await;
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_invites_no_access_not_logged_in(pool: PgPool) {
         let mut server = TestServer::new(pool, None).await;
-        test_invites_no_access(&mut server, StatusCode::UNAUTHORIZED).await;
+        test_invites_no_access(
+            &mut server,
+            StatusCode::UNAUTHORIZED,
+            StatusCode::UNAUTHORIZED,
+        )
+        .await;
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
