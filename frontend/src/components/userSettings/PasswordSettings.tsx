@@ -1,5 +1,5 @@
 import { notifications } from "@mantine/notifications";
-import { IconTrash, } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { Button, Grid, PasswordInput, Stack, Tooltip } from "@mantine/core";
@@ -46,6 +46,8 @@ export function PasswordSettings() {
           color: "green",
           message: "",
         });
+      } else if (res.status === 400) {
+        passwordForm.setFieldError("old_password", "Wrong password");
       } else {
         errorNotification("Something went wrong");
       }
@@ -80,6 +82,8 @@ export function PasswordSettings() {
           color: "green",
           message: "",
         });
+      } else if (res.status === 400) {
+        passwordForm.setFieldError("old_password", "Wrong password");
       } else {
         errorNotification("Something went wrong");
       }

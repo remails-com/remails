@@ -72,7 +72,7 @@ export function Pages() {
   }
 
   if (routerState.name === "mfa") {
-    return <Mfa setUser={(user) => dispatch({ type: "set_user", user })} />
+    return <Mfa setUser={(user) => dispatch({ type: "set_user", user })} />;
   }
 
   if (!userFetched) {

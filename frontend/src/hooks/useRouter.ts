@@ -93,6 +93,16 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     [state.routerState, dispatch, router, middleware]
   );
 
+  const redirect = useCallback(async () => {
+    if (state.routerState.params.redirect) {
+      const page = router.match(state.routerState.params.redirect);
+      if (page) {
+        return navigate(page.name, page.params);
+      }
+    }
+    return navigate("default");
+  }, [state.routerState, router, navigate]);
+
   // handle back / forward events
   useEffect(() => {
     const onPopState = async (event: PopStateEvent) => {
@@ -110,5 +120,5 @@ export function useRouter(router: Router, state: State, dispatch: Dispatch<Actio
     };
   }, [dispatch, router, navigate]);
 
-  return { navigate };
+  return { navigate, redirect };
 }

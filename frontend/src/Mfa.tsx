@@ -14,11 +14,7 @@ interface FormValues {
 }
 
 export default function Mfa({ setUser }: MfaProps) {
-  const {
-    state: { routerState },
-    navigate,
-    match,
-  } = useRemails();
+  const { redirect } = useRemails();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -31,17 +27,6 @@ export default function Mfa({ setUser }: MfaProps) {
     },
   });
 
-  // TODO deduplicate code
-  const redirect = () => {
-    if (routerState.params.redirect) {
-      const page = match(routerState.params.redirect);
-      if (page) {
-        return navigate(page.name, page.params);
-      }
-    }
-    return navigate("default");
-  };
-
   const submit = async ({ code }: FormValues) => {
     const res = await fetch("/api/login/totp", {
       method: "POST",
@@ -52,12 +37,12 @@ export default function Mfa({ setUser }: MfaProps) {
     });
     if (res.status === 401) {
       setError("Invalid code");
-      form.setFieldError("code", true)
+      form.setFieldError("code", true);
       return;
     }
     if (res.status === 429) {
       setError("Too many attempts, please try again later");
-      form.setFieldError("code", true)
+      form.setFieldError("code", true);
       return;
     }
     if (res.status === 200) {
@@ -94,7 +79,7 @@ export default function Mfa({ setUser }: MfaProps) {
                 type="number"
               />
             </FocusTrap>
-            {error && <Alert variant="light" title={error}/>}
+            {error && <Alert variant="light" title={error} />}
             <Group justify="space-between">
               <Button href="/api/logout" component="a" variant="outline">
                 Cancel

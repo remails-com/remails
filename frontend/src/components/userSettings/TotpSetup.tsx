@@ -45,7 +45,7 @@ export default function TotpSetup({ opened, close }: TotpSetupProps) {
       setQrSrc(`/api/api_user/${user?.id}/totp/enroll?cacheInvalidator=${Math.random().toString(36).slice(2, 7)}`);
       setActiveStep(0);
     }
-  }, [opened]);
+  }, [opened, user?.id]);
 
   if (!user) {
     return null;

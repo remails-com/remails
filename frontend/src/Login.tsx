@@ -27,7 +27,7 @@ export default function Login({ setUser }: LoginProps) {
   const {
     state: { routerState },
     navigate,
-    match,
+    redirect,
   } = useRemails();
 
   const type: "login" | "register" = routerState.params.type === "register" ? "register" : "login";
@@ -48,16 +48,6 @@ export default function Login({ setUser }: LoginProps) {
       password: (val) => (val.length <= 6 ? "Password should include at least 6 characters" : null),
     },
   });
-
-  const redirect = () => {
-    if (routerState.params.redirect) {
-      const page = match(routerState.params.redirect);
-      if (page) {
-        return navigate(page.name, page.params);
-      }
-    }
-    return navigate("default");
-  };
 
   const submit = ({ email, name, password }: SignUpRequest) => {
     setGlobalError(null);
@@ -80,7 +70,7 @@ export default function Login({ setUser }: LoginProps) {
             return;
           }
           if (whoami.login_status === "mfa_pending") {
-            navigate("mfa", routerState.params)
+            navigate("mfa", routerState.params);
           }
           redirect();
         }

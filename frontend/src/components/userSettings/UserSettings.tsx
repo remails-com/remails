@@ -1,4 +1,4 @@
-import { Button, Container, Group, Stack, Tabs, TextInput, Title } from "@mantine/core";
+import { Button, Container, Group, Stack, Tabs, TextInput, Title, Tooltip } from "@mantine/core";
 import GitHubBadge from "./GitHubBadge";
 import { IconAuth2fa, IconBrandGithub, IconPassword } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
@@ -118,8 +118,19 @@ export default function UserSettings() {
           <Tabs.Panel value="2fa" mt="md">
             <TotpSetup opened={mfaOpened} close={closeMfa} />
             <Stack>
-              <TotpList />
-              <Button onClick={openMfa}>Add Authenticator App</Button>
+              {user.password_enabled && <TotpList />}
+              <Tooltip
+                label={
+                  user.password_enabled
+                    ? "Configure 2FA for password logins"
+                    : "2FA only works if you have a password configured to log in"
+                }
+                events={{ hover: true, focus: false, touch: !user.password_enabled }}
+              >
+                <Button onClick={openMfa} disabled={!user.password_enabled}>
+                  Add Authenticator App
+                </Button>
+              </Tooltip>
             </Stack>
           </Tabs.Panel>
 
