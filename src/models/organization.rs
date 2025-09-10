@@ -1,4 +1,5 @@
 use crate::{
+    SubscriptionStatus,
     models::{ApiUserId, Error, Role},
     moneybird::MoneybirdContactId,
 };
@@ -32,16 +33,18 @@ impl OrganizationId {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq)]
+#[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
     id: OrganizationId,
     pub name: String,
     total_message_quota: i64,
     used_message_quota: i64,
-    quota_reset: DateTime<Utc>,
+    quota_reset: Option<DateTime<Utc>>,
     moneybird_contact_id: Option<MoneybirdContactId>,
     remaining_rate_limit: i64,
     rate_limit_reset: DateTime<Utc>,
+    current_subscription: SubscriptionStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -75,6 +78,40 @@ impl OrganizationMember {
 
     pub fn role(&self) -> &Role {
         &self.role
+    }
+}
+
+struct PgOrganization {
+    id: OrganizationId,
+    pub name: String,
+    total_message_quota: i64,
+    used_message_quota: i64,
+    quota_reset: Option<DateTime<Utc>>,
+    moneybird_contact_id: Option<MoneybirdContactId>,
+    remaining_rate_limit: i64,
+    rate_limit_reset: DateTime<Utc>,
+    current_subscription: serde_json::Value,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl TryFrom<PgOrganization> for Organization {
+    type Error = serde_json::Error;
+
+    fn try_from(pg: PgOrganization) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: pg.id,
+            name: pg.name,
+            total_message_quota: pg.total_message_quota,
+            used_message_quota: pg.used_message_quota,
+            quota_reset: pg.quota_reset,
+            moneybird_contact_id: pg.moneybird_contact_id,
+            remaining_rate_limit: pg.remaining_rate_limit,
+            rate_limit_reset: pg.rate_limit_reset,
+            current_subscription: serde_json::from_value(pg.current_subscription)?,
+            created_at: pg.created_at,
+            updated_at: pg.updated_at,
+        })
     }
 }
 
@@ -116,7 +153,7 @@ impl OrganizationRepository {
 
     pub async fn create(&self, organization: NewOrganization) -> Result<Organization, Error> {
         Ok(sqlx::query_as!(
-            Organization,
+            PgOrganization,
             r#"
             INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
             VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())
@@ -129,12 +166,14 @@ impl OrganizationRepository {
                       updated_at,
                       moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                       rate_limit_reset,
-                      remaining_rate_limit
+                      remaining_rate_limit,
+                      current_subscription
             "#,
             organization.name.trim(),
         )
-        .fetch_one(&self.pool)
-        .await?)
+            .fetch_one(&self.pool)
+            .await?
+            .try_into()?)
     }
 
     pub async fn update(
@@ -143,7 +182,7 @@ impl OrganizationRepository {
         organization: NewOrganization,
     ) -> Result<Organization, Error> {
         Ok(sqlx::query_as!(
-            Organization,
+            PgOrganization,
             r#"
             UPDATE organizations
             SET name = $2
@@ -158,18 +197,20 @@ impl OrganizationRepository {
                 updated_at,
                 moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                 rate_limit_reset,
-                remaining_rate_limit
+                remaining_rate_limit,
+                current_subscription
             "#,
             *id,
             organization.name.trim(),
         )
         .fetch_one(&self.pool)
-        .await?)
+        .await?
+        .try_into()?)
     }
 
     pub async fn list(&self, filter: Option<Vec<Uuid>>) -> Result<Vec<Organization>, Error> {
         Ok(sqlx::query_as!(
-            Organization,
+            PgOrganization,
             r#"
             SELECT id,
                    name,
@@ -180,7 +221,8 @@ impl OrganizationRepository {
                    updated_at,
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
-                   remaining_rate_limit
+                   remaining_rate_limit,
+                   current_subscription
             FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY name
@@ -188,12 +230,15 @@ impl OrganizationRepository {
             filter.as_deref(),
         )
         .fetch_all(&self.pool)
-        .await?)
+        .await?
+        .into_iter()
+        .map(TryInto::<Organization>::try_into)
+        .collect::<Result<Vec<_>, _>>()?)
     }
 
     pub async fn get_by_id(&self, id: OrganizationId) -> Result<Option<Organization>, Error> {
         Ok(sqlx::query_as!(
-            Organization,
+            PgOrganization,
             r#"
             SELECT id,
                    name,
@@ -204,14 +249,17 @@ impl OrganizationRepository {
                    updated_at,
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
-                   remaining_rate_limit
+                   remaining_rate_limit,
+                   current_subscription
             FROM organizations
             WHERE id = $1
             "#,
             *id,
         )
         .fetch_optional(&self.pool)
-        .await?)
+        .await?
+        .map(TryInto::<Organization>::try_into)
+        .transpose()?)
     }
 
     pub async fn remove(&self, id: OrganizationId) -> Result<OrganizationId, Error> {
@@ -296,7 +344,7 @@ mod test {
             self.total_message_quota - self.used_message_quota
         }
 
-        pub fn quota_reset(&self) -> DateTime<Utc> {
+        pub fn quota_reset(&self) -> Option<DateTime<Utc>> {
             self.quota_reset
         }
     }

@@ -96,6 +96,18 @@ const actionHandler: {
   add_totp_code: (state, action) => {
     return { ...state, totpCodes: [action.totpCode, ...(state.totpCodes || [])] };
   },
+  set_subscription: function (state, action) {
+    const org = state.organizations?.find((o) => o.id === action.organizationId);
+    if (!org) {
+      console.error("Cannot find organization to update subscription");
+      return state;
+    }
+    org.current_subscription = action.status;
+    return {
+      ...state,
+      organizations: [...(state.organizations?.filter((o) => o.id !== action.organizationId) || []), org],
+    };
+  },
   set_error: function (state, action) {
     return { ...state, error: action.error };
   },
@@ -111,6 +123,6 @@ function getActionHandler<T extends Action["type"]>(
 export function reducer(state: State, action: Action): State {
   const handler = getActionHandler(action);
   const newState = handler(state, action);
-  // console.log("action:", action, newState);
+  console.log("action:", action, newState);
   return newState;
 }

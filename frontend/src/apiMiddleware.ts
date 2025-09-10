@@ -4,7 +4,7 @@ import { Action, Organization, User, WhoamiResponse } from "./types";
 import { FullRouterState, RouteParams, Router } from "./router";
 import { RemailsError } from "./error/error";
 
-async function get<T>(path: string): Promise<T> {
+export async function get<T>(path: string): Promise<T> {
   const response = await fetch(path, {
     method: "GET",
     headers: {

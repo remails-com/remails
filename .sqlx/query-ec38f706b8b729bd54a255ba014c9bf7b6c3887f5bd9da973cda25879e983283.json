@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())\n            RETURNING id,\n                      name,\n                      total_message_quota,\n                      used_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())\n            RETURNING id,\n                      name,\n                      total_message_quota,\n                      used_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit,\n                      current_subscription\n            ",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,11 @@
         "ordinal": 9,
         "name": "remaining_rate_limit",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "current_subscription",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
@@ -64,13 +69,14 @@
       false,
       false,
       false,
-      false,
+      true,
       false,
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "d61203c3392b4b84b9e3c1ad0922c992fce5f7c5cee845497768ffb037ca8131"
+  "hash": "ec38f706b8b729bd54a255ba014c9bf7b6c3887f5bd9da973cda25879e983283"
 }

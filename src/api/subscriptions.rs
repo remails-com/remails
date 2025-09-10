@@ -23,7 +23,7 @@ pub async fn get_subscription(
         "get subscription"
     );
 
-    Ok(Json(moneybird.get_subscription_status(org_id).await?))
+    Ok(Json(moneybird.refresh_subscription_status(org_id).await?))
 }
 
 pub async fn get_sales_link(

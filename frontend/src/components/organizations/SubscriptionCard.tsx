@@ -1,11 +1,15 @@
-import { Badge, Button, Card, Container, Divider, Grid, Skeleton, Stack, Text, Title, Tooltip } from "@mantine/core";
-import { useSubscription } from "../../hooks/useSubscription.tsx";
+import { Badge, Button, Card, Container, Divider, Grid, Stack, Text, Title, Tooltip } from "@mantine/core";
+import { useSubscription } from "../../hooks/useSubscription.ts";
 import { SubscriptionStatus } from "../../types.ts";
 import React from "react";
 import { formatDate } from "../../util.ts";
 
 export default function SubscriptionCard() {
-  const { subscription, salesLink } = useSubscription();
+  const { subscription, navigateToSales } = useSubscription();
+
+  if (!subscription) {
+    return null;
+  }
 
   const details = (subscription: SubscriptionStatus) => {
     if (subscription.status === "none") {
@@ -18,11 +22,7 @@ export default function SubscriptionCard() {
   const no_subscription = (
     <>
       <Text size="xl">No subscription found</Text>
-      <Tooltip label="Can't connect to sales backend, try again later" disabled={!!salesLink}>
-        <Button component="a" href={salesLink ? salesLink : undefined} target="_blank" disabled={!salesLink}>
-          Choose subscription
-        </Button>
-      </Tooltip>
+      <Button onClick={navigateToSales}>Choose subscription</Button>
     </>
   );
 
@@ -62,24 +62,13 @@ export default function SubscriptionCard() {
     </>
   );
 
-  const details_skeleton = (
-    <>
-      <Skeleton height="1.7rem" width="20%" />
-      <Divider />
-      <Skeleton height="1rem" width="80%" />
-      <Skeleton height="1rem" width="80%" />
-      <Skeleton height="1rem" width="80%" />
-      <Button variant="light" />
-    </>
-  );
-
   return (
     <Container size="xs" mt="md" pl="0" ml="0">
       <Title order={3} mb="md">
         Your subscription
       </Title>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="md">{subscription === null ? details_skeleton : details(subscription)}</Stack>
+        <Stack gap="md">{details(subscription)}</Stack>
       </Card>
     </Container>
   );

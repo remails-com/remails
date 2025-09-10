@@ -1,5 +1,5 @@
 use crate::models::{OrganizationId, Password};
-use chrono::{DateTime, Days, Months, NaiveDate, Utc};
+use chrono::{DateTime, Days, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rand::Rng;
@@ -89,6 +89,7 @@ struct RecurringSalesInvoice {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum ProductIdentifier {
+    NotSubscribed,
     RmlsFree,
     RmlsTinyMonthly,
     RmlsSmallMonthly,
@@ -127,6 +128,7 @@ impl FromStr for ProductIdentifier {
 impl ProductIdentifier {
     pub fn monthly_quota(&self) -> u32 {
         match self {
+            ProductIdentifier::NotSubscribed => 0,
             ProductIdentifier::RmlsFree => 1_000,
             ProductIdentifier::RmlsTinyMonthly => 100_000,
             ProductIdentifier::RmlsSmallMonthly => 300_000,
@@ -141,7 +143,7 @@ impl ProductIdentifier {
     }
 }
 
-#[derive(Serialize, PartialEq)]
+#[derive(Serialize, PartialEq, Debug, Deserialize, Clone)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SubscriptionStatus {
     Active(Subscription),
@@ -149,7 +151,7 @@ pub enum SubscriptionStatus {
     None,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct Subscription<EndDate = Option<NaiveDate>> {
     subscription_id: SubscriptionId,
     product: ProductIdentifier,
@@ -202,6 +204,18 @@ impl SubscriptionStatus {
             SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
                 ProductIdentifier::RmlsFree.monthly_quota()
             }
+        }
+    }
+
+    fn subscription_id(&self) -> Option<&SubscriptionId> {
+        match self {
+            SubscriptionStatus::Active(Subscription {
+                subscription_id, ..
+            }) => Some(subscription_id),
+            SubscriptionStatus::Expired(Subscription {
+                subscription_id, ..
+            }) => Some(subscription_id),
+            SubscriptionStatus::None => None,
         }
     }
 }
@@ -262,7 +276,6 @@ where
 struct QuotaResetInfo {
     org_id: OrganizationId,
     contact_id: Option<MoneybirdContactId>,
-    quota_reset: DateTime<Utc>,
 }
 
 /// This models the content of a webhook we received from Moneybird
@@ -477,16 +490,11 @@ impl MoneyBird {
         )
     }
 
-    pub async fn webhook_handler(&self, payload: MoneybirdWebhookPayload) -> Result<(), Error> {
-        if matches!(payload.action, Action::TestWebhook) {
-            debug!(
-                administration_id = payload.administration_id.as_str(),
-                "Received test webhook"
-            );
-            return Ok(());
-        }
-
-        let Some(webhook_id) = payload.webhook_id else {
+    async fn authorize_webhook_call(
+        &self,
+        payload: &MoneybirdWebhookPayload,
+    ) -> Result<WebhookId, Error> {
+        let Some(webhook_id) = payload.webhook_id.clone() else {
             warn!(
                 administration_id = payload.administration_id.as_str(),
                 "Received webhook without webhook_id"
@@ -523,8 +531,24 @@ impl MoneyBird {
             })
             .map_err(|_| Error::Unauthorized)?;
 
+        Ok(webhook_id)
+    }
+
+    pub async fn webhook_handler(&self, payload: MoneybirdWebhookPayload) -> Result<(), Error> {
+        if matches!(payload.action, Action::TestWebhook) {
+            debug!(
+                administration_id = payload.administration_id.as_str(),
+                "Received test webhook"
+            );
+            return Ok(());
+        }
+
+        let webhook_id = self.authorize_webhook_call(&payload).await?;
+
         match payload.action {
-            Action::TestWebhook => {}
+            Action::TestWebhook => {
+                unreachable!("Test webhook should have been handled before this point")
+            }
             Action::Unknown(unknown) => {
                 warn!(
                     webhook_id = webhook_id.as_str(),
@@ -537,81 +561,98 @@ impl MoneyBird {
             | Action::SubscriptionEdited
             | Action::SubscriptionResumed
             | Action::SubscriptionUpdated => {
-                debug!(
-                    webhook_id = webhook_id.as_str(),
-                    administration_id = payload.administration_id.as_str(),
-                    "received {:?} webhook",
-                    payload.action
-                );
-                if payload.entity_type != EntityType::Subscription {
-                    error!(
-                        webhook_id = webhook_id.as_str(),
-                        administration_id = payload.administration_id.as_str(),
-                        "webhook does not have subscription entity type"
-                    );
-                    return Err(Error::Moneybird(
-                        "Webhook does not have subscription entity type".to_string(),
-                    ));
-                }
-                let subscription = serde_json::from_value::<MoneybirdSubscription>(payload.entity)?;
-                self.sync_subscription(subscription).await?;
+                self.sync_subscription(payload, webhook_id).await?;
             }
         };
 
         Ok(())
     }
 
-    async fn sync_subscription(&self, subscription: MoneybirdSubscription) -> Result<(), Error> {
+    async fn sync_subscription(
+        &self,
+        payload: MoneybirdWebhookPayload,
+        webhook_id: WebhookId,
+    ) -> Result<(), Error> {
+        debug!(
+            webhook_id = webhook_id.as_str(),
+            administration_id = payload.administration_id.as_str(),
+            "received {:?} webhook",
+            payload.action
+        );
+        if payload.entity_type != EntityType::Subscription {
+            error!(
+                webhook_id = webhook_id.as_str(),
+                administration_id = payload.administration_id.as_str(),
+                "webhook does not have subscription entity type"
+            );
+            return Err(Error::Moneybird(
+                "Webhook does not have subscription entity type".to_string(),
+            ));
+        }
+        let subscription = serde_json::from_value::<MoneybirdSubscription>(payload.entity)?;
+
         debug!(
             subscription_id = subscription.id.as_str(),
             moneybird_contact_id = subscription.contact.id.as_str(),
             "syncing subscription"
         );
 
-        let Some(quota_reset) = sqlx::query_scalar!(
-            r#"
-            SELECT quota_reset FROM organizations WHERE moneybird_contact_id = $1
-            "#,
-            *subscription.contact.id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            warn!(
-                moneybird_contact_id = subscription.contact.id.as_str(),
-                "Cannot find organization with moneybird contact id"
-            );
-            return Err(Error::Moneybird(
-                "Cannot find organization with moneybird contact id".to_string(),
-            ));
-        };
-
         let subscription_status: SubscriptionStatus = [&subscription].into();
 
+        self.store_subscription_status(&subscription_status, subscription.contact.id)
+            .await
+    }
+
+    async fn store_subscription_status(
+        &self,
+        subscription_status: &SubscriptionStatus,
+        moneybird_contact_id: MoneybirdContactId,
+    ) -> Result<(), Error> {
         let quota_reset = self
-            .calculate_quota_reset_datetime(&subscription_status, quota_reset)
+            .calculate_quota_reset_datetime(subscription_status)
             .await?;
 
         let product = match subscription_status {
             SubscriptionStatus::Active(Subscription { product, .. }) => product,
             SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
-                ProductIdentifier::RmlsFree
+                &ProductIdentifier::NotSubscribed
             }
         };
 
-        sqlx::query!(
+        let org_id = sqlx::query_scalar!(
             r#"
             UPDATE organizations
             SET total_message_quota = $2,
-                quota_reset = $3
+                quota_reset = $3,
+                current_subscription = $4
             WHERE moneybird_contact_id = $1
+            RETURNING id
             "#,
-            *subscription.contact.id,
+            moneybird_contact_id.as_str(),
             product.monthly_quota() as i64,
-            quota_reset
+            quota_reset,
+            serde_json::to_value(&subscription_status)?
         )
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
+
+        let Some(org_id) = org_id else {
+            warn!(
+                moneybird_contact_id = moneybird_contact_id.as_str(),
+                "Could not find organization with moneybird contact id"
+            );
+            return Err(Error::Moneybird(
+                "Could not find organization with moneybird contact id".to_string(),
+            ));
+        };
+        debug!(
+            organization_id = org_id.to_string(),
+            subscription_id = ?subscription_status.subscription_id(),
+            moneybird_contact_id = moneybird_contact_id.as_str(),
+            product = product.to_string(),
+            quota_reset = ?quota_reset,
+            "Updated subscription information in database"
+        );
 
         Ok(())
     }
@@ -636,50 +677,47 @@ impl MoneyBird {
     async fn calculate_quota_reset_datetime(
         &self,
         subscription: &SubscriptionStatus,
-        mut current_quota_reset: DateTime<Utc>,
-    ) -> Result<DateTime<Utc>, Error> {
-        Ok(match subscription {
+    ) -> Result<Option<DateTime<Utc>>, Error> {
+        let date = match subscription {
             SubscriptionStatus::Active(Subscription {
-                                           end_date,
-                                           recurring_sales_invoice_id,
-                                           subscription_id,
-                                           ..
-                                       }) => {
+                end_date,
+                recurring_sales_invoice_id,
+                subscription_id,
+                ..
+            }) => {
                 if let Some(end_date) = end_date {
                     trace!(
                         subscription_id = subscription_id.as_str(),
                         "Calculating subscription period end based on the subscription `end_date`"
                     );
-                    *end_date
+                    Some(*end_date)
                 } else {
                     trace!(
                         subscription_id = subscription_id.as_str(),
                         recurring_sales_invoice_id = recurring_sales_invoice_id.as_str(),
                         "Calculating subscription period end based on the next recurring invoice `invoice_date`"
                     );
-                    self.next_invoice_date(recurring_sales_invoice_id).await?
+                    Some(self.next_invoice_date(recurring_sales_invoice_id).await?
                         .checked_sub_days(Days::new(1))
                         .ok_or(
-                            Error::Moneybird("Could not calculate subscription period end based on the next invoice date".to_string()))?
+                            Error::Moneybird("Could not calculate subscription period end based on the next invoice date".to_string()))?)
                 }
             }
             SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
-                trace!("Calculating subscription period end based existing reset date as the current subscription is expired or does not exist");
-                while current_quota_reset < Utc::now() {
-                    current_quota_reset = current_quota_reset
-                        .checked_add_months(Months::new(1))
-                        .ok_or(Error::Moneybird(
-                            "Could not calculate subscription period end based existing reset date"
-                                .to_string(),
-                        ))?;
-                }
-                current_quota_reset.date_naive()
+                trace!("Found no active subscription. Setting quota reset to None");
+                None
             }
-        }.and_hms_opt(23, 59, 59)
-            .ok_or(Error::Moneybird(
-                "Could not add time to subscription end".to_string()
-            ))?
-            .and_utc())
+        };
+        Ok(match date {
+            None => None,
+            Some(date) => Some(
+                date.and_hms_opt(23, 59, 59)
+                    .ok_or(Error::Moneybird(
+                        "Could not add time to subscription end".to_string(),
+                    ))?
+                    .and_utc(),
+            ),
+        })
     }
 
     pub async fn reset_all_quotas(&self) -> Result<(), Error> {
@@ -687,8 +725,7 @@ impl MoneyBird {
             QuotaResetInfo,
             r#"
             SELECT id AS org_id,
-                   moneybird_contact_id AS "contact_id: MoneybirdContactId",
-                   quota_reset
+                   moneybird_contact_id AS "contact_id: MoneybirdContactId"
             FROM organizations
             WHERE quota_reset < now()
             "#
@@ -707,14 +744,14 @@ impl MoneyBird {
 
     async fn reset_single_quota(&self, quota_info: QuotaResetInfo) -> Result<(), Error> {
         let subscription_status = if let Some(contact_id) = quota_info.contact_id {
-            self.get_subscription_status_by_contact_id(contact_id)
+            self.get_subscription_status_by_contact_id(&contact_id)
                 .await?
         } else {
             SubscriptionStatus::None
         };
 
         let reset_date = self
-            .calculate_quota_reset_datetime(&subscription_status, quota_info.quota_reset)
+            .calculate_quota_reset_datetime(&subscription_status)
             .await?;
 
         let quota = subscription_status.quota();
@@ -839,7 +876,7 @@ impl MoneyBird {
         Ok(sales_link.parse()?)
     }
 
-    pub async fn get_subscription_status(
+    pub async fn refresh_subscription_status(
         &self,
         org_id: OrganizationId,
     ) -> Result<SubscriptionStatus, Error> {
@@ -861,12 +898,17 @@ impl MoneyBird {
             return Ok(SubscriptionStatus::None);
         };
 
-        self.get_subscription_status_by_contact_id(contact_id).await
+        let status = self
+            .get_subscription_status_by_contact_id(&contact_id)
+            .await?;
+
+        self.store_subscription_status(&status, contact_id).await?;
+        Ok(status)
     }
 
     async fn get_subscription_status_by_contact_id(
         &self,
-        contact_id: MoneybirdContactId,
+        contact_id: &MoneybirdContactId,
     ) -> Result<SubscriptionStatus, Error> {
         let subscription_status: SubscriptionStatus = self
             .client
@@ -897,8 +939,6 @@ impl MoneyBird {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::OrganizationRepository;
-    use chrono::Datelike;
 
     impl<T> Default for Subscription<T>
     where
@@ -973,77 +1013,5 @@ mod test {
 
         assert!(expired_yesterday > none);
         assert!(none < expired_yesterday);
-    }
-
-    #[sqlx::test(fixtures("organizations"))]
-    async fn quota_reset_without_moneybird(db: PgPool) {
-        let moneybird = MoneyBird::new(db.clone()).await.unwrap();
-        moneybird.reset_all_quotas().await.unwrap();
-
-        let org_repo = OrganizationRepository::new(db);
-        let orgs = org_repo.list(None).await.unwrap();
-
-        for org in orgs {
-            match org.id().as_uuid().to_string().as_str() {
-                "44729d9f-a7dc-4226-b412-36a7537f5176" => {
-                    assert_eq!(org.remaining_message_quota(), 1_000);
-                    assert_eq!(
-                        org.quota_reset().date_naive(),
-                        Utc::now()
-                            .date_naive()
-                            .checked_add_months(Months::new(1))
-                            .unwrap()
-                    );
-                }
-                "5d55aec5-136a-407c-952f-5348d4398204" => {
-                    assert_eq!(org.remaining_message_quota(), 500);
-                    assert_eq!(
-                        org.quota_reset().date_naive(),
-                        Utc::now()
-                            .date_naive()
-                            .checked_add_months(Months::new(1))
-                            .unwrap()
-                    );
-                }
-                "533d9a19-16e8-4a1b-a824-ff50af8b428c" => {
-                    assert_eq!(org.remaining_message_quota(), 1_000);
-                    assert_eq!(
-                        org.quota_reset().date_naive(),
-                        Utc::now()
-                            .date_naive()
-                            .checked_add_months(Months::new(1))
-                            .unwrap()
-                    );
-                }
-                "ee14cdb8-f62e-42ac-a0cd-294d708be994" => {
-                    assert_eq!(org.remaining_message_quota(), 1_000);
-                    let new_reset_date = if Utc::now().date_naive().day() <= 25 {
-                        Utc::now().date_naive().with_day(25).unwrap()
-                    } else {
-                        Utc::now()
-                            .date_naive()
-                            .with_day(25)
-                            .unwrap()
-                            .checked_add_months(Months::new(1))
-                            .unwrap()
-                    };
-                    assert_eq!(org.quota_reset().date_naive(), new_reset_date);
-                }
-                "7b2d91d0-f9d9-4ddd-88ac-6853f736501c" => {
-                    assert_eq!(org.remaining_message_quota(), 333);
-                    assert_eq!(org.quota_reset().date_naive(), Utc::now().date_naive());
-                }
-                "0f83bfee-e7b6-4670-83ec-192afec2b137" => {
-                    assert_eq!(org.remaining_message_quota(), 1_000);
-                    // If a reset date is the last of the month,
-                    // it will gradually reduce to the 28th of the month, because of the February.
-                    // This is only true if there is no connection to Moneybird,
-                    // as with Moneybird will reset the quota on the last day before the new invoice,
-                    // which will potentially be the last day of the month.
-                    assert_eq!(org.quota_reset().day(), 28u32)
-                }
-                _ => panic!("Unexpected organization id"),
-            }
-        }
     }
 }
