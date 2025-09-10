@@ -1,4 +1,4 @@
-use super::error::{ApiError, ApiResult};
+use super::error::ApiResult;
 use crate::models::{
     ApiMessage, ApiMessageMetadata, ApiUser, MessageFilter, MessageId, MessageRepository,
     MessageRetryUpdate, OrganizationId, ProjectId, StreamId,
@@ -9,29 +9,6 @@ use axum::{
 };
 use serde::Deserialize;
 use tracing::debug;
-
-fn has_read_access(
-    org: &OrganizationId,
-    proj: Option<&ProjectId>,
-    stream: Option<&StreamId>,
-    message: Option<&MessageId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    has_write_access(org, proj, stream, message, user)
-}
-
-fn has_write_access(
-    org: &OrganizationId,
-    _proj: Option<&ProjectId>,
-    _stream: Option<&StreamId>,
-    _message: Option<&MessageId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
 
 #[derive(Debug, Deserialize)]
 pub struct MessagePath {
@@ -58,13 +35,7 @@ pub async fn list_messages(
     Query(filter): Query<MessageFilter>,
     user: ApiUser,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
-    has_read_access(
-        &org_id,
-        project_id.as_ref(),
-        stream_id.as_ref(),
-        None,
-        &user,
-    )?;
+    user.has_org_read_access(&org_id)?;
 
     let messages = repo
         .list_message_metadata(org_id, project_id, stream_id, filter)
@@ -92,13 +63,7 @@ pub async fn get_message(
     }): Path<SpecificMessagePath>,
     user: ApiUser,
 ) -> ApiResult<ApiMessage> {
-    has_read_access(
-        &org_id,
-        project_id.as_ref(),
-        stream_id.as_ref(),
-        Some(&message_id),
-        &user,
-    )?;
+    user.has_org_read_access(&org_id)?;
 
     let message = repo
         .find_by_id(org_id, project_id, stream_id, message_id)
@@ -126,13 +91,7 @@ pub async fn remove_message(
     }): Path<SpecificMessagePath>,
     user: ApiUser,
 ) -> ApiResult<()> {
-    has_write_access(
-        &org_id,
-        project_id.as_ref(),
-        stream_id.as_ref(),
-        Some(&message_id),
-        &user,
-    )?;
+    user.has_org_write_access(&org_id)?;
 
     repo.remove(org_id, project_id, stream_id, message_id)
         .await?;
@@ -159,13 +118,7 @@ pub async fn update_to_retry_asap(
     }): Path<SpecificMessagePath>,
     user: ApiUser,
 ) -> ApiResult<MessageRetryUpdate> {
-    has_write_access(
-        &org_id,
-        project_id.as_ref(),
-        stream_id.as_ref(),
-        Some(&message_id),
-        &user,
-    )?;
+    user.has_org_write_access(&org_id)?;
 
     let update = repo
         .update_to_retry_asap(org_id, project_id, stream_id, message_id)

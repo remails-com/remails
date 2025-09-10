@@ -31,10 +31,34 @@ impl ApiUser {
             .is_some_and(|role| *role == Role::Admin)
     }
 
-    pub fn is_org_admin(&self, org_id: &OrganizationId) -> bool {
+    fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
         self.org_roles
             .iter()
-            .any(|org_role| org_role.org_id == *org_id && org_role.role == Role::Admin)
+            .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role))
+    }
+
+    pub fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::ReadOnly) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
+    }
+
+    pub fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::Maintainer) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
+    }
+
+    pub fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::Admin) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
     }
 
     pub fn viewable_organizations(&self) -> Vec<uuid::Uuid> {

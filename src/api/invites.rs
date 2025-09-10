@@ -15,20 +15,6 @@ use crate::{
     },
 };
 
-fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
-fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
 #[derive(Debug, Deserialize)]
 pub struct InvitePath {
     org_id: OrganizationId,
@@ -39,7 +25,7 @@ pub async fn create_invite(
     Path(InvitePath { org_id }): Path<InvitePath>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(&user, &org_id)?;
+    user.has_org_admin_access(&org_id)?;
 
     let expires = Utc::now() + TimeDelta::days(7);
     let invite = repo.create(org_id, *user.id(), expires).await?;
@@ -58,7 +44,7 @@ pub async fn get_org_invites(
     Path(InvitePath { org_id }): Path<InvitePath>,
     user: ApiUser,
 ) -> ApiResult<Vec<ApiInvite>> {
-    has_read_access(&user, &org_id)?;
+    user.has_org_read_access(&org_id)?;
 
     debug!(
         user_id = user.id().to_string(),
@@ -94,7 +80,7 @@ pub async fn remove_invite(
     Path((org_id, invite_id)): Path<(OrganizationId, InviteId)>,
     user: ApiUser,
 ) -> ApiResult<InviteId> {
-    has_write_access(&user, &org_id)?;
+    user.has_org_admin_access(&org_id)?;
 
     debug!(
         user_id = user.id().to_string(),

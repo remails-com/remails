@@ -17,27 +17,6 @@ use http::StatusCode;
 use serde::Deserialize;
 use tracing::{debug, info};
 
-fn has_write_access(
-    org: &OrganizationId,
-    _proj: Option<&ProjectId>,
-    _domain: Option<&DomainId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
-fn has_read_access(
-    org: &OrganizationId,
-    proj: Option<&ProjectId>,
-    domain: Option<&DomainId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    has_write_access(org, proj, domain, user)
-}
-
 #[derive(Debug, Deserialize)]
 pub struct DomainPath {
     org_id: OrganizationId,
@@ -57,7 +36,7 @@ pub async fn create_domain(
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(&org_id, project_id.as_ref(), None, &user)?;
+    user.has_org_write_access(&org_id)?;
 
     let domain = repo.create(new, org_id, project_id).await?;
 
@@ -80,7 +59,7 @@ pub async fn list_domains(
     user: ApiUser,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
 ) -> ApiResult<Vec<ApiDomain>> {
-    has_read_access(&org_id, project_id.as_ref(), None, &user)?;
+    user.has_org_read_access(&org_id)?;
 
     let domains = repo.list(org_id, project_id).await?;
 
@@ -112,7 +91,7 @@ pub async fn get_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<ApiDomain> {
-    has_read_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
+    user.has_org_read_access(&org_id)?;
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 
@@ -141,7 +120,7 @@ pub async fn delete_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<DomainId> {
-    has_write_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
+    user.has_org_write_access(&org_id)?;
 
     let domain_id = repo.remove(org_id, project_id, domain_id).await?;
 
@@ -165,7 +144,7 @@ pub(super) async fn verify_domain(
         domain_id,
     }): Path<SpecificDomainPath>,
 ) -> ApiResult<DomainVerificationStatus> {
-    has_write_access(&org_id, project_id.as_ref(), Some(&domain_id), &user)?;
+    user.has_org_read_access(&org_id)?;
 
     let domain = repo.get(org_id, project_id, domain_id).await?;
 

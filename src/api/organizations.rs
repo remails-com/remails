@@ -13,17 +13,6 @@ use axum::{
 use http::StatusCode;
 use tracing::{debug, info};
 
-fn has_read_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    has_write_access(user, org)
-}
-
-fn has_write_access(user: &ApiUser, org: &OrganizationId) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
 pub async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
@@ -45,17 +34,17 @@ pub async fn list_organizations(
 }
 
 pub async fn get_organization(
-    Path(id): Path<OrganizationId>,
+    Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<Organization> {
-    has_read_access(&user, &id)?;
+    user.has_org_read_access(&org_id)?;
 
-    let organization = repo.get_by_id(id).await?.ok_or(ApiError::NotFound)?;
+    let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::NotFound)?;
 
     debug!(
         user_id = user.id().to_string(),
-        organization_id = id.to_string(),
+        organization_id = org_id.to_string(),
         organization_name = organization.name,
         "retrieved organization",
     );
@@ -90,13 +79,13 @@ pub async fn create_organization(
 }
 
 pub async fn remove_organization(
-    Path(id): Path<OrganizationId>,
+    Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<OrganizationId> {
-    has_write_access(&user, &id)?;
+    user.has_org_admin_access(&org_id)?;
 
-    let organization_id = repo.remove(id).await?;
+    let organization_id = repo.remove(org_id).await?;
 
     info!(
         user_id = user.id().to_string(),
@@ -108,14 +97,14 @@ pub async fn remove_organization(
 }
 
 pub async fn update_organization(
-    Path(id): Path<OrganizationId>,
+    Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
     Json(update): Json<NewOrganization>,
 ) -> ApiResult<Organization> {
-    has_write_access(&user, &id)?;
+    user.has_org_admin_access(&org_id)?;
 
-    let organization = repo.update(id, update).await?;
+    let organization = repo.update(org_id, update).await?;
 
     info!(
         user_id = user.id().to_string(),
@@ -131,7 +120,7 @@ pub async fn list_members(
     State(repo): State<OrganizationRepository>,
     user: ApiUser,
 ) -> ApiResult<Vec<OrganizationMember>> {
-    has_read_access(&user, &org_id)?;
+    user.has_org_read_access(&org_id)?;
 
     let members = repo.list_members(org_id).await?;
 
@@ -151,13 +140,14 @@ pub async fn remove_member(
     user: ApiUser,
 ) -> ApiResult<()> {
     // admins can remove any member, non-admin users can remove themselves
-    has_write_access(&user, &org_id).or(has_read_access(&user, &org_id).and(
-        (user_id == *user.id())
-            .then_some(())
-            .ok_or(ApiError::Forbidden),
-    ))?;
+    user.has_org_admin_access(&org_id)
+        .or(user.has_org_read_access(&org_id).and(
+            (user_id == *user.id())
+                .then_some(())
+                .ok_or(ApiError::Forbidden),
+        ))?;
 
-    if user.is_org_admin(&org_id) {
+    if user.has_org_admin_access(&org_id).is_ok() {
         let members = repo.list_members(org_id).await?;
         let any_other_admins = members
             .iter()
