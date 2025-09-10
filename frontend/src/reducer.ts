@@ -87,6 +87,15 @@ const actionHandler: {
   set_user: function (state, action) {
     return { ...state, user: action.user, userFetched: true };
   },
+  set_totp_codes: (state, action) => {
+    return { ...state, totpCodes: action.totpCodes };
+  },
+  remove_totp_code: (state, action) => {
+    return { ...state, totpCodes: state.totpCodes?.filter((c) => c.id !== action.totpCodeId) || null };
+  },
+  add_totp_code: (state, action) => {
+    return { ...state, totpCodes: [action.totpCode, ...(state.totpCodes || [])] };
+  },
   set_error: function (state, action) {
     return { ...state, error: action.error };
   },

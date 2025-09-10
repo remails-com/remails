@@ -1,12 +1,18 @@
 use crate::models::{Error, OrganizationId};
+use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use totp_rs::{Algorithm, Secret, TOTP};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiUserId(Uuid);
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+pub struct TotpId(Uuid);
 
 #[derive(From, derive_more::Debug, Deserialize, FromStr)]
 #[debug("*****")]
@@ -68,6 +74,28 @@ pub struct ApiUserUpdate {
 pub struct PasswordUpdate {
     pub new_password: Password,
     pub current_password: Password,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct TotpFinishEnroll {
+    #[garde(pattern("^[0-9]{6}$"))]
+    code: String,
+    #[garde(length(max = 100))]
+    description: String,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct TotpCode {
+    pub id: TotpId,
+    pub description: String,
+    pub last_used: Option<DateTime<Utc>>,
+}
+
+impl TotpCode {
+    pub fn id(&self) -> &TotpId {
+        &self.id
+    }
 }
 
 impl ApiUser {
@@ -176,6 +204,202 @@ impl ApiUserRepository {
         tx.commit().await?;
 
         Ok(self.find_by_id(&user_id.into()).await?.unwrap())
+    }
+
+    pub async fn start_enroll_totp(&self, user_id: &ApiUserId) -> Result<Vec<u8>, Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let email = sqlx::query_scalar!(r#"SELECT email FROM api_users WHERE id = $1"#, **user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        // Make sure there is only one TOTP token enrolling at a time
+        sqlx::query!(
+            r#"
+            DELETE FROM totp WHERE user_id = $1 AND state = 'enrolling';
+            "#,
+            **user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        let totp = TOTP::new(
+            Algorithm::SHA256,
+            6,
+            1,
+            30,
+            Secret::generate_secret().to_bytes().unwrap(),
+            Some("Remails".to_string()),
+            email,
+        )?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO totp (id, description, user_id, url)
+            VALUES (gen_random_uuid(), 'Not yet activated' , $1, $2)
+            "#,
+            **user_id,
+            totp.get_url()
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        let png = totp.get_qr_png().map_err(Error::Internal);
+        tx.commit().await?;
+        png
+    }
+
+    pub async fn finish_enroll_totp(
+        &self,
+        user_id: &ApiUserId,
+        finish: TotpFinishEnroll,
+    ) -> Result<TotpCode, Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let url = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM totp WHERE user_id = $1 AND state = 'enrolling'
+            "#,
+            **user_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let totp = TOTP::from_url(url)?;
+
+        if !totp.check(&finish.code, Utc::now().timestamp() as u64) {
+            return Err(Error::BadRequest("Invalid TOTP code".to_string()));
+        }
+
+        let code = sqlx::query_as!(
+            TotpCode,
+            r#"
+            UPDATE totp SET state = 'enabled',
+                            description = $2
+            WHERE user_id = $1
+              AND state = 'enrolling'
+            RETURNING
+                id,
+                description,
+                last_used
+            "#,
+            **user_id,
+            finish.description
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(code)
+    }
+
+    pub async fn mfa_enabled(&self, user_id: &ApiUserId) -> Result<bool, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM totp WHERE user_id = $1 AND state = 'enabled') as "exists!"
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn check_totp_code(&self, user_id: &ApiUserId, code: &str) -> Result<bool, Error> {
+        self.check_and_increase_totp_try_counter(user_id).await?;
+
+        struct Totp {
+            id: TotpId,
+            url: String,
+        }
+
+        let totps = sqlx::query_as!(
+            Totp,
+            r#"
+            SELECT id, url FROM totp WHERE user_id = $1 AND state = 'enabled'
+            "#,
+            **user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let now = Utc::now().timestamp() as u64;
+
+        for Totp { id, url } in totps {
+            let totp = TOTP::from_url(url)?;
+
+            if totp.check(code, now) {
+                sqlx::query!(
+                    "
+                    UPDATE totp SET last_used = now() where id = $1
+                    ",
+                    *id
+                )
+                .execute(&self.pool)
+                .await?;
+
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    async fn check_and_increase_totp_try_counter(&self, user_id: &ApiUserId) -> Result<(), Error> {
+        let counter = sqlx::query_scalar!(
+            r#"
+            UPDATE api_users
+            SET totp_try_counter       = CASE
+                                             WHEN totp_try_counter_reset < now() THEN 0
+                                             ELSE totp_try_counter + 1 END,
+                totp_try_counter_reset = CASE
+                                             WHEN totp_try_counter_reset < now() THEN now() + '1 min'
+                                             ELSE totp_try_counter_reset END
+            WHERE id = $1
+            RETURNING totp_try_counter;
+            "#,
+            **user_id
+        )
+        .fetch_one(&self.pool).await?;
+
+        if counter > 3 {
+            Err(Error::TooManyRequests)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn totp_codes(&self, user_id: &ApiUserId) -> Result<Vec<TotpCode>, Error> {
+        Ok(sqlx::query_as!(
+            TotpCode,
+            r#"
+            SELECT id, description, last_used FROM totp
+            WHERE state = 'enabled'
+              AND user_id = $1
+            "#,
+            **user_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn delete_totp(
+        &self,
+        user_id: &ApiUserId,
+        totp_id: &TotpId,
+    ) -> Result<TotpId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM totp
+            WHERE id = $2
+              AND user_id = $1
+            RETURNING id
+            "#,
+            **user_id,
+            **totp_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
     }
 
     pub async fn find_by_github_id(&self, github_id: i64) -> Result<Option<ApiUser>, Error> {
@@ -334,10 +558,10 @@ impl ApiUserRepository {
             "#,
             **id
         )
-        .fetch_optional(&self.pool)
-        .await?
-        .map(TryInto::try_into)
-        .transpose()
+            .fetch_optional(&self.pool)
+            .await?
+            .map(TryInto::try_into)
+            .transpose()
     }
 
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
@@ -358,10 +582,10 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-        .fetch_optional(&self.pool)
-        .await?
-        .map(TryInto::try_into)
-        .transpose()
+            .fetch_optional(&self.pool)
+            .await?
+            .map(TryInto::try_into)
+            .transpose()
     }
 
     pub async fn check_password(
@@ -369,17 +593,45 @@ impl ApiUserRepository {
         email: &EmailAddress,
         password: Password,
     ) -> Result<(), Error> {
-        let hash = sqlx::query_scalar!(
+        struct HashAndCounter {
+            hash: Option<String>,
+            counter: i32,
+        }
+
+        let res = sqlx::query_as!(
+            HashAndCounter,
             r#"
-            SELECT password_hash FROM api_users WHERE email = $1
+            UPDATE api_users
+            SET password_try_counter       = CASE
+                                             WHEN password_try_counter_reset < now() THEN 0
+                                             ELSE password_try_counter + 1 END,
+                password_try_counter_reset = CASE
+                                             WHEN password_try_counter_reset < now() THEN now() + '1 min'
+                                             ELSE password_try_counter_reset END
+            WHERE email = $1
+            RETURNING password_try_counter as counter, password_hash as hash
             "#,
             email.as_str()
         )
         .fetch_optional(&self.pool)
-        .await?
-        .flatten();
+        .await?;
 
-        if let Some(hash) = hash {
+        if let Some(HashAndCounter {
+            hash: Some(hash),
+            counter,
+        }) = res
+        {
+            if counter > 3 {
+                // TODO, we might wan't to send an email to the user telling their account got temporarily blocked (see #222)
+                // Note, we must not show any other behaviour to the outside world to avoid leaking if an account exists
+                tracing::warn!(
+                    attempts = counter,
+                    "Too many failed password attempts for user {}",
+                    email
+                );
+                return Err(Error::NotFound("User not found or wrong password"));
+            }
+
             password_auth::verify_password(password.0, &hash)
                 .inspect_err(|err| tracing::trace!("wrong password for {}: {}", email, err))
                 .map_err(|_| Error::NotFound("User not found or wrong password"))?;

@@ -1,16 +1,25 @@
 use crate::{
     api::{
         error::{ApiError, ApiResult},
+        validation::ValidatedJson,
         whoami::WhoamiResponse,
     },
     models::{
         ApiUser, ApiUserId, ApiUserRepository, ApiUserUpdate, Error, Password, PasswordUpdate,
+        TotpCode, TotpFinishEnroll, TotpId,
     },
 };
 use axum::{
     Json,
     extract::{Path, State},
+    response::IntoResponse,
 };
+use http::header;
+use tracing::{debug, info};
+
+fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
+    has_write_access(user_id, user)
+}
 
 fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
     if *user.id() == user_id {
@@ -29,13 +38,18 @@ pub async fn update_user(
 
     repo.update(update, &user_id).await?;
 
-    Ok(Json(
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "updated user details"
+    );
+
+    Ok(Json(WhoamiResponse::logged_in(
         repo.find_by_id(&user_id)
             .await
             .transpose()
-            .ok_or(Error::NotFound("User not found"))??
-            .into(),
-    ))
+            .ok_or(Error::NotFound("User not found"))??,
+    )))
 }
 
 pub async fn update_password(
@@ -48,7 +62,98 @@ pub async fn update_password(
 
     repo.update_password(update, &user_id).await?;
 
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "updated user password"
+    );
+
     Ok(())
+}
+
+pub async fn start_enroll_totp(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+) -> Result<impl IntoResponse, ApiError> {
+    has_write_access(user_id, &user)?;
+
+    let png = repo.start_enroll_totp(&user_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "started enrolling TOTP"
+    );
+
+    let headers = [
+        (header::CONTENT_TYPE, "image/png".to_string()),
+        (
+            header::CACHE_CONTROL,
+            "no-cache, no-store, max-age=0, must-revalidate".to_string(),
+        ),
+        (header::PRAGMA, "no-cache".to_string()),
+        (header::EXPIRES, "0".to_string()),
+    ];
+
+    Ok((headers, png))
+}
+
+pub async fn finish_enroll_totp(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+    ValidatedJson(finish): ValidatedJson<TotpFinishEnroll>,
+) -> ApiResult<TotpCode> {
+    has_write_access(user_id, &user)?;
+
+    let code = repo.finish_enroll_totp(&user_id, finish).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        totp_id = code.id().to_string(),
+        "finished enrolling TOTP"
+    );
+
+    Ok(Json(code))
+}
+
+pub async fn totp_codes(
+    State(repo): State<ApiUserRepository>,
+    Path(user_id): Path<ApiUserId>,
+    user: ApiUser,
+) -> ApiResult<Vec<TotpCode>> {
+    has_read_access(user_id, &user)?;
+
+    let codes = repo.totp_codes(&user_id).await?;
+
+    debug!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "retrieved TOTP codes"
+    );
+
+    Ok(Json(codes))
+}
+
+pub async fn delete_totp_code(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id, totp_id)): Path<(ApiUserId, TotpId)>,
+    user: ApiUser,
+) -> ApiResult<TotpId> {
+    has_write_access(user_id, &user)?;
+
+    let id = repo.delete_totp(&user_id, &totp_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        totp_id = id.to_string(),
+        "deleted TOTP code"
+    );
+
+    Ok(Json(id))
 }
 
 #[derive(serde::Deserialize)]
@@ -75,6 +180,12 @@ pub async fn delete_password(
     repo.delete_password(update.current_password, &user_id)
         .await?;
 
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "deleted password"
+    );
+
     Ok(())
 }
 
@@ -89,7 +200,7 @@ mod tests {
     use super::*;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
-    fn test_update_user(pool: PgPool) {
+    async fn test_update_user(pool: PgPool) {
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef"; // not in any organization
         let user_3_id: ApiUserId = user_3.parse().unwrap();
         let users = ApiUserRepository::new(pool.clone());
@@ -99,6 +210,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Test API User 3");
         assert_eq!(whoami.email.as_str(), "test-api@user-3");
@@ -118,6 +235,13 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
+
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -128,6 +252,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -200,6 +330,12 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = match whoami {
+            WhoamiResponse::LoggedIn(user) => user,
+            WhoamiResponse::MfaPending => {
+                panic!("Received MFA pending response")
+            }
+        };
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");

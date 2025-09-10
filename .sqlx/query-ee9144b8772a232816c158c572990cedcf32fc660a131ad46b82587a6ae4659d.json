@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO totp (id, description, user_id, url)\n            VALUES (gen_random_uuid(), 'Not yet activated' , $1, $2)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee9144b8772a232816c158c572990cedcf32fc660a131ad46b82587a6ae4659d"
+}

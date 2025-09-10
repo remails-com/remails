@@ -14,7 +14,16 @@ export interface User {
   password_enabled: boolean;
 }
 
-export type WhoamiResponse = User | { error: string };
+export interface TotpCode {
+  id: string;
+  description: string;
+  last_used: string;
+}
+
+export type WhoamiResponse =
+  | (User & { login_status: "logged_in" })
+  | { login_status: "mfa_pending" }
+  | { error: string };
 
 export type DeliveryStatus =
   | {
@@ -80,6 +89,7 @@ export interface RemailsConfig {
 export interface State {
   user: User | null;
   userFetched: boolean;
+  totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
   streams: Stream[] | null;
@@ -97,6 +107,18 @@ export type Action =
   | {
       type: "set_user";
       user: User | null;
+    }
+  | {
+      type: "set_totp_codes";
+      totpCodes: TotpCode[] | null;
+    }
+  | {
+      type: "remove_totp_code";
+      totpCodeId: string;
+    }
+  | {
+      type: "add_totp_code";
+      totpCode: TotpCode;
     }
   | {
       type: "set_organizations";

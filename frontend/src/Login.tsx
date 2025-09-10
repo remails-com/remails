@@ -15,7 +15,7 @@ import { useForm } from "@mantine/form";
 import { upperFirst } from "@mantine/hooks";
 import { IconBrandGithub, IconX } from "@tabler/icons-react";
 import { useState } from "react";
-import { SignUpRequest, User } from "./types.ts";
+import { SignUpRequest, User, WhoamiResponse } from "./types.ts";
 import { RemailsLogo } from "./components/RemailsLogo.tsx";
 import { useRemails } from "./hooks/useRemails.ts";
 
@@ -27,7 +27,7 @@ export default function Login({ setUser }: LoginProps) {
   const {
     state: { routerState },
     navigate,
-    match,
+    redirect,
   } = useRemails();
 
   const type: "login" | "register" = routerState.params.type === "register" ? "register" : "login";
@@ -49,16 +49,6 @@ export default function Login({ setUser }: LoginProps) {
     },
   });
 
-  const redirect = () => {
-    if (routerState.params.redirect) {
-      const page = match(routerState.params.redirect);
-      if (page) {
-        return navigate(page.name, page.params);
-      }
-    }
-    return navigate("default");
-  };
-
   const submit = ({ email, name, password }: SignUpRequest) => {
     setGlobalError(null);
     if (type === "login") {
@@ -68,13 +58,20 @@ export default function Login({ setUser }: LoginProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
-      }).then((res) => {
+      }).then(async (res) => {
         if (res.status === 404) {
           form.setFieldError("password", "Wrong username or password");
         } else if (res.status !== 200) {
           setGlobalError("Something went wrong");
         } else {
-          res.json().then(setUser);
+          const whoami: WhoamiResponse = await res.json();
+          if (!whoami || "error" in whoami) {
+            setGlobalError("Something went wrong");
+            return;
+          }
+          if (whoami.login_status === "mfa_pending") {
+            navigate("mfa", routerState.params);
+          }
           redirect();
         }
       });

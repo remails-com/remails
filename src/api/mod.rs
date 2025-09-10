@@ -1,7 +1,11 @@
 use crate::{
     Environment,
     api::{
-        auth::{logout, password_login, password_register},
+        api_users::{
+            delete_password, delete_totp_code, finish_enroll_totp, start_enroll_totp, totp_codes,
+            update_password, update_user,
+        },
+        auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
         messages::{get_message, list_messages, remove_message, update_to_retry_asap},
@@ -58,6 +62,7 @@ mod projects;
 mod smtp_credentials;
 mod streams;
 mod subscriptions;
+mod validation;
 mod whoami;
 
 static USER_AGENT_VALUE: &str = "remails";
@@ -279,8 +284,11 @@ impl ApiServer {
             .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/webhook/moneybird", post(moneybird_webhook))
-            .route("/api_user/{user_id}", put(api_users::update_user))
-            .route("/api_user/{user_id}/password", put(api_users::update_password).delete(api_users::delete_password))
+            .route("/api_user/{user_id}", put(update_user))
+            .route("/api_user/{user_id}/password", put(update_password).delete(delete_password))
+            .route("/api_user/{user_id}/totp/enroll", get(start_enroll_totp).post(finish_enroll_totp))
+            .route("/api_user/{user_id}/totp", get(totp_codes))
+            .route("/api_user/{user_id}/totp/{totp_id}", delete(delete_totp_code))
             .route(
                 "/organizations",
                 get(list_organizations).post(create_organization),
@@ -367,6 +375,7 @@ impl ApiServer {
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
+            .route("/login/totp", post(totp_login))
             .route("/register/password", post(password_register))
             .route("/invite/{org_id}", get(get_org_invites).post(create_invite))
             .route("/invite/{org_id}/{invite_id}", delete(remove_invite))

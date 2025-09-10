@@ -1,5 +1,5 @@
 use crate::{api::oauth, models, models::Error};
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{Json, extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, error};
@@ -28,6 +28,18 @@ pub enum ApiError {
     Moneybird(#[from] crate::moneybird::Error),
 }
 
+impl From<garde::Report> for ApiError {
+    fn from(err: garde::Report) -> Self {
+        Self::BadRequest(err.to_string())
+    }
+}
+
+impl From<JsonRejection> for ApiError {
+    fn from(rejection: JsonRejection) -> Self {
+        Self::BadRequest(rejection.to_string())
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response<axum::body::Body> {
         error!("API server error: {self} {self:?}");
@@ -48,6 +60,13 @@ impl IntoResponse for ApiError {
                 }
                 Error::Conflict => (StatusCode::CONFLICT, "Conflict".to_string()),
                 Error::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+                Error::TooManyRequests => {
+                    debug!("Too many requests");
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "Too many requests".to_string(),
+                    )
+                }
                 _ => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Database error".to_string(),

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users\n            SET password_try_counter       = CASE\n                                             WHEN password_try_counter_reset < now() THEN 0\n                                             ELSE password_try_counter + 1 END,\n                password_try_counter_reset = CASE\n                                             WHEN password_try_counter_reset < now() THEN now() + '1 min'\n                                             ELSE password_try_counter_reset END\n            WHERE email = $1\n            RETURNING password_try_counter as counter, password_hash as hash\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "counter",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "a95d2af3e0fe8005b8f1d7ea64dcf962d8605f23a6fa17890ee32ff31d56b618"
+}

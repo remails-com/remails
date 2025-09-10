@@ -79,16 +79,15 @@ pub async fn disconnect_github(
 
     user_repository.remove_github_id(api_user.id()).await?;
 
-    Ok(Json(
+    Ok(Json(WhoamiResponse::logged_in(
         user_repository
             .find_by_id(api_user.id())
             .await
             .transpose()
             .ok_or(models::Error::NotFound(
                 "Could not find user to disconnect from GitHub",
-            ))??
-            .into(),
-    ))
+            ))??,
+    )))
 }
 
 impl GithubOauthService {

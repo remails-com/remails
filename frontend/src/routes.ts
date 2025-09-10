@@ -104,6 +104,10 @@ export const routes = [
     path: "/login",
   },
   {
+    name: "mfa",
+    path: "/mfa",
+  },
+  {
     name: "invite",
     path: "/invite/{new_org_id}/{invite_id}/{password}",
   },
