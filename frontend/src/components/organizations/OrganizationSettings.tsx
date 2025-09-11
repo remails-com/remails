@@ -1,5 +1,5 @@
 import SubscriptionCard from "./SubscriptionCard.tsx";
-import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useOrganizations, useOrgRole } from "../../hooks/useOrganizations.ts";
 import { notifications } from "@mantine/notifications";
 import { IconBuildings, IconReceiptEuro, IconUsers } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -10,6 +10,7 @@ import Members from "./Members.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
+  const { isAdmin } = useOrgRole();
   const { dispatch } = useRemails();
 
   if (!currentOrganization) {
@@ -42,7 +43,12 @@ export default function OrganizationSettings() {
 
   return (
     <>
-      <Header name={currentOrganization.name} entityType="Organization" Icon={IconBuildings} saveRename={saveName} />
+      <Header
+        name={currentOrganization.name}
+        entityType="Organization"
+        Icon={IconBuildings}
+        saveRename={isAdmin ? saveName : undefined}
+      />
       <Tabs
         tabs={[
           {
