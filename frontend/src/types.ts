@@ -1,7 +1,7 @@
 import { RemailsError } from "./error/error";
 import { RouterState } from "./router";
 
-export type Role = "admin";
+export type Role = "admin" | "maintainer" | "read_only";
 export type OrgRole = { role: Role; org_id: string };
 
 export interface User {

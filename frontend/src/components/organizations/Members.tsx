@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core";
 import { IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
@@ -13,6 +13,7 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
+import { AdminActionIcon, AdminButton } from "../RoleButtons";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
@@ -80,10 +81,16 @@ export default function Members() {
     <Table.Tr key={invite.id}>
       <Table.Td>{formatDateTime(invite.expires_at)}</Table.Td>
       <Table.Td>{invite.created_by_name}</Table.Td>
+      <Table.Td>{formatDateTime(invite.created_at)}</Table.Td>
       <Table.Td align={"right"}>
-        <ActionIcon variant="light" onClick={() => confirmDeleteInvite(invite.id)} size={30}>
+        <AdminActionIcon
+          variant="light"
+          onClick={() => confirmDeleteInvite(invite.id)}
+          size={30}
+          tooltip="Retract invite link"
+        >
           <IconTrash />
-        </ActionIcon>
+        </AdminActionIcon>
       </Table.Td>
     </Table.Tr>
   ));
@@ -141,7 +148,7 @@ export default function Members() {
     <Table.Tr key={member.user_id}>
       <Table.Td>{member.name}</Table.Td>
       <Table.Td>{member.email}</Table.Td>
-      <Table.Td>{member.role}</Table.Td>
+      <Table.Td>{member.role.replaceAll("_", "-")}</Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
         {member.user_id == user.id && (
@@ -176,11 +183,11 @@ export default function Members() {
       <Title order={3} mb="md" mt="xl">
         Organization invites
       </Title>
-      <StyledTable headers={["Expires", "Created by", ""]}>{invite_rows}</StyledTable>
+      <StyledTable headers={["Expires", "Created by", "Created at", ""]}>{invite_rows}</StyledTable>
       <Flex justify="center" mt="md">
-        <Button onClick={createInvite} leftSection={<IconUserPlus />}>
+        <AdminButton onClick={createInvite} leftSection={<IconUserPlus />}>
           New invite link
-        </Button>
+        </AdminButton>
       </Flex>
       <NewInvite opened={opened} close={close} invite={invite} />
     </>

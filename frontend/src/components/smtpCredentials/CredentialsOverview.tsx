@@ -1,6 +1,6 @@
 import { useCredentials } from "../../hooks/useCredentials";
 import { Loader } from "../../Loader.tsx";
-import { Button, Flex, Table, Text } from "@mantine/core";
+import { Flex, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
@@ -9,6 +9,7 @@ import { SmtpInfo } from "./SmtpInfo.tsx";
 import EditButton from "../EditButton.tsx";
 import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 export function CredentialsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -66,9 +67,9 @@ export function CredentialsOverview() {
         {rows}
       </StyledTable>
       <Flex justify="center" my="md">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
+        <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Credential
-        </Button>
+        </MaintainerButton>
       </Flex>
     </>
   );

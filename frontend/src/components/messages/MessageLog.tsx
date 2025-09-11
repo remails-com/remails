@@ -132,18 +132,18 @@ export function MessageLog() {
       <Button
         variant="default"
         leftSection={<IconArrowLeft />}
-        onClick={loadNewer}
-        disabled={!routerState.params.before}
-      >
-        newer messages
-      </Button>
-      <Button
-        variant="default"
-        rightSection={<IconArrowRight />}
         onClick={loadOlder}
         disabled={!has_more_entries || messages.length == 0}
       >
         older messages
+      </Button>
+      <Button
+        variant="default"
+        rightSection={<IconArrowRight />}
+        onClick={loadNewer}
+        disabled={!routerState.params.before}
+      >
+        newer messages
       </Button>
     </>
   );

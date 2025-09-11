@@ -1,4 +1,4 @@
-import { Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { Group, Stack, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconTrash } from "@tabler/icons-react";
 import { useEffect } from "react";
@@ -12,6 +12,7 @@ import { useProjects } from "../../hooks/useProjects.ts";
 import { useStreams } from "../../hooks/useStreams.ts";
 import { Loader } from "../../Loader.tsx";
 import { errorNotification } from "../../notify.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 interface FormValues {
   name: string;
@@ -128,22 +129,18 @@ export default function StreamSettings() {
             onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
           />
           <Group>
-            <Tooltip
-              label={canDelete ? "Delete Stream" : "Cannot delete Stream, there are Messages in it"}
-              events={{ focus: false, hover: true, touch: true }}
+            <MaintainerButton
+              leftSection={<IconTrash />}
+              variant="outline"
+              disabled={!canDelete}
+              tooltip={canDelete ? "Delete Stream" : "Cannot delete Stream, there are Messages in it"}
+              onClick={() => confirmDeleteStream(currentStream)}
             >
-              <Button
-                leftSection={<IconTrash />}
-                variant="outline"
-                disabled={!canDelete}
-                onClick={() => confirmDeleteStream(currentStream)}
-              >
-                Delete
-              </Button>
-            </Tooltip>
-            <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+              Delete
+            </MaintainerButton>
+            <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
               Save
-            </Button>
+            </MaintainerButton>
           </Group>
         </Stack>
       </form>

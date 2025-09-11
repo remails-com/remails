@@ -8,6 +8,7 @@ import { NewStream } from "./NewStream.tsx";
 import { Link } from "../../Link.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import StyledTable from "../StyledTable.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 export function StreamsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -47,9 +48,9 @@ export function StreamsOverview() {
 
       <StyledTable headers={["Name", "Updated", ""]}>{rows}</StyledTable>
       <Flex justify="center" mt="md">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
+        <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Stream
-        </Button>
+        </MaintainerButton>
       </Flex>
     </>
   );

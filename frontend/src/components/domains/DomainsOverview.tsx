@@ -1,6 +1,6 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Button, Flex, Table } from "@mantine/core";
+import { Flex, Table } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
@@ -12,6 +12,7 @@ import StyledTable from "../StyledTable.tsx";
 import VerificationBadge from "./VerificationBadge.tsx";
 import EditButton from "../EditButton.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -65,9 +66,9 @@ export default function DomainsOverview() {
       <NewDomain opened={opened} close={close} projectId={currentProject?.id || null} />
       <StyledTable headers={["Domains", "DNS Status", "Updated", ""]}>{rows}</StyledTable>
       <Flex justify="center" mt="md">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
+        <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Domain
-        </Button>
+        </MaintainerButton>
       </Flex>
     </>
   );
