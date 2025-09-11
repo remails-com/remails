@@ -317,6 +317,7 @@ export type Invite = {
   id: string;
   organization_id: string;
   organization_name: string;
+  role: Role;
   created_by: string;
   created_by_name: string;
   created_at: string;

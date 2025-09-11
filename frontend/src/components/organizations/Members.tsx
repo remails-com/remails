@@ -2,12 +2,10 @@ import { Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core"
 import { IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
-import { CreatedInvite } from "../../types";
-import { useState } from "react";
 import { useInvites, useMembers, useOrganizations } from "../../hooks/useOrganizations";
 import { errorNotification } from "../../notify";
 import StyledTable from "../StyledTable";
-import { formatDateTime } from "../../util";
+import { formatDateTime, ROLE_LABELS } from "../../util";
 import { useSelector } from "../../hooks/useSelector";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -23,32 +21,10 @@ export default function Members() {
   const { navigate } = useRemails();
 
   const [opened, { open, close }] = useDisclosure(false);
-  const [invite, setInvite] = useState<CreatedInvite | null>(null);
 
   if (!currentOrganization) {
     return null;
   }
-
-  const createInvite = async () => {
-    const res = await fetch(`/api/invite/${currentOrganization.id}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (res.status !== 201) {
-      errorNotification("Could not create invite");
-      console.error(res);
-      return;
-    }
-
-    const invite = await res.json();
-    invite.created_by_name = user.name;
-    setInvite(invite);
-    setInvites([...(invites ?? []), invite]);
-    open();
-  };
 
   const deleteInvite = async (id: string) => {
     const res = await fetch(`/api/invite/${currentOrganization.id}/${id}`, {
@@ -79,6 +55,7 @@ export default function Members() {
 
   const invite_rows = invites?.map((invite) => (
     <Table.Tr key={invite.id}>
+      <Table.Td>{ROLE_LABELS[invite.role]}</Table.Td>
       <Table.Td>{formatDateTime(invite.expires_at)}</Table.Td>
       <Table.Td>{invite.created_by_name}</Table.Td>
       <Table.Td>{formatDateTime(invite.created_at)}</Table.Td>
@@ -148,7 +125,7 @@ export default function Members() {
     <Table.Tr key={member.user_id}>
       <Table.Td>{member.name}</Table.Td>
       <Table.Td>{member.email}</Table.Td>
-      <Table.Td>{member.role.replaceAll("_", "-")}</Table.Td>
+      <Table.Td>{ROLE_LABELS[member.role]}</Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
         {member.user_id == user.id && (
@@ -183,13 +160,13 @@ export default function Members() {
       <Title order={3} mb="md" mt="xl">
         Organization invites
       </Title>
-      <StyledTable headers={["Expires", "Created by", "Created at", ""]}>{invite_rows}</StyledTable>
+      <StyledTable headers={["Role", "Expires", "Created by", "Created at", ""]}>{invite_rows}</StyledTable>
       <Flex justify="center" mt="md">
-        <AdminButton onClick={createInvite} leftSection={<IconUserPlus />}>
+        <AdminButton onClick={open} leftSection={<IconUserPlus />}>
           New invite link
         </AdminButton>
       </Flex>
-      <NewInvite opened={opened} close={close} invite={invite} />
+      <NewInvite opened={opened} close={close} onNewInvite={(invite) => setInvites([...(invites ?? []), invite])} />
     </>
   );
 }

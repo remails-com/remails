@@ -1,3 +1,5 @@
+import { Role } from "./types";
+
 export function formatDateTime(date: number | string | Date): string {
   return new Date(date).toLocaleString("en-US", {
     day: "numeric",
@@ -24,3 +26,9 @@ export function formatNumber(number: number): string {
 export function is_in_the_future(date: number | string | Date) {
   return new Date(date).getTime() - new Date().getTime() > 0;
 }
+
+export const ROLE_LABELS: Record<Role, string> = {
+  admin: "Admin",
+  maintainer: "Maintainer",
+  read_only: "Read-only",
+};

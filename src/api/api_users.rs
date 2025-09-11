@@ -210,12 +210,7 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
-        let whoami = match whoami {
-            WhoamiResponse::LoggedIn(user) => user,
-            WhoamiResponse::MfaPending => {
-                panic!("Received MFA pending response")
-            }
-        };
+        let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Test API User 3");
         assert_eq!(whoami.email.as_str(), "test-api@user-3");
@@ -235,13 +230,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
-        let whoami = match whoami {
-            WhoamiResponse::LoggedIn(user) => user,
-            WhoamiResponse::MfaPending => {
-                panic!("Received MFA pending response")
-            }
-        };
-
+        let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -252,12 +241,7 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
-        let whoami = match whoami {
-            WhoamiResponse::LoggedIn(user) => user,
-            WhoamiResponse::MfaPending => {
-                panic!("Received MFA pending response")
-            }
-        };
+        let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");
@@ -330,12 +314,7 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
-        let whoami = match whoami {
-            WhoamiResponse::LoggedIn(user) => user,
-            WhoamiResponse::MfaPending => {
-                panic!("Received MFA pending response")
-            }
-        };
+        let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
         assert_eq!(whoami.email.as_str(), "updated-api@user-3");

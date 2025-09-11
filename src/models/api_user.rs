@@ -25,7 +25,9 @@ impl Password {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, PartialOrd, sqlx::Type)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "role", rename_all = "snake_case")]
 #[cfg_attr(test, derive(Ord, Eq))]

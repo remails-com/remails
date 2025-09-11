@@ -6,13 +6,5 @@
   &:hover {
     outline: 1px solid var(--mantine-color-remails-red-text);
     min-width: 14em;
-
-    .editIcon {
-      opacity: 100%;
-    }
   }
-}
-
-.editIcon {
-  opacity: 0;
 }

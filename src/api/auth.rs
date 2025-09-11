@@ -186,22 +186,22 @@ pub(super) async fn totp_login(
     user: MfaPending,
     Json(totp_code): Json<String>,
 ) -> Result<Response, ApiError> {
-    if repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
-        let user = repo
-            .find_by_id(&user.id())
-            .await?
-            .ok_or(ApiError::Unauthorized)?;
-        cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
-
-        Ok((
-            StatusCode::OK,
-            cookie_storage,
-            Json(WhoamiResponse::logged_in(user)),
-        )
-            .into_response())
-    } else {
-        Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response())
+    if !repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
+        return Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response());
     }
+
+    let user = repo
+        .find_by_id(&user.id())
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+
+    Ok((
+        StatusCode::OK,
+        cookie_storage,
+        Json(WhoamiResponse::logged_in(user)),
+    )
+        .into_response())
 }
 
 #[derive(Deserialize)]

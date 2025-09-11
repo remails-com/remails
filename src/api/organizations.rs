@@ -66,7 +66,7 @@ pub async fn create_organization(
         "created organization"
     );
 
-    repo.add_user(org.id(), *user.id()).await?;
+    repo.add_user(org.id(), *user.id(), Role::Admin).await?;
 
     info!(
         user_id = user.id().to_string(),
@@ -262,12 +262,7 @@ mod tests {
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
-        let whoami = match whoami {
-            WhoamiResponse::LoggedIn(user) => user,
-            WhoamiResponse::MfaPending => {
-                panic!("MFA not applicable to this test")
-            }
-        };
+        let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id, user_3);
         assert_eq!(whoami.org_roles.len(), 1);
         assert_eq!(

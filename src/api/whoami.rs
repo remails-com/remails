@@ -42,6 +42,15 @@ impl WhoamiResponse {
             email: user.email,
         })
     }
+
+    /// Panics if whoami response is not logged in
+    #[cfg(test)]
+    pub fn unwrap_logged_in(&self) -> &Whoami {
+        match self {
+            WhoamiResponse::LoggedIn(whoami) => whoami,
+            WhoamiResponse::MfaPending => panic!("Unexpected MFA pending"),
+        }
+    }
 }
 
 pub async fn whoami(user: Option<ApiUser>, mfa_pending: Option<MfaPending>) -> Response {
