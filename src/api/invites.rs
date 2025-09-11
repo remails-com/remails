@@ -243,7 +243,7 @@ mod tests {
         // admin invite
         let response = server
             .post(
-                &format!("/api/invite/{org_1}/32bba198-fdd8-4cb7-8b82-85857dd2527f/unsecure"),
+                format!("/api/invite/{org_1}/32bba198-fdd8-4cb7-8b82-85857dd2527f/unsecure"),
                 Body::empty(),
             )
             .await
@@ -268,7 +268,7 @@ mod tests {
         // maintainer invite
         let response = server
             .post(
-                &format!("/api/invite/{org_1}/516e1804-1d4b-44d4-b4ac-9d81a6b554e7/unsecure"),
+                format!("/api/invite/{org_1}/516e1804-1d4b-44d4-b4ac-9d81a6b554e7/unsecure"),
                 Body::empty(),
             )
             .await
@@ -293,7 +293,7 @@ mod tests {
         // read-only invite
         let response = server
             .post(
-                &format!("/api/invite/{org_1}/dbbddca4-1e50-42bb-ac6e-6e8034ba666b/unsecure"),
+                format!("/api/invite/{org_1}/dbbddca4-1e50-42bb-ac6e-6e8034ba666b/unsecure"),
                 Body::empty(),
             )
             .await

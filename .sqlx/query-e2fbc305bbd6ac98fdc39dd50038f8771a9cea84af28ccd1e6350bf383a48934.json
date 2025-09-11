@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT i.id, i.organization_id, o.name AS organization_name, \n                i.password_hash,\n                i.created_by, a.name AS created_by_name, \n                i.created_at, i.expires_at\n            FROM organization_invites i\n            JOIN organizations o ON o.id = i.organization_id\n            JOIN api_users a ON a.id = i.created_by\n            WHERE i.id = $1 AND i.organization_id = $2\n            ",
+  "query": "\n            SELECT i.id, i.organization_id, o.name AS organization_name, \n                i.role as \"role: Role\", i.password_hash,\n                i.created_by, a.name AS created_by_name, \n                i.created_at, i.expires_at\n            FROM organization_invites i\n            JOIN organizations o ON o.id = i.organization_id\n            JOIN api_users a ON a.id = i.created_by\n            WHERE i.id = $1 AND i.organization_id = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -20,26 +20,42 @@
       },
       {
         "ordinal": 3,
+        "name": "role: Role",
+        "type_info": {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "password_hash",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_by",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_by_name",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "expires_at",
         "type_info": "Timestamptz"
       }
@@ -58,8 +74,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c96640bedc33ec36d955de0ba853598857285ad0ef13eed1a2af407fb6c1bdd9"
+  "hash": "e2fbc305bbd6ac98fdc39dd50038f8771a9cea84af28ccd1e6350bf383a48934"
 }
