@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id FROM api_users u \n                JOIN api_users_organizations o ON u.id = o.api_user_id\n            WHERE o.organization_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4a932dfe8e8d4ef9b9f830188e8897806676fffbc0ab2ac068560a247f788858"
+}

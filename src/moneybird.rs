@@ -218,6 +218,14 @@ impl SubscriptionStatus {
             SubscriptionStatus::None => None,
         }
     }
+
+    fn status_string(&self) -> &'static str {
+        match self {
+            SubscriptionStatus::Active(_) => "active",
+            SubscriptionStatus::Expired(_) => "expired",
+            SubscriptionStatus::None => "none",
+        }
+    }
 }
 
 impl<'a, T> From<T> for SubscriptionStatus
@@ -600,14 +608,14 @@ impl MoneyBird {
 
         let subscription_status: SubscriptionStatus = [&subscription].into();
 
-        self.store_subscription_status(&subscription_status, subscription.contact.id)
+        self.store_subscription_status(&subscription_status, &subscription.contact.id)
             .await
     }
 
     async fn store_subscription_status(
         &self,
         subscription_status: &SubscriptionStatus,
-        moneybird_contact_id: MoneybirdContactId,
+        moneybird_contact_id: &MoneybirdContactId,
     ) -> Result<(), Error> {
         let quota_reset = self
             .calculate_quota_reset_datetime(subscription_status)
@@ -619,6 +627,9 @@ impl MoneyBird {
                 &ProductIdentifier::NotSubscribed
             }
         };
+
+        self.make_user_admin_on_first_subscription(subscription_status, moneybird_contact_id)
+            .await?;
 
         let org_id = sqlx::query_scalar!(
             r#"
@@ -654,6 +665,106 @@ impl MoneyBird {
             quota_reset = ?quota_reset,
             "Updated subscription information in database"
         );
+
+        Ok(())
+    }
+
+    /// If a user creates an organization, it initially gets the [`Role::ReadOnly`] assigned.
+    /// This prevents the user from using the API before it is subscribed in Moneybird.
+    /// As soon as the organization subscribed for the first time, this user should get admin rights assigned.
+    /// As the initial user only had read access to the API, it must be the only user in this organization as inviting other users requires admin access.
+    ///
+    /// This function elevates the privileges from read-only to admin for this initial user when the organization subscribed for the first time.
+    async fn make_user_admin_on_first_subscription(
+        &self,
+        new_subscription_status: &SubscriptionStatus,
+        moneybird_contact_id: &MoneybirdContactId,
+    ) -> Result<(), Error> {
+        struct SubscriptionAndOrgId {
+            old_subscription_json: serde_json::Value,
+            org_id: OrganizationId,
+        }
+
+        let Some(SubscriptionAndOrgId {
+            old_subscription_json,
+            org_id,
+        }) = sqlx::query_as!(
+            SubscriptionAndOrgId,
+            r#"
+            SELECT current_subscription AS old_subscription_json, 
+                   id AS org_id 
+            FROM organizations 
+            WHERE moneybird_contact_id = $1
+            "#,
+            moneybird_contact_id.as_str(),
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            warn!(
+                moneybird_contact_id = moneybird_contact_id.as_str(),
+                "Could not find organization with moneybird contact id to update user privileges"
+            );
+            return Ok(());
+        };
+
+        let old_subscription_status: SubscriptionStatus =
+            serde_json::from_value(old_subscription_json)?;
+
+        if !matches!(
+            (&old_subscription_status, &new_subscription_status),
+            (&SubscriptionStatus::None, &SubscriptionStatus::Active(_))
+        ) {
+            trace!(
+                old_subscription_status = old_subscription_status.status_string(),
+                new_subscription_status = new_subscription_status.status_string(),
+                moneybird_contact_id = moneybird_contact_id.as_str(),
+                organization_id = org_id.to_string(),
+                "Not updating user privileges",
+            );
+            return Ok(());
+        };
+
+        let api_user_ids = sqlx::query_scalar!(
+            r#"
+            SELECT id FROM api_users u 
+                JOIN api_users_organizations o ON u.id = o.api_user_id
+            WHERE o.organization_id = $1
+            "#,
+            *org_id,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        if api_user_ids.len() != 1 {
+            error!(
+                organization_id = org_id.to_string(),
+                "Expected exactly one API user for organization but found {} API users",
+                api_user_ids.len()
+            );
+            return Ok(());
+        }
+
+        info!(
+            old_subscription_status = old_subscription_status.status_string(),
+            new_subscription_status = new_subscription_status.status_string(),
+            moneybird_contact_id = moneybird_contact_id.as_str(),
+            organization_id = org_id.to_string(),
+            "Organization subscribed for the first time. Elevating privileges from read-only to admin",
+        );
+
+        sqlx::query!(
+            r#"
+            UPDATE api_users_organizations 
+            SET role = 'admin' 
+            WHERE api_user_id = $1 
+              AND organization_id = $2 
+            "#,
+            api_user_ids[0],
+            *org_id,
+        )
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
@@ -903,7 +1014,7 @@ impl MoneyBird {
             .get_subscription_status_by_contact_id(&contact_id)
             .await?;
 
-        self.store_subscription_status(&status, contact_id).await?;
+        self.store_subscription_status(&status, &contact_id).await?;
         Ok(status)
     }
 

@@ -4,7 +4,11 @@ import { errorNotification } from "../notify.tsx";
 
 export function useSubscription() {
   const { currentOrganization } = useOrganizations();
-  const { dispatch } = useRemails();
+  const {
+    dispatch,
+    navigate,
+    state: { routerState },
+  } = useRemails();
 
   const generateSalesLink = async (): Promise<string | null> => {
     if (!currentOrganization) {
@@ -34,13 +38,14 @@ export function useSubscription() {
       return;
     }
     const res = await fetch(`/api/organizations/${currentOrganization.id}/subscription`);
-    if (res.status === 200) {
-      dispatch({ type: "set_subscription", status: await res.json(), organizationId: currentOrganization.id });
-    } else {
+    if (res.status !== 200) {
       errorNotification("Something went wrong while reloading the subscription status. Please try again later.");
       console.error(`Failed to reload subscription status: ${res.status} ${res.statusText}`);
       return null;
     }
+
+    dispatch({ type: "set_subscription", status: await res.json(), organizationId: currentOrganization.id });
+    navigate(routerState.name, { force: "reload-orgs" });
   };
 
   return { subscription: currentOrganization?.current_subscription, navigateToSales, reloadSubscription };

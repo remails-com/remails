@@ -66,13 +66,15 @@ pub async fn create_organization(
         "created organization"
     );
 
-    repo.add_user(org.id(), *user.id(), Role::Admin).await?;
+    let role = Role::ReadOnly;
+    repo.add_user(org.id(), *user.id(), role).await?;
 
     info!(
         user_id = user.id().to_string(),
         organization_id = org.id().to_string(),
         organization_name = org.name,
-        "added user as organization admin"
+        role = role.to_string(),
+        "added user to organization"
     );
 
     Ok((StatusCode::CREATED, Json(org)))
