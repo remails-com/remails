@@ -5,7 +5,7 @@ import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
-import { Alert, Button, Group, Modal, Stack, Stepper, Textarea, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Modal, Stack, Stepper, Textarea, TextInput, Title } from "@mantine/core";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { CopyableCode } from "../CopyableCode.tsx";
 import { SmtpInfo } from "./SmtpInfo.tsx";
@@ -80,9 +80,14 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
       <Modal
         opened={opened}
         onClose={activeStep === 0 ? close : () => {}}
-        title="Create new SMTP credential"
-        size="lg"
         withCloseButton={activeStep === 0}
+        title={
+          <Title order={3} component="span">
+            Create new SMTP credential
+          </Title>
+        }
+        size="lg"
+        padding="xl"
       >
         <Stepper active={activeStep} onStepClick={setActiveStep}>
           <Stepper.Step label="Create" allowStepSelect={false}>

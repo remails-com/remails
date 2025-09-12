@@ -14,6 +14,7 @@ import { errorNotification } from "../../notify.tsx";
 import Header from "../Header.tsx";
 import { CopyableCode } from "../CopyableCode.tsx";
 import React, { useState } from "react";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 const badgeColors: { [key in VerifyResult["status"]]: string } = {
   Success: "green",
@@ -235,9 +236,13 @@ export default function DomainDetails() {
         <Button disabled={domainVerified === "loading"} onClick={() => reverifyDomain(currentDomain)}>
           Retry DNS verification
         </Button>
-        <Button leftSection={<IconTrash />} variant="outline" onClick={() => confirmDeleteDomain(currentDomain)}>
+        <MaintainerButton
+          leftSection={<IconTrash />}
+          variant="outline"
+          onClick={() => confirmDeleteDomain(currentDomain)}
+        >
           Delete domain
-        </Button>
+        </MaintainerButton>
       </Group>
     </>
   );

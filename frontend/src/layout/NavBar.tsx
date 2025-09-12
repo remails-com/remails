@@ -70,9 +70,7 @@ export function NavBar({ close }: { close: () => void }) {
           {organizations
             ?.filter((all_org) => {
               return (
-                user.org_roles.find((role) => {
-                  return role.role === "admin" && role.org_id === all_org.id;
-                }) || all_org.id === currentOrganization?.id
+                user.org_roles.find((role) => role.org_id === all_org.id) || all_org.id === currentOrganization?.id
               );
             })
             .map((org) => (

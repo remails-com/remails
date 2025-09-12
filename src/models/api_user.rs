@@ -25,12 +25,22 @@ impl Password {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, sqlx::Type)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+)]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "role", rename_all = "lowercase")]
-#[cfg_attr(test, derive(PartialOrd, Ord, Eq))]
+#[sqlx(type_name = "role", rename_all = "snake_case")]
+#[cfg_attr(test, derive(Ord, Eq))]
 pub enum Role {
-    Admin,
+    ReadOnly = 0,
+    Maintainer = 1,
+    Admin = 2,
+}
+
+impl Role {
+    pub fn is_at_least(&self, role: Role) -> bool {
+        *self >= role
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -682,7 +692,7 @@ mod test {
                 email: self.email.clone(),
                 name: self.name.clone(),
                 password: None,
-                global_role: self.global_role.clone(),
+                global_role: self.global_role,
                 org_roles: self.org_roles.clone(),
                 github_user_id: self.github_user_id,
             }

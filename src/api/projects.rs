@@ -10,37 +10,18 @@ use axum::{
 use http::StatusCode;
 use tracing::{debug, info};
 
-fn has_read_access(
-    org: &OrganizationId,
-    project: Option<&ProjectId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    has_write_access(org, project, user)
-}
-
-fn has_write_access(
-    org: &OrganizationId,
-    _project: Option<&ProjectId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
-    Path(org): Path<OrganizationId>,
+    Path(org_id): Path<OrganizationId>,
     user: ApiUser,
 ) -> ApiResult<Vec<Project>> {
-    has_read_access(&org, None, &user)?;
+    user.has_org_read_access(&org_id)?;
 
-    let projects = repo.list(org).await?;
+    let projects = repo.list(org_id).await?;
 
     debug!(
         user_id = user.id().to_string(),
-        organization_id = org.to_string(),
+        organization_id = org_id.to_string(),
         "listed {} projects",
         projects.len()
     );
@@ -50,18 +31,18 @@ pub async fn list_projects(
 
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
-    Path((org, proj)): Path<(OrganizationId, ProjectId)>,
+    Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     user: ApiUser,
     Json(update): Json<NewProject>,
 ) -> ApiResult<Project> {
-    has_write_access(&org, Some(&proj), &user)?;
+    user.has_org_write_access(&org_id)?;
 
-    let project = repo.update(org, proj, update).await?;
+    let project = repo.update(org_id, proj_id, update).await?;
 
     debug!(
         user_id = user.id().to_string(),
-        organization_id = org.to_string(),
-        project_id = proj.to_string(),
+        organization_id = org_id.to_string(),
+        project_id = proj_id.to_string(),
         "updated project",
     );
 
@@ -71,16 +52,16 @@ pub async fn update_project(
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     user: ApiUser,
-    Path(org): Path<OrganizationId>,
+    Path(org_id): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(&org, None, &user)?;
+    user.has_org_write_access(&org_id)?;
 
-    let project = repo.create(new, org).await?;
+    let project = repo.create(new, org_id).await?;
 
     info!(
         user_id = user.id().to_string(),
-        organization_id = org.to_string(),
+        organization_id = org_id.to_string(),
         project_id = project.id().to_string(),
         project_name = project.name,
         "created project"
@@ -92,15 +73,15 @@ pub async fn create_project(
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
     user: ApiUser,
-    Path((org, proj)): Path<(OrganizationId, ProjectId)>,
+    Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
-    has_write_access(&org, Some(&proj), &user)?;
+    user.has_org_write_access(&org_id)?;
 
-    let project_id = repo.remove(proj, org).await?;
+    let project_id = repo.remove(proj_id, org_id).await?;
 
     info!(
         user_id = user.id().to_string(),
-        organization_id = org.to_string(),
+        organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         "deleted project",
     );

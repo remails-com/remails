@@ -45,7 +45,7 @@ export function useMembers() {
           if (res.status === 200) {
             return res.json();
           } else {
-            errorNotification("Failed to load the organization's menbers");
+            errorNotification("Failed to load the organization's members");
             console.error(res);
             return null;
           }
@@ -55,4 +55,17 @@ export function useMembers() {
   }, [currentOrganization]);
 
   return { members, setMembers };
+}
+
+export function useOrgRole() {
+  const { currentOrganization } = useOrganizations();
+  const user = useSelector((state) => state.user);
+
+  const isAdmin =
+    user.org_roles.some((o) => o.org_id == currentOrganization?.id && o.role == "admin") || user.global_role == "admin";
+
+  const isMaintainer =
+    isAdmin || user.org_roles.some((o) => o.org_id == currentOrganization?.id && o.role == "maintainer");
+
+  return { isAdmin, isMaintainer };
 }

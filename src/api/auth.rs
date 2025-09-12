@@ -31,10 +31,34 @@ impl ApiUser {
             .is_some_and(|role| *role == Role::Admin)
     }
 
-    pub fn is_org_admin(&self, org_id: &OrganizationId) -> bool {
+    fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
         self.org_roles
             .iter()
-            .any(|org_role| org_role.org_id == *org_id && org_role.role == Role::Admin)
+            .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role))
+    }
+
+    pub fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::ReadOnly) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
+    }
+
+    pub fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::Maintainer) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
+    }
+
+    pub fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        if self.is_at_least(org_id, Role::Admin) || self.is_super_admin() {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
     }
 
     pub fn viewable_organizations(&self) -> Vec<uuid::Uuid> {
@@ -162,22 +186,22 @@ pub(super) async fn totp_login(
     user: MfaPending,
     Json(totp_code): Json<String>,
 ) -> Result<Response, ApiError> {
-    if repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
-        let user = repo
-            .find_by_id(&user.id())
-            .await?
-            .ok_or(ApiError::Unauthorized)?;
-        cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
-
-        Ok((
-            StatusCode::OK,
-            cookie_storage,
-            Json(WhoamiResponse::logged_in(user)),
-        )
-            .into_response())
-    } else {
-        Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response())
+    if !repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
+        return Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response());
     }
+
+    let user = repo
+        .find_by_id(&user.id())
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+
+    Ok((
+        StatusCode::OK,
+        cookie_storage,
+        Json(WhoamiResponse::logged_in(user)),
+    )
+        .into_response())
 }
 
 #[derive(Deserialize)]
@@ -840,5 +864,59 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_org_access(pool: PgPool) {
+        let repo = ApiUserRepository::new(pool);
+
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(); // test org 1
+        let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(); // test org 2
+
+        let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // admin of org 2
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // not in any org
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // maintainer of org 1
+        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e".parse().unwrap(); // read only in org 1
+        let super_admin = "deadbeef-4e43-4a66-bbb9-fbcd4a933a34".parse().unwrap(); // read only in org 1
+
+        let admin = repo.find_by_id(&user_2).await.unwrap().unwrap();
+        assert!(admin.has_org_admin_access(&org_1).is_err());
+        assert!(admin.has_org_write_access(&org_1).is_err());
+        assert!(admin.has_org_read_access(&org_1).is_err());
+        assert!(admin.has_org_admin_access(&org_2).is_ok());
+        assert!(admin.has_org_write_access(&org_2).is_ok());
+        assert!(admin.has_org_read_access(&org_2).is_ok());
+
+        let no_orgs = repo.find_by_id(&user_3).await.unwrap().unwrap();
+        assert!(no_orgs.has_org_admin_access(&org_1).is_err());
+        assert!(no_orgs.has_org_write_access(&org_1).is_err());
+        assert!(no_orgs.has_org_read_access(&org_1).is_err());
+        assert!(no_orgs.has_org_admin_access(&org_2).is_err());
+        assert!(no_orgs.has_org_write_access(&org_2).is_err());
+        assert!(no_orgs.has_org_read_access(&org_2).is_err());
+
+        let maintainer = repo.find_by_id(&user_4).await.unwrap().unwrap();
+        assert!(maintainer.has_org_admin_access(&org_1).is_err());
+        assert!(maintainer.has_org_write_access(&org_1).is_ok());
+        assert!(maintainer.has_org_read_access(&org_1).is_ok());
+        assert!(maintainer.has_org_admin_access(&org_2).is_err());
+        assert!(maintainer.has_org_write_access(&org_2).is_err());
+        assert!(maintainer.has_org_read_access(&org_2).is_err());
+
+        let read_only = repo.find_by_id(&user_5).await.unwrap().unwrap();
+        assert!(read_only.has_org_admin_access(&org_1).is_err());
+        assert!(read_only.has_org_write_access(&org_1).is_err());
+        assert!(read_only.has_org_read_access(&org_1).is_ok());
+        assert!(read_only.has_org_admin_access(&org_2).is_err());
+        assert!(read_only.has_org_write_access(&org_2).is_err());
+        assert!(read_only.has_org_read_access(&org_2).is_err());
+
+        let super_admin = repo.find_by_id(&super_admin).await.unwrap().unwrap();
+        assert!(super_admin.has_org_admin_access(&org_1).is_ok());
+        assert!(super_admin.has_org_write_access(&org_1).is_ok());
+        assert!(super_admin.has_org_read_access(&org_1).is_ok());
+        assert!(super_admin.has_org_admin_access(&org_2).is_ok());
+        assert!(super_admin.has_org_write_access(&org_2).is_ok());
+        assert!(super_admin.has_org_read_access(&org_2).is_ok());
     }
 }

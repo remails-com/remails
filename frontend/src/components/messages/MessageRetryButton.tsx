@@ -4,9 +4,9 @@ import { IconReload } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
 import { useStreams } from "../../hooks/useStreams";
-import { ActionIcon, Button, Tooltip } from "@mantine/core";
 import { is_in_the_future } from "../../util";
 import { errorNotification } from "../../notify.tsx";
+import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 
 export default function MessageRetryButton({
   message,
@@ -60,25 +60,23 @@ export default function MessageRetryButton({
 
   const can_retry = status_retryable && !already_scheduled;
 
-  return (
-    <Tooltip
-      label={
-        status_retryable
-          ? already_scheduled
-            ? "Message is already scheduled to retry as soon as possible"
-            : "(Re-)schedule retry"
-          : `Message is ${message.status.toLowerCase()}`
-      }
-    >
-      {small ? (
-        <ActionIcon disabled={!can_retry} onClick={retry} variant="light" size={30}>
-          <IconReload />
-        </ActionIcon>
-      ) : (
-        <Button leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
-          Retry
-        </Button>
-      )}
-    </Tooltip>
-  );
+  const tooltip = status_retryable
+    ? already_scheduled
+      ? "Message is already scheduled to retry as soon as possible"
+      : "(Re-)schedule retry"
+    : `Message is ${message.status.toLowerCase()}`;
+
+  if (small) {
+    return (
+      <MaintainerActionIcon tooltip={tooltip} disabled={!can_retry} onClick={retry} variant="light" size={30}>
+        <IconReload />
+      </MaintainerActionIcon>
+    );
+  } else {
+    return (
+      <MaintainerButton tooltip={tooltip} leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
+        Retry
+      </MaintainerButton>
+    );
+  }
 }

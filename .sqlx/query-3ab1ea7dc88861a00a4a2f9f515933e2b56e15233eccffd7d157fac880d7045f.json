@@ -26,7 +26,9 @@
             "name": "role",
             "kind": {
               "Enum": [
-                "admin"
+                "admin",
+                "maintainer",
+                "read_only"
               ]
             }
           }

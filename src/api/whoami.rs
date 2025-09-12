@@ -34,13 +34,22 @@ impl WhoamiResponse {
     pub fn logged_in(user: ApiUser) -> Self {
         Self::LoggedIn(Whoami {
             id: *user.id(),
-            global_role: user.global_role.clone(),
+            global_role: user.global_role,
             org_roles: user.org_roles.clone(),
             github_id: user.github_user_id().map(|id| id.to_string()),
             password_enabled: user.password_enabled(),
             name: user.name,
             email: user.email,
         })
+    }
+
+    /// Panics if whoami response is not logged in
+    #[cfg(test)]
+    pub fn unwrap_logged_in(&self) -> &Whoami {
+        match self {
+            WhoamiResponse::LoggedIn(whoami) => whoami,
+            WhoamiResponse::MfaPending => panic!("Unexpected MFA pending"),
+        }
     }
 }
 

@@ -11,36 +11,13 @@ use axum::{
 use http::StatusCode;
 use tracing::{debug, info};
 
-fn has_read_access(
-    org: &OrganizationId,
-    proj: &ProjectId,
-    stream_id: &StreamId,
-    smtp_cred: Option<&SmtpCredentialId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    has_write_access(org, proj, stream_id, smtp_cred, user)
-}
-
-fn has_write_access(
-    org: &OrganizationId,
-    _proj: &ProjectId,
-    _stream_id: &StreamId,
-    _smtp_cred: Option<&SmtpCredentialId>,
-    user: &ApiUser,
-) -> Result<(), ApiError> {
-    if user.is_org_admin(org) || user.is_super_admin() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
-}
-
 pub async fn create_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     user: ApiUser,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     Json(request): Json<SmtpCredentialRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    has_write_access(&org_id, &proj_id, &stream_id, None, &user)?;
+    user.has_org_write_access(&org_id)?;
 
     let new_credential = repo.generate(org_id, proj_id, stream_id, &request).await?;
 
@@ -68,7 +45,7 @@ pub async fn update_smtp_credential(
     )>,
     Json(request): Json<SmtpCredentialUpdateRequest>,
 ) -> ApiResult<SmtpCredential> {
-    has_write_access(&org_id, &proj_id, &stream_id, None, &user)?;
+    user.has_org_write_access(&org_id)?;
 
     let update = repo
         .update(org_id, proj_id, stream_id, cred_id, &request)
@@ -92,7 +69,7 @@ pub async fn list_smtp_credential(
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     user: ApiUser,
 ) -> ApiResult<Vec<SmtpCredential>> {
-    has_read_access(&org_id, &proj_id, &stream_id, None, &user)?;
+    user.has_org_read_access(&org_id)?;
 
     let credentials = repo.list(org_id, proj_id, stream_id).await?;
 
@@ -118,7 +95,7 @@ pub async fn remove_smtp_credential(
     )>,
     user: ApiUser,
 ) -> ApiResult<SmtpCredentialId> {
-    has_write_access(&org_id, &proj_id, &stream_id, Some(&credential_id), &user)?;
+    user.has_org_write_access(&org_id)?;
 
     let credential_id = repo
         .remove(org_id, proj_id, stream_id, credential_id)
@@ -262,7 +239,11 @@ mod tests {
         assert_eq!(credentials.len(), 0);
     }
 
-    async fn test_smtp_credential_no_access(server: TestServer, status_code: StatusCode) {
+    async fn test_smtp_credential_no_access(
+        server: TestServer,
+        read_status_code: StatusCode,
+        write_status_code: StatusCode,
+    ) {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
@@ -275,7 +256,7 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), read_status_code);
 
         // can't create credentials
         let response = server
@@ -290,7 +271,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), write_status_code);
 
         // can't update credentials
         let response = server
@@ -304,7 +285,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), write_status_code);
 
         // can't delete credentials
         let response = server
@@ -313,7 +294,7 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(response.status(), status_code);
+        assert_eq!(response.status(), write_status_code);
     }
 
     #[sqlx::test(fixtures(
@@ -329,7 +310,23 @@ mod tests {
     async fn test_smtp_credential_no_access_wrong_user(pool: PgPool) {
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let server = TestServer::new(pool.clone(), Some(user_2)).await;
-        test_smtp_credential_no_access(server, StatusCode::FORBIDDEN).await;
+        test_smtp_credential_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials"
+        )
+    ))]
+    async fn test_smtp_credential_no_access_read_only(pool: PgPool) {
+        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e".parse().unwrap(); // is read only in org 1
+        let server = TestServer::new(pool.clone(), Some(user_5)).await;
+        test_smtp_credential_no_access(server, StatusCode::OK, StatusCode::FORBIDDEN).await;
     }
 
     #[sqlx::test(fixtures(
@@ -344,6 +341,7 @@ mod tests {
     ))]
     async fn test_smtp_credential_no_access_not_logged_in(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
-        test_smtp_credential_no_access(server, StatusCode::UNAUTHORIZED).await;
+        test_smtp_credential_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED)
+            .await;
     }
 }

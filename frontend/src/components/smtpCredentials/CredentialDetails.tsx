@@ -8,11 +8,12 @@ import { useEffect } from "react";
 import { Loader } from "../../Loader.tsx";
 import { SmtpCredential } from "../../types.ts";
 import { modals } from "@mantine/modals";
-import { Button, Container, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { Container, Group, Stack, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconKey, IconTrash } from "@tabler/icons-react";
 import Header from "../Header.tsx";
 import { errorNotification } from "../../notify.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 interface FormValues {
   description: string;
@@ -125,18 +126,17 @@ export default function CredentialDetails() {
               <TextInput label="Password" value="••••••••" readOnly variant="filled" />
             </Tooltip>
             <Group>
-              <Tooltip label="Delete SMTP credential">
-                <Button
-                  leftSection={<IconTrash />}
-                  variant="outline"
-                  onClick={() => confirmDeleteCredential(currentCredential)}
-                >
-                  Delete
-                </Button>
-              </Tooltip>
-              <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+              <MaintainerButton
+                leftSection={<IconTrash />}
+                variant="outline"
+                onClick={() => confirmDeleteCredential(currentCredential)}
+                tooltip="Delete SMTP credential"
+              >
+                Delete
+              </MaintainerButton>
+              <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
                 Save
-              </Button>
+              </MaintainerButton>
             </Group>
           </Stack>
         </form>

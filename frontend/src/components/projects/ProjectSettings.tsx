@@ -1,5 +1,5 @@
 import { useForm } from "@mantine/form";
-import { Button, Group, List, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { Group, List, Stack, Text, TextInput } from "@mantine/core";
 import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -11,6 +11,7 @@ import { useProjects } from "../../hooks/useProjects.ts";
 import { Loader } from "../../Loader.tsx";
 import { useDomains } from "../../hooks/useDomains.ts";
 import { errorNotification } from "../../notify.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 interface FormValues {
   name: string;
@@ -132,22 +133,18 @@ export default function ProjectSettings() {
             onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
           />
           <Group>
-            <Tooltip
-              label={canDelete ? "Delete project" : "Cannot delete project, there are streams in it"}
-              events={{ focus: false, hover: true, touch: true }}
+            <MaintainerButton
+              leftSection={<IconTrash />}
+              variant="outline"
+              disabled={!canDelete}
+              tooltip={canDelete ? "Delete project" : "Cannot delete project, there are streams in it"}
+              onClick={() => confirmDeleteProject(currentProject)}
             >
-              <Button
-                leftSection={<IconTrash />}
-                variant="outline"
-                disabled={!canDelete}
-                onClick={() => confirmDeleteProject(currentProject)}
-              >
-                Delete
-              </Button>
-            </Tooltip>
-            <Button type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+              Delete
+            </MaintainerButton>
+            <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
               Save
-            </Button>
+            </MaintainerButton>
           </Group>
         </Stack>
       </form>

@@ -228,14 +228,20 @@ impl OrganizationRepository {
         .into())
     }
 
-    pub async fn add_user(&self, org_id: OrganizationId, user_id: ApiUserId) -> Result<(), Error> {
+    pub async fn add_user(
+        &self,
+        org_id: OrganizationId,
+        user_id: ApiUserId,
+        role: Role,
+    ) -> Result<(), Error> {
         sqlx::query!(
             r#"
             INSERT INTO api_users_organizations (organization_id, api_user_id, role)
-            VALUES ($1, $2, 'admin')
+            VALUES ($1, $2, $3)
             "#,
             *org_id,
-            *user_id
+            *user_id,
+            role as Role
         )
         .execute(&self.pool)
         .await?;

@@ -1,4 +1,4 @@
-import { Button, Flex, Table } from "@mantine/core";
+import { Flex, Table } from "@mantine/core";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useProjects } from "../../hooks/useProjects.ts";
@@ -10,6 +10,7 @@ import EditButton from "../EditButton.tsx";
 import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
+import { MaintainerButton } from "../RoleButtons.tsx";
 
 export default function ProjectsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -50,9 +51,9 @@ export default function ProjectsOverview() {
       <StyledTable headers={["Name", "Updated", ""]}>{rows}</StyledTable>
 
       <Flex justify="center" mt="md">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
+        <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Project
-        </Button>
+        </MaintainerButton>
       </Flex>
     </>
   );

@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Text, Tooltip } from "@mantine/core";
+import { Text } from "@mantine/core";
 import { IconTrash } from "@tabler/icons-react";
 import { MessageMetadata } from "../../types";
 import { modals } from "@mantine/modals";
@@ -8,6 +8,7 @@ import { useStreams } from "../../hooks/useStreams";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
 import { errorNotification } from "../../notify.tsx";
+import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 
 export default function MessageDeleteButton({ message, small }: { message: MessageMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
@@ -50,17 +51,22 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
     });
   };
 
-  return (
-    <Tooltip label="Delete message">
-      {small ? (
-        <ActionIcon variant="light" onClick={confirmDeleteCredential} size={30}>
-          <IconTrash />
-        </ActionIcon>
-      ) : (
-        <Button leftSection={<IconTrash />} variant="outline" onClick={confirmDeleteCredential}>
-          Delete
-        </Button>
-      )}
-    </Tooltip>
-  );
+  if (small) {
+    return (
+      <MaintainerActionIcon tooltip="Delete message" variant="light" onClick={confirmDeleteCredential} size={30}>
+        <IconTrash />
+      </MaintainerActionIcon>
+    );
+  } else {
+    return (
+      <MaintainerButton
+        tooltip="Delete message"
+        leftSection={<IconTrash />}
+        variant="outline"
+        onClick={confirmDeleteCredential}
+      >
+        Delete
+      </MaintainerButton>
+    );
+  }
 }

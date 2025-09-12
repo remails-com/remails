@@ -4,7 +4,7 @@ use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{ApiUserId, Error, OrganizationId};
+use crate::models::{ApiUserId, Error, OrganizationId, Role};
 
 #[derive(
     Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
@@ -15,8 +15,8 @@ pub struct InviteId(Uuid);
 #[derive(Serialize)]
 pub struct CreatedInvite {
     id: InviteId,
-    password_hash: String,
     organization_id: OrganizationId,
+    role: Role,
     created_by: ApiUserId,
     created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
@@ -28,6 +28,7 @@ pub struct CreatedInviteWithPassword {
     id: InviteId,
     password: String,
     organization_id: OrganizationId,
+    role: Role,
     created_by: ApiUserId,
     created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
@@ -58,6 +59,7 @@ pub struct ApiInvite {
     id: InviteId,
     organization_id: OrganizationId,
     organization_name: String,
+    role: Role,
     #[serde(skip)]
     password_hash: String,
     created_by: ApiUserId,
@@ -73,6 +75,10 @@ impl ApiInvite {
 
     pub fn is_expired(&self) -> bool {
         self.expires_at < Utc::now()
+    }
+
+    pub fn role(&self) -> Role {
+        self.role
     }
 
     #[cfg(test)]
@@ -104,6 +110,7 @@ impl InviteRepository {
     pub async fn create(
         &self,
         org_id: OrganizationId,
+        role: Role,
         created_by: ApiUserId,
         expires: DateTime<Utc>,
     ) -> Result<CreatedInviteWithPassword, Error> {
@@ -113,12 +120,13 @@ impl InviteRepository {
         let invite = sqlx::query_as!(
             CreatedInvite,
             r#"
-            INSERT INTO organization_invites (id, password_hash, organization_id, created_by, expires_at)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4)
-            RETURNING *
+            INSERT INTO organization_invites (id, password_hash, organization_id, role, created_by, expires_at)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            RETURNING id, organization_id, role as "role: Role", created_by, created_at, expires_at
             "#,
             password_hash,
             *org_id,
+            role as Role,
             *created_by,
             expires
         )
@@ -129,6 +137,7 @@ impl InviteRepository {
             id: invite.id,
             password,
             organization_id: invite.organization_id,
+            role: invite.role,
             created_by: invite.created_by,
             created_at: invite.created_at,
             expires_at: invite.expires_at,
@@ -140,7 +149,7 @@ impl InviteRepository {
             ApiInvite,
             r#"
             SELECT i.id, i.organization_id, o.name AS organization_name,
-                i.password_hash,
+                i.role as "role: Role", i.password_hash,
                 i.created_by, a.name AS created_by_name, 
                 i.created_at, i.expires_at
             FROM organization_invites i
@@ -163,7 +172,7 @@ impl InviteRepository {
             ApiInvite,
             r#"
             SELECT i.id, i.organization_id, o.name AS organization_name, 
-                i.password_hash,
+                i.role as "role: Role", i.password_hash,
                 i.created_by, a.name AS created_by_name, 
                 i.created_at, i.expires_at
             FROM organization_invites i
@@ -231,7 +240,12 @@ mod test {
 
         // create invite
         let invite = invite_repo
-            .create(org_id, created_by, Utc::now() + chrono::Duration::days(3))
+            .create(
+                org_id,
+                Role::Admin,
+                created_by,
+                Utc::now() + chrono::Duration::days(3),
+            )
             .await
             .unwrap();
 
@@ -241,7 +255,7 @@ mod test {
 
         // add expired invite
         invite_repo
-            .create(org_id, created_by, Utc::now())
+            .create(org_id, Role::Admin, created_by, Utc::now())
             .await
             .unwrap();
         assert_eq!(invite_repo.get_by_org(org_id).await.unwrap().len(), 2);
