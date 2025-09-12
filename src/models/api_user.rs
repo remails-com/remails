@@ -20,8 +20,12 @@ pub struct TotpId(Uuid);
 pub struct Password(String);
 
 impl Password {
-    pub fn danger_as_str(&self) -> &str {
-        &self.0
+    pub fn generate_hash(&self) -> String {
+        password_auth::generate_hash(self.0.as_str())
+    }
+
+    pub fn verify_password(&self, hash: &str) -> Result<(), password_auth::VerifyError> {
+        password_auth::verify_password(&self.0, hash)
     }
 }
 
@@ -178,7 +182,7 @@ impl ApiUserRepository {
     }
 
     pub async fn create(&self, user: NewApiUser) -> Result<ApiUser, Error> {
-        let password_hash = user.password.map(|pw| password_auth::generate_hash(pw.0));
+        let password_hash = user.password.map(|pw| pw.generate_hash());
 
         let mut tx = self.pool.begin().await?;
 
@@ -492,14 +496,16 @@ impl ApiUserRepository {
         .await?;
 
         if let Some(hash) = hash {
-            password_auth::verify_password(update.current_password.0, &hash)
+            update
+                .current_password
+                .verify_password(&hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
                 })
                 .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
         }
 
-        let hash = password_auth::generate_hash(update.new_password.0);
+        let hash = update.new_password.generate_hash();
         sqlx::query!(
             r#"
             UPDATE api_users SET password_hash = $2 WHERE id = $1
@@ -528,7 +534,8 @@ impl ApiUserRepository {
         .await?;
 
         if let Some(hash) = hash {
-            password_auth::verify_password(current_password.0, &hash)
+            current_password
+                .verify_password(&hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
                 })
@@ -642,7 +649,8 @@ impl ApiUserRepository {
                 return Err(Error::NotFound("User not found or wrong password"));
             }
 
-            password_auth::verify_password(password.0, &hash)
+            password
+                .verify_password(&hash)
                 .inspect_err(|err| tracing::trace!("wrong password for {}: {}", email, err))
                 .map_err(|_| Error::NotFound("User not found or wrong password"))?;
             return Ok(());

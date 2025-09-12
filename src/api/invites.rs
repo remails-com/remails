@@ -12,7 +12,7 @@ use crate::{
     api::error::{ApiError, ApiResult},
     models::{
         ApiInvite, ApiUser, InviteId, InviteRepository, OrganizationId, OrganizationRepository,
-        Role,
+        Password, Role,
     },
 };
 
@@ -61,7 +61,7 @@ pub async fn get_org_invites(
 
 pub async fn get_invite(
     State(repo): State<InviteRepository>,
-    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, String)>,
+    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
 ) -> ApiResult<ApiInvite> {
     debug!(
@@ -98,7 +98,7 @@ pub async fn remove_invite(
 
 pub async fn accept_invite(
     State((invites, organizations)): State<(InviteRepository, OrganizationRepository)>,
-    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, String)>,
+    Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, ApiError> {
     debug!(

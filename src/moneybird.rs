@@ -458,13 +458,12 @@ impl MoneyBird {
                 }
             };
 
-            let hash = password_auth::generate_hash(webhook.token.danger_as_str());
             if let Err(err) = sqlx::query!(
                 r#"
                 INSERT INTO moneybird_webhook (moneybird_id, token_hash) VALUES ($1, $2)
                 "#,
                 *webhook.id,
-                hash
+                webhook.token.generate_hash()
             )
             .execute(&self_clone.pool)
             .await
@@ -520,7 +519,9 @@ impl MoneyBird {
             return Err(Error::Unauthorized);
         };
 
-        password_auth::verify_password(payload.webhook_token.danger_as_str(), &hash)
+        payload
+            .webhook_token
+            .verify_password(&hash)
             .inspect_err(|err| {
                 warn!(
                     webhook_id = webhook_id.as_str(),
