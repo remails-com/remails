@@ -157,9 +157,11 @@ export default function Members() {
       </Title>
       <StyledTable headers={["Name", "Email", "Role", "Updated", ""]}>{member_rows}</StyledTable>
 
-      <Title order={3} mb="md" mt="xl">
-        Organization invites
-      </Title>
+      {invite_rows && invite_rows.length > 0 && (
+        <Title order={3} mb="md" mt="xl">
+          Organization invites
+        </Title>
+      )}
       <StyledTable headers={["Role", "Expires", "Created by", "Created at", ""]}>{invite_rows}</StyledTable>
       <Flex justify="center" mt="md">
         <AdminButton onClick={open} leftSection={<IconUserPlus />}>
