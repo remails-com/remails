@@ -4,7 +4,7 @@ use smtp_proto::{
     AUTH_PLAIN, EXT_8BIT_MIME, EXT_AUTH, EXT_ENHANCED_STATUS_CODES, EXT_SMTP_UTF8, EhloResponse,
     Request,
 };
-use std::{fmt::Display, net::SocketAddr};
+use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
@@ -43,11 +43,11 @@ impl From<(u16, String)> for SmtpResponse {
 }
 
 impl SmtpResponse {
-    fn from_ok(email: String) -> Self {
+    fn from_ok(email: Cow<'_, str>) -> Self {
         SmtpResponse(250, format!("2.1.0 Originator <{email}> ok"))
     }
 
-    fn to_ok(email: String) -> Self {
+    fn to_ok(email: Cow<'_, str>) -> Self {
         SmtpResponse(250, format!("2.1.5 Recipient <{email}> ok"))
     }
 
@@ -124,7 +124,7 @@ impl SmtpSession {
 
     pub async fn handle(
         &mut self,
-        request: Result<Request<String>, smtp_proto::Error>,
+        request: Result<Request<Cow<'_, str>>, smtp_proto::Error>,
     ) -> SessionReply {
         let request = match request {
             Ok(r) => r,
@@ -160,7 +160,7 @@ impl SmtpSession {
                 let mut buf = Vec::with_capacity(64);
                 response.write(&mut buf).ok();
 
-                self.peer_name = Some(host);
+                self.peer_name = Some(host.to_string());
 
                 SessionReply::RawReply(buf)
             }
@@ -193,9 +193,8 @@ impl SmtpSession {
                     return SessionReply::IngestAuth(SmtpResponse::INGEST_AUTH.into());
                 }
 
-                let response = self
-                    .handle_plain_auth(&mut initial_response.into_bytes())
-                    .await;
+                let mut initial_response = initial_response.into_owned().into_bytes();
+                let response = self.handle_plain_auth(&mut initial_response).await;
 
                 SessionReply::ReplyAndContinue(response)
             }
