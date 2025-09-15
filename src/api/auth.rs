@@ -301,11 +301,6 @@ where
                     Err(ApiError::Unauthorized)?
                 }
                 if !matches!(cookie.state, LoginState::MfaPending) {
-                    warn!(
-                        user_id = cookie.id().to_string(),
-                        "Received user cookie that is not in `MfaPending` state but {:?}",
-                        cookie.state
-                    );
                     Err(ApiError::Unauthorized)?
                 }
                 trace!(

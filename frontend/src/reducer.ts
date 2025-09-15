@@ -123,6 +123,6 @@ function getActionHandler<T extends Action["type"]>(
 export function reducer(state: State, action: Action): State {
   const handler = getActionHandler(action);
   const newState = handler(state, action);
-  console.log("action:", action, newState);
+  // console.log("action:", action, newState);
   return newState;
 }

@@ -1,7 +1,6 @@
 use crate::{
-    SubscriptionStatus,
     models::{ApiUserId, Error, Role},
-    moneybird::MoneybirdContactId,
+    moneybird::{MoneybirdContactId, SubscriptionStatus},
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};

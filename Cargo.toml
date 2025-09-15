@@ -64,6 +64,7 @@ ppp = "2.3.0"
 url = "2.5.4"
 totp-rs = { version = "5.7.0", features = ["gen_secret", "qr"] }
 garde = { version = "0.22.0", features = ["derive", "regex", "serde"] }
+async-trait = "0.1.89"
 
 [dev-dependencies]
 reqwest = { version = "0.12.23", features = ["json"] }

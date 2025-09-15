@@ -1,167 +1,23 @@
-use crate::models::{OrganizationId, Password};
+mod mock;
+mod model;
+mod production_api;
+
+pub use model::*;
+
+use crate::{
+    Environment,
+    models::OrganizationId,
+    moneybird::{mock::MockMoneybirdApi, production_api::ProductionMoneybirdApi},
+};
+use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate, Utc};
-use derive_more::{Deref, Display, From, FromStr};
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Type};
-use std::{cmp::Ordering, env, str::FromStr, time::Duration};
+use sqlx::PgPool;
+use std::{cmp::Ordering, env, sync::Arc, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 const MONEYBIRD_API_URL: &str = "https://moneybird.com/api/v2";
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub struct MoneybirdContactId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-struct SubscriptionTemplateId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub struct SubscriptionId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-struct ProductId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub struct RecurringSalesInvoiceId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub struct AdministrationId(String);
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub struct WebhookId(String);
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Contact {
-    id: MoneybirdContactId,
-    company_name: String,
-    email: String,
-    phone: String,
-    address1: String,
-    address2: String,
-    zipcode: String,
-    city: String,
-    country: String,
-    sales_invoices_url: Url,
-    contact_people: Vec<CompanyContactPerson>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct CompanyContactPerson {
-    firstname: String,
-    lastname: String,
-    phone: String,
-    email: String,
-}
-#[derive(Debug, Deserialize, Serialize)]
-struct SubscriptionTemplate {
-    id: SubscriptionTemplateId,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct MoneybirdSubscription {
-    id: SubscriptionId,
-    contact: Contact,
-    recurring_sales_invoice_id: RecurringSalesInvoiceId,
-    cancelled_at: Option<DateTime<Utc>>,
-    product: Product,
-    start_date: NaiveDate,
-    end_date: Option<NaiveDate>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Product {
-    id: ProductId,
-    identifier: Option<ProductIdentifier>,
-    title: String,
-    description: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct RecurringSalesInvoice {
-    id: RecurringSalesInvoiceId,
-    invoice_date: NaiveDate,
-    last_date: Option<NaiveDate>,
-    active: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
-#[serde(rename_all = "SCREAMING-KEBAB-CASE")]
-pub enum ProductIdentifier {
-    NotSubscribed,
-    RmlsFree,
-    RmlsTinyMonthly,
-    RmlsSmallMonthly,
-    RmlsMediumMonthly,
-    RmlsLargeMonthly,
-    RmlsTinyYearly,
-    RmlsSmallYearly,
-    RmlsMediumYearly,
-    RmlsLargeYearly,
-    #[serde(untagged)]
-    Unknown(String),
-}
-
-impl FromStr for ProductIdentifier {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "RmlsFree" => Self::RmlsFree,
-            "RmlsTinyMonthly" => Self::RmlsTinyMonthly,
-            "RmlsSmallMonthly" => Self::RmlsSmallMonthly,
-            "RmlsMediumMonthly" => Self::RmlsMediumMonthly,
-            "RmlsLargeMonthly" => Self::RmlsLargeMonthly,
-            "RmlsTinyYearly" => Self::RmlsTinyYearly,
-            "RmlsSmallYearly" => Self::RmlsSmallYearly,
-            "RmlsMediumYearly" => Self::RmlsMediumYearly,
-            "RmlsLargeYearly" => Self::RmlsLargeYearly,
-            unknown => {
-                warn!("Unknown product identifier: {}", unknown);
-                Self::Unknown(unknown.to_string())
-            }
-        })
-    }
-}
-
-impl ProductIdentifier {
-    pub fn monthly_quota(&self) -> u32 {
-        match self {
-            ProductIdentifier::NotSubscribed => 0,
-            ProductIdentifier::RmlsFree => 1_000,
-            ProductIdentifier::RmlsTinyMonthly => 100_000,
-            ProductIdentifier::RmlsSmallMonthly => 300_000,
-            ProductIdentifier::RmlsMediumMonthly => 700_000,
-            ProductIdentifier::RmlsLargeMonthly => 1_500_000,
-            ProductIdentifier::RmlsTinyYearly => 100_000,
-            ProductIdentifier::RmlsSmallYearly => 300_000,
-            ProductIdentifier::RmlsMediumYearly => 700_000,
-            ProductIdentifier::RmlsLargeYearly => 1_500_000,
-            ProductIdentifier::Unknown(_) => 0,
-        }
-    }
-}
-
-#[derive(Serialize, PartialEq, Debug, Deserialize, Clone)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum SubscriptionStatus {
-    Active(Subscription),
-    Expired(Subscription<NaiveDate>),
-    None,
-}
-
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct Subscription<EndDate = Option<NaiveDate>> {
-    subscription_id: SubscriptionId,
-    product: ProductIdentifier,
-    title: String,
-    description: String,
-    recurring_sales_invoice_id: RecurringSalesInvoiceId,
-    start_date: NaiveDate,
-    end_date: EndDate,
-    sales_invoices_url: Url,
-}
 
 impl PartialOrd for SubscriptionStatus {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -286,104 +142,86 @@ struct QuotaResetInfo {
     contact_id: Option<MoneybirdContactId>,
 }
 
-/// This models the content of a webhook we received from Moneybird
-#[derive(Debug, Deserialize)]
-pub struct MoneybirdWebhookPayload {
-    // The webhook_id is not present in the `test_webhook`, otherwise it is present
-    #[serde(default)]
-    webhook_id: Option<WebhookId>,
-    administration_id: AdministrationId,
-    action: Action,
-    // Strangely, the `test_webhook` does not call this `webhook_token`, but `token`
-    #[serde(alias = "token")]
-    webhook_token: Password,
-    entity_type: EntityType,
-    entity: serde_json::Value,
-}
-
-/// This models the "webhook" item returned by a `GET` request to `/webhooks`
-#[derive(Debug, Deserialize)]
-struct Webhook {
-    id: WebhookId,
-    administration_id: AdministrationId,
-    url: Url,
-    token: Password,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-enum EntityType {
-    Contact,
-    Subscription,
-    RecurringSalesInvoice,
-    #[serde(untagged)]
-    Unknown(String),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Action {
-    SubscriptionCancelled,
-    SubscriptionCreated,
-    SubscriptionEdited,
-    SubscriptionResumed,
-    SubscriptionUpdated,
-    TestWebhook,
-    #[serde(untagged)]
-    Unknown(String),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Moneybird error: {0}")]
-    Moneybird(String),
-    #[error("Sqlx error: {0}")]
-    Sqlx(#[from] sqlx::Error),
-    #[error("Reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
-    #[error("Parse url error: {0}")]
-    ParseUrl(#[from] url::ParseError),
-    #[error("Unauthorized")]
-    Unauthorized,
-    #[error("Serde error: {0}")]
-    Serde(#[from] serde_json::Error),
-}
-
 #[derive(Clone)]
 pub struct MoneyBird {
-    client: reqwest::Client,
+    api: Arc<dyn MoneybirdApi + Send + Sync>,
     pool: PgPool,
-    administration: AdministrationId,
-    webhook_url: Url,
+}
+
+#[async_trait]
+trait MoneybirdApi {
+    async fn register_webhook(&self) -> Option<Webhook>;
+    async fn next_invoice_date(
+        &self,
+        recurring_sales_invoice_id: &RecurringSalesInvoiceId,
+    ) -> Result<NaiveDate, Error>;
+    async fn create_contact(&self, company_name: &str) -> reqwest::Result<Contact>;
+    async fn subscription_templates(&self) -> Result<Vec<SubscriptionTemplate>, Error>;
+    async fn get_subscription_status_by_contact_id(
+        &self,
+        contact_id: &MoneybirdContactId,
+    ) -> Result<SubscriptionStatus, Error>;
+    async fn create_sales_link(
+        &self,
+        moneybird_contact_id: MoneybirdContactId,
+    ) -> Result<Url, Error>;
 }
 
 impl MoneyBird {
     pub async fn new(pool: PgPool) -> Result<Self, Error> {
-        let api_key = env::var("MONEYBIRD_API_KEY").expect("MONEYBIRD_API_KEY env var must be set");
+        let api_key = env::var("MONEYBIRD_API_KEY").ok();
 
-        let administration = env::var("MONEYBIRD_ADMINISTRATION_ID")
-            .expect("MONEYBIRD_ADMINISTRATION_ID env var must be set")
-            .into();
+        let administration = env::var("MONEYBIRD_ADMINISTRATION_ID").ok().map(Into::into);
 
-        let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL")
-            .expect("MONEYBIRD_WEBHOOK_URL env var must be set")
-            .parse()
-            .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL");
+        let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL").ok().map(|url| {
+            url.parse()
+                .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL")
+        });
 
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(AUTHORIZATION, format!("Bearer {api_key}").parse().unwrap());
-        headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-        headers.insert(ACCEPT, "application/json".parse().unwrap());
+        let environment: Environment = env::var("ENVIRONMENT")
+            .map(|s| s.parse())
+            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
+            .unwrap_or(Ok(Environment::Development))
+            .expect(
+                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
+            );
 
-        let client = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()?;
-
-        let res = Self {
-            client,
-            pool,
+        let api: Arc<dyn MoneybirdApi + Send + Sync> = match (
+            api_key,
             administration,
             webhook_url,
+            environment,
+        ) {
+            (Some(api_key), Some(administration), Some(webhook_url), Environment::Production) => {
+                Arc::new(ProductionMoneybirdApi::new(
+                    api_key,
+                    administration,
+                    webhook_url,
+                )?)
+            }
+            (Some(api_key), Some(administration), Some(webhook_url), _) => {
+                warn!("Using production Moneybird API even though not in production environment");
+                Arc::new(ProductionMoneybirdApi::new(
+                    api_key,
+                    administration,
+                    webhook_url,
+                )?)
+            }
+            (_, _, _, Environment::Production) => {
+                panic!(
+                    "Missing at least one of the following environment variables as you are in production environment: MONEYBIRD_API_KEY, MONEYBIRD_ADMINISTRATION_ID, MONEYBIRD_WEBHOOK_URL"
+                );
+            }
+            (_, _, _, _) => {
+                warn!("Using Mock Moneybird API");
+                info!(
+                    "To use production Moneybird API make sure to set MONEYBIRD_API_KEY, MONEYBIRD_ADMINISTRATION_ID and MONEYBIRD_WEBHOOK_URL env vars"
+                );
+                Arc::new(MockMoneybirdApi {})
+            }
         };
+
+        let res = Self { api, pool };
 
         Ok(res)
     }
@@ -429,41 +267,8 @@ impl MoneyBird {
 
             info!("registering Moneybird webhook");
 
-            let webhook: Webhook = match self_clone
-                .client
-                .post(self_clone.url("webhooks"))
-                .json(&serde_json::json!({
-                    "url": self_clone.webhook_url.as_str(),
-                    "enabled_events": [
-                        "subscription_cancelled",
-                        "subscription_created",
-                        "subscription_edited",
-                        "subscription_resumed",
-                        "subscription_updated"
-                    ]
-                }))
-                .send()
-                .await
-            {
-                Ok(res) if res.status().is_success() => match res.json().await {
-                    Ok(webhook) => webhook,
-                    Err(err) => {
-                        error!("Error registering Moneybird webhook: {}", err);
-                        return;
-                    }
-                },
-                Err(err) => {
-                    error!("Error registering Moneybird webhook: {}", err);
-                    return;
-                }
-                Ok(res) => {
-                    error!(
-                        "Error registering Moneybird webhook: Status {}, Response: {}",
-                        res.status(),
-                        res.text().await.unwrap()
-                    );
-                    return;
-                }
+            let Some(webhook) = self_clone.api.register_webhook().await else {
+                return;
             };
 
             if let Err(err) = sqlx::query!(
@@ -487,14 +292,6 @@ impl MoneyBird {
                 "Moneybird webhook registered"
             );
         });
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!(
-            "{MONEYBIRD_API_URL}/{}/{}",
-            self.administration,
-            path.trim_matches('/')
-        )
     }
 
     async fn authorize_webhook_call(
@@ -600,6 +397,25 @@ impl MoneyBird {
         }
         let subscription = serde_json::from_value::<MoneybirdSubscription>(payload.entity)?;
 
+        let Some(organization_id) = sqlx::query_scalar!(
+            r#"
+            SELECT id FROM organizations WHERE moneybird_contact_id = $1
+            "#,
+            subscription.contact.id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            warn!(
+                subscription_id = subscription.id.as_str(),
+                moneybird_contact_id = subscription.contact.id.as_str(),
+                "Could not find organization with moneybird contact id"
+            );
+            return Err(Error::Moneybird(
+                "Could not find organization with moneybird contact id".to_string(),
+            ));
+        };
+
         debug!(
             subscription_id = subscription.id.as_str(),
             moneybird_contact_id = subscription.contact.id.as_str(),
@@ -608,14 +424,14 @@ impl MoneyBird {
 
         let subscription_status: SubscriptionStatus = [&subscription].into();
 
-        self.store_subscription_status(&subscription_status, &subscription.contact.id)
+        self.store_subscription_status(&subscription_status, &organization_id.into())
             .await
     }
 
     async fn store_subscription_status(
         &self,
         subscription_status: &SubscriptionStatus,
-        moneybird_contact_id: &MoneybirdContactId,
+        organization_id: &OrganizationId,
     ) -> Result<(), Error> {
         let quota_reset = self
             .calculate_quota_reset_datetime(subscription_status)
@@ -628,39 +444,28 @@ impl MoneyBird {
             }
         };
 
-        self.make_user_admin_on_first_subscription(subscription_status, moneybird_contact_id)
+        self.make_user_admin_on_first_subscription(subscription_status, organization_id)
             .await?;
 
-        let org_id = sqlx::query_scalar!(
+        sqlx::query!(
             r#"
             UPDATE organizations
             SET total_message_quota = $2,
                 quota_reset = $3,
                 current_subscription = $4
-            WHERE moneybird_contact_id = $1
-            RETURNING id
+            WHERE id = $1
             "#,
-            moneybird_contact_id.as_str(),
+            **organization_id,
             product.monthly_quota() as i64,
             quota_reset,
             serde_json::to_value(&subscription_status)?
         )
-        .fetch_optional(&self.pool)
+        .execute(&self.pool)
         .await?;
 
-        let Some(org_id) = org_id else {
-            warn!(
-                moneybird_contact_id = moneybird_contact_id.as_str(),
-                "Could not find organization with moneybird contact id"
-            );
-            return Err(Error::Moneybird(
-                "Could not find organization with moneybird contact id".to_string(),
-            ));
-        };
         debug!(
-            organization_id = org_id.to_string(),
+            organization_id = organization_id.to_string(),
             subscription_id = ?subscription_status.subscription_id(),
-            moneybird_contact_id = moneybird_contact_id.as_str(),
             product = product.to_string(),
             quota_reset = ?quota_reset,
             "Updated subscription information in database"
@@ -678,35 +483,18 @@ impl MoneyBird {
     async fn make_user_admin_on_first_subscription(
         &self,
         new_subscription_status: &SubscriptionStatus,
-        moneybird_contact_id: &MoneybirdContactId,
+        organization_id: &OrganizationId,
     ) -> Result<(), Error> {
-        struct SubscriptionAndOrgId {
-            old_subscription_json: serde_json::Value,
-            org_id: OrganizationId,
-        }
-
-        let Some(SubscriptionAndOrgId {
-            old_subscription_json,
-            org_id,
-        }) = sqlx::query_as!(
-            SubscriptionAndOrgId,
+        let old_subscription_json = sqlx::query_scalar!(
             r#"
-            SELECT current_subscription AS old_subscription_json, 
-                   id AS org_id 
-            FROM organizations 
-            WHERE moneybird_contact_id = $1
+            SELECT current_subscription AS old_subscription_json
+            FROM organizations
+            WHERE id = $1
             "#,
-            moneybird_contact_id.as_str(),
+            **organization_id,
         )
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            warn!(
-                moneybird_contact_id = moneybird_contact_id.as_str(),
-                "Could not find organization with moneybird contact id to update user privileges"
-            );
-            return Ok(());
-        };
+        .fetch_one(&self.pool)
+        .await?;
 
         let old_subscription_status: SubscriptionStatus =
             serde_json::from_value(old_subscription_json)?;
@@ -718,8 +506,7 @@ impl MoneyBird {
             trace!(
                 old_subscription_status = old_subscription_status.status_string(),
                 new_subscription_status = new_subscription_status.status_string(),
-                moneybird_contact_id = moneybird_contact_id.as_str(),
-                organization_id = org_id.to_string(),
+                organization_id = organization_id.to_string(),
                 "Not updating user privileges",
             );
             return Ok(());
@@ -727,18 +514,18 @@ impl MoneyBird {
 
         let api_user_ids = sqlx::query_scalar!(
             r#"
-            SELECT id FROM api_users u 
+            SELECT id FROM api_users u
                 JOIN api_users_organizations o ON u.id = o.api_user_id
             WHERE o.organization_id = $1
             "#,
-            *org_id,
+            **organization_id,
         )
         .fetch_all(&self.pool)
         .await?;
 
         if api_user_ids.len() != 1 {
             error!(
-                organization_id = org_id.to_string(),
+                organization_id = organization_id.to_string(),
                 "Expected exactly one API user for organization but found {} API users",
                 api_user_ids.len()
             );
@@ -748,42 +535,24 @@ impl MoneyBird {
         info!(
             old_subscription_status = old_subscription_status.status_string(),
             new_subscription_status = new_subscription_status.status_string(),
-            moneybird_contact_id = moneybird_contact_id.as_str(),
-            organization_id = org_id.to_string(),
+            organization_id = organization_id.to_string(),
             "Organization subscribed for the first time. Elevating privileges from read-only to admin",
         );
 
         sqlx::query!(
             r#"
-            UPDATE api_users_organizations 
-            SET role = 'admin' 
-            WHERE api_user_id = $1 
-              AND organization_id = $2 
+            UPDATE api_users_organizations
+            SET role = 'admin'
+            WHERE api_user_id = $1
+              AND organization_id = $2
             "#,
             api_user_ids[0],
-            *org_id,
+            **organization_id,
         )
         .execute(&self.pool)
         .await?;
 
         Ok(())
-    }
-
-    async fn next_invoice_date(
-        &self,
-        recurring_sales_invoice_id: &RecurringSalesInvoiceId,
-    ) -> Result<NaiveDate, Error> {
-        Ok(self
-            .client
-            .get(self.url(&format!(
-                "recurring_sales_invoices/{recurring_sales_invoice_id}",
-            )))
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<RecurringSalesInvoice>()
-            .await?
-            .invoice_date)
     }
 
     async fn calculate_quota_reset_datetime(
@@ -809,7 +578,7 @@ impl MoneyBird {
                         recurring_sales_invoice_id = recurring_sales_invoice_id.as_str(),
                         "Calculating subscription period end based on the next recurring invoice `invoice_date`"
                     );
-                    Some(self.next_invoice_date(recurring_sales_invoice_id).await?
+                    Some(self.api.next_invoice_date(recurring_sales_invoice_id).await?
                         .checked_sub_days(Days::new(1))
                         .ok_or(
                             Error::Moneybird("Could not calculate subscription period end based on the next invoice date".to_string()))?)
@@ -856,7 +625,8 @@ impl MoneyBird {
 
     async fn reset_single_quota(&self, quota_info: QuotaResetInfo) -> Result<(), Error> {
         let subscription_status = if let Some(contact_id) = quota_info.contact_id {
-            self.get_subscription_status_by_contact_id(&contact_id)
+            self.api
+                .get_subscription_status_by_contact_id(&contact_id)
                 .await?
         } else {
             SubscriptionStatus::None
@@ -901,19 +671,7 @@ impl MoneyBird {
         .fetch_one(&self.pool)
         .await?;
 
-        let contact: Contact = self
-            .client
-            .post(self.url("contacts"))
-            .json(&serde_json::json!({
-                "contact": {
-                    "company_name": company_name
-                }
-            }))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        let contact: Contact = self.api.create_contact(&company_name).await?;
 
         sqlx::query!(
             r#"
@@ -954,38 +712,7 @@ impl MoneyBird {
     pub async fn create_sales_link(&self, org_id: OrganizationId) -> Result<Url, Error> {
         let contact_id = self.get_contact_id(org_id).await?;
 
-        let templates = self
-            .subscription_templates()
-            .await?
-            .into_iter()
-            .map(|t| t.id)
-            .collect::<Vec<_>>();
-
-        if templates.is_empty() {
-            Err(Error::Moneybird(
-                "No subscription templates found".to_string(),
-            ))?
-        }
-        if templates.len() > 1 {
-            warn!(
-                "Found multiple subscription templates, using the first one: {}",
-                templates[0].as_str()
-            );
-        }
-
-        let sales_link: String = self
-            .client
-            .get(self.url(&format!(
-                "subscription_templates/{}/checkout_identifier?contact_id={contact_id}",
-                templates[0]
-            )))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        Ok(sales_link.parse()?)
+        self.api.create_sales_link(contact_id).await
     }
 
     pub async fn refresh_subscription_status(
@@ -1002,49 +729,49 @@ impl MoneyBird {
         .await?
         .map(|id| id.into());
 
-        let Some(contact_id) = contact_id else {
-            trace!(
-                organization_id = org_id.as_uuid().to_string(),
-                "No moneybird contact found"
-            );
-            return Ok(SubscriptionStatus::None);
+        let status = match contact_id {
+            Some(contact_id) => self
+                .api
+                .get_subscription_status_by_contact_id(&contact_id)
+                .await
+                .inspect_err(|err| {
+                    warn!(
+                        organization_id = org_id.as_uuid().to_string(),
+                        contact_id = contact_id.as_str(),
+                        "Cloud not fetch subscription status from moneybird: {}",
+                        err
+                    );
+                })?,
+            None => {
+                trace!(
+                    organization_id = org_id.as_uuid().to_string(),
+                    "No moneybird contact found"
+                );
+                // if matches!(self.environment, Environment::Production) {
+                SubscriptionStatus::None
+                // }
+                //
+                // info!(
+                //     organization_id = org_id.as_uuid().to_string(),
+                //     "Using testing subscription as not in production environment"
+                // );
+                //
+                // SubscriptionStatus::Active(Subscription {
+                //     subscription_id: "test_subscription".parse().unwrap(),
+                //     product: ProductIdentifier::RmlsFree,
+                //     title: "Testing".to_string(),
+                //     description: "For testing only".to_string(),
+                //     recurring_sales_invoice_id: "no_invoice_id".parse().unwrap(),
+                //     start_date: Utc::now().date_naive(),
+                //     end_date: None,
+                //     sales_invoices_url: "https://tweedegolf.com".parse()?,
+                // })
+            }
         };
 
-        let status = self
-            .get_subscription_status_by_contact_id(&contact_id)
-            .await?;
+        self.store_subscription_status(&status, &org_id).await?;
 
-        self.store_subscription_status(&status, &contact_id).await?;
         Ok(status)
-    }
-
-    async fn get_subscription_status_by_contact_id(
-        &self,
-        contact_id: &MoneybirdContactId,
-    ) -> Result<SubscriptionStatus, Error> {
-        let subscription_status: SubscriptionStatus = self
-            .client
-            .get(self.url(&format!("subscriptions?contact_id={contact_id}",)))
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<Vec<MoneybirdSubscription>>()
-            .await?
-            .as_slice()
-            .into();
-
-        Ok(subscription_status)
-    }
-
-    async fn subscription_templates(&self) -> Result<Vec<SubscriptionTemplate>, Error> {
-        Ok(self
-            .client
-            .get(self.url("subscription_templates"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?)
     }
 }
 
