@@ -66,7 +66,7 @@ pub async fn create_organization(
         "created organization"
     );
 
-    repo.add_user(org.id(), *user.id(), Role::Admin).await?;
+    repo.add_member(org.id(), *user.id(), Role::Admin).await?;
 
     info!(
         user_id = user.id().to_string(),
@@ -134,6 +134,24 @@ pub async fn list_members(
     Ok(Json(members))
 }
 
+async fn prevent_last_remaining_admin(
+    repo: &OrganizationRepository,
+    org_id: &OrganizationId,
+    user_id: &ApiUserId,
+) -> Result<(), ApiError> {
+    let members = repo.list_members(*org_id).await?;
+
+    let any_other_admins = members
+        .iter()
+        .any(|m| *m.role() == Role::Admin && *m.user_id() != *user_id);
+
+    any_other_admins
+        .then_some(())
+        .ok_or(ApiError::PreconditionFailed(
+            "At least one admin must remain in the organization".to_owned(),
+        ))
+}
+
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
@@ -147,17 +165,8 @@ pub async fn remove_member(
                 .ok_or(ApiError::Forbidden),
         ))?;
 
-    if user.has_org_admin_access(&org_id).is_ok() {
-        let members = repo.list_members(org_id).await?;
-        let any_other_admins = members
-            .iter()
-            .any(|m| *m.role() == Role::Admin && *m.user_id() != user_id);
-        if !any_other_admins {
-            return Err(ApiError::PreconditionFailed(
-                "Last remaining admin cannot leave organization, delete the organization instead"
-                    .to_owned(),
-            ));
-        }
+    if user.has_org_admin_access(&org_id).is_ok() && *user.id() == user_id {
+        prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
     }
 
     repo.remove_member(org_id, user_id).await?;
@@ -167,6 +176,30 @@ pub async fn remove_member(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
         "removed user from organization",
+    );
+
+    Ok(Json(()))
+}
+
+pub async fn update_member_role(
+    Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser,
+    Json(role): Json<Role>,
+) -> ApiResult<()> {
+    user.has_org_admin_access(&org_id)?;
+
+    if *user.id() == user_id {
+        prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
+    }
+
+    repo.update_member_role(org_id, user_id, role).await?;
+
+    info!(
+        updated_user_id = user_id.to_string(),
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "updated organization member",
     );
 
     Ok(Json(()))
@@ -375,6 +408,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
+
+        // can't update organization member's role
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/members/{user_1}"),
+                serialize_body(Role::ReadOnly),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), write_status_code);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -386,7 +429,7 @@ mod tests {
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_organization_no_access_read_only(pool: PgPool) {
-        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e".parse().unwrap(); // is read only in org 1
+        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e".parse().unwrap(); // is read-only in org 1
         let server = TestServer::new(pool.clone(), Some(user_5)).await;
         test_organization_no_access(&server, StatusCode::OK, StatusCode::FORBIDDEN).await;
     }
@@ -421,7 +464,7 @@ mod tests {
     async fn test_organization_members(pool: PgPool) {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
-        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e"; // is read only in org 1
+        let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e"; // is read-only in org 1
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let org_2 = "5d55aec5-136a-407c-952f-5348d4398204";
         let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
@@ -446,6 +489,16 @@ mod tests {
         // can't remove themselves from org 1 as they are the last remaining admin
         let response = server
             .delete(format!("/api/organizations/{org_1}/members/{user_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+
+        // can't make themselves non-admin as they are the last remaining admin
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/members/{user_1}"),
+                serialize_body(Role::Maintainer),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
@@ -483,5 +536,63 @@ mod tests {
         let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
         assert_eq!(members.len(), 1);
         assert_eq!(*members[0].user_id(), user_2);
+
+        // put user_1 back in org 2
+        let repo = OrganizationRepository::new(pool);
+        repo.add_member(org_2.parse().unwrap(), user_1, Role::Admin)
+            .await
+            .unwrap();
+
+        // user_1 can make user_2 non-admin in org 2
+        server.set_user(Some(user_1));
+        let response = server
+            .put(
+                format!("/api/organizations/{org_2}/members/{user_2}"),
+                serialize_body(Role::ReadOnly),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // verify user_2 is read-only now
+        let response = server
+            .get(format!("/api/organizations/{org_2}/members"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert!(
+            members
+                .iter()
+                .filter(|m| *m.user_id() == user_2)
+                .all(|m| *m.role() == Role::ReadOnly)
+        );
+
+        // make user_2 admin again
+        let response = server
+            .put(
+                format!("/api/organizations/{org_2}/members/{user_2}"),
+                serialize_body(Role::Admin),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // user_1 can make themselves non-admin in org 2
+        let response = server
+            .put(
+                format!("/api/organizations/{org_2}/members/{user_1}"),
+                serialize_body(Role::ReadOnly),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // can't remove users anymore
+        let response = server
+            .delete(format!("/api/organizations/{org_2}/members/{user_2}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

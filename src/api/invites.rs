@@ -119,7 +119,7 @@ pub async fn accept_invite(
     }
 
     organizations
-        .add_user(org_id, *user.id(), invite.role())
+        .add_member(org_id, *user.id(), invite.role())
         .await?;
 
     invites.remove_by_id(invite_id, org_id).await?;

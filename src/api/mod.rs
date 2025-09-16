@@ -12,7 +12,7 @@ use crate::{
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_members, list_organizations, remove_member,
-            remove_organization, update_organization,
+            remove_organization, update_member_role, update_organization,
         },
         projects::{create_project, list_projects, remove_project, update_project},
         smtp_credentials::{
@@ -371,7 +371,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/members/{user_id}",
-                delete(remove_member),
+                delete(remove_member).put(update_member_role),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))

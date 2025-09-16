@@ -1,8 +1,8 @@
 import { Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core";
-import { IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
+import { IconEdit, IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
-import { useInvites, useMembers, useOrganizations } from "../../hooks/useOrganizations";
+import { useInvites, useMembers, useOrganizations, useOrgRole } from "../../hooks/useOrganizations";
 import { errorNotification } from "../../notify";
 import StyledTable from "../StyledTable";
 import { formatDateTime, ROLE_LABELS } from "../../util";
@@ -12,14 +12,16 @@ import { notifications } from "@mantine/notifications";
 import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
 import { AdminActionIcon, AdminButton } from "../RoleButtons";
-import { OrganizationMember } from "../../types";
+import { OrganizationMember, Role } from "../../types";
+import UpdateRole from "./UpdateRole";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
+  const { isAdmin } = useOrgRole();
   const { invites, setInvites } = useInvites();
   const { members, setMembers } = useMembers();
   const user = useSelector((state) => state.user);
-  const { navigate } = useRemails();
+  const { dispatch, navigate } = useRemails();
 
   const [opened, { open, close }] = useDisclosure(false);
 
@@ -78,7 +80,6 @@ export default function Members() {
       method: "DELETE",
     });
     if (res.status === 200) {
-      setInvites((invites) => invites?.filter((invite) => invite.id !== id) ?? []);
       notifications.show({
         title: "User removed",
         message: "User removed from organization",
@@ -143,6 +144,58 @@ export default function Members() {
     });
   };
 
+  const updateMemberRole = async (member: OrganizationMember, role: Role) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/members/${member.user_id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(role),
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: "Role updated",
+        message: `Made ${member.name} ${ROLE_LABELS[role].toLowerCase()}`,
+        color: "green",
+      });
+      member.role = role;
+      setMembers([...(members?.filter((m) => m.user_id != member.user_id) ?? []), member]);
+      if (member.user_id == user.id) {
+        dispatch({
+          type: "set_user",
+          user: {
+            ...user,
+            org_roles: [
+              ...user.org_roles.filter((o) => o.org_id != currentOrganization.id),
+              { role, org_id: currentOrganization.id },
+            ],
+          },
+        });
+      }
+    } else {
+      errorNotification("Could not update role");
+      console.error(res);
+    }
+  };
+
+  const updateRole = (member: OrganizationMember) => {
+    modals.open({
+      title: `Edit role of ${member.name}`,
+      children: (
+        <UpdateRole
+          cancel={() => modals.closeAll()}
+          submit={(role) => {
+            updateMemberRole(member, role);
+            modals.closeAll();
+          }}
+          member={member}
+          user={user}
+          currentOrganization={currentOrganization}
+        />
+      ),
+    });
+  };
+
   const is_last_remaining_admin =
     user.org_roles.some((o) => o.org_id == currentOrganization.id && o.role == "admin") &&
     !members?.some((m) => m.role == "admin" && m.user_id != user.id);
@@ -159,7 +212,19 @@ export default function Members() {
         )}
       </Table.Td>
       <Table.Td>{member.email}</Table.Td>
-      <Table.Td>{ROLE_LABELS[member.role]}</Table.Td>
+      <Table.Td>
+        {ROLE_LABELS[member.role]}{" "}
+        {isAdmin && !(is_last_remaining_admin && member.user_id == user.id) && (
+          <AdminActionIcon
+            onClick={() => updateRole(member)}
+            variant="transparent"
+            style={{ verticalAlign: "middle" }}
+            tooltip="Edit role"
+          >
+            <IconEdit />
+          </AdminActionIcon>
+        )}
+      </Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
         {member.user_id == user.id ? (

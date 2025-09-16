@@ -16,14 +16,38 @@ interface NewInviteProps {
 }
 
 const ALL_ROLES: Role[] = ["read_only", "maintainer", "admin"];
-function isValidRole(value: string): value is Role {
+export function isValidRole(value: string): value is Role {
   return ALL_ROLES.includes(value as Role);
 }
 
-const roleSelectData: { value: Role; label: string }[] = ALL_ROLES.map((role) => ({
+export const roleSelectData: { value: Role; label: string }[] = ALL_ROLES.map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }));
+
+export const ROLE_INFO = (
+  <Alert icon={<IconInfoCircle />} color="gray">
+    <Text>
+      <Text fw="bold" span>
+        Read-only:{" "}
+      </Text>
+      can view the organization, including its projects, streams, messages, domains, etc.
+    </Text>
+    <Text>
+      <Text fw="bold" span>
+        Maintainer:{" "}
+      </Text>
+      in addition to read-only access, can also create and edit projects, streams, messages and domains within the
+      organization.
+    </Text>
+    <Text>
+      <Text fw="bold" span>
+        Admin:{" "}
+      </Text>
+      in addition to maintainer access, can also edit organization settings, including inviting and removing members.
+    </Text>
+  </Alert>
+);
 
 interface FormValues {
   role: Role;
@@ -89,28 +113,7 @@ export default function NewInvite({ opened, close, onNewInvite }: NewInviteProps
           <form onSubmit={form.onSubmit(createInvite)}>
             <Stack>
               Please select which role the invite link should give:
-              <Alert icon={<IconInfoCircle />}>
-                <Text>
-                  <Text fw="bold" span>
-                    Read-only:{" "}
-                  </Text>
-                  can view the organization, including its projects, streams, messages, domains, etc.
-                </Text>
-                <Text>
-                  <Text fw="bold" span>
-                    Maintainer:{" "}
-                  </Text>
-                  in addition to read-only access, can also create and edit projects, streams, messages and domains
-                  within the organization.
-                </Text>
-                <Text>
-                  <Text fw="bold" span>
-                    Admin:{" "}
-                  </Text>
-                  in addition to maintainer access, can also edit organization settings, including inviting and removing
-                  members.
-                </Text>
-              </Alert>
+              {ROLE_INFO}
               <Select
                 data-autofocus
                 label="Organization role"
