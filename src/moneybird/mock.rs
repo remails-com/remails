@@ -17,7 +17,7 @@ pub(super) struct MockMoneybirdApi {}
 impl MoneybirdApi for MockMoneybirdApi {
     async fn register_webhook(&self) -> Option<Webhook> {
         Some(Webhook {
-            id: WebhookId("mock webhook".to_string()),
+            id: WebhookId("mock_webhook_id".to_string()),
             administration_id: AdministrationId("mock administration".to_string()),
             url: "https://dump.tweede.golf/dump/moneybird".parse().unwrap(),
             token: "supersecuretoken".to_string().into(),

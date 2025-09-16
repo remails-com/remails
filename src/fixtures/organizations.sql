@@ -27,4 +27,12 @@ VALUES ('44729d9f-a7dc-4226-b412-36a7537f5176',
         'quota reset test org 4',
         333, 0,
         '2025-01-31 23:59:59.000000 +00:00',
-        500000, now() + '1 day')
+        500000, now() + '1 day');
+
+INSERT INTO organizations (id, name, moneybird_contact_id, current_subscription)
+VALUES ('ad76a517-3ff2-4d84-8299-742847782d4d',
+        'webhook test',
+        'webhook_test_org',
+        '{
+          "status": "none"
+        }');

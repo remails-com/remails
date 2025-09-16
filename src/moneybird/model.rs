@@ -14,10 +14,10 @@ pub struct MoneybirdContactId(pub(super) String);
 pub(super) struct SubscriptionTemplateId(pub(super) String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub(super) struct SubscriptionId(pub(super) String);
+pub struct SubscriptionId(pub(super) String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub(super) struct ProductId(pub(super) String);
+pub struct ProductId(pub(super) String);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
 pub(super) struct RecurringSalesInvoiceId(pub(super) String);
@@ -67,7 +67,7 @@ pub(super) struct MoneybirdSubscription {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub(super) struct Product {
+pub struct Product {
     pub(super) id: ProductId,
     pub(super) identifier: Option<ProductIdentifier>,
     pub(super) title: String,
@@ -84,7 +84,7 @@ pub(super) struct RecurringSalesInvoice {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
-pub(super) enum ProductIdentifier {
+pub enum ProductIdentifier {
     NotSubscribed,
     RmlsFree,
     RmlsTinyMonthly,
@@ -219,4 +219,18 @@ pub enum Error {
     Unauthorized,
     #[error("Serde error: {0}")]
     Serde(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{ProductIdentifier, Subscription, SubscriptionId};
+
+    impl Subscription {
+        pub fn id(&self) -> &SubscriptionId {
+            &self.subscription_id
+        }
+        pub fn product_id(&self) -> &ProductIdentifier {
+            &self.product
+        }
+    }
 }

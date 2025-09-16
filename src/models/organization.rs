@@ -346,6 +346,14 @@ mod test {
         pub fn quota_reset(&self) -> Option<DateTime<Utc>> {
             self.quota_reset
         }
+
+        pub fn total_message_quota(&self) -> i64 {
+            self.total_message_quota
+        }
+
+        pub fn current_subscription(&self) -> &SubscriptionStatus {
+            &self.current_subscription
+        }
     }
 
     #[sqlx::test]

@@ -38,4 +38,9 @@ VALUES ('672be18f-a89e-4a1d-adaa-45a0b4e2f350', 'test-totp-rate-limit@user-4',
 INSERT INTO totp (id, description, user_id, url, state, last_used)
 VALUES ('448f8b7c-e6b9-4038-ab73-bc35826fd5da', '', '672be18f-a89e-4a1d-adaa-45a0b4e2f350',
         'otpauth://totp/Remails:test-totp-rate-limit%40user-4?secret=CP32OBJWEI6FDV3Z7UDMAQT5YDYUS36L&algorithm=SHA256&issuer=Remails',
-        'enabled', null)
+        'enabled', null);
+
+INSERT INTO api_users (id, email, name) -- Read-only member of the "webhook test" organization
+VALUES ('d57373be-cb77-4a2b-9e6e-66b28c4b5c7e', 'webhook@test.com', 'Webhook test');
+INSERT INTO api_users_organizations (api_user_id, organization_id, role)
+VALUES ('d57373be-cb77-4a2b-9e6e-66b28c4b5c7e', 'ad76a517-3ff2-4d84-8299-742847782d4d', 'read_only')

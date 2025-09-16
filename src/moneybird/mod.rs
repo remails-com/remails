@@ -11,9 +11,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate, Utc};
+#[cfg(not(test))]
 use rand::Rng;
 use sqlx::PgPool;
-use std::{cmp::Ordering, env, sync::Arc, time::Duration};
+#[cfg(not(test))]
+use std::time::Duration;
+use std::{cmp::Ordering, env, sync::Arc};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -58,7 +61,7 @@ impl SubscriptionStatus {
         match self {
             SubscriptionStatus::Active(Subscription { product, .. }) => product.monthly_quota(),
             SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
-                ProductIdentifier::RmlsFree.monthly_quota()
+                ProductIdentifier::NotSubscribed.monthly_quota()
             }
         }
     }
@@ -232,16 +235,19 @@ impl MoneyBird {
     pub(crate) fn register_webhook(&self) {
         let self_clone = self.clone();
         tokio::spawn(async move {
-            // Cannot inline this "random_delay", see: https://stackoverflow.com/a/75227719
-            let random_delay = {
-                let mut rng = rand::rng();
-                rng.random_range(0..10)
-            };
+            #[cfg(not(test))]
+            {
+                // Cannot inline this "random_delay", see: https://stackoverflow.com/a/75227719
+                let random_delay = {
+                    let mut rng = rand::rng();
+                    rng.random_range(0..10)
+                };
 
-            // If multiple instances (Pods) start at the same time,
-            // try to avoid race conditions by introducing a random delay
-            // so that only one will register the webhook
-            tokio::time::sleep(Duration::from_secs(random_delay)).await;
+                // If multiple instances (Pods) start at the same time,
+                // try to avoid race conditions by introducing a random delay
+                // so that only one will register the webhook
+                tokio::time::sleep(Duration::from_secs(random_delay)).await;
+            }
 
             match sqlx::query_scalar!(
                 r#"
@@ -747,25 +753,7 @@ impl MoneyBird {
                     organization_id = org_id.as_uuid().to_string(),
                     "No moneybird contact found"
                 );
-                // if matches!(self.environment, Environment::Production) {
                 SubscriptionStatus::None
-                // }
-                //
-                // info!(
-                //     organization_id = org_id.as_uuid().to_string(),
-                //     "Using testing subscription as not in production environment"
-                // );
-                //
-                // SubscriptionStatus::Active(Subscription {
-                //     subscription_id: "test_subscription".parse().unwrap(),
-                //     product: ProductIdentifier::RmlsFree,
-                //     title: "Testing".to_string(),
-                //     description: "For testing only".to_string(),
-                //     recurring_sales_invoice_id: "no_invoice_id".parse().unwrap(),
-                //     start_date: Utc::now().date_naive(),
-                //     end_date: None,
-                //     sales_invoices_url: "https://tweedegolf.com".parse()?,
-                // })
             }
         };
 
@@ -835,12 +823,14 @@ mod test {
 
         let none = SubscriptionStatus::None;
 
+        assert_eq!(active_none, active_none);
         assert!(active_none > active_tomorrow);
         assert!(active_tomorrow < active_none);
         assert!(active_tomorrow > active_today);
         assert!(active_none > active_today);
 
         assert!(active_today > expired_yesterday);
+        assert!(expired_yesterday < active_today);
         assert!(active_none > expired_two_days_ago);
 
         assert!(expired_yesterday > expired_two_days_ago);
@@ -852,5 +842,6 @@ mod test {
 
         assert!(expired_yesterday > none);
         assert!(none < expired_yesterday);
+        assert_eq!(none, none);
     }
 }
