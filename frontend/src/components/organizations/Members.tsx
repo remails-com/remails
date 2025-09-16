@@ -12,11 +12,12 @@ import { notifications } from "@mantine/notifications";
 import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
 import { AdminActionIcon, AdminButton } from "../RoleButtons";
+import { OrganizationMember } from "../../types";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
   const { invites, setInvites } = useInvites();
-  const { members } = useMembers();
+  const { members, setMembers } = useMembers();
   const user = useSelector((state) => state.user);
   const { navigate } = useRemails();
 
@@ -86,6 +87,8 @@ export default function Members() {
       if (id == user.id) {
         // reload-orgs makes sure that the organization is removed from the front-end
         navigate("default", { force: "reload-orgs" });
+      } else {
+        setMembers(members?.filter((m) => m.user_id != id) ?? []);
       }
     } else {
       errorNotification("Could not remove user from organization");
@@ -117,18 +120,49 @@ export default function Members() {
     });
   };
 
+  const confirmRemoveFromOrg = (member: OrganizationMember) => {
+    modals.openConfirmModal({
+      title: "Please confirm your action",
+      children: (
+        <>
+          <Text>
+            Are you sure you want to remove {member.name} from the{" "}
+            <Text fw="bold" span>
+              {currentOrganization.name}
+            </Text>{" "}
+            organization?
+          </Text>
+          <Alert my="lg" icon={<IconInfoCircle />}>
+            They will not be able to access this organization anymore, unless they get reinvited by one of the admins.
+          </Alert>
+        </>
+      ),
+      labels: { confirm: "Confirm", cancel: "Cancel" },
+      onCancel: () => {},
+      onConfirm: () => removeFromOrganization(member.user_id),
+    });
+  };
+
   const is_last_remaining_admin =
     user.org_roles.some((o) => o.org_id == currentOrganization.id && o.role == "admin") &&
     !members?.some((m) => m.role == "admin" && m.user_id != user.id);
 
   const member_rows = members?.map((member) => (
     <Table.Tr key={member.user_id}>
-      <Table.Td>{member.name}</Table.Td>
+      <Table.Td>
+        {member.user_id == user.id ? (
+          <Text size="sm" span fw="bold">
+            {member.name}
+          </Text>
+        ) : (
+          member.name
+        )}
+      </Table.Td>
       <Table.Td>{member.email}</Table.Td>
       <Table.Td>{ROLE_LABELS[member.role]}</Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
-        {member.user_id == user.id && (
+        {member.user_id == user.id ? (
           <Tooltip
             label={
               is_last_remaining_admin
@@ -140,6 +174,14 @@ export default function Members() {
               Leave
             </Button>
           </Tooltip>
+        ) : (
+          <AdminButton
+            onClick={() => confirmRemoveFromOrg(member)}
+            leftSection={<IconUserMinus />}
+            tooltip={`Remove ${member.name} from organization`}
+          >
+            Remove
+          </AdminButton>
         )}
       </Table.Td>
     </Table.Tr>
