@@ -9,7 +9,6 @@ export default function Quota() {
     return null;
   }
 
-  // Fixme: quota does not update on subscription update
   return (
     <Group>
       <Card withBorder radius="md" shadow="sm">

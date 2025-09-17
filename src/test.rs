@@ -340,12 +340,12 @@ async fn quotas_count_atomically(pool: PgPool) {
                     assert_eq!(recv.envelope_from.as_str(), "john@test-org-1-project-1.com");
                     assert_eq!(recv.envelope_recipients.len(), 1);
                     assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-2-project-1.com");
-                    if i > 1000 {
+                    if i > 800 {
                         panic!("went over quota")
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                    if i < 1000 {
+                    if i < 800 {
                         panic!("timed out receiving {i}th email")
                     }
                     return

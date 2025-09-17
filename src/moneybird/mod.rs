@@ -5,9 +5,9 @@ mod production_api;
 pub use model::*;
 
 use crate::{
-    Environment,
     models::OrganizationId,
     moneybird::{mock::MockMoneybirdApi, production_api::ProductionMoneybirdApi},
+    Environment,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate, Utc};
@@ -138,11 +138,6 @@ where
 
         subscription.unwrap_or(SubscriptionStatus::None)
     }
-}
-
-struct QuotaResetInfo {
-    org_id: OrganizationId,
-    contact_id: Option<MoneybirdContactId>,
 }
 
 #[derive(Clone)]
@@ -608,6 +603,10 @@ impl MoneyBird {
     }
 
     pub async fn reset_all_quotas(&self) -> Result<(), Error> {
+        struct QuotaResetInfo {
+            org_id: OrganizationId,
+            contact_id: Option<MoneybirdContactId>,
+        }
         let quota_infos = sqlx::query_as!(
             QuotaResetInfo,
             r#"
@@ -623,14 +622,19 @@ impl MoneyBird {
         debug!("resetting quotas for {} organizations", quota_infos.len());
 
         for quota_info in quota_infos {
-            self.reset_single_quota(quota_info).await?;
+            self.reset_single_quota(quota_info.org_id, quota_info.contact_id)
+                .await?;
         }
 
         Ok(())
     }
 
-    async fn reset_single_quota(&self, quota_info: QuotaResetInfo) -> Result<(), Error> {
-        let subscription_status = if let Some(contact_id) = quota_info.contact_id {
+    async fn reset_single_quota(
+        &self,
+        organization_id: OrganizationId,
+        contact_id: Option<MoneybirdContactId>,
+    ) -> Result<(), Error> {
+        let subscription_status = if let Some(contact_id) = contact_id {
             self.api
                 .get_subscription_status_by_contact_id(&contact_id)
                 .await?
@@ -640,6 +644,9 @@ impl MoneyBird {
 
         let reset_date = self
             .calculate_quota_reset_datetime(&subscription_status)
+            .await?;
+
+        self.store_subscription_status(&subscription_status, &organization_id)
             .await?;
 
         let quota = subscription_status.quota();
@@ -652,7 +659,7 @@ impl MoneyBird {
                 used_message_quota = 0
             WHERE id = $1
             "#,
-            *quota_info.org_id,
+            *organization_id,
             reset_date,
             quota as i64
         )
@@ -766,6 +773,9 @@ impl MoneyBird {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::models::OrganizationRepository;
+    use chrono::{Months, NaiveTime};
+    use std::ops::Add;
 
     impl<T> Default for Subscription<T>
     where
@@ -843,5 +853,76 @@ mod test {
         assert!(expired_yesterday > none);
         assert!(none < expired_yesterday);
         assert_eq!(none, none);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations")))]
+    async fn reset_all_quotas(db: PgPool) {
+        let moneybird = MoneyBird::new(db.clone()).await.unwrap();
+
+        moneybird.reset_all_quotas().await.unwrap();
+
+        let orgs = OrganizationRepository::new(db.clone())
+            .list(None)
+            .await
+            .unwrap();
+
+        assert_eq!(orgs.len(), 7);
+        for org in orgs {
+            let (exp_total, reset, exp_subscription_status) = match org.id().as_uuid().to_string().as_str() {
+                "44729d9f-a7dc-4226-b412-36a7537f5176" => {
+                    (800, Utc::now().checked_add_months(Months::new(1)), "none")
+                }
+                "5d55aec5-136a-407c-952f-5348d4398204" => {
+                    (500, Utc::now().checked_add_months(Months::new(1)), "none")
+                }
+                "533d9a19-16e8-4a1b-a824-ff50af8b428c" => (0, None, "none"),
+                "ee14cdb8-f62e-42ac-a0cd-294d708be994" => (0, None, "none"),
+                "7b2d91d0-f9d9-4ddd-88ac-6853f736501c" => (
+                    333,
+                    Some(Utc::now().add(chrono::Duration::seconds(60))),
+                    "none",
+                ),
+                "0f83bfee-e7b6-4670-83ec-192afec2b137" => (0, None, "none"),
+                "ad76a517-3ff2-4d84-8299-742847782d4d" => (
+                    1_000,
+                    Some(
+                        Utc::now()
+                            .checked_add_days(Days::new(9))
+                            .unwrap()
+                            .with_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+                            .unwrap()
+                            .to_utc(),
+                    ),
+                    "active",
+                ),
+                _ => panic!("Received unknown organization id"),
+            };
+            assert_eq!(
+                org.total_message_quota(),
+                exp_total,
+                "wrong message quota for {}",
+                org.id()
+            );
+
+            assert_eq!(org.current_subscription().status_string(), exp_subscription_status, "wrong subscription status for {}", org.id());
+
+            match reset {
+                None => {
+                    assert!(org.quota_reset().is_none())
+                }
+                Some(exp_reset) => {
+                    assert!(
+                        (exp_reset.timestamp_millis()
+                            - org.quota_reset().unwrap().timestamp_millis())
+                        .abs()
+                            < 3000,
+                        "failed for {}: exp_reset: {:?}, org_reset: {:?}",
+                        org.id(),
+                        exp_reset,
+                        org.quota_reset()
+                    )
+                }
+            }
+        }
     }
 }

@@ -28,7 +28,10 @@ impl MoneybirdApi for MockMoneybirdApi {
         &self,
         _recurring_sales_invoice_id: &RecurringSalesInvoiceId,
     ) -> Result<NaiveDate, Error> {
-        Ok(Utc::now().date_naive())
+        Ok(Utc::now()
+            .date_naive()
+            .checked_add_days(Days::new(10))
+            .unwrap())
     }
 
     async fn create_contact(&self, company_name: &str) -> reqwest::Result<Contact> {

@@ -129,7 +129,7 @@ export default function Members() {
       <Table.Td>{member.email}</Table.Td>
       <Table.Td>
         <Tooltip
-          label={"As soon as you chose a subscription, you'll become admin"}
+          label={"As soon as you choose a subscription, you'll become admin"}
           disabled={subscription.status !== "none"}
           events={{ hover: true, focus: false, touch: true }}
         >
