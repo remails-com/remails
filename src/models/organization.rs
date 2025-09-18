@@ -275,7 +275,7 @@ impl OrganizationRepository {
         .into())
     }
 
-    pub async fn add_user(
+    pub async fn add_member(
         &self,
         org_id: OrganizationId,
         user_id: ApiUserId,
@@ -326,6 +326,28 @@ impl OrganizationRepository {
             "#,
             *org_id,
             *user_id,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
+
+    pub async fn update_member_role(
+        &self,
+        org_id: OrganizationId,
+        user_id: ApiUserId,
+        role: Role,
+    ) -> Result<ApiUserId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            UPDATE api_users_organizations
+            SET role = $3
+            WHERE organization_id = $1 AND api_user_id = $2
+            RETURNING api_user_id
+            "#,
+            *org_id,
+            *user_id,
+            role as Role,
         )
         .fetch_one(&self.pool)
         .await?
@@ -387,18 +409,27 @@ mod test {
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
-    async fn organization_remove_member(db: PgPool) {
+    async fn organization_member_lifecycle(db: PgPool) {
         let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // not in any organization
 
         let repo = OrganizationRepository::new(db);
 
         // org 2 contains two members: user_1 and user_2
         let members = repo.list_members(org_2).await.unwrap();
         assert_eq!(members.len(), 2);
-        assert!(members.iter().any(|m| m.user_id == user_1));
-        assert!(members.iter().any(|m| m.user_id == user_2));
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_1 && m.role == Role::Admin)
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_2 && m.role == Role::Admin)
+        );
 
         // remove user_1 from org 2
         let removed_user = repo.remove_member(org_2, user_1).await.unwrap();
@@ -408,5 +439,42 @@ mod test {
         let members = repo.list_members(org_2).await.unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].user_id, user_2);
+        assert_eq!(members[0].role, Role::Admin);
+
+        // add user_3 to org 2 as read-only
+        repo.add_member(org_2, user_3, Role::ReadOnly)
+            .await
+            .unwrap();
+
+        let members = repo.list_members(org_2).await.unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_2 && m.role == Role::Admin)
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_3 && m.role == Role::ReadOnly)
+        );
+
+        // make user_3 maintainer
+        repo.update_member_role(org_2, user_3, Role::Maintainer)
+            .await
+            .unwrap();
+
+        let members = repo.list_members(org_2).await.unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_2 && m.role == Role::Admin)
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.user_id == user_3 && m.role == Role::Maintainer)
+        );
     }
 }

@@ -1,8 +1,8 @@
 import { Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core";
-import { IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
+import { IconEdit, IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
-import { useInvites, useMembers, useOrganizations } from "../../hooks/useOrganizations";
+import { useInvites, useMembers, useOrganizations, useOrgRole } from "../../hooks/useOrganizations";
 import { errorNotification } from "../../notify";
 import StyledTable from "../StyledTable";
 import { formatDateTime, ROLE_LABELS } from "../../util";
@@ -12,15 +12,18 @@ import { notifications } from "@mantine/notifications";
 import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
 import { AdminActionIcon, AdminButton } from "../RoleButtons";
+import { OrganizationMember, Role } from "../../types";
 import { useSubscription } from "../../hooks/useSubscription";
+import UpdateRole from "./UpdateRole";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
+  const { isAdmin } = useOrgRole();
   const { subscription } = useSubscription();
   const { invites, setInvites } = useInvites();
-  const { members } = useMembers();
+  const { members, setMembers } = useMembers();
   const user = useSelector((state) => state.user);
-  const { navigate } = useRemails();
+  const { dispatch, navigate } = useRemails();
 
   const [opened, { open, close }] = useDisclosure(false);
 
@@ -79,7 +82,6 @@ export default function Members() {
       method: "DELETE",
     });
     if (res.status === 200) {
-      setInvites((invites) => invites?.filter((invite) => invite.id !== id) ?? []);
       notifications.show({
         title: "User removed",
         message: "User removed from organization",
@@ -88,6 +90,8 @@ export default function Members() {
       if (id == user.id) {
         // reload-orgs makes sure that the organization is removed from the front-end
         navigate("default", { force: "reload-orgs" });
+      } else {
+        setMembers(members?.filter((m) => m.user_id != id) ?? []);
       }
     } else {
       errorNotification("Could not remove user from organization");
@@ -119,13 +123,96 @@ export default function Members() {
     });
   };
 
+  const confirmRemoveFromOrg = (member: OrganizationMember) => {
+    modals.openConfirmModal({
+      title: "Please confirm your action",
+      children: (
+        <>
+          <Text>
+            Are you sure you want to remove {member.name} from the{" "}
+            <Text fw="bold" span>
+              {currentOrganization.name}
+            </Text>{" "}
+            organization?
+          </Text>
+          <Alert my="lg" icon={<IconInfoCircle />}>
+            They will not be able to access this organization anymore, unless they get reinvited by one of the admins.
+          </Alert>
+        </>
+      ),
+      labels: { confirm: "Confirm", cancel: "Cancel" },
+      onCancel: () => {},
+      onConfirm: () => removeFromOrganization(member.user_id),
+    });
+  };
+
+  const updateMemberRole = async (member: OrganizationMember, role: Role) => {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/members/${member.user_id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(role),
+    });
+    if (res.status === 200) {
+      notifications.show({
+        title: "Role updated",
+        message: `Made ${member.name} ${ROLE_LABELS[role].toLowerCase()}`,
+        color: "green",
+      });
+      member.role = role;
+      setMembers([...(members?.filter((m) => m.user_id != member.user_id) ?? []), member]);
+      if (member.user_id == user.id) {
+        dispatch({
+          type: "set_user",
+          user: {
+            ...user,
+            org_roles: [
+              ...user.org_roles.filter((o) => o.org_id != currentOrganization.id),
+              { role, org_id: currentOrganization.id },
+            ],
+          },
+        });
+      }
+    } else {
+      errorNotification("Could not update role");
+      console.error(res);
+    }
+  };
+
+  const updateRole = (member: OrganizationMember) => {
+    modals.open({
+      title: `Edit role of ${member.name}`,
+      children: (
+        <UpdateRole
+          cancel={() => modals.closeAll()}
+          submit={(role) => {
+            updateMemberRole(member, role);
+            modals.closeAll();
+          }}
+          member={member}
+          user={user}
+          currentOrganization={currentOrganization}
+        />
+      ),
+    });
+  };
+
   const is_last_remaining_admin =
     user.org_roles.some((o) => o.org_id == currentOrganization.id && o.role == "admin") &&
     !members?.some((m) => m.role == "admin" && m.user_id != user.id);
 
   const member_rows = members?.map((member) => (
     <Table.Tr key={member.user_id}>
-      <Table.Td>{member.name}</Table.Td>
+      <Table.Td>
+        {member.user_id == user.id ? (
+          <Text size="sm" span fw="bold">
+            {member.name}
+          </Text>
+        ) : (
+          member.name
+        )}
+      </Table.Td>
       <Table.Td>{member.email}</Table.Td>
       <Table.Td>
         <Tooltip
@@ -133,12 +220,24 @@ export default function Members() {
           disabled={subscription.status !== "none"}
           events={{ hover: true, focus: false, touch: true }}
         >
-          <Text>{ROLE_LABELS[member.role]}</Text>
+          <Text size="sm">
+            {ROLE_LABELS[member.role]}{" "}
+            {isAdmin && !(is_last_remaining_admin && member.user_id == user.id) && (
+              <AdminActionIcon
+                onClick={() => updateRole(member)}
+                variant="transparent"
+                style={{ verticalAlign: "middle" }}
+                tooltip="Edit role"
+              >
+                <IconEdit />
+              </AdminActionIcon>
+            )}
+          </Text>
         </Tooltip>
       </Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
-        {member.user_id == user.id && (
+        {member.user_id == user.id ? (
           <Tooltip
             label={
               is_last_remaining_admin
@@ -150,6 +249,14 @@ export default function Members() {
               Leave
             </Button>
           </Tooltip>
+        ) : (
+          <AdminButton
+            onClick={() => confirmRemoveFromOrg(member)}
+            leftSection={<IconUserMinus />}
+            tooltip={`Remove ${member.name} from organization`}
+          >
+            Remove
+          </AdminButton>
         )}
       </Table.Td>
     </Table.Tr>
