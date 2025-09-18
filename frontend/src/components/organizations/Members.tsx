@@ -12,9 +12,11 @@ import { notifications } from "@mantine/notifications";
 import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
 import { AdminActionIcon, AdminButton } from "../RoleButtons";
+import { useSubscription } from "../../hooks/useSubscription";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
+  const { subscription } = useSubscription();
   const { invites, setInvites } = useInvites();
   const { members } = useMembers();
   const user = useSelector((state) => state.user);
@@ -22,7 +24,7 @@ export default function Members() {
 
   const [opened, { open, close }] = useDisclosure(false);
 
-  if (!currentOrganization) {
+  if (!currentOrganization || !subscription) {
     return null;
   }
 
@@ -125,7 +127,15 @@ export default function Members() {
     <Table.Tr key={member.user_id}>
       <Table.Td>{member.name}</Table.Td>
       <Table.Td>{member.email}</Table.Td>
-      <Table.Td>{ROLE_LABELS[member.role]}</Table.Td>
+      <Table.Td>
+        <Tooltip
+          label={"As soon as you choose a subscription, you'll become admin"}
+          disabled={subscription.status !== "none"}
+          events={{ hover: true, focus: false, touch: true }}
+        >
+          <Text>{ROLE_LABELS[member.role]}</Text>
+        </Tooltip>
+      </Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">
         {member.user_id == user.id && (

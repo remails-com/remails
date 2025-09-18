@@ -25,12 +25,14 @@ export default function Quota() {
             ></Progress.Section>
           </Progress.Root>
         </Tooltip>
-        <Text>
-          Resets on{" "}
-          <Text span c={"remails-red"}>
-            {formatDate(currentOrganization.quota_reset)}
+        {currentOrganization.quota_reset && (
+          <Text>
+            Resets on{" "}
+            <Text span c={"remails-red"}>
+              {formatDate(currentOrganization.quota_reset)}
+            </Text>
           </Text>
-        </Text>
+        )}
       </Card>
     </Group>
   );

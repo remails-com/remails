@@ -209,6 +209,11 @@ export type Action =
       config: RemailsConfig;
     }
   | {
+      type: "set_subscription";
+      status: SubscriptionStatus;
+      organizationId: string;
+    }
+  | {
       type: "set_error";
       error: RemailsError;
     };
@@ -218,7 +223,8 @@ export interface Organization {
   name: string;
   total_message_quota: number;
   used_message_quota: number;
-  quota_reset: string;
+  current_subscription: SubscriptionStatus;
+  quota_reset: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -18,6 +18,8 @@ import Statistics from "./components/statistics/Statistics.tsx";
 import Error from "./error/Error.tsx";
 import { ConfirmInvite } from "./components/ConfirmInvite.tsx";
 import Mfa from "./Mfa.tsx";
+import SetupSubscription from "./components/SetupSubscription.tsx";
+import { useSubscription } from "./hooks/useSubscription.ts";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -49,9 +51,14 @@ function Page() {
   const {
     state: { organizations, routerState },
   } = useRemails();
+  const { subscription } = useSubscription();
 
   if (organizations?.length === 0 && routerState.name != "invite") {
     return <Setup />;
+  }
+
+  if (!routerState.name.startsWith("settings") && subscription && subscription.status !== "active") {
+    return <SetupSubscription />;
   }
 
   return PageContent[routerState.name];

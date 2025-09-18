@@ -8,7 +8,7 @@ import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconTrash, IconWorldWww } from "@tabler/icons-react";
 import { Badge, Button, Code, Group, Loader, Paper, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
 import { dkimRecord, dmarcValue, spfRecord } from "./DnsRecords.tsx";
-import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
+import { useVerifyDomain } from "../../hooks/useVerifyDomain.ts";
 import { formatDateTime } from "../../util.ts";
 import { errorNotification } from "../../notify.tsx";
 import Header from "../Header.tsx";
