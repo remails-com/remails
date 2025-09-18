@@ -1,0 +1,39 @@
+{{- define "upcloud-lb-config" }}
+plan: {{ $.Values.smtp.upcloudLoadBalancerPlan | quote }}
+frontends:
+  {{- range $port := $.Values.smtp.ports }}
+  - name: smtp-{{ $port }}
+    mode: tcp
+    port: {{ $port }}
+  {{- end }}
+backends:
+  {{- range $port := $.Values.smtp.ports }}
+  - name: smtp-{{ $port }}
+    properties:
+      outbound_proxy_protocol: v2
+  {{- end}}
+{{- end}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mta
+  labels:
+    app: mta
+    environment: {{ $.Values.environment }}
+    namespace: {{ $.Release.Namespace }}
+  annotations:
+    service.beta.kubernetes.io/upcloud-load-balancer-config: |
+{{ include "upcloud-lb-config" . | fromYaml | mustToPrettyJson | indent 6 }}
+spec:
+  selector:
+    app: mta
+    environment: {{ $.Values.environment }}
+  ports:
+  {{- range $port := $.Values.smtp.ports }}
+    - name: smtp-{{ $port }}
+      protocol: TCP
+      port: {{ $port }}
+      targetPort: smtp
+  {{- end }}
+  type: LoadBalancer

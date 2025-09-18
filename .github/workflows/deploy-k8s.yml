@@ -11,6 +11,7 @@ on:
         options:
           - Staging Scaleway
           - Production Scaleway
+          - Staging UpCloud private NL-AMS
 
 permissions:
   packages: write
@@ -194,6 +195,7 @@ jobs:
             --set smtp.server_name="${{ vars.SMTP_SERVER_NAME }}" \
             --set smtp.scw_loadbalancer_type="${{ vars.SMTP_LOAD_BALANCER_TYPE }}" \
             --set smtp.dkim_selector="${{ vars.DKIM_SELECTOR }}" \
-            --set-json 'smtp.scw_loadbalancers=${{ vars.SMTP_LOAD_BALANCERS }}' \
+            --set-json 'smtp.scw_loadbalancers=${{ vars.SCW_SMTP_LOAD_BALANCERS }}' \
+            --set smtp.upcloudLoadBalancerPlan="${{ vars.UPCLOUD_SMTP_LOAD_BALANCER_PLAN }}" \
             --set management.server_name="${{ vars.MANAGEMENT_SERVER_NAME }}" \
             --namespace ${{ vars.namespace }}

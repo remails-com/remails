@@ -1,0 +1,44 @@
+{{- define "upcloud-lb-config" }}
+  plan: {{ $.Values.nginxLoadBalancer.upcloudLoadBalancerPlan | quote }}
+  frontends:
+    - name: http
+      mode: tcp
+      port: 80
+    - name: https
+      mode: tcp
+      port: 443
+  backends:
+    - name: http
+      properties:
+        outbound_proxy_protocol: v2
+    - name: https
+      properties:
+        outbound_proxy_protocol: v2
+{{- end}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress
+  annotations:
+    service.beta.kubernetes.io/upcloud-load-balancer-config: |
+{{ include "upcloud-lb-config" . | fromYaml | mustToPrettyJson | indent 6 }}
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: {{ $.Chart.Name }}
+    app.kubernetes.io/name: ingress-nginx
+  ports:
+    - appProtocol: http
+      name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - appProtocol: https
+      name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  type: LoadBalancer
