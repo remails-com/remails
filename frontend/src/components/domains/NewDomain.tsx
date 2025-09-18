@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Domain } from "../../types.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { DnsRecords } from "./DnsRecords.tsx";
-import { useVerifyDomain } from "../../hooks/useVerifyDomain.tsx";
+import { useVerifyDomain } from "../../hooks/useVerifyDomain.ts";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { errorNotification } from "../../notify.tsx";
 

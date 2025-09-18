@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit\n            FROM organizations\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit,\n                   current_subscription\n            FROM organizations\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,11 @@
         "ordinal": 9,
         "name": "remaining_rate_limit",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "current_subscription",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
@@ -64,13 +69,14 @@
       false,
       false,
       false,
-      false,
+      true,
       false,
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "f78461ca1a7adfd62f740e60e4eed329fbdb59872a328dec3d33576c3a3ca078"
+  "hash": "01113bb2e199863beec16df49c6b37375ea99df5988f8422be926fbdfc030b24"
 }

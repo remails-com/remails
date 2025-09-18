@@ -66,13 +66,15 @@ pub async fn create_organization(
         "created organization"
     );
 
-    repo.add_member(org.id(), *user.id(), Role::Admin).await?;
+    let role = Role::ReadOnly;
+    repo.add_member(org.id(), *user.id(), role).await?;
 
     info!(
         user_id = user.id().to_string(),
         organization_id = org.id().to_string(),
         organization_name = org.name,
-        "added user as organization admin"
+        role = role.to_string(),
+        "added user to organization"
     );
 
     Ok((StatusCode::CREATED, Json(org)))
@@ -248,7 +250,7 @@ mod tests {
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
-        assert_eq!(organizations.len(), 6);
+        assert_eq!(organizations.len(), 8);
 
         // not logged in users can't list organizations
         server.set_user(None);
@@ -291,7 +293,52 @@ mod tests {
         assert_eq!(organization.id(), created_org.id());
         assert_eq!(organization.name, "Test Org");
 
-        // whoami should contain admin role for created organization
+        // whoami should contain read-only role for created organization (until the user subscribed using moneybird)
+        let response = server.get("/api/whoami").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
+        let whoami = whoami.unwrap_logged_in();
+        assert_eq!(whoami.id, user_3);
+        assert_eq!(whoami.org_roles.len(), 1);
+        assert_eq!(
+            whoami.org_roles[0],
+            OrgRole {
+                role: Role::ReadOnly,
+                org_id: created_org.id()
+            }
+        );
+
+        // organization should contain the user as read-only
+        let response = server
+            .get(format!("/api/organizations/{}/members", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
+        assert_eq!(members.len(), 1);
+        assert_eq!(*members[0].user_id(), user_3);
+
+        // Get link to choose subscription
+        let response = server
+            .get(format!(
+                "/api/organizations/{}/subscription/new",
+                created_org.id()
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Reload subscriptions (in non-production environment, this activates a mock subscription)
+        let response = server
+            .get(format!(
+                "/api/organizations/{}/subscription",
+                created_org.id()
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // whoami should contain admin role for created organization now
         let response = server.get("/api/whoami").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let whoami: WhoamiResponse = deserialize_body(response.into_body()).await;
@@ -305,16 +352,6 @@ mod tests {
                 org_id: created_org.id()
             }
         );
-
-        // organization should contain the user as admin
-        let response = server
-            .get(format!("/api/organizations/{}/members", created_org.id()))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let members: Vec<OrganizationMember> = deserialize_body(response.into_body()).await;
-        assert_eq!(members.len(), 1);
-        assert_eq!(*members[0].user_id(), user_3);
 
         // update organization
         let response = server

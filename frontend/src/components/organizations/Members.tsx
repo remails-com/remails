@@ -13,11 +13,13 @@ import InfoAlert from "../InfoAlert";
 import { useRemails } from "../../hooks/useRemails";
 import { AdminActionIcon, AdminButton } from "../RoleButtons";
 import { OrganizationMember, Role } from "../../types";
+import { useSubscription } from "../../hooks/useSubscription";
 import UpdateRole from "./UpdateRole";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
   const { isAdmin } = useOrgRole();
+  const { subscription } = useSubscription();
   const { invites, setInvites } = useInvites();
   const { members, setMembers } = useMembers();
   const user = useSelector((state) => state.user);
@@ -25,7 +27,7 @@ export default function Members() {
 
   const [opened, { open, close }] = useDisclosure(false);
 
-  if (!currentOrganization) {
+  if (!currentOrganization || !subscription) {
     return null;
   }
 
@@ -213,17 +215,25 @@ export default function Members() {
       </Table.Td>
       <Table.Td>{member.email}</Table.Td>
       <Table.Td>
-        {ROLE_LABELS[member.role]}{" "}
-        {isAdmin && !(is_last_remaining_admin && member.user_id == user.id) && (
-          <AdminActionIcon
-            onClick={() => updateRole(member)}
-            variant="transparent"
-            style={{ verticalAlign: "middle" }}
-            tooltip="Edit role"
-          >
-            <IconEdit />
-          </AdminActionIcon>
-        )}
+        <Tooltip
+          label={"As soon as you choose a subscription, you'll become admin"}
+          disabled={subscription.status !== "none"}
+          events={{ hover: true, focus: false, touch: true }}
+        >
+          <Text size="sm">
+            {ROLE_LABELS[member.role]}{" "}
+            {isAdmin && !(is_last_remaining_admin && member.user_id == user.id) && (
+              <AdminActionIcon
+                onClick={() => updateRole(member)}
+                variant="transparent"
+                style={{ verticalAlign: "middle" }}
+                tooltip="Edit role"
+              >
+                <IconEdit />
+              </AdminActionIcon>
+            )}
+          </Text>
+        </Tooltip>
       </Table.Td>
       <Table.Td>{formatDateTime(member.updated_at)}</Table.Td>
       <Table.Td align={"right"} h="51">

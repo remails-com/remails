@@ -1,5 +1,6 @@
 use crate::Environment;
 use std::{env, path::PathBuf};
+use tracing::warn;
 
 mod connection;
 mod proxy_protocol;
@@ -33,8 +34,11 @@ impl Default for SmtpConfig {
             .expect("Invalid SMTP_KEY_FILE path");
         let environment: Environment = env::var("ENVIRONMENT")
             .map(|s| s.parse())
+            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
             .unwrap_or(Ok(Environment::Development))
-            .unwrap_or(Environment::Development);
+            .expect(
+                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
+            );
 
         Self {
             listen_addr,

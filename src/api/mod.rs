@@ -91,8 +91,13 @@ impl Default for RemailsConfig {
         let version = env::var("VERSION").unwrap_or("dev".to_string());
         let environment: Environment = env::var("ENVIRONMENT")
             .map(|s| s.parse())
+            .inspect_err(|_| {
+                tracing::warn!("Did not find ENVIRONMENT env var, defaulting to development")
+            })
             .unwrap_or(Ok(Environment::Development))
-            .unwrap_or(Environment::Development);
+            .expect(
+                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
+            );
         let smtp_domain_name =
             env::var("SMTP_SERVER_NAME").expect("SMTP_SERVER_NAME env var must be set");
         let smtp_ports = env::var("SMTP_PORTS")

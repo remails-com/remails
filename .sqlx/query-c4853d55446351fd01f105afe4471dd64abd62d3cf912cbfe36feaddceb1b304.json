@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users_organizations\n            SET role = 'admin'\n            WHERE api_user_id = $1\n              AND organization_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c4853d55446351fd01f105afe4471dd64abd62d3cf912cbfe36feaddceb1b304"
+}

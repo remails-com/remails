@@ -4,7 +4,7 @@ use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{ApiUserId, Error, OrganizationId, Role};
+use crate::models::{ApiUserId, Error, OrganizationId, Password, Role};
 
 #[derive(
     Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
@@ -36,7 +36,7 @@ pub struct CreatedInviteWithPassword {
 
 #[cfg(test)]
 impl CreatedInviteWithPassword {
-    pub fn password(&self) -> &str {
+    pub fn password(&self) -> &String {
         &self.password
     }
 
@@ -69,8 +69,8 @@ pub struct ApiInvite {
 }
 
 impl ApiInvite {
-    pub fn verify_password(&self, password: &str) -> bool {
-        password_auth::verify_password(password.as_bytes(), &self.password_hash).is_ok()
+    pub fn verify_password(&self, password: &Password) -> bool {
+        password.verify_password(&self.password_hash).is_ok()
     }
 
     pub fn is_expired(&self) -> bool {
