@@ -43,4 +43,15 @@ VALUES ('448f8b7c-e6b9-4038-ab73-bc35826fd5da', '', '672be18f-a89e-4a1d-adaa-45a
 INSERT INTO api_users (id, email, name) -- Read-only member of the "webhook test" organization
 VALUES ('d57373be-cb77-4a2b-9e6e-66b28c4b5c7e', 'webhook@test.com', 'Webhook test');
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
-VALUES ('d57373be-cb77-4a2b-9e6e-66b28c4b5c7e', 'ad76a517-3ff2-4d84-8299-742847782d4d', 'read_only')
+VALUES ('d57373be-cb77-4a2b-9e6e-66b28c4b5c7e', 'ad76a517-3ff2-4d84-8299-742847782d4d', 'read_only');
+
+
+INSERT INTO api_users (id, email, name) -- Read-only member of the "First subscription become admin test with two members" organization
+VALUES ('6bd0c3a0-7053-4bb1-b20a-3c144373fe30', 'subscription@test.com', 'subscription test');
+INSERT INTO api_users_organizations (api_user_id, organization_id, role)
+VALUES ('6bd0c3a0-7053-4bb1-b20a-3c144373fe30', 'e11df9da-56f5-433c-9d3a-dd338f262c66', 'read_only');
+
+INSERT INTO api_users (id, email, name) -- Read-only member of the "First subscription become admin test with two members" organization
+VALUES ('9aa7656f-6f52-4a4c-b7cf-93600e613177', 'subscription2@test.com', 'subscription2 test');
+INSERT INTO api_users_organizations (api_user_id, organization_id, role)
+VALUES ('9aa7656f-6f52-4a4c-b7cf-93600e613177', 'e11df9da-56f5-433c-9d3a-dd338f262c66', 'read_only');

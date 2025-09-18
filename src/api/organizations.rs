@@ -217,7 +217,7 @@ mod tests {
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let organizations: Vec<Organization> = deserialize_body(response.into_body()).await;
-        assert_eq!(organizations.len(), 7);
+        assert_eq!(organizations.len(), 8);
 
         // not logged in users can't list organizations
         server.set_user(None);

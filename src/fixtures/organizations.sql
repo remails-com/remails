@@ -36,4 +36,11 @@ VALUES ('ad76a517-3ff2-4d84-8299-742847782d4d',
         '{
           "status": "none"
         }',
+        now()),
+       ('e11df9da-56f5-433c-9d3a-dd338f262c66',
+        'First subscription become admin with two members',
+        'first_subscription_test_org',
+        '{
+          "status": "none"
+        }',
         now());
