@@ -1,8 +1,9 @@
-import { Alert, Button, Group, Select, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Select, Stack, Text, Tooltip } from "@mantine/core";
 import { Organization, OrganizationMember, Role, User } from "../../types";
 import { useState } from "react";
 import { isValidRole, ROLE_INFO, roleSelectData } from "./NewInvite";
 import { IconAlertTriangle } from "@tabler/icons-react";
+import { ROLE_LABELS } from "../../util";
 
 interface UpdateRoleProps {
   cancel: () => void;
@@ -18,6 +19,9 @@ export default function UpdateRole({ cancel, submit, member, user, currentOrgani
   if (!currentOrganization) {
     return null;
   }
+
+  const role_unchanged = role == member.role;
+  const role_name = ROLE_LABELS[role].toLowerCase();
 
   return (
     <Stack gap="xl">
@@ -62,7 +66,11 @@ export default function UpdateRole({ cancel, submit, member, user, currentOrgani
         <Button variant="outline" onClick={cancel}>
           Cancel
         </Button>
-        <Button onClick={() => submit(role)}>Confirm</Button>
+        <Tooltip label={role_unchanged ? `${member.name} is already ${role_name}` : `Make ${member.name} ${role_name}`}>
+          <Button onClick={() => submit(role)} disabled={role_unchanged}>
+            Confirm
+          </Button>
+        </Tooltip>
       </Group>
     </Stack>
   );
