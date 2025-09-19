@@ -33,14 +33,18 @@ cargo sqlx migrate run --database-url=postgres://...
 
 # Install Remails
 
+Please check out the GitHub CI to see the currently used Helm install command: [`deploy-k8s.yml`](../.github/workflows/deploy-k8s.yml).
+
+# Install Grafana
 ```shell
-helm upgrade --install remails ./remails \
-            --set images.mta.tag=<defaults to 'dev'> \
-            --set images.management.tag=<defaults to 'dev'> \
-            --set database_url="${{ secrets.DB_URL }}" \
-            --set session_key=<has a default for development> \
-            --set github_oauth.client_secret="${{ secrets.OAUTH_CLIENT_SECRET_GITHUB }}" \
-            --namespace ${{ vars.namespace }}
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+kubectl create namespace monitoring
+helm upgrade --install grafana grafana/grafana --namespace monitoring -f grafana-values.yaml
+helm upgrade --install prometheus prometheus-community/prometheus --namespace monitoring -f prometheus-values.yaml
+helm upgrade --install alloy grafana/alloy --namespace monitoring -f alloy-values.yaml
+helm upgrade --install loki grafana/loki -f loki-values.yaml --namespace monitoring
 ```
 
 # Back up and restore Database
