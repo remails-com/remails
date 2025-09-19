@@ -3,8 +3,6 @@ global:
 
 loki:
   auth_enabled: false
-#  compactor:
-#    working_directory: /var/loki/compactor
   commonConfig:
     replication_factor: 1
     path_prefix: /var/loki
@@ -54,6 +52,9 @@ chunksCache:
 # Enable minio for storage
 minio:
   enabled: true
+
+gateway:
+  enabled: false
 
 # Zero out replica counts of other deployment modes
 backend:
