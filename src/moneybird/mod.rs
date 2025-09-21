@@ -5,9 +5,9 @@ mod production_api;
 pub use model::*;
 
 use crate::{
+    Environment,
     models::OrganizationId,
     moneybird::{mock::MockMoneybirdApi, production_api::ProductionMoneybirdApi},
-    Environment,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate, Utc};

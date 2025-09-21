@@ -408,7 +408,7 @@ impl Handler {
         let mut priority = 0..65536;
 
         // restrict the recipients; this object is cheap to clone
-        let message = smtp::message::Message {
+        let smtp_message = smtp::message::Message {
             mail_from: message.from_email.as_str().into(),
             rcpt_to: vec![recipient.email().into()],
             body: message.raw_data.as_slice().into(),
@@ -436,7 +436,7 @@ impl Handler {
                         connection_log.log(LogLevel::Info, format!(
                             "securely connected to '{hostname}' with port {port} over TLS",
                         ));
-                        let result = client.send(message.clone()).await;
+                        let result = client.send(smtp_message.clone()).await;
                         Self::quit_smtp(client, &hostname).await;
                         result
                     }
@@ -449,7 +449,7 @@ impl Handler {
                             connection_log.log(LogLevel::Info,format!(
                             "INSECURELY connected to '{hostname}' with port {port} without TLS",
                         ));
-                            let result = client.send(message.clone()).await;
+                            let result = client.send(smtp_message.clone()).await;
                             Self::quit_smtp(client, &hostname).await;
                             result
                         }
@@ -461,7 +461,7 @@ impl Handler {
                 debug!(domain, port, "successfully send email");
                 connection_log.log(
                     LogLevel::Info,
-                    format!("successfully send email using hostname '{hostname}' and port {port}",),
+                    format!("successfully sent email using hostname '{hostname}' and port {port}",),
                 );
                 return Ok(());
             };
@@ -502,8 +502,15 @@ impl Handler {
         }
     }
 
+    #[tracing::instrument(
+        skip(self, message),
+        fields(
+            message_id = message.id().to_string(),
+            organization_id = message.organization_id.to_string(),
+            stream_id = message.stream_id.to_string(),
+        ))]
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
-        info!("sending message {}", message.id());
+        info!("sending message");
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
