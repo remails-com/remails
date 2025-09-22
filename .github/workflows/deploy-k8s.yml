@@ -9,8 +9,6 @@ on:
         required: true
         type: choice
         options:
-          - Staging Scaleway
-          - Production Scaleway
           - Staging UpCloud private NL-AMS
           - Production UpCloud private NL-AMS
 
