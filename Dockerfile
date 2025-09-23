@@ -8,7 +8,7 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-FROM rust:1.87-bookworm AS rust-builder
+FROM rust:1.90-bookworm AS rust-builder
 
 WORKDIR /app
 COPY --from=frontend-builder /app/dist/ /app/frontend/dist/

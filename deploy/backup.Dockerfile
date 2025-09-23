@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 # Install postgresql client
 ENV VERSION=dev
-ENV POSTGRESQL_VERSION=16
+ENV POSTGRESQL_VERSION=17
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
