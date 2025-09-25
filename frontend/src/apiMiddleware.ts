@@ -60,7 +60,6 @@ export default async function apiMiddleware(
     dispatch({ type: "set_user", user: updated_user });
     user = updated_user;
   } else {
-    console.log("state has user");
     user = navState.state.user;
   }
 

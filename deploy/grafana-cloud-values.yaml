@@ -1,0 +1,113 @@
+cluster:
+  name: remails
+destinations:
+  - name: grafana-cloud-metrics
+    type: prometheus
+    url: https://prometheus-prod-24-prod-eu-west-2.grafana.net./api/prom/push
+    auth:
+      type: basic
+      username: "2691761"
+      password: REPLACE_WITH_ACCESS_POLICY_TOKEN
+  - name: grafana-cloud-logs
+    type: loki
+    url: https://logs-prod-012.grafana.net./loki/api/v1/push
+    auth:
+      type: basic
+      username: "1341557"
+      password: REPLACE_WITH_ACCESS_POLICY_TOKEN
+clusterMetrics:
+  enabled: true
+annotationAutodiscovery:
+  enabled: true
+clusterEvents:
+  enabled: true
+podLogs:
+  enabled: true
+alloy-metrics:
+  enabled: true
+  alloy:
+    extraEnv:
+      - name: GCLOUD_RW_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: alloy-metrics-remote-cfg-grafana-k8s-monitoring
+            key: password
+      - name: CLUSTER_NAME
+        value: remails
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: GCLOUD_FM_COLLECTOR_ID
+        value: grafana-k8s-monitoring-$(CLUSTER_NAME)-$(NAMESPACE)-$(POD_NAME)
+  remoteConfig:
+    enabled: true
+    url: https://fleet-management-prod-011.grafana.net
+    auth:
+      type: basic
+      username: "1383763"
+      password: REPLACE_WITH_ACCESS_POLICY_TOKEN
+alloy-singleton:
+  enabled: true
+  alloy:
+    extraEnv:
+      - name: GCLOUD_RW_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: alloy-singleton-remote-cfg-grafana-k8s-monitoring
+            key: password
+      - name: CLUSTER_NAME
+        value: remails
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: GCLOUD_FM_COLLECTOR_ID
+        value: grafana-k8s-monitoring-$(CLUSTER_NAME)-$(NAMESPACE)-$(POD_NAME)
+  remoteConfig:
+    enabled: true
+    url: https://fleet-management-prod-011.grafana.net
+    auth:
+      type: basic
+      username: "1383763"
+      password: REPLACE_WITH_ACCESS_POLICY_TOKEN
+alloy-logs:
+  enabled: true
+  alloy:
+    extraEnv:
+      - name: GCLOUD_RW_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: alloy-logs-remote-cfg-grafana-k8s-monitoring
+            key: password
+      - name: CLUSTER_NAME
+        value: remails
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      - name: GCLOUD_FM_COLLECTOR_ID
+        value: grafana-k8s-monitoring-$(CLUSTER_NAME)-$(NAMESPACE)-alloy-logs-$(NODE_NAME)
+  remoteConfig:
+    enabled: true
+    url: https://fleet-management-prod-011.grafana.net
+    auth:
+      type: basic
+      username: "1383763"
+      password: REPLACE_WITH_ACCESS_POLICY_TOKEN
