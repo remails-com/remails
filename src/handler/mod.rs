@@ -408,7 +408,7 @@ impl Handler {
         let mut priority = 0..65536;
 
         // restrict the recipients; this object is cheap to clone
-        let smtp_message = smtp::message::Message {
+        let message = smtp::message::Message {
             mail_from: message.from_email.as_str().into(),
             rcpt_to: vec![recipient.email().into()],
             body: message.raw_data.as_slice().into(),
@@ -436,7 +436,7 @@ impl Handler {
                         connection_log.log(LogLevel::Info, format!(
                             "securely connected to '{hostname}' with port {port} over TLS",
                         ));
-                        let result = client.send(smtp_message.clone()).await;
+                        let result = client.send(message.clone()).await;
                         Self::quit_smtp(client, &hostname).await;
                         result
                     }
@@ -449,7 +449,7 @@ impl Handler {
                             connection_log.log(LogLevel::Info,format!(
                             "INSECURELY connected to '{hostname}' with port {port} without TLS",
                         ));
-                            let result = client.send(smtp_message.clone()).await;
+                            let result = client.send(message.clone()).await;
                             Self::quit_smtp(client, &hostname).await;
                             result
                         }
