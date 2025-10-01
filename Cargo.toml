@@ -26,7 +26,7 @@ load-fixtures = []
 
 [dependencies]
 anyhow = "1.0.100"
-axum = { version = "0.8.6", features = ["macros"] }
+axum = { version = "0.8.6", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.3", features = ["cookie-private", "typed-header"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 dotenvy = "0.15.7"
