@@ -9,11 +9,9 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::sync::broadcast;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-type BusMessage = String;
-
 #[derive(Clone)]
 struct BusState {
-    message_tx: broadcast::Sender<BusMessage>,
+    message_tx: broadcast::Sender<String>,
 }
 
 struct Bus {
@@ -22,7 +20,7 @@ struct Bus {
 }
 
 impl Bus {
-    fn new(socket: SocketAddrV4, message_tx: broadcast::Sender<BusMessage>) -> Self {
+    fn new(socket: SocketAddrV4, message_tx: broadcast::Sender<String>) -> Self {
         let router = Router::new()
             .route("/listen", get(ws_handler))
             .route("/post", post(new_message))
@@ -62,13 +60,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3700);
-    let (tx, _rx) = broadcast::channel::<BusMessage>(100);
+    let (tx, _rx) = broadcast::channel::<String>(100);
     let bus = Bus::new(socket, tx);
 
     bus.serve().await
 }
 
-async fn new_message(State(state): State<BusState>, body: BusMessage) -> impl IntoResponse {
+async fn new_message(State(state): State<BusState>, body: String) -> impl IntoResponse {
     tracing::info!("new message: {body}");
     match state.message_tx.send(body) {
         Ok(n) => {
@@ -92,4 +90,79 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<BusState>) -> impl
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt;
+    use rand::Rng;
+    use remails::messaging::{BusClient, BusMessage};
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn multiple_listeners() {
+        let mut rng = rand::rng();
+        let port = rng.random_range(10_000..30_000);
+
+        // spawn message bus
+        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
+        let (tx, _rx) = broadcast::channel::<String>(100);
+        let bus = Bus::new(socket, tx);
+        tokio::spawn(bus.serve());
+
+        let client = BusClient::new(port).unwrap();
+
+        // two listeners
+        let mut stream1 = client.receive().await.unwrap();
+        let mut stream2 = client.receive().await.unwrap();
+
+        // send a message
+        let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+        client.send(&message).await.unwrap();
+
+        // both listeners should receive the message
+        let received = stream1.next().await.unwrap();
+        assert_eq!(received, message);
+
+        let received = stream2.next().await.unwrap();
+        assert_eq!(received, message);
+    }
+
+    #[tokio::test]
+    async fn auto_reconnect() {
+        let mut rng = rand::rng();
+        let port = rng.random_range(10_000..30_000);
+
+        // start receiving, even though message bus is offline
+        let client = BusClient::new(port).unwrap();
+        let mut stream = client.receive_auto_reconnect(std::time::Duration::from_millis(500));
+
+        let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+
+        let mut listen = async || {
+            let received = stream.next().await.unwrap();
+            assert_eq!(received, message);
+        };
+
+        let host_and_post = async || {
+            // spawn message bus
+            let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
+            let (tx, _rx) = broadcast::channel::<String>(100);
+            let bus = Bus::new(socket, tx);
+            tokio::spawn(bus.serve());
+
+            // send message after listener has had time to reconnect
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            client.send(&message).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            panic!("timeout!");
+        };
+
+        tokio::select! {
+            _ = listen() => (),
+            _ = host_and_post() => (),
+        }
+    }
 }
