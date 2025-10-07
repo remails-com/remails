@@ -399,6 +399,7 @@ impl ApiServer {
             let memory_router = memory_serve::from_local_build!()
                 .index_file(Some("/index.html"))
                 .fallback(Some("/index.html"))
+                .fallback_status(StatusCode::OK)
                 .into_router();
 
             router = router.merge(memory_router);
