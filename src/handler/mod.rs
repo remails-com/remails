@@ -461,7 +461,7 @@ impl Handler {
                 debug!(domain, port, "successfully send email");
                 connection_log.log(
                     LogLevel::Info,
-                    format!("successfully send email using hostname '{hostname}' and port {port}",),
+                    format!("successfully sent email using hostname '{hostname}' and port {port}",),
                 );
                 return Ok(());
             };
@@ -502,8 +502,15 @@ impl Handler {
         }
     }
 
+    #[tracing::instrument(
+        skip(self, message),
+        fields(
+            message_id = message.id().to_string(),
+            organization_id = message.organization_id.to_string(),
+            stream_id = message.stream_id.to_string(),
+        ))]
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
-        info!("sending message {}", message.id());
+        info!("sending message");
         let mut failures = 0u32;
         let mut should_reattempt = false;
 

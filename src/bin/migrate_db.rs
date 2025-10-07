@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or("sqlx=debug".parse().unwrap()),
         )
-        .with(tracing_subscriber::fmt::layer().without_time())
+        .with(tracing_subscriber::fmt::layer().json())
         .init();
 
     let database_url = std::env::var("DATABASE_URL")

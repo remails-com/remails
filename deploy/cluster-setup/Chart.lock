@@ -6,4 +6,4 @@ dependencies:
   repository: https://helm.scw.cloud/
   version: 0.4.0
 digest: sha256:168ef74936258b8ffcef6490362d57b6900813c7f97595da212a0b36d0165a92
-generated: "2025-07-11T13:42:27.891712327+02:00"
+generated: "2025-09-23T16:10:43.648783449+02:00"

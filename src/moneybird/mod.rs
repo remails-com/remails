@@ -171,10 +171,19 @@ impl MoneyBird {
 
         let administration = env::var("MONEYBIRD_ADMINISTRATION_ID").ok().map(Into::into);
 
-        let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL").ok().map(|url| {
-            url.parse()
-                .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL")
-        });
+        let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL")
+            .ok()
+            .and_then(|url| {
+                if url.trim().is_empty() {
+                    None
+                } else {
+                    Some(url)
+                }
+            })
+            .map(|url| {
+                url.parse()
+                    .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL")
+            });
 
         let environment: Environment = env::var("ENVIRONMENT")
             .map(|s| s.parse())

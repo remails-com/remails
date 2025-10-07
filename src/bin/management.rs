@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
                 .into()
             }),
         )
-        .with(tracing_subscriber::fmt::layer().without_time())
+        .with(tracing_subscriber::fmt::layer().json())
         .init();
 
     let database_url = std::env::var("DATABASE_URL")

@@ -57,7 +57,12 @@ function Page() {
     return <Setup />;
   }
 
-  if (!routerState.name.startsWith("settings") && subscription && subscription.status !== "active") {
+  if (
+    !routerState.name.startsWith("settings") &&
+    !routerState.name.startsWith("organizations") &&
+    subscription &&
+    subscription.status !== "active"
+  ) {
     return <SetupSubscription />;
   }
 

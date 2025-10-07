@@ -47,5 +47,8 @@ spec:
                   value: {{ .Values.rust_log | quote }}
                 - name: DKIM_SELECTOR
                   value: {{ .Values.smtp.dkim_selector | quote }}
+                - name: ENVIRONMENT
+                  value: {{ .Values.environment | quote }}
+
 
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}
