@@ -24,6 +24,15 @@ impl BusClient {
         })
     }
 
+    pub fn new_from_env_var() -> Result<Self, reqwest::Error> {
+        let port = std::env::var("MESSAGE_BUS_PORT")
+            .unwrap_or("4000".to_owned())
+            .parse()
+            .expect("MESSAGE_BUS_PORT must be a u16");
+
+        BusClient::new(port)
+    }
+
     pub async fn send(&self, message: &BusMessage) -> Result<(), reqwest::Error> {
         self.client
             .post(format!("http://localhost:{}/post", self.port))

@@ -59,7 +59,12 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
-    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3700);
+    let port = std::env::var("MESSAGE_BUS_PORT")
+        .unwrap_or("4000".to_owned())
+        .parse()
+        .expect("MESSAGE_BUS_PORT must be a u16");
+
+    let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
     let (tx, _rx) = broadcast::channel::<String>(100);
     let bus = Bus::new(socket, tx);
 
