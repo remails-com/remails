@@ -2,6 +2,7 @@ pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
     dkim::PrivateKey,
     handler::{connection_log::LogLevel, dns::DnsResolver},
+    messaging::BusClient,
     models::{
         DeliveryDetails, DeliveryStatus, DomainRepository, InviteRepository, Message,
         MessageRepository, MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
@@ -10,6 +11,7 @@ use crate::{
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
+use futures::StreamExt;
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
@@ -92,6 +94,7 @@ pub struct Handler {
     organization_repository: OrganizationRepository,
     invite_repository: InviteRepository,
     workers: Arc<Semaphore>,
+    bus_client: BusClient,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -108,6 +111,7 @@ impl Handler {
             organization_repository: OrganizationRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
             workers: Arc::new(Semaphore::new(100)),
+            bus_client: BusClient::new_from_env_var().unwrap(),
             shutdown,
             config,
         }
@@ -617,6 +621,10 @@ impl Handler {
 
     pub fn spawn(self, mut queue_receiver: Receiver<NewMessage>) {
         tokio::spawn(async move {
+            let mut bus_stream = self
+                .bus_client
+                .receive_auto_reconnect(std::time::Duration::from_secs(1));
+
             loop {
                 tokio::select! {
                     _ = self.shutdown.cancelled() => {
@@ -661,6 +669,9 @@ impl Handler {
                                 error!(message_id, "failed to send message: {e:?}");
                             }
                         });
+                    }
+                    message = bus_stream.next() => {
+                        info!("New bus message: {message:?}");
                     }
                 }
             }

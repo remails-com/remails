@@ -1,16 +1,17 @@
 use async_stream::stream;
 use serde::{Deserialize, Serialize};
 
-use crate::models::MessageId;
+use crate::models::SmtpCredentialId;
 
 use futures::{Stream, StreamExt};
 pub type BusStream<'a> = std::pin::Pin<Box<dyn Stream<Item = BusMessage> + Send + 'a>>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum BusMessage {
-    EmailReadyToSend(MessageId),
+    EmailReadyToSend(SmtpCredentialId), // for testing
 }
 
+#[derive(Clone)]
 pub struct BusClient {
     client: reqwest::Client,
     port: u16,
@@ -79,7 +80,7 @@ impl BusClient {
                         yield message;
                     },
                     Err(e) => {
-                        tracing::error!("reconnecting in 10 seconds... {e:?}");
+                        tracing::error!("reconnecting in {timeout:?} seconds... {e:?}");
                         tokio::time::sleep(timeout).await;
                     },
                 }

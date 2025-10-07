@@ -1,11 +1,11 @@
 use crate::{
     Environment,
+    messaging::BusClient,
     models::{NewMessage, SmtpCredentialRepository},
     smtp::{
         SmtpConfig,
         connection::{self, ConnectionError},
-        proxy_protocol,
-        proxy_protocol::{Error, handle_proxy_protocol},
+        proxy_protocol::{self, Error, handle_proxy_protocol},
     },
 };
 use rand::random_range;
@@ -46,6 +46,7 @@ pub enum SmtpServerError {
 pub struct SmtpServer {
     user_repository: SmtpCredentialRepository,
     queue: Sender<NewMessage>,
+    bus_client: BusClient,
     shutdown: CancellationToken,
     config: Arc<SmtpConfig>,
 }
@@ -58,10 +59,11 @@ impl SmtpServer {
         shutdown: CancellationToken,
     ) -> SmtpServer {
         SmtpServer {
-            config,
             user_repository,
             queue,
+            bus_client: BusClient::new_from_env_var().unwrap(),
             shutdown,
+            config,
         }
     }
 
@@ -115,6 +117,7 @@ impl SmtpServer {
 
         let server_name = self.config.server_name.clone();
         let queue = self.queue.clone();
+        let bus_client = self.bus_client.clone();
         let user_repository = self.user_repository.clone();
         let shutdown = self.shutdown.clone();
 
@@ -172,6 +175,7 @@ impl SmtpServer {
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
                         let queue = queue.clone();
+                        let bus_client = bus_client.clone();
                         let user_repository = user_repository.clone();
 
                         let task = async move || {
@@ -185,6 +189,7 @@ impl SmtpServer {
                                 server_name,
                                 peer_addr,
                                 queue,
+                                bus_client,
                                 user_repository,
                             )
                             .await?;
