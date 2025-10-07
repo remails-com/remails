@@ -6,14 +6,6 @@ scaleway-certmanager-webhook:
     secretKey:
 
 nginxLoadBalancer:
-  scw_loadbalancers: # TODO https://www.scaleway.com/en/docs/kubernetes/reference-content/multi-az-clusters/#dns-with-dynamic-record-health-check
-  #    - zone: "nl-ams-1"
-  #      # 51.15.60.162 and 2001:bc8:1640:6::
-  #      ip_ids: "5d59bfa3-ccbc-4f59-8ecd-8a0a576a0546,96195995-6c04-4d4b-9e9c-a059833dfaa4"
-  #    - zone: "nl-ams-2"
-  #      # 51.158.231.158 and 2001:bc8:5090:14::
-  #      ip_ids: "26982c39-c2da-4e53-a133-794f2b824e34,bd902354-c928-4672-a137-432ea8e1cb7f"
-  #  scw_loadbalancer_type: "lb-s" # available are "lb-s", "lb-gp-m", "lb-pg-l", and "lb-gp-xl"
   upcloudLoadBalancerPlan: "production-small" # available are "essentials", "development", "production-small", "production-medium"
 
 
