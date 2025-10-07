@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: message-bus
+spec:
+  selector:
+    app: message-bus
+    environment: {{ .Values.environment }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.message_bus_port }}
+      targetPort: http
+  type: ClusterIP
+  

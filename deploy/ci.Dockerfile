@@ -48,3 +48,12 @@ RUN chmod 777 migrate_db
 
 ENV VERSION=${version}
 ENTRYPOINT ["./migrate_db"]
+
+FROM final-base AS message-bus
+ARG version=dev
+
+COPY --chown=nonroot:nonroot ./target/release/message_bus ./message_bus
+RUN chmod 777 message_bus
+
+ENV VERSION=${version}
+ENTRYPOINT ["./message_bus"]

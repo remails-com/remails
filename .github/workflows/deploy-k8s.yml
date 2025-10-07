@@ -1,5 +1,5 @@
 name: Deploy to Kubernetes
-run-name: "Deploy \"${{ github.ref_name }}\" to ${{ inputs.env }}"
+run-name: 'Deploy "${{ github.ref_name }}" to ${{ inputs.env }}'
 
 on:
   workflow_dispatch:
@@ -82,6 +82,7 @@ jobs:
             target/release/migrate_db
             target/release/mta
             target/release/retry
+            target/release/message_bus
 
   build-docker:
     name: Build and push Docker containers
@@ -142,6 +143,15 @@ jobs:
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
+      - name: Build and push message_bus image
+        uses: docker/build-push-action@v6
+        with:
+          file: deploy/ci.Dockerfile
+          target: message-bus
+          push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
+          context: .
+          tags: "ghcr.io/tweedegolf/remails/message_bus:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push backup_db image
         uses: docker/build-push-action@v6
         with:

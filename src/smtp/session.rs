@@ -8,10 +8,14 @@ use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::models::{NewMessage, SmtpCredential, SmtpCredentialRepository};
+use crate::{
+    messaging::{BusClient, BusMessage},
+    models::{NewMessage, SmtpCredential, SmtpCredentialRepository},
+};
 
 pub struct SmtpSession {
     queue: Sender<NewMessage>,
+    bus_client: BusClient,
     smtp_credentials: SmtpCredentialRepository,
 
     peer_addr: SocketAddr,
@@ -106,10 +110,12 @@ impl SmtpSession {
     pub fn new(
         peer_addr: SocketAddr,
         queue: Sender<NewMessage>,
+        bus_client: BusClient,
         smtp_credentials: SmtpCredentialRepository,
     ) -> Self {
         Self {
             queue,
+            bus_client,
             smtp_credentials,
             peer_addr,
             peer_name: None,
@@ -380,6 +386,13 @@ impl SmtpSession {
             };
 
             trace!("received message ({} bytes)", message.raw_data.len());
+
+            // Temporary to test the message bus:
+            let _ = self
+                .bus_client
+                .send(&BusMessage::EmailReadyToSend(message.smtp_credential_id))
+                .await
+                .inspect_err(|e| tracing::error!("{e:?}"));
 
             if let Err(e) = self.queue.send(message).await {
                 debug!("failed to queue message: {e}");

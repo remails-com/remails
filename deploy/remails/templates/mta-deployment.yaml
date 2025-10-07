@@ -92,6 +92,10 @@ spec:
               value: {{ .Values.smtp.rate_limit_max_messages | quote }}
             - name: DKIM_SELECTOR
               value: {{ .Values.smtp.dkim_selector | quote }}
+            - name: MESSAGE_BUS_PORT
+              value: {{ .Values.message_bus_port | quote }}
+            - name: MESSAGE_BUS_FQDN
+              value: message-bus
           ports:
             - containerPort: 3025
               name: smtp

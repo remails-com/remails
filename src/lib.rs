@@ -16,6 +16,7 @@ pub mod handler;
 mod smtp;
 pub use crate::handler::HandlerConfig;
 pub use smtp::SmtpConfig;
+pub mod messaging;
 
 #[cfg(feature = "load-fixtures")]
 pub use fixtures::load_fixtures;
@@ -26,6 +27,7 @@ mod test;
 
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
+
 mod moneybird;
 pub use moneybird::*;
 

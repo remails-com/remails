@@ -9,6 +9,7 @@ use tokio::{
 use tracing::{debug, info, trace};
 
 use crate::{
+    messaging::BusClient,
     models::{NewMessage, SmtpCredentialRepository},
     smtp::session::{DataReply, SessionReply, SmtpResponse, SmtpSession},
 };
@@ -35,13 +36,14 @@ pub async fn handle(
     server_name: String,
     peer_addr: SocketAddr,
     queue: Sender<NewMessage>,
+    bus_client: BusClient,
     user_repository: SmtpCredentialRepository,
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);
 
     // NOTE: we re-use this Vec<u8> to avoid re-allocating buffer
     let mut buffer = Vec::with_capacity(BUFFER_SIZE);
-    let mut session = SmtpSession::new(peer_addr, queue, user_repository);
+    let mut session = SmtpSession::new(peer_addr, queue, bus_client, user_repository);
 
     let mut reader = BufReader::new(source);
 
