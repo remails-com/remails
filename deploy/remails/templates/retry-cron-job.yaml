@@ -49,6 +49,9 @@ spec:
                   value: {{ .Values.smtp.dkim_selector | quote }}
                 - name: ENVIRONMENT
                   value: {{ .Values.environment | quote }}
-
+                - name: MESSAGE_BUS_PORT
+                  value: {{ .Values.message_bus_port | quote }}
+                - name: MESSAGE_BUS_FQDN
+                  value: message-bus
 
               imagePullPolicy: {{ .Values.images.retry.pullPolicy }}

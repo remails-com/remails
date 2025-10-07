@@ -117,7 +117,7 @@ mod tests {
         let bus = Bus::new(socket, tx);
         tokio::spawn(bus.serve());
 
-        let client = BusClient::new(port).unwrap();
+        let client = BusClient::new(port, "localhost".to_owned()).unwrap();
 
         // two listeners
         let mut stream1 = client.receive().await.unwrap();
@@ -141,7 +141,7 @@ mod tests {
         let port = rng.random_range(10_000..30_000);
 
         // start receiving, even though message bus is offline
-        let client = BusClient::new(port).unwrap();
+        let client = BusClient::new(port, "localhost".to_owned()).unwrap();
         let mut stream = client.receive_auto_reconnect(std::time::Duration::from_millis(500));
 
         let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());

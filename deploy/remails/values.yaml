@@ -14,6 +14,9 @@ images:
   backup_db:
     repository: ghcr.io/tweedegolf/remails/backup_db
     pullPolicy: Always
+  message_bus:
+    repository: ghcr.io/tweedegolf/remails/message_bus
+    pullPolicy: Always
 
 environment: development
 
@@ -22,6 +25,8 @@ database_url: ""
 session_key: "0HwY07uU2ffGHX2lNZSEQ7NUbIbmXVQ0v0VnJARMCMiuotvcS5/zbpb8QN+BCMA2PudLOBeu9RIF1rAhIGb8cQ=="
 
 rust_log: "remails=debug,tower_http=debug,axum=debug,info"
+
+message_bus_port: 4000
 
 smtp:
   replicas: 3

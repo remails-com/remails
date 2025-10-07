@@ -14,13 +14,15 @@ pub enum BusMessage {
 pub struct BusClient {
     client: reqwest::Client,
     port: u16,
+    domain_name: String,
 }
 
 impl BusClient {
-    pub fn new(port: u16) -> Result<Self, reqwest::Error> {
+    pub fn new(port: u16, domain_name: String) -> Result<Self, reqwest::Error> {
         Ok(BusClient {
             client: reqwest::ClientBuilder::new().build()?,
             port,
+            domain_name,
         })
     }
 
@@ -29,13 +31,14 @@ impl BusClient {
             .unwrap_or("4000".to_owned())
             .parse()
             .expect("MESSAGE_BUS_PORT must be a u16");
+        let domain_name = std::env::var("MESSAGE_BUS_FQDN").unwrap_or("localhost".to_owned());
 
-        BusClient::new(port)
+        BusClient::new(port, domain_name)
     }
 
     pub async fn send(&self, message: &BusMessage) -> Result<(), reqwest::Error> {
         self.client
-            .post(format!("http://localhost:{}/post", self.port))
+            .post(format!("http://{}:{}/post", self.domain_name, self.port))
             .json(&message)
             .send()
             .await?
@@ -45,7 +48,7 @@ impl BusClient {
     }
 
     pub async fn receive(&'_ self) -> Result<BusStream<'_>, tokio_tungstenite::tungstenite::Error> {
-        let ws_address = format!("ws://localhost:{}/listen", self.port);
+        let ws_address = format!("ws://{}:{}/listen", self.domain_name, self.port);
         let (ws_stream, _) =
             tokio_tungstenite::connect_async_with_config(ws_address, None, false).await?;
 
