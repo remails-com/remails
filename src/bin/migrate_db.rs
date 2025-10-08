@@ -1,20 +1,15 @@
 use anyhow::Context;
+use remails::init_tracing;
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or("sqlx=debug".parse().unwrap()),
-        )
-        .with(tracing_subscriber::fmt::layer().json())
-        .init();
+
+    init_tracing();
 
     let database_url = std::env::var("DATABASE_URL")
         .context("DATABASE_URL must be set")?
