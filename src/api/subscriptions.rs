@@ -132,7 +132,10 @@ mod test {
             org.id(),
             "ad76a517-3ff2-4d84-8299-742847782d4d".parse().unwrap()
         );
-        assert_eq!(org.total_message_quota(), 1_000);
+        assert_eq!(
+            org.total_message_quota(),
+            ProductIdentifier::RmlsFree.monthly_quota() as i64
+        );
 
         let SubscriptionStatus::Active(subscription) = org.current_subscription() else {
             panic!("No active subscription found in Organization");
