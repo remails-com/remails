@@ -2,7 +2,7 @@ pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
     dkim::PrivateKey,
     handler::{connection_log::LogLevel, dns::DnsResolver},
-    messaging::BusClient,
+    messaging::{BusClient, BusMessage},
     models::{
         DeliveryDetails, DeliveryStatus, DomainRepository, InviteRepository, Message,
         MessageRepository, MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
@@ -19,7 +19,7 @@ use std::{borrow::Cow::Borrowed, fmt::Display, sync::Arc};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::{Semaphore, mpsc::Receiver},
+    sync::Semaphore,
 };
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
@@ -53,12 +53,32 @@ enum Protection {
 }
 
 #[derive(Clone)]
+pub struct RetryConfig {
+    pub(crate) delay: Duration,
+    pub(crate) max_automatic_retries: i32,
+}
+
+impl RetryConfig {
+    pub fn new() -> Self {
+        Self {
+            delay: Duration::minutes(5),
+            max_automatic_retries: 5,
+        }
+    }
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone)]
 pub struct HandlerConfig {
     pub(crate) resolver: DnsResolver,
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
-    pub(crate) retry_delay: Duration,
-    pub(crate) max_automatic_retries: i32,
+    pub(crate) retry: RetryConfig,
 }
 
 #[cfg(not(test))]
@@ -69,14 +89,8 @@ impl HandlerConfig {
             domain: std::env::var("SMTP_EHLO_DOMAIN")
                 .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
-            retry_delay: Duration::minutes(5),
-            max_automatic_retries: 5,
+            retry: Default::default(),
         }
-    }
-
-    pub fn allow_plain_smtp(mut self, value: bool) -> Self {
-        self.allow_plain = value;
-        self
     }
 }
 
@@ -288,7 +302,7 @@ impl Handler {
 
     pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
         self.message_repository
-            .create(&message, self.config.max_automatic_retries)
+            .create(&message, self.config.retry.max_automatic_retries)
             .await
             .inspect(|m| trace!("stored message {}", m.id()))
             .map_err(HandlerError::RepositoryError)
@@ -364,7 +378,7 @@ impl Handler {
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
 
-        message.set_next_retry(&self.config);
+        message.set_next_retry(&self.config.retry);
 
         self.message_repository
             .update_message_data_and_status(message)
@@ -609,7 +623,7 @@ impl Handler {
             }
         };
 
-        message.set_next_retry(&self.config);
+        message.set_next_retry(&self.config.retry);
 
         self.message_repository
             .update_message_status(&mut message)
@@ -619,7 +633,7 @@ impl Handler {
         Ok(())
     }
 
-    pub fn spawn(self, mut queue_receiver: Receiver<NewMessage>) {
+    pub fn spawn(self) {
         tokio::spawn(async move {
             let mut bus_stream = self
                 .bus_client
@@ -631,47 +645,51 @@ impl Handler {
                         info!("shutting down message handler");
                         return;
                     }
-                    queue_result = queue_receiver.recv() => {
-                       let Some(message) = queue_result else {
-                            error!("queue error, shutting down");
-                            self.shutdown.cancel();
-                            return
-                        };
-                        let Ok(permit) = self.workers.clone().acquire_owned().await else {
-                            error!("failed to acquire worker semaphore permit, shutting down");
-                            self.shutdown.cancel();
-                            return
-                        };
-                        let self_clone = self.clone();
-                        tokio::spawn(async move {
-                            let _p = permit;
-
-                            let mut message = match self_clone.create_message(message).await {
-                                Ok(message) => message,
-                                Err(e) => {
-                                    error!("failed to create message: {e:?}");
-                                    return
-                                },
-                            };
-
-                            let message_id = message.id().to_string();
-                            if let Err(e) = self_clone.handle_message(&mut message).await {
-                                if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
-                                    warn!(message_id, "Message held: {reason}")
-                                } else {
-                                    error!(message_id, "failed to handle message: {e:?}");
-                                }
-                                return
-                            };
-
-                            message.attempts = 0; // reset attempts before sending
-                            if let Err(e) = self_clone.send_message(message).await {
-                                error!(message_id, "failed to send message: {e:?}");
-                            }
-                        });
-                    }
                     message = bus_stream.next() => {
-                        info!("New bus message: {message:?}");
+                        match message {
+                            None => {
+                                error!("Bus stream ended, shutting down");
+                                self.shutdown.cancel();
+                            },
+                            Some(BusMessage::EmailReadyToSend(id)) => {
+                                info!("Ready to send {id}");
+
+                                let Ok(permit) = self.workers.clone().acquire_owned().await else {
+                                    error!("failed to acquire worker semaphore permit, shutting down");
+                                    self.shutdown.cancel();
+                                    return
+                                };
+                                let self_clone = self.clone();
+                                tokio::spawn(async move {
+                                    let _p = permit;
+
+                                    // retrieve message from database
+                                    let mut message = match self_clone.message_repository.get(id).await {
+                                        Ok(message) => message,
+                                        Err(e) => {
+                                            error!("failed to create message: {e:?}");
+                                            return
+                                        },
+                                    };
+
+                                    let message_id = message.id().to_string();
+                                    if let Err(e) = self_clone.handle_message(&mut message).await {
+                                        if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
+                                            warn!(message_id, "Message held: {reason}")
+                                        } else {
+                                            error!(message_id, "failed to handle message: {e:?}");
+                                        }
+                                        return
+                                    };
+
+                                    message.attempts = 0; // reset attempts before sending
+                                    if let Err(e) = self_clone.send_message(message).await {
+                                        error!(message_id, "failed to send message: {e:?}");
+                                    }
+                                });
+                            },
+                            Some(_) => {} // ignore other bus messages
+                        }
                     }
                 }
             }
@@ -791,8 +809,10 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry_delay: Duration::minutes(5),
-            max_automatic_retries: 1,
+            retry: RetryConfig {
+                delay: Duration::minutes(5),
+                max_automatic_retries: 1,
+            },
         };
         let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
 
@@ -849,8 +869,10 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
-                retry_delay: Duration::minutes(5),
-                max_automatic_retries: 1,
+                retry: RetryConfig {
+                    delay: Duration::minutes(5),
+                    max_automatic_retries: 1,
+                },
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
@@ -916,8 +938,10 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
-                retry_delay: Duration::minutes(5),
-                max_automatic_retries: 1,
+                retry: RetryConfig {
+                    delay: Duration::minutes(5),
+                    max_automatic_retries: 1,
+                },
             };
             let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
 
@@ -988,8 +1012,10 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry_delay: Duration::minutes(60),
-            max_automatic_retries: 3,
+            retry: RetryConfig {
+                delay: Duration::minutes(60),
+                max_automatic_retries: 3,
+            },
         };
         let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
         handler.retry_all().await.unwrap();
@@ -1066,8 +1092,10 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry_delay: Duration::minutes(60),
-            max_automatic_retries: 3,
+            retry: RetryConfig {
+                delay: Duration::minutes(60),
+                max_automatic_retries: 3,
+            },
         };
         let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
         handler.retry_all().await.unwrap();

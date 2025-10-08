@@ -1,4 +1,4 @@
-use crate::Environment;
+use crate::{Environment, handler::RetryConfig};
 use std::{env, path::PathBuf};
 use tracing::warn;
 
@@ -14,6 +14,7 @@ pub struct SmtpConfig {
     pub cert_file: PathBuf,
     pub key_file: PathBuf,
     pub environment: Environment,
+    pub retry: RetryConfig,
 }
 
 impl Default for SmtpConfig {
@@ -46,6 +47,7 @@ impl Default for SmtpConfig {
             cert_file,
             key_file,
             environment,
+            retry: Default::default(),
         }
     }
 }
@@ -53,7 +55,9 @@ impl Default for SmtpConfig {
 #[cfg(test)]
 mod test {
     use crate::{
-        models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{
+            MessageRepository, MessageStatus, SmtpCredentialRepository, SmtpCredentialRequest,
+        },
         smtp::{SmtpConfig, server::SmtpServer},
         test::{TestStreams, random_port},
     };
@@ -63,22 +67,14 @@ mod test {
         net::{Ipv4Addr, SocketAddrV4},
         sync::Arc,
     };
-    use tokio::{sync::mpsc, task::JoinHandle};
+    use tokio::task::JoinHandle;
     use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
 
     async fn setup_server(
         pool: PgPool,
-    ) -> (
-        CancellationToken,
-        JoinHandle<()>,
-        mpsc::Receiver<NewMessage>,
-        u16,
-        String,
-        String,
-    ) {
+    ) -> (CancellationToken, JoinHandle<()>, u16, String, String) {
         let smtp_port = random_port();
-        let user_repository = SmtpCredentialRepository::new(pool.clone());
 
         let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
@@ -102,8 +98,7 @@ mod test {
             ..Default::default()
         });
         let shutdown = CancellationToken::new();
-        let (queue_sender, receiver) = mpsc::channel::<NewMessage>(100);
-        let server = SmtpServer::new(config, user_repository, queue_sender, shutdown.clone());
+        let server = SmtpServer::new(pool, config, shutdown.clone());
 
         let server_handle = tokio::spawn(async move {
             server.serve().await.unwrap();
@@ -114,7 +109,6 @@ mod test {
         (
             shutdown,
             server_handle,
-            receiver,
             smtp_port,
             credential.username(),
             credential.cleartext_password(),
@@ -132,7 +126,7 @@ mod test {
                 .expect("Failed to install crypto provider")
         }
 
-        let (shutdown, server_handle, mut receiver, port, username, pwd) = setup_server(pool).await;
+        let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
@@ -158,9 +152,22 @@ mod test {
         shutdown.cancel();
         server_handle.await.unwrap();
 
-        let received_message = receiver.recv().await.unwrap();
+        // message should now be received and stored in the database
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let messages = MessageRepository::new(pool);
+        let received_messages = messages
+            .list_message_metadata(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                Default::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(received_messages.len(), 1);
+        assert_eq!(received_messages[0].status, MessageStatus::Processing);
         assert_eq!(
-            received_message.from_email,
+            received_messages[0].from_email,
             "john@test-org-1-project-1.com".parse().unwrap()
         );
     }
@@ -170,7 +177,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
-        let (shutdown, server_handle, _, port, username, _) = setup_server(pool).await;
+        let (shutdown, server_handle, port, username, _) = setup_server(pool).await;
 
         let result = SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)

@@ -1,5 +1,5 @@
 use crate::{
-    handler::{HandlerConfig, dns::DnsResolver},
+    handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
         ApiMessageMetadata, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
         StreamId,
@@ -122,20 +122,25 @@ async fn setup(
         rx: mailcrab_rx,
     } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_random_port).await;
 
+    let retry_config = RetryConfig {
+        delay: chrono::Duration::minutes(5),
+        max_automatic_retries: 2,
+    };
+
     let smtp_config = SmtpConfig {
         listen_addr: smtp_socket.into(),
         server_name: "localhost".to_string(),
         cert_file: "cert.pem".into(),
         key_file: "key.pem".into(),
         environment: Default::default(),
+        retry: retry_config.clone(),
     };
 
     let handler_config = HandlerConfig {
         allow_plain: true,
         domain: "test".to_string(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
-        retry_delay: chrono::Duration::minutes(5),
-        max_automatic_retries: 2,
+        retry: retry_config,
     };
 
     run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;

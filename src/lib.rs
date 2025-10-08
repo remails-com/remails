@@ -1,13 +1,11 @@
-use crate::models::NewMessage;
 use api::ApiServer;
 use derive_more::FromStr;
 use handler::Handler;
-use models::SmtpCredentialRepository;
 use serde::Serialize;
 use smtp::server::SmtpServer;
 use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
-use tokio::{signal, sync::mpsc};
+use tokio::signal;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -64,16 +62,13 @@ pub async fn run_mta(
 ) {
     let smtp_config = Arc::new(smtp_config);
     let handler_config = Arc::new(handler_config);
-    let user_repository = SmtpCredentialRepository::new(pool.clone());
 
-    let (queue_sender, queue_receiver) = mpsc::channel::<NewMessage>(100);
-
-    let smtp_server = SmtpServer::new(smtp_config, user_repository, queue_sender, shutdown.clone());
+    let smtp_server = SmtpServer::new(pool.clone(), smtp_config, shutdown.clone());
 
     let message_handler = Handler::new(pool.clone(), handler_config, shutdown);
 
     smtp_server.spawn();
-    message_handler.spawn(queue_receiver);
+    message_handler.spawn();
 }
 
 pub async fn run_api_server(

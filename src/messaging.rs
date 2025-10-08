@@ -1,14 +1,15 @@
 use async_stream::stream;
 use serde::{Deserialize, Serialize};
 
-use crate::models::SmtpCredentialId;
+use crate::models::MessageId;
 
 use futures::{Stream, StreamExt};
 pub type BusStream<'a> = std::pin::Pin<Box<dyn Stream<Item = BusMessage> + Send + 'a>>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum BusMessage {
-    EmailReadyToSend(SmtpCredentialId), // for testing
+    EmailReadyToSend(MessageId),
+    EmailDeliveryAttempted(MessageId),
 }
 
 #[derive(Clone)]

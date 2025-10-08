@@ -3,14 +3,13 @@ use std::net::SocketAddr;
 use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    sync::mpsc::Sender,
     time::{Duration, timeout},
 };
 use tracing::{debug, info, trace};
 
 use crate::{
     messaging::BusClient,
-    models::{NewMessage, SmtpCredentialRepository},
+    models::{MessageRepository, SmtpCredentialRepository},
     smtp::session::{DataReply, SessionReply, SmtpResponse, SmtpSession},
 };
 
@@ -35,15 +34,22 @@ pub async fn handle(
     stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
     server_name: String,
     peer_addr: SocketAddr,
-    queue: Sender<NewMessage>,
     bus_client: BusClient,
     user_repository: SmtpCredentialRepository,
+    message_repository: MessageRepository,
+    max_automatic_retries: i32,
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);
 
     // NOTE: we re-use this Vec<u8> to avoid re-allocating buffer
     let mut buffer = Vec::with_capacity(BUFFER_SIZE);
-    let mut session = SmtpSession::new(peer_addr, queue, bus_client, user_repository);
+    let mut session = SmtpSession::new(
+        peer_addr,
+        bus_client,
+        user_repository,
+        message_repository,
+        max_automatic_retries,
+    );
 
     let mut reader = BufReader::new(source);
 
