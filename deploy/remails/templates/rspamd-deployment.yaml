@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rspamd
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: rspamd
+    environment: {{ .Values.environment }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      environment: {{ .Values.environment }}
+      app: rspamd
+  template:
+    metadata:
+      labels:
+        environment: {{ .Values.environment }}
+        app: rspamd
+    spec:
+      containers:
+        - name: rspamd
+          image: "ghcr.io/rspamd/rspamd-docker:3.13"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: "/ping"
+              scheme: HTTP
+              port: check
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - mountPath: /etc/rspamd/local.d
+              name: config
+          ports:
+            - containerPort: 11333
+              name: check
+            - containerPort: 11334
+              name: http
+      volumes:
+        - name: config
+          configMap:
+            name: rspamd-config

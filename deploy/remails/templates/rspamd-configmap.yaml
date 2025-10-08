@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rspamd-config
+  namespace: {{ .Release.Namespace }}
+data:
+  worker-controller.inc: |
+    password = "$2$5rhu7c1k8ko9ggmd4c9ewgwu79dmw55j$oo3qs5k7fs3u6cefq9r6wxd598mz6imwhr6b19zgi7goegs6sm1b";
+  actions.conf: |
+    # Basic action thresholds
+    reject = 15;        # Reject obvious spam
+    add_header = 6;     # Add spam headers
+    greylist = 4;       # Temporary delay suspicious mail
+  spf.conf: |
+    enabled: false
+  dkim.conf: |
+    enabled: false
+  dmarc.conf: |
+    enabled: false
+  hfilter.conf: |
+    hfilter {
+      helo_enabled = false;      # HELO patterns and DNS/FQDN checks
+      hostname_enabled = false;  # reverse DNS/hostname patterns
+      url_enabled = true;        # URL-only / one-line content
+      from_enabled = false;      # MAIL FROM domain checks and bounce
+      rcpt_enabled = false;      # recipient sanity (e.g. bounces to many rcpts)
+      mid_enabled = false;       # Message-Id domain checks
+    }

@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rspamd-{{ .Values.environment }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ printf "letsencrypt-%s-http" .Values.management.certificate_type }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: rspamd.{{ .Values.management.server_name }}
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: rspamd
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - rspamd.{{ .Values.management.server_name }}
+      secretName: rspamd-tls-cert

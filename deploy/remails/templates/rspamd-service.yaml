@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rspamd
+spec:
+  selector:
+    app: rspamd
+    environment: {{ .Values.environment }}
+  ports:
+    - name: check
+      protocol: TCP
+      port: 11333
+      targetPort: check
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+  type: ClusterIP
