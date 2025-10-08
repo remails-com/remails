@@ -1,7 +1,9 @@
 use anyhow::Context;
 use remails::{
-    HandlerConfig, SmtpConfig, bus::client::BusClient, handler::Handler, run_api_server, run_mta,
-    shutdown_signal,
+    HandlerConfig, SmtpConfig,
+    bus::{client::BusClient, server::Bus},
+    handler::Handler,
+    run_api_server, run_mta, shutdown_signal,
 };
 use sqlx::{
     ConnectOptions,
@@ -56,6 +58,14 @@ async fn main() -> anyhow::Result<()> {
     let handler_config = HandlerConfig::new();
     let shutdown = CancellationToken::new();
     let bus_client = BusClient::new_from_env_var().unwrap();
+    let bus_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 4000);
+
+    // Run message bus
+    tokio::spawn(async move {
+        let (tx, _rx) = tokio::sync::broadcast::channel::<String>(100);
+        let bus = Bus::new(bus_socket, tx);
+        bus.serve().await
+    });
 
     run_mta(
         pool.clone(),
