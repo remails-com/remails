@@ -145,6 +145,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
+        bus::client::BusClient,
         handler::{Handler, RetryConfig, dns::DnsResolver},
         models::{CreatedInviteWithPassword, OrgRole, Organization, Role},
     };
@@ -468,7 +469,13 @@ mod tests {
                 max_automatic_retries: 3,
             },
         };
-        let message_handler = Handler::new(pool.clone(), config.into(), CancellationToken::new());
+        let bus_client = BusClient::new_from_env_var().unwrap();
+        let message_handler = Handler::new(
+            pool.clone(),
+            config.into(),
+            bus_client,
+            CancellationToken::new(),
+        );
         message_handler.periodic_clean_up().await.unwrap();
 
         // cannot get automatically removed expired invite

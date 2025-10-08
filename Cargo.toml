@@ -21,6 +21,10 @@ path = "src/bin/mta.rs"
 name = "retry"
 path = "src/bin/retry.rs"
 
+[[bin]]
+name = "message_bus"
+path = "src/bin/message_bus.rs"
+
 [features]
 load-fixtures = []
 

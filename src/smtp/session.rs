@@ -8,7 +8,7 @@ use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tracing::{debug, trace};
 
 use crate::{
-    messaging::{BusClient, BusMessage},
+    bus::client::{BusClient, BusMessage},
     models::{MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
 };
 

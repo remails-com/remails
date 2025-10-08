@@ -13,9 +13,10 @@ pub mod api;
 mod dkim;
 pub mod handler;
 mod smtp;
+use crate::bus::client::BusClient;
 pub use crate::handler::HandlerConfig;
 pub use smtp::SmtpConfig;
-pub mod messaging;
+pub mod bus;
 
 #[cfg(feature = "load-fixtures")]
 pub use fixtures::load_fixtures;
@@ -58,14 +59,20 @@ pub async fn run_mta(
     pool: PgPool,
     smtp_config: SmtpConfig,
     handler_config: HandlerConfig,
+    bus_client: BusClient,
     shutdown: CancellationToken,
 ) {
     let smtp_config = Arc::new(smtp_config);
     let handler_config = Arc::new(handler_config);
 
-    let smtp_server = SmtpServer::new(pool.clone(), smtp_config, shutdown.clone());
+    let smtp_server = SmtpServer::new(
+        pool.clone(),
+        smtp_config,
+        bus_client.clone(),
+        shutdown.clone(),
+    );
 
-    let message_handler = Handler::new(pool.clone(), handler_config, shutdown);
+    let message_handler = Handler::new(pool, handler_config, bus_client, shutdown);
 
     smtp_server.spawn();
     message_handler.spawn();

@@ -1,6 +1,6 @@
 use crate::{
     Environment,
-    messaging::BusClient,
+    bus::client::BusClient,
     models::{MessageRepository, SmtpCredentialRepository},
     smtp::{
         SmtpConfig,
@@ -48,11 +48,16 @@ pub struct SmtpServer {
 }
 
 impl SmtpServer {
-    pub fn new(pool: PgPool, config: Arc<SmtpConfig>, shutdown: CancellationToken) -> SmtpServer {
+    pub fn new(
+        pool: PgPool,
+        config: Arc<SmtpConfig>,
+        bus_client: BusClient,
+        shutdown: CancellationToken,
+    ) -> SmtpServer {
         SmtpServer {
             user_repository: SmtpCredentialRepository::new(pool.clone()),
             message_repository: MessageRepository::new(pool),
-            bus_client: BusClient::new_from_env_var().unwrap(),
+            bus_client,
             shutdown,
             config,
         }

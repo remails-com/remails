@@ -55,6 +55,7 @@ impl Default for SmtpConfig {
 #[cfg(test)]
 mod test {
     use crate::{
+        bus::client::BusClient,
         models::{
             MessageRepository, MessageStatus, SmtpCredentialRepository, SmtpCredentialRequest,
         },
@@ -98,7 +99,8 @@ mod test {
             ..Default::default()
         });
         let shutdown = CancellationToken::new();
-        let server = SmtpServer::new(pool, config, shutdown.clone());
+        let bus_client = BusClient::new_from_env_var().unwrap();
+        let server = SmtpServer::new(pool, config, bus_client, shutdown.clone());
 
         let server_handle = tokio::spawn(async move {
             server.serve().await.unwrap();

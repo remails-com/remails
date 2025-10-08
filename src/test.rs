@@ -1,4 +1,5 @@
 use crate::{
+    bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
         ApiMessageMetadata, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
@@ -113,9 +114,11 @@ async fn setup(
     let smtp_port = random_port();
     let mailcrab_random_port = random_port();
     let http_port = random_port();
+    let bus_port = random_port();
 
     let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), http_port);
+    let bus_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), bus_port);
 
     let TestMailServerHandle {
         token,
@@ -143,8 +146,22 @@ async fn setup(
         retry: retry_config,
     };
 
-    run_mta(pool.clone(), smtp_config, handler_config, token.clone()).await;
+    // spawn message bus
+    let (tx, _rx) = tokio::sync::broadcast::channel::<String>(100);
+    let bus = Bus::new(bus_socket, tx);
+    tokio::spawn(async { bus.serve().await });
+
+    let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+    run_mta(
+        pool.clone(),
+        smtp_config,
+        handler_config,
+        bus_client,
+        token.clone(),
+    )
+    .await;
     run_api_server(pool, http_socket, token.clone(), false).await;
+
     let _drop_guard = token.drop_guard();
 
     (_drop_guard, client, http_port, mailcrab_rx, smtp_port)

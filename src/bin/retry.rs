@@ -1,5 +1,5 @@
 use anyhow::Context;
-use remails::{HandlerConfig, MoneyBird, handler::Handler, init_tracing};
+use remails::{HandlerConfig, MoneyBird, bus::client::BusClient, handler::Handler, init_tracing};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -38,8 +38,9 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown = CancellationToken::new();
     let handler_config = HandlerConfig::new();
+    let bus_client = BusClient::new_from_env_var().unwrap();
 
-    let message_handler = Handler::new(pool.clone(), handler_config.into(), shutdown);
+    let message_handler = Handler::new(pool.clone(), handler_config.into(), bus_client, shutdown);
 
     message_handler.retry_all().await?;
     message_handler.periodic_clean_up().await?;

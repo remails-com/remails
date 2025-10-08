@@ -1,5 +1,7 @@
 use anyhow::Context;
-use remails::{HandlerConfig, SmtpConfig, init_tracing, run_mta, shutdown_signal};
+use remails::{
+    HandlerConfig, SmtpConfig, bus::client::BusClient, init_tracing, run_mta, shutdown_signal,
+};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -30,8 +32,16 @@ async fn main() -> anyhow::Result<()> {
     let shutdown = CancellationToken::new();
     let smtp_config = SmtpConfig::default();
     let handler_config = HandlerConfig::new();
+    let bus_client = BusClient::new_from_env_var().unwrap();
 
-    run_mta(pool, smtp_config, handler_config, shutdown.clone()).await;
+    run_mta(
+        pool,
+        smtp_config,
+        handler_config,
+        bus_client,
+        shutdown.clone(),
+    )
+    .await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");

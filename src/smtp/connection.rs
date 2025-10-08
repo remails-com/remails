@@ -8,7 +8,7 @@ use tokio::{
 use tracing::{debug, info, trace};
 
 use crate::{
-    messaging::BusClient,
+    bus::client::BusClient,
     models::{MessageRepository, SmtpCredentialRepository},
     smtp::session::{DataReply, SessionReply, SmtpResponse, SmtpSession},
 };

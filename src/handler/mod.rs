@@ -1,8 +1,8 @@
 pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
+    bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
     handler::{connection_log::LogLevel, dns::DnsResolver},
-    messaging::{BusClient, BusMessage},
     models::{
         DeliveryDetails, DeliveryStatus, DomainRepository, InviteRepository, Message,
         MessageRepository, MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
@@ -114,7 +114,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(pool: PgPool, config: Arc<HandlerConfig>, shutdown: CancellationToken) -> Self {
+    pub fn new(
+        pool: PgPool,
+        config: Arc<HandlerConfig>,
+        bus_client: BusClient,
+        shutdown: CancellationToken,
+    ) -> Self {
         if CryptoProvider::get_default().is_none() {
             CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
                 .expect("Failed to install crypto provider");
@@ -125,7 +130,7 @@ impl Handler {
             organization_repository: OrganizationRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
             workers: Arc::new(Semaphore::new(100)),
-            bus_client: BusClient::new_from_env_var().unwrap(),
+            bus_client,
             shutdown,
             config,
         }
@@ -814,7 +819,8 @@ mod test {
                 max_automatic_retries: 1,
             },
         };
-        let handler = Handler::new(pool, Arc::new(config), CancellationToken::new());
+        let bus_client = BusClient::new_from_env_var().unwrap();
+        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
 
         let mut message = handler.create_message(message).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
@@ -874,7 +880,12 @@ mod test {
                     max_automatic_retries: 1,
                 },
             };
-            let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+            let handler = Handler::new(
+                pool.clone(),
+                Arc::new(config),
+                BusClient::new_from_env_var().unwrap(),
+                CancellationToken::new(),
+            );
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
@@ -943,7 +954,12 @@ mod test {
                     max_automatic_retries: 1,
                 },
             };
-            let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+            let handler = Handler::new(
+                pool.clone(),
+                Arc::new(config),
+                BusClient::new_from_env_var().unwrap(),
+                CancellationToken::new(),
+            );
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
@@ -1017,7 +1033,8 @@ mod test {
                 max_automatic_retries: 3,
             },
         };
-        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        let bus_client = BusClient::new_from_env_var().unwrap();
+        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
         handler.retry_all().await.unwrap();
 
         assert_eq!(
@@ -1097,7 +1114,12 @@ mod test {
                 max_automatic_retries: 3,
             },
         };
-        let handler = Handler::new(pool.clone(), Arc::new(config), CancellationToken::new());
+        let handler = Handler::new(
+            pool.clone(),
+            Arc::new(config),
+            BusClient::new_from_env_var().unwrap(),
+            CancellationToken::new(),
+        );
         handler.retry_all().await.unwrap();
 
         let mut senders = HashSet::new();
