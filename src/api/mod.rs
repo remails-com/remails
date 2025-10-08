@@ -30,9 +30,10 @@ use crate::{
     moneybird::MoneyBird,
 };
 use axum::{
-    Json, Router,
-    extract::{FromRef, Request, State},
+    Json, RequestExt, Router,
+    extract::{ConnectInfo, FromRef, Request, State},
     middleware,
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
@@ -46,8 +47,9 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{
-    error, info,
+    Instrument, Level, error, field, info,
     log::{trace, warn},
+    span,
 };
 
 mod api_users;
@@ -236,6 +238,27 @@ async fn api_fallback() -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
+async fn ip_middleware(mut request: Request, next: Next) -> Response {
+    let span = span!(
+        Level::INFO,
+        "ip_addr",
+        real_ip = field::Empty,
+        connection_ip = field::Empty
+    );
+
+    let real_ip = request.headers().get("x-forwarded-for");
+    if let Some(real_ip) = real_ip {
+        span.record("real_ip", real_ip.to_str().unwrap_or("unknown"));
+    }
+
+    let connection_ip = request.extract_parts::<ConnectInfo<SocketAddr>>().await;
+    if let Ok(connection_ip) = connection_ip {
+        span.record("connection_ip", connection_ip.to_string());
+    }
+
+    next.run(request).instrument(span).await
+}
+
 pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
@@ -389,6 +412,7 @@ impl ApiServer {
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
+                middleware::from_fn(ip_middleware),
                 TimeoutLayer::new(Duration::from_secs(10)),
             ))
             .with_state(state.clone());
