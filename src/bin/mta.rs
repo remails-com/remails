@@ -1,5 +1,5 @@
 use anyhow::Context;
-use remails::{HandlerConfig, SmtpConfig, run_mta, shutdown_signal};
+use remails::{HandlerConfig, SmtpConfig, init_tracing, run_mta, shutdown_signal};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -7,19 +7,12 @@ use sqlx::{
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or("remails=trace,tower_http=debug,axum=trace".parse().unwrap()),
-        )
-        .with(tracing_subscriber::fmt::layer().json())
-        .init();
+    init_tracing();
 
     let database_url = std::env::var("DATABASE_URL")
         .context("DATABASE_URL must be set")?

@@ -9,6 +9,7 @@ use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
 use tokio::{signal, sync::mpsc};
 use tokio_util::sync::CancellationToken;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod api;
 mod dkim;
@@ -38,6 +39,21 @@ pub enum Environment {
     Production,
     #[default]
     Development,
+}
+
+pub fn init_tracing() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!(
+                    "{}=trace,tower_http=debug,axum=trace,info",
+                    env!("CARGO_CRATE_NAME")
+                )
+                .into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer().json())
+        .init();
 }
 
 pub async fn run_mta(

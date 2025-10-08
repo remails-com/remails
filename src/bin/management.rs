@@ -1,5 +1,5 @@
 use anyhow::Context;
-use remails::{run_api_server, shutdown_signal};
+use remails::{init_tracing, run_api_server, shutdown_signal};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -10,24 +10,12 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!(
-                    "{}=trace,tower_http=debug,axum=trace,info",
-                    env!("CARGO_CRATE_NAME")
-                )
-                .into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer().json())
-        .init();
+    init_tracing();
 
     let database_url = std::env::var("DATABASE_URL")
         .context("DATABASE_URL must be set")?

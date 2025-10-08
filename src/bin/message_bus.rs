@@ -5,9 +5,9 @@ use axum::{
     routing::{get, post},
 };
 use http::StatusCode;
+use remails::init_tracing;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::sync::broadcast;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
 struct BusState {
@@ -46,18 +46,9 @@ impl Bus {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!(
-                    "{}=trace,tower_http=debug,axum=trace,info",
-                    env!("CARGO_CRATE_NAME")
-                )
-                .into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer().without_time())
-        .init();
+    dotenvy::dotenv().ok();
+
+    init_tracing();
 
     let port = std::env::var("MESSAGE_BUS_PORT")
         .unwrap_or("4000".to_owned())
