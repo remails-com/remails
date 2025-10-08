@@ -6,6 +6,8 @@ metadata:
 data:
   worker-controller.inc: |
     password = "$2$5rhu7c1k8ko9ggmd4c9ewgwu79dmw55j$oo3qs5k7fs3u6cefq9r6wxd598mz6imwhr6b19zgi7goegs6sm1b";
+  worker-proxy.inc: |
+    enabled = false;
   actions.conf: |
     # Basic action thresholds
     reject = 15;        # Reject obvious spam
@@ -16,6 +18,13 @@ data:
   dkim.conf: |
     enabled: false
   dmarc.conf: |
+    enabled: false
+  once_received.conf: |
+    enabled: false
+  ratelimit.conf: |
+    enabled: false
+  rbl.conf: |
+    # TODO This should probably be enabled and properly configured. For example to check of suspicious URLs in the email or its attachments
     enabled: false
   hfilter.conf: |
     hfilter {

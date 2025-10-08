@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      environment: {{ .Values.environment }}
+  template:
+    metadata:
+      labels:
+        app: redis
+        environment: {{ .Values.environment }}
+    spec:
+      containers:
+        - name: redis
+          image: "redis:8"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 6379
+              name: redis
+          volumeMounts:
+            - mountPath: /etc/redis/
+              name: config
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
