@@ -125,7 +125,7 @@ impl ProductIdentifier {
     pub fn monthly_quota(&self) -> u32 {
         match self {
             ProductIdentifier::NotSubscribed => 0,
-            ProductIdentifier::RmlsFree => 1_000,
+            ProductIdentifier::RmlsFree => 3_000,
             ProductIdentifier::RmlsTinyMonthly => 100_000,
             ProductIdentifier::RmlsSmallMonthly => 300_000,
             ProductIdentifier::RmlsMediumMonthly => 700_000,

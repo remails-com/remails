@@ -894,7 +894,7 @@ mod test {
                     ),
                     "0f83bfee-e7b6-4670-83ec-192afec2b137" => (0, None, "none"),
                     "ad76a517-3ff2-4d84-8299-742847782d4d" => (
-                        1_000,
+                        ProductIdentifier::RmlsFree.monthly_quota().into(),
                         Some(
                             Utc::now()
                                 .checked_add_days(Days::new(9))
