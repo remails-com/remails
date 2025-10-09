@@ -17,9 +17,9 @@ backends:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mta
+  name: inbound
   labels:
-    app: mta
+    app: inbound
     environment: {{ $.Values.environment }}
     namespace: {{ $.Release.Namespace }}
   annotations:
@@ -27,7 +27,7 @@ metadata:
 {{ include "upcloud-lb-config" . | fromYaml | mustToPrettyJson | indent 6 }}
 spec:
   selector:
-    app: mta
+    app: inbound
     environment: {{ $.Values.environment }}
   ports:
   {{- range $port := $.Values.smtp.ports }}

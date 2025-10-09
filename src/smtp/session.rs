@@ -5,18 +5,18 @@ use smtp_proto::{
     Request,
 };
 use std::{borrow::Cow, fmt::Display, net::SocketAddr};
-use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use crate::{
-    messaging::{BusClient, BusMessage},
-    models::{NewMessage, SmtpCredential, SmtpCredentialRepository},
+    bus::client::{BusClient, BusMessage},
+    models::{MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
 };
 
 pub struct SmtpSession {
-    queue: Sender<NewMessage>,
     bus_client: BusClient,
     smtp_credentials: SmtpCredentialRepository,
+    message_repository: MessageRepository,
+    max_automatic_retries: i32,
 
     peer_addr: SocketAddr,
     peer_name: Option<String>,
@@ -109,14 +109,16 @@ impl SmtpSession {
 
     pub fn new(
         peer_addr: SocketAddr,
-        queue: Sender<NewMessage>,
         bus_client: BusClient,
         smtp_credentials: SmtpCredentialRepository,
+        message_repository: MessageRepository,
+        max_automatic_retries: i32,
     ) -> Self {
         Self {
-            queue,
             bus_client,
             smtp_credentials,
+            message_repository,
+            max_automatic_retries,
             peer_addr,
             peer_name: None,
             current_message: None,
@@ -387,18 +389,25 @@ impl SmtpSession {
 
             trace!("received message ({} bytes)", message.raw_data.len());
 
-            // Temporary to test the message bus:
+            // Store message in database
+            let message = match self
+                .message_repository
+                .create(&message, self.max_automatic_retries)
+                .await
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    debug!("failed to create message: {e}");
+                    return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_REJECTED.into());
+                }
+            };
+
+            // Send message to message bus
             let _ = self
                 .bus_client
-                .send(&BusMessage::EmailReadyToSend(message.smtp_credential_id))
+                .send(&BusMessage::EmailReadyToSend(message.id()))
                 .await
                 .inspect_err(|e| tracing::error!("{e:?}"));
-
-            if let Err(e) = self.queue.send(message).await {
-                debug!("failed to queue message: {e}");
-
-                return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_REJECTED.into());
-            }
 
             return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_ACCEPTED.into());
         }

@@ -1,6 +1,5 @@
 use crate::{
-    HandlerConfig,
-    handler::ConnectionLog,
+    handler::{ConnectionLog, RetryConfig},
     models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
 };
 use chrono::{DateTime, Utc};
@@ -91,11 +90,11 @@ impl ApiMessage {
 #[derive(Serialize)]
 pub struct ApiMessageMetadata {
     pub id: MessageId,
-    status: MessageStatus,
+    pub status: MessageStatus,
     reason: Option<String>,
     delivery_details: HashMap<EmailAddress, DeliveryDetails>,
     smtp_credential_id: Option<SmtpCredentialId>,
-    from_email: EmailAddress,
+    pub from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
     /// Human-readable size
     raw_size: String,
@@ -180,7 +179,7 @@ impl Message {
         self.raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
     }
 
-    pub fn set_next_retry(&mut self, config: &HandlerConfig) {
+    pub fn set_next_retry(&mut self, config: &RetryConfig) {
         self.attempts += 1;
 
         if !self.status.should_retry() {
@@ -190,7 +189,7 @@ impl Message {
 
         if self.attempts < config.max_automatic_retries {
             let timeout = config
-                .retry_delay
+                .delay
                 .checked_mul(self.attempts)
                 .unwrap_or(chrono::TimeDelta::days(1));
             self.retry_after = Some(chrono::Utc::now() + timeout);
@@ -520,6 +519,42 @@ impl MessageRepository {
         .collect::<Result<Vec<_>, Error>>()
     }
 
+    /// Get a specific message
+    ///
+    /// Unlike [`find_by_id`] this returns a `Message` witht the full raw data
+    pub async fn get(&self, message_id: MessageId) -> Result<Message, Error> {
+        sqlx::query_as!(
+            PgMessage,
+            r#"
+            SELECT
+                m.id,
+                m.organization_id,
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
+                m.status as "status: _",
+                m.reason,
+                m.delivery_details,
+                m.from_email,
+                m.recipients,
+                m.raw_data,
+                octet_length(m.raw_data) as "raw_size!",
+                m.message_data,
+                m.created_at,
+                m.updated_at,
+                m.retry_after,
+                m.attempts,
+                m.max_attempts
+            FROM messages m
+            WHERE m.id = $1
+            "#,
+            *message_id,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
+    }
+
     pub async fn find_by_id(
         &self,
         org_id: OrganizationId,
@@ -550,7 +585,7 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts,
                 m.max_attempts
-            FROM messages  m
+            FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
               AND ($3::uuid IS NULL OR m.project_id = $3)

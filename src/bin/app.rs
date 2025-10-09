@@ -1,6 +1,9 @@
 use anyhow::Context;
 use remails::{
-    HandlerConfig, SmtpConfig, handler::Handler, run_api_server, run_mta, shutdown_signal,
+    HandlerConfig, SmtpConfig,
+    bus::{client::BusClient, server::Bus},
+    handler::Handler,
+    run_api_server, run_mta, shutdown_signal,
 };
 use sqlx::{
     ConnectOptions,
@@ -54,18 +57,33 @@ async fn main() -> anyhow::Result<()> {
     let smtp_config = SmtpConfig::default();
     let handler_config = HandlerConfig::new();
     let shutdown = CancellationToken::new();
+    let bus_client = BusClient::new_from_env_var().unwrap();
+    let bus_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 4000);
+
+    // Run message bus
+    tokio::spawn(async move {
+        let (tx, _rx) = tokio::sync::broadcast::channel::<String>(100);
+        let bus = Bus::new(bus_socket, tx);
+        bus.serve().await
+    });
 
     run_mta(
         pool.clone(),
         smtp_config,
         handler_config.clone(),
+        bus_client.clone(),
         shutdown.clone(),
     )
     .await;
     run_api_server(pool.clone(), http_socket, shutdown.clone(), true).await;
 
     // Run retry service
-    let message_handler = Handler::new(pool.clone(), handler_config.into(), shutdown.clone());
+    let message_handler = Handler::new(
+        pool.clone(),
+        handler_config.into(),
+        bus_client,
+        shutdown.clone(),
+    );
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {

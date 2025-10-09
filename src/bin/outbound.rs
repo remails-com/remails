@@ -1,11 +1,14 @@
 use anyhow::Context;
-use remails::{HandlerConfig, MoneyBird, bus::client::BusClient, handler::Handler, init_tracing};
+use remails::{
+    HandlerConfig, bus::client::BusClient, handler::Handler, init_tracing, shutdown_signal,
+};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
+use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,7 +21,8 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .expect("DATABASE_URL must be a valid URL");
 
-    let db_options = PgConnectOptions::from_url(&database_url)?.application_name("remails-retry");
+    let db_options =
+        PgConnectOptions::from_url(&database_url)?.application_name("remails-outbound");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -26,24 +30,20 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    let moneybird = MoneyBird::new(pool.clone())
-        .await
-        .expect("Cannot connect to Moneybird");
-
-    moneybird
-        .reset_all_quotas()
-        .await
-        .inspect_err(|err| error!("Failed to reset quotas: {}", err))
-        .ok();
-
     let shutdown = CancellationToken::new();
     let handler_config = HandlerConfig::new();
     let bus_client = BusClient::new_from_env_var().unwrap();
 
-    let message_handler = Handler::new(pool.clone(), handler_config.into(), bus_client, shutdown);
+    let message_handler =
+        Handler::new(pool, Arc::new(handler_config), bus_client, shutdown.clone());
+    message_handler.spawn();
 
-    message_handler.retry_all().await?;
-    message_handler.periodic_clean_up().await?;
+    shutdown_signal(shutdown.clone()).await;
+    info!("received shutdown signal, stopping services");
+    shutdown.cancel();
+
+    // give services the opportunity to shut down
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     Ok(())
 }

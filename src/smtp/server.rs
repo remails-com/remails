@@ -1,7 +1,7 @@
 use crate::{
     Environment,
-    messaging::BusClient,
-    models::{NewMessage, SmtpCredentialRepository},
+    bus::client::BusClient,
+    models::{MessageRepository, SmtpCredentialRepository},
     smtp::{
         SmtpConfig,
         connection::{self, ConnectionError},
@@ -9,18 +9,15 @@ use crate::{
     },
 };
 use rand::random_range;
+use sqlx::PgPool;
 use std::{fs::File, io, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::{
-    io::AsyncWriteExt,
-    net::TcpListener,
-    select,
-    sync::{RwLock, mpsc::Sender},
-};
+use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::RwLock};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
-        self,
+        self, crypto,
+        crypto::CryptoProvider,
         pki_types::{CertificateDer, PrivateKeyDer},
     },
 };
@@ -45,7 +42,7 @@ pub enum SmtpServerError {
 
 pub struct SmtpServer {
     user_repository: SmtpCredentialRepository,
-    queue: Sender<NewMessage>,
+    message_repository: MessageRepository,
     bus_client: BusClient,
     shutdown: CancellationToken,
     config: Arc<SmtpConfig>,
@@ -53,15 +50,19 @@ pub struct SmtpServer {
 
 impl SmtpServer {
     pub fn new(
+        pool: PgPool,
         config: Arc<SmtpConfig>,
-        user_repository: SmtpCredentialRepository,
-        queue: Sender<NewMessage>,
+        bus_client: BusClient,
         shutdown: CancellationToken,
     ) -> SmtpServer {
+        if CryptoProvider::get_default().is_none() {
+            CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
+                .expect("Failed to install crypto provider");
+        }
         SmtpServer {
-            user_repository,
-            queue,
-            bus_client: BusClient::new_from_env_var().unwrap(),
+            user_repository: SmtpCredentialRepository::new(pool.clone()),
+            message_repository: MessageRepository::new(pool),
+            bus_client,
             shutdown,
             config,
         }
@@ -116,9 +117,10 @@ impl SmtpServer {
         );
 
         let server_name = self.config.server_name.clone();
-        let queue = self.queue.clone();
         let bus_client = self.bus_client.clone();
         let user_repository = self.user_repository.clone();
+        let message_repository = self.message_repository.clone();
+        let max_automatic_retries = self.config.retry.max_automatic_retries;
         let shutdown = self.shutdown.clone();
 
         let acceptor_clone = acceptor.clone();
@@ -174,9 +176,9 @@ impl SmtpServer {
                         }
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
-                        let queue = queue.clone();
                         let bus_client = bus_client.clone();
                         let user_repository = user_repository.clone();
+                        let message_repository = message_repository.clone();
 
                         let task = async move || {
                             let mut tls_stream = acceptor.read().await
@@ -188,9 +190,10 @@ impl SmtpServer {
                                 &mut tls_stream,
                                 server_name,
                                 peer_addr,
-                                queue,
                                 bus_client,
                                 user_repository,
+                                message_repository,
+                                max_automatic_retries,
                             )
                             .await?;
 

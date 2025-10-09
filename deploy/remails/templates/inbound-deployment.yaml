@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mta
+  name: inbound
   namespace: {{ .Release.Namespace }}
   labels:
-    app: mta
+    app: inbound
     version: {{ .Chart.AppVersion }}
 spec:
   replicas: {{ .Values.smtp.replicas }}
   selector:
     matchLabels:
-      app: mta
+      app: inbound
       environment: {{ .Values.environment }}
   template:
     metadata:
       labels:
-        app: mta
+        app: inbound
         environment: {{ .Values.environment }}
         version: {{ .Chart.AppVersion }}
     spec:
@@ -37,7 +37,7 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - mta
+                        - inbound
                 topologyKey: topology.kubernetes.io/zone
             - weight: 75
               podAffinityTerm:
@@ -46,11 +46,11 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - mta
+                        - inbound
                 topologyKey: kubernetes.io/hostname
       containers:
-        - name: mta
-          image: "{{ .Values.images.mta.repository }}:{{ .Chart.AppVersion }}"
+        - name: inbound
+          image: "{{ .Values.images.inbound.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           volumeMounts:
             - mountPath: "/etc/smtp-cert"
@@ -75,8 +75,6 @@ spec:
               value: "0.0.0.0:3025"
             - name: SMTP_SERVER_NAME
               value: {{ .Values.smtp.server_name }}
-            - name: SMTP_EHLO_DOMAIN
-              value: {{ .Values.smtp.ehlo_domain }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -90,8 +88,6 @@ spec:
               value: {{ .Values.smtp.rate_limit_minutes | quote }}
             - name: RATE_LIMIT_MAX_MESSAGES
               value: {{ .Values.smtp.rate_limit_max_messages | quote }}
-            - name: DKIM_SELECTOR
-              value: {{ .Values.smtp.dkim_selector | quote }}
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
