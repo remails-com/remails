@@ -635,6 +635,15 @@ impl Handler {
             .await
             .map_err(HandlerError::RepositoryError)?;
 
+        let _ = self
+            .bus_client
+            .send(&BusMessage::EmailDeliveryAttempted(
+                message.id(),
+                message.status,
+            ))
+            .await
+            .inspect_err(|e| tracing::error!("Error sending bus message: {e}"));
+
         Ok(())
     }
 

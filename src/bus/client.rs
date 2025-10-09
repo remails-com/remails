@@ -1,7 +1,7 @@
 use async_stream::stream;
 use serde::{Deserialize, Serialize};
 
-use crate::models::MessageId;
+use crate::models::{MessageId, MessageStatus};
 
 use futures::{Stream, StreamExt};
 pub type BusStream<'a> = std::pin::Pin<Box<dyn Stream<Item = BusMessage> + Send + 'a>>;
@@ -9,7 +9,7 @@ pub type BusStream<'a> = std::pin::Pin<Box<dyn Stream<Item = BusMessage> + Send 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum BusMessage {
     EmailReadyToSend(MessageId),
-    EmailDeliveryAttempted(MessageId),
+    EmailDeliveryAttempted(MessageId, MessageStatus),
 }
 
 #[derive(Clone)]
