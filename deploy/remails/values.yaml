@@ -34,7 +34,7 @@ message_bus_port: 4000
 smtp:
   replicas: 3
   server_name: "smtp.remails.net"
-  ehlo_domain: "sending.remails.net"
+  ehlo_domain: "mail.remails.net"
   rate_limit_max_messages: "120"
   rate_limit_minutes: "1"
   spf_include: "include:spf.remails.net"
