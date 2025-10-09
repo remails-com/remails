@@ -69,7 +69,6 @@ mod test {
         sync::Arc,
     };
     use tokio::task::JoinHandle;
-    use tokio_rustls::rustls::crypto;
     use tokio_util::sync::CancellationToken;
 
     async fn setup_server(
@@ -122,12 +121,6 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
     ))]
     async fn test_smtp(pool: PgPool) {
-        if crypto::CryptoProvider::get_default().is_none() {
-            crypto::aws_lc_rs::default_provider()
-                .install_default()
-                .expect("Failed to install crypto provider")
-        }
-
         let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;
 
         let message = MessageBuilder::new()

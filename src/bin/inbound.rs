@@ -1,12 +1,10 @@
 use anyhow::Context;
-use remails::{
-    HandlerConfig, SmtpConfig, bus::client::BusClient, init_tracing, run_mta, shutdown_signal,
-};
+use remails::{SmtpConfig, SmtpServer, bus::client::BusClient, init_tracing, shutdown_signal};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -21,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .expect("DATABASE_URL must be a valid URL");
 
-    let db_options = PgConnectOptions::from_url(&database_url)?.application_name("remails-mta");
+    let db_options = PgConnectOptions::from_url(&database_url)?.application_name("remails-inbound");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -31,17 +29,15 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown = CancellationToken::new();
     let smtp_config = SmtpConfig::default();
-    let handler_config = HandlerConfig::new();
     let bus_client = BusClient::new_from_env_var().unwrap();
 
-    run_mta(
-        pool,
-        smtp_config,
-        handler_config,
-        bus_client,
+    let smtp_server = SmtpServer::new(
+        pool.clone(),
+        Arc::new(smtp_config),
+        bus_client.clone(),
         shutdown.clone(),
-    )
-    .await;
+    );
+    smtp_server.spawn();
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");

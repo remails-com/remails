@@ -21,15 +21,25 @@ EXPOSE 3000
 ENV VERSION=${version}
 ENTRYPOINT ["./management"]
 
-FROM final-base AS mta
+FROM final-base AS inbound
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/mta ./mta
-RUN chmod 777 mta
+COPY --chown=nonroot:nonroot ./target/release/inbound ./inbound
+RUN chmod 777 inbound
 
 EXPOSE 3025
 ENV VERSION=${version}
-ENTRYPOINT ["./mta"]
+ENTRYPOINT ["./inbound"]
+
+FROM final-base AS outbound
+ARG version=dev
+
+COPY --chown=nonroot:nonroot ./target/release/outbound ./outbound
+RUN chmod 777 outbound
+
+EXPOSE 3025
+ENV VERSION=${version}
+ENTRYPOINT ["./outbound"]
 
 FROM final-base AS retry
 ARG version=dev

@@ -80,7 +80,8 @@ jobs:
           path: |
             target/release/management
             target/release/migrate_db
-            target/release/mta
+            target/release/inbound
+            target/release/outbound
             target/release/retry
             target/release/message_bus
 
@@ -107,15 +108,24 @@ jobs:
           name: backend_target
           path: target/release/
 
-      - name: Build and push MTA image
+      - name: Build and push inbound image
         uses: docker/build-push-action@v6
         with:
           file: deploy/ci.Dockerfile
-          target: mta
+          target: inbound
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
-          tags: "ghcr.io/tweedegolf/remails/mta:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/tweedegolf/remails/inbound:${{ needs.build-frontend.outputs.tag }}"
+      - name: Build and push outbound image
+        uses: docker/build-push-action@v6
+        with:
+          file: deploy/ci.Dockerfile
+          target: outbound
+          push: true
+          build-args: "version=${{ needs.build-frontend.outputs.tag }}"
+          context: .
+          tags: "ghcr.io/tweedegolf/remails/outbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push management image
         uses: docker/build-push-action@v6
         with:

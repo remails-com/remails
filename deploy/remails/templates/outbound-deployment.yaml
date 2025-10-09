@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbound
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: outbound
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: outbound
+      environment: {{ .Values.environment }}
+  template:
+    metadata:
+      labels:
+        app: outbound
+        environment: {{ .Values.environment }}
+        version: {{ .Chart.AppVersion }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: outbound
+          image: "{{ .Values.images.outbound.repository }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          # TODO: add a lifeness probe
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
+            - name: RUST_LOG
+              value: {{ .Values.rust_log | quote }}
+            - name: SMTP_EHLO_DOMAIN
+              value: {{ .Values.smtp.ehlo_domain }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: database_url
+            - name: DKIM_SELECTOR
+              value: {{ .Values.smtp.dkim_selector | quote }}
+            - name: MESSAGE_BUS_PORT
+              value: {{ .Values.message_bus_port | quote }}
+            - name: MESSAGE_BUS_FQDN
+              value: message-bus

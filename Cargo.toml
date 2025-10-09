@@ -14,8 +14,12 @@ name = "management"
 path = "src/bin/management.rs"
 
 [[bin]]
-name = "mta"
-path = "src/bin/mta.rs"
+name = "inbound"
+path = "src/bin/inbound.rs"
+
+[[bin]]
+name = "outbound"
+path = "src/bin/outbound.rs"
 
 [[bin]]
 name = "retry"

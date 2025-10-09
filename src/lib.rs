@@ -2,7 +2,6 @@ use api::ApiServer;
 use derive_more::FromStr;
 use handler::Handler;
 use serde::Serialize;
-use smtp::server::SmtpServer;
 use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
 use tokio::signal;
@@ -15,7 +14,7 @@ pub mod handler;
 mod smtp;
 use crate::bus::client::BusClient;
 pub use crate::handler::HandlerConfig;
-pub use smtp::SmtpConfig;
+pub use smtp::{SmtpConfig, server::SmtpServer};
 pub mod bus;
 
 #[cfg(feature = "load-fixtures")]

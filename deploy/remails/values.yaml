@@ -1,6 +1,9 @@
 images:
-  mta:
-    repository: ghcr.io/tweedegolf/remails/mta
+  inbound:
+    repository: ghcr.io/tweedegolf/remails/inbound
+    pullPolicy: Always
+  outbound:
+    repository: ghcr.io/tweedegolf/remails/outbound
     pullPolicy: Always
   management:
     repository: ghcr.io/tweedegolf/remails/management
