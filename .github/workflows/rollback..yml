@@ -1,0 +1,29 @@
+name: Rollback deployment
+run-name: 'Rollback ${{ inputs.env }} by one version'
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Deploy environment
+        required: true
+        type: choice
+        options:
+          - Staging UpCloud private NL-AMS
+          - Production UpCloud private NL-AMS
+
+jobs:
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env }}
+    steps:
+      - name: Install Helm
+        run: "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+      - name: Create kubeconfig file
+        run: echo "${{ secrets.KUBECONFIG }}" > ${{ github.workspace }}/kubeconfig
+      - name: Rollback
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
+        run: |
+          helm rollback -n ${{ vars.namespace }} remails
