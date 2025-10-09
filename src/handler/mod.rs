@@ -362,28 +362,31 @@ impl Handler {
             serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
 
         let result = self.check_and_sign_message(message, &parsed_msg).await?;
-        message.status = match result {
+        match result {
             Ok(_) => match &message.status {
                 // For messages being sent for the first time, update message status
-                MessageStatus::Processing | MessageStatus::Held => MessageStatus::Accepted,
-                // For messages that have been processed before, keep the status
-                status @ (MessageStatus::Reattempt
-                | MessageStatus::Failed
-                | MessageStatus::Accepted) => status.clone(),
+                MessageStatus::Processing | MessageStatus::Held => {
+                    message.status = MessageStatus::Accepted;
+                }
+                // For messages that have been processed before, keep the status as is
+                MessageStatus::Reattempt | MessageStatus::Failed | MessageStatus::Accepted => {}
+                // Other messages should not be processed (but we do want to save the message if this happens)
                 status @ (MessageStatus::Rejected | MessageStatus::Delivered) => {
                     error!(
                         message_id = message.id().to_string(),
                         message_status = status.to_string(),
                         "message should not be processed"
                     );
-                    status.clone()
                 }
             },
-            Err((ref status, _)) => status.clone(),
+            Err((ref status, _)) => message.status = status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
 
         message.set_next_retry(&self.config.retry);
+        if message.status == MessageStatus::Accepted {
+            message.attempts = 0; // reset attempts before sending
+        }
 
         self.message_repository
             .update_message_data_and_status(message)
@@ -696,7 +699,6 @@ impl Handler {
                                         return
                                     };
 
-                                    message.attempts = 0; // reset attempts before sending
                                     if let Err(e) = self_clone.send_message(message).await {
                                         error!(message_id, "failed to send message: {e:?}");
                                     }
@@ -728,29 +730,13 @@ impl Handler {
                 "Retrying message from {} (status: {:?})", message.from_email, message.status
             );
 
-            match message.status {
-                MessageStatus::Held => {
-                    if let Err(e) = self.handle_message(&mut message).await {
-                        error!(message_id, "failed to handle message: {e:?}");
-                        continue;
-                    };
+            if let Err(e) = self.handle_message(&mut message).await {
+                error!(message_id, "failed to handle message: {e:?}");
+                continue;
+            };
 
-                    message.attempts = 0; // reset attempts before sending
-                    if let Err(e) = self.send_message(message).await {
-                        error!(message_id, "failed to send message: {e:?}");
-                    }
-                }
-                MessageStatus::Reattempt => {
-                    if let Err(e) = self.handle_message(&mut message).await {
-                        error!(message_id, "failed to handle reattempted message: {e:?}");
-                        continue;
-                    };
-
-                    if let Err(e) = self.send_message(message).await {
-                        error!(message_id, "failed to resend message: {e:?}");
-                    }
-                }
-                status => error!("Can't retry message with status {status:?}"),
+            if let Err(e) = self.send_message(message).await {
+                error!(message_id, "failed to send message: {e:?}");
             }
         }
 
