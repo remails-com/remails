@@ -106,4 +106,24 @@ impl BusClient {
             }
         })
     }
+
+    /// For testing: wait for a certain number of messages to be ready and attempted by listening
+    /// to the message bus
+    ///
+    /// Times out if no bus message is received for 5 seconds
+    #[cfg(test)]
+    pub async fn wait_for_attempt(messages_to_attempt: u32, stream: &mut BusStream<'_>) {
+        let mut ready = 0;
+        let mut attempted = 0;
+        while ready < messages_to_attempt || attempted < messages_to_attempt {
+            match tokio::time::timeout(tokio::time::Duration::from_secs(5), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                BusMessage::EmailReadyToSend(_) => ready += 1,
+                BusMessage::EmailDeliveryAttempted(_, _) => attempted += 1,
+            }
+        }
+    }
 }

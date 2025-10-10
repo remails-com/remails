@@ -717,25 +717,11 @@ impl Handler {
             .await
             .map_err(HandlerError::RepositoryError)?;
 
-        if messages.is_empty() {
-            debug!("There are no messages to retry right now");
-        }
-
-        for mut message in messages {
-            let message_id = message.id().to_string();
-            info!(
-                message_id,
-                "Retrying message from {} (status: {:?})", message.from_email, message.status
-            );
-
-            if let Err(e) = self.handle_message(&mut message).await {
-                error!(message_id, "failed to handle message: {e:?}");
-                continue;
-            };
-
-            if let Err(e) = self.send_message(message).await {
-                error!(message_id, "failed to send message: {e:?}");
-            }
+        for message_id in messages {
+            info!("Retrying message {}", message_id);
+            self.bus_client
+                .try_send(&BusMessage::EmailReadyToSend(message_id))
+                .await;
         }
 
         Ok(())
@@ -758,6 +744,7 @@ pub mod mock;
 mod test {
     use super::*;
     use crate::{
+        bus::server::Bus,
         handler::dns::DnsResolver,
         models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest},
         test::{TestStreams, random_port},
@@ -1017,6 +1004,8 @@ mod test {
             MessageStatus::Reattempt
         );
 
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
             allow_plain: true,
             domain: "test".to_string(),
@@ -1026,9 +1015,17 @@ mod test {
                 max_automatic_retries: 3,
             },
         };
-        let bus_client = BusClient::new_from_env_var().unwrap();
-        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
+        let handler = Handler::new(
+            pool,
+            Arc::new(config),
+            bus_client.clone(),
+            CancellationToken::new(),
+        );
+        handler.clone().spawn();
+
+        let mut stream = bus_client.receive().await.unwrap();
         handler.retry_all().await.unwrap();
+        BusClient::wait_for_attempt(2, &mut stream).await;
 
         assert_eq!(
             get_message_status(message_held_id).await,
@@ -1065,7 +1062,10 @@ mod test {
             )
             .await
             .unwrap();
+
         handler.retry_all().await.unwrap();
+        BusClient::wait_for_attempt(2, &mut stream).await;
+
         assert_eq!(
             get_message_status(message_out_of_attempts).await,
             MessageStatus::Delivered
@@ -1098,6 +1098,8 @@ mod test {
 
         let org_id = TestStreams::Org1Project1Stream1.org_id();
 
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
             allow_plain: true,
             domain: "test".to_string(),
@@ -1110,13 +1112,14 @@ mod test {
         let handler = Handler::new(
             pool.clone(),
             Arc::new(config),
-            BusClient::new_from_env_var().unwrap(),
+            bus_client,
             CancellationToken::new(),
         );
+        handler.clone().spawn();
+
         handler.retry_all().await.unwrap();
 
         let mut senders = HashSet::new();
-
         loop {
             select! {
                 Ok(recv) = mailcrab_rx.recv() => {

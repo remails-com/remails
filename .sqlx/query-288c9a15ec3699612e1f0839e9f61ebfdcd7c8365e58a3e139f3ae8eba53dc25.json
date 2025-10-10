@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id\n            FROM messages m\n            WHERE (m.status = 'held' OR m.status = 'reattempt')\n              AND now() > m.retry_after\n              AND m.attempts < m.max_attempts\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "288c9a15ec3699612e1f0839e9f61ebfdcd7c8365e58a3e139f3ae8eba53dc25"
+}
