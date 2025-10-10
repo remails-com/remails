@@ -1,0 +1,272 @@
+use sqlx::PgPool;
+
+use crate::{
+    MoneyBird,
+    bus::client::{BusClient, BusMessage},
+    models::{self, InviteRepository, MessageRepository},
+    moneybird,
+};
+
+pub struct Periodically {
+    message_repository: MessageRepository,
+    invite_repository: InviteRepository,
+    moneybird: MoneyBird,
+    bus_client: BusClient,
+}
+
+impl Periodically {
+    pub async fn new(pool: PgPool, bus_client: BusClient) -> Result<Self, moneybird::Error> {
+        Ok(Self {
+            message_repository: MessageRepository::new(pool.clone()),
+            invite_repository: InviteRepository::new(pool.clone()),
+            moneybird: MoneyBird::new(pool).await?,
+            bus_client,
+        })
+    }
+
+    pub async fn retry_messages(&self) -> Result<(), models::Error> {
+        let messages = self
+            .message_repository
+            .find_messages_ready_for_retry()
+            .await?;
+
+        for message_id in messages {
+            tracing::info!("Retrying message {}", message_id);
+            self.bus_client
+                .try_send(&BusMessage::EmailReadyToSend(message_id))
+                .await;
+        }
+
+        Ok(())
+    }
+
+    pub async fn clean_up_invites(&self) -> Result<(), models::Error> {
+        self.invite_repository
+            .remove_expired_before(chrono::Utc::now())
+            .await
+    }
+
+    pub async fn reset_all_quotas(&self) -> Result<(), moneybird::Error> {
+        self.moneybird.reset_all_quotas().await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{collections::HashSet, net::Ipv4Addr, sync::Arc};
+
+    use chrono::Duration;
+    use mailcrab::TestMailServerHandle;
+    use tokio::select;
+    use tokio_util::sync::CancellationToken;
+
+    use crate::{
+        HandlerConfig,
+        bus::server::Bus,
+        handler::{Handler, RetryConfig, dns::DnsResolver},
+        models::{MessageId, MessageStatus},
+        test::{TestStreams, random_port},
+    };
+
+    use super::*;
+
+    #[sqlx::test(fixtures(
+        path = "./fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "org_domains",
+            "proj_domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn retry_sending_messages(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let message_repo = MessageRepository::new(pool.clone());
+
+        let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
+        let message_reattempt_id = "c1e03226-8aad-42a9-8c43-380a5b25cb79".parse().unwrap();
+        let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
+        let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
+
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+
+        let get_message_status = async |id: MessageId| {
+            message_repo
+                .find_by_id(org_id, Some(project_id), Some(stream_id), id)
+                .await
+                .unwrap()
+                .status()
+                .to_owned()
+        };
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Held
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
+
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
+            retry: RetryConfig {
+                delay: Duration::minutes(60),
+                max_automatic_retries: 3,
+            },
+        };
+        let handler = Handler::new(
+            pool.clone(),
+            Arc::new(config),
+            bus_client.clone(),
+            CancellationToken::new(),
+        );
+        handler.spawn();
+
+        let periodically = Periodically::new(pool, bus_client.clone()).await.unwrap();
+
+        let mut stream = bus_client.receive().await.unwrap();
+        periodically.retry_messages().await.unwrap();
+        BusClient::wait_for_attempt(2, &mut stream).await;
+
+        assert_eq!(
+            get_message_status(message_held_id).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_reattempt_id,).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Reattempt
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Reattempt
+        );
+
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_out_of_attempts,
+            )
+            .await
+            .unwrap();
+        message_repo
+            .update_to_retry_asap(
+                org_id,
+                Some(project_id),
+                Some(stream_id),
+                message_on_timeout,
+            )
+            .await
+            .unwrap();
+
+        periodically.retry_messages().await.unwrap();
+        BusClient::wait_for_attempt(2, &mut stream).await;
+
+        assert_eq!(
+            get_message_status(message_out_of_attempts).await,
+            MessageStatus::Delivered
+        );
+        assert_eq!(
+            get_message_status(message_on_timeout).await,
+            MessageStatus::Delivered
+        );
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "streams",
+            "org_domains",
+            "proj_domains",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn quotas_retries(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle {
+            token,
+            rx: mut mailcrab_rx,
+        } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let org_id = TestStreams::Org1Project1Stream1.org_id();
+
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
+            retry: RetryConfig {
+                delay: Duration::minutes(60),
+                max_automatic_retries: 3,
+            },
+        };
+        let handler = Handler::new(
+            pool.clone(),
+            Arc::new(config),
+            bus_client.clone(),
+            CancellationToken::new(),
+        );
+        handler.spawn();
+
+        let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+        periodically.retry_messages().await.unwrap();
+
+        let mut senders = HashSet::new();
+        loop {
+            select! {
+                Ok(recv) = mailcrab_rx.recv() => {
+                    senders.insert(recv.envelope_from.as_str().to_string());
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                    break
+                },
+            }
+        }
+
+        assert!(senders.contains("email-held@test-org-1-project-1.com"));
+        assert!(senders.contains("email-reattempt-2@test-org-1-project-1.com"));
+        assert_eq!(senders.len(), 2);
+
+        let remaining = sqlx::query_scalar!(
+            r#"
+            SELECT total_message_quota - used_message_quota as "remaining!" FROM organizations WHERE id = $1
+            "#,
+            *org_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(remaining, 799);
+    }
+}

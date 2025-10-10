@@ -1,11 +1,9 @@
 use anyhow::Context;
-use remails::{HandlerConfig, MoneyBird, bus::client::BusClient, handler::Handler, init_tracing};
+use remails::{bus::client::BusClient, init_tracing, periodically::Periodically};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
-use tokio_util::sync::CancellationToken;
-use tracing::error;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,24 +24,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    let moneybird = MoneyBird::new(pool.clone())
-        .await
-        .expect("Cannot connect to Moneybird");
-
-    moneybird
-        .reset_all_quotas()
-        .await
-        .inspect_err(|err| error!("Failed to reset quotas: {}", err))
-        .ok();
-
-    let shutdown = CancellationToken::new();
-    let handler_config = HandlerConfig::new();
     let bus_client = BusClient::new_from_env_var().unwrap();
+    let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
 
-    let message_handler = Handler::new(pool.clone(), handler_config.into(), bus_client, shutdown);
-
-    message_handler.retry_all().await?;
-    message_handler.periodic_clean_up().await?;
+    periodically.retry_messages().await?;
+    periodically.clean_up_invites().await?;
+    periodically.reset_all_quotas().await?;
 
     Ok(())
 }

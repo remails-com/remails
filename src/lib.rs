@@ -11,6 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub mod api;
 mod dkim;
 pub mod handler;
+pub mod periodically;
 mod smtp;
 use crate::bus::client::BusClient;
 pub use crate::handler::HandlerConfig;
