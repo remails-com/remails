@@ -25,6 +25,7 @@ impl Periodically {
         })
     }
 
+    /// Retry all messages that are ready to be retried
     pub async fn retry_messages(&self) -> Result<(), models::Error> {
         let messages = self
             .message_repository
@@ -48,6 +49,7 @@ impl Periodically {
             .await
     }
 
+    /// Reset quotas for all organizations where the quota is ready to be reset
     pub async fn reset_all_quotas(&self) -> Result<(), moneybird::Error> {
         self.moneybird.reset_all_quotas().await
     }

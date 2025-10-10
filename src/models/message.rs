@@ -628,14 +628,21 @@ impl MessageRepository {
         .into())
     }
 
+    /// Messages which should be retried are either:
+    /// - on `held` or `reattempt`, not on timeout, with attempts left
+    /// - on `accepted` or `processing`, and not having been updated in 15 minutes
     pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<MessageId>, Error> {
         Ok(sqlx::query_scalar!(
             r#"
             SELECT m.id
             FROM messages m
-            WHERE (m.status = 'held' OR m.status = 'reattempt')
-              AND now() > m.retry_after
-              AND m.attempts < m.max_attempts
+            WHERE (
+                (m.status = 'held' OR m.status = 'reattempt')
+                AND now() > m.retry_after AND m.attempts < m.max_attempts
+              ) OR (
+                (m.status = 'accepted' OR m.status = 'processing')
+                AND now() > m.updated_at + '15 minutes'
+              )
             "#,
         )
         .fetch_all(&self.pool)
