@@ -521,7 +521,7 @@ impl MessageRepository {
 
     /// Get a specific message
     ///
-    /// Unlike [`find_by_id`] this returns a `Message` witht the full raw data
+    /// Unlike [`find_by_id`] this returns a `Message` with the full raw data
     pub async fn get(&self, message_id: MessageId) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
