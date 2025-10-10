@@ -54,6 +54,8 @@ mod tests {
         let mut stream = client.receive_auto_reconnect(std::time::Duration::from_millis(500));
 
         let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+        client.send(&message).await.unwrap_err(); // should error
+        client.try_send(&message).await; // ignores error
 
         let mut listen = async || {
             let received = stream.next().await.unwrap();

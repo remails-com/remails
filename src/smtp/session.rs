@@ -403,11 +403,9 @@ impl SmtpSession {
             };
 
             // Send message to message bus
-            let _ = self
-                .bus_client
-                .send(&BusMessage::EmailReadyToSend(message.id()))
-                .await
-                .inspect_err(|e| tracing::error!("{e:?}"));
+            self.bus_client
+                .try_send(&BusMessage::EmailReadyToSend(message.id()))
+                .await;
 
             return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_ACCEPTED.into());
         }
