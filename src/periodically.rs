@@ -1,3 +1,4 @@
+use chrono::Duration;
 use sqlx::PgPool;
 
 use crate::{
@@ -40,9 +41,10 @@ impl Periodically {
         Ok(())
     }
 
+    /// Clean up invites which have been expired for more than a day
     pub async fn clean_up_invites(&self) -> Result<(), models::Error> {
         self.invite_repository
-            .remove_expired_before(chrono::Utc::now())
+            .remove_expired_before(chrono::Utc::now() - Duration::days(1))
             .await
     }
 
