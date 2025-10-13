@@ -4,7 +4,6 @@ import { RemailsLogo } from "./RemailsLogo.tsx";
 import { useEffect, useState } from "react";
 import { RemailsError } from "../error/error.ts";
 import { Invite } from "../types.ts";
-import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { errorNotification } from "../notify.tsx";
 
 export function ConfirmInvite() {
@@ -15,7 +14,9 @@ export function ConfirmInvite() {
       routerState: { params },
     },
   } = useRemails();
-  const { organizations } = useOrganizations();
+  const {
+    state: { user },
+  } = useRemails();
 
   const [invite, setInvite] = useState<Invite | null>(null);
 
@@ -33,6 +34,10 @@ export function ConfirmInvite() {
     });
   }, [dispatch, params]);
 
+  if (!user) {
+    return null;
+  }
+
   const accept = async () => {
     const res = await fetch(`/api/invite/${params.new_org_id}/${params.invite_id}/${params.password}`, {
       method: "POST",
@@ -49,7 +54,7 @@ export function ConfirmInvite() {
     navigate("projects", { org_id: newOrg.id });
   };
 
-  const already_joined = organizations.some((o) => o.id == invite?.organization_id);
+  const already_joined = user.org_roles.some((o) => o.org_id == invite?.organization_id);
   const is_expired = invite && new Date(invite.expires_at) < new Date();
 
   return (
