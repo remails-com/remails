@@ -1,11 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE messages\n            SET status = $2,\n                reason = $3,\n                delivery_details = $4,\n                retry_after = $5,\n                attempts = $6\n            WHERE id = $1\n            ",
+  "query": "\n            UPDATE messages\n            SET message_data = $2,\n                status = $3,\n                reason = $4,\n                retry_after = $5,\n                attempts = $6,\n                max_attempts = $7\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
         "Uuid",
+        "Jsonb",
         {
           "Custom": {
             "name": "message_status",
@@ -23,12 +24,12 @@
           }
         },
         "Varchar",
-        "Jsonb",
         "Timestamptz",
+        "Int4",
         "Int4"
       ]
     },
     "nullable": []
   },
-  "hash": "a70af5c843cb48e67e9e8c3b8c1194162d6204930a8948ec5fe7e281605e2eb2"
+  "hash": "8ec0bafab15d27154ec7b57c9214127822807aa5d0015b7a0bbdd8b29ce375da"
 }

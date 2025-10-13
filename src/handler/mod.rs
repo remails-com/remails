@@ -2,9 +2,12 @@ pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
-    handler::{connection_log::LogLevel, dns::DnsResolver},
+    handler::{
+        connection_log::LogLevel,
+        dns::{DnsResolver, ResolveError},
+    },
     models::{
-        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageRepository,
+        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository,
         MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
     },
 };
@@ -25,6 +28,7 @@ use tokio::{
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
+
 mod connection_log;
 
 pub mod dns;
@@ -37,6 +41,8 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
     #[error("message is being {0:?}: {1}")]
     MessageNotAccepted(MessageStatus, String),
+    #[error("Message is in an illegal state: {0}, {1:?}")]
+    IllegalMessageState(MessageStatus, MessageId),
 }
 
 #[derive(Debug, Error)]
@@ -368,14 +374,20 @@ impl Handler {
                     message.status = MessageStatus::Accepted;
                 }
                 // For messages that have been processed before, keep the status as is
-                MessageStatus::Reattempt | MessageStatus::Failed | MessageStatus::Accepted => {}
+                MessageStatus::Reattempt
+                | MessageStatus::Failed
+                | MessageStatus::Accepted
+                | MessageStatus::Rejected => {}
                 // Other messages should not be processed (but we do want to save the message if this happens)
-                status @ (MessageStatus::Rejected | MessageStatus::Delivered) => {
+                MessageStatus::Delivered => {
                     error!(
                         message_id = message.id().to_string(),
-                        message_status = status.to_string(),
-                        "message should not be processed"
+                        "Delivered message should not be processed"
                     );
+                    return Err(HandlerError::IllegalMessageState(
+                        MessageStatus::Delivered,
+                        message.id(),
+                    ));
                 }
             },
             Err((ref status, _)) => message.status = status.clone(),
@@ -383,9 +395,6 @@ impl Handler {
         message.reason = result.as_ref().err().map(|e| e.1.clone());
 
         message.set_next_retry(&self.config.retry);
-        if message.status == MessageStatus::Accepted {
-            message.attempts = 0; // reset attempts before sending
-        }
 
         self.message_repository
             .update_message_data_and_status(message)
@@ -441,26 +450,80 @@ impl Handler {
 
         let mut is_temporary_failure = false;
 
-        while let Ok((hostname, port)) = self
-            .config
-            .resolver
-            .resolve_mail_domain(domain, &mut priority)
-            .await
-        {
-            let smtp = SmtpClientBuilder::new(&hostname, port)
-                .implicit_tls(false)
-                .say_ehlo(true)
-                .helo_host(&self.config.domain)
-                .timeout(std::time::Duration::from_secs(60));
+        loop {
+            match self
+                .config
+                .resolver
+                .resolve_mail_domain(domain, &mut priority)
+                .await
+            {
+                Ok((hostname, port)) => {
+                    match self
+                        .send_single_upstream(
+                            security,
+                            connection_log,
+                            domain,
+                            message.clone(),
+                            &hostname,
+                            port,
+                        )
+                        .await
+                    {
+                        Ok(_) => return Ok(()),
+                        Err(SendError::PermanentFailure) => {} // continue to try the next server
+                        Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                    }
+                }
+                Err(ResolveError::AllServersExhausted) => {
+                    info!(domain, "all mail servers exhausted");
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!("all mail servers for domain {domain} exhausted"),
+                    );
+                    break;
+                }
+                Err(ResolveError::Dns(err)) => {
+                    error!(domain, "could not resolve mail domain: {err}");
+                    connection_log.log(
+                        LogLevel::Warn,
+                        format!("could not resolve domain '{domain}': {err}"),
+                    );
+                    break;
+                }
+            }
+        }
 
-            let result = match security {
+        if is_temporary_failure {
+            Err(SendError::TemporaryFailure)
+        } else {
+            Err(SendError::PermanentFailure)
+        }
+    }
+
+    async fn send_single_upstream(
+        &self,
+        security: Protection,
+        connection_log: &mut ConnectionLog,
+        domain: &str,
+        message: smtp::message::Message<'_>,
+        hostname: &String,
+        port: u16,
+    ) -> Result<(), SendError> {
+        let smtp = SmtpClientBuilder::new(&hostname, port)
+            .implicit_tls(false)
+            .say_ehlo(true)
+            .helo_host(&self.config.domain)
+            .timeout(std::time::Duration::from_secs(60));
+
+        let result =
+            match security {
                 Protection::Tls => match smtp.connect().await {
                     Err(err) => Err(err),
                     Ok(mut client) => {
                         trace!(domain, port, "securely connected to upstream server");
                         connection_log.log(LogLevel::Info, format!(
-                            "securely connected to '{hostname}' with port {port} over TLS",
-                        ));
+                        "securely connected to '{hostname}' with port {port} over TLS",
+                    ));
                         let result = client.send(message.clone()).await;
                         Self::quit_smtp(client, &hostname).await;
                         result
@@ -471,7 +534,7 @@ impl Handler {
                         Err(err) => Err(err),
                         Ok(mut client) => {
                             trace!(domain, port, "INSECURELY connected to upstream server");
-                            connection_log.log(LogLevel::Info,format!(
+                            connection_log.log(LogLevel::Info, format!(
                             "INSECURELY connected to '{hostname}' with port {port} without TLS",
                         ));
                             let result = client.send(message.clone()).await;
@@ -482,49 +545,44 @@ impl Handler {
                 }
             };
 
-            let Err(err) = result else {
-                debug!(domain, port, "successfully send email");
-                connection_log.log(
-                    LogLevel::Info,
-                    format!("successfully sent email using hostname '{hostname}' and port {port}",),
-                );
-                return Ok(());
-            };
-
-            info!(domain, port, "could not use server: {err}");
+        let Err(err) = result else {
+            debug!(domain, port, "successfully send email");
             connection_log.log(
-                LogLevel::Warn,
-                format!("could not use {hostname} on port {port}: {err}",),
+                LogLevel::Info,
+                format!("successfully sent email using hostname '{hostname}' and port {port}",),
             );
+            return Ok(());
+        };
 
-            match err {
-                mail_send::Error::Io(_) => is_temporary_failure = true,
-                mail_send::Error::Tls(_) => is_temporary_failure = true,
-                mail_send::Error::Base64(_) => is_temporary_failure = true,
-                mail_send::Error::Auth(_) => is_temporary_failure = true,
-                mail_send::Error::UnparseableReply => is_temporary_failure = true,
-                mail_send::Error::UnexpectedReply(response)
-                | mail_send::Error::AuthenticationFailed(response) => {
-                    // SMTP 4XX errors are temporary failures
-                    if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
-                        is_temporary_failure = true
-                    }
+        info!(domain, port, "could not use server: {err}");
+        connection_log.log(
+            LogLevel::Warn,
+            format!("could not use {hostname} on port {port}: {err}",),
+        );
+
+        Err(match err {
+            mail_send::Error::Io(_) => SendError::TemporaryFailure,
+            mail_send::Error::Tls(_) => SendError::TemporaryFailure,
+            mail_send::Error::Base64(_) => SendError::TemporaryFailure,
+            mail_send::Error::Auth(_) => SendError::TemporaryFailure,
+            mail_send::Error::UnparseableReply => SendError::TemporaryFailure,
+            mail_send::Error::UnexpectedReply(response)
+            | mail_send::Error::AuthenticationFailed(response) => {
+                // SMTP 4XX errors are temporary failures
+                if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
+                    SendError::TemporaryFailure
+                } else {
+                    SendError::PermanentFailure
                 }
-                mail_send::Error::InvalidTLSName => is_temporary_failure = true,
-                mail_send::Error::MissingCredentials => {}
-                mail_send::Error::MissingMailFrom => {}
-                mail_send::Error::MissingRcptTo => {}
-                mail_send::Error::UnsupportedAuthMechanism => {}
-                mail_send::Error::Timeout => is_temporary_failure = true,
-                mail_send::Error::MissingStartTls => {}
             }
-        }
-
-        if is_temporary_failure {
-            Err(SendError::TemporaryFailure)
-        } else {
-            Err(SendError::PermanentFailure)
-        }
+            mail_send::Error::InvalidTLSName => SendError::TemporaryFailure,
+            mail_send::Error::MissingCredentials => SendError::PermanentFailure,
+            mail_send::Error::MissingMailFrom => SendError::PermanentFailure,
+            mail_send::Error::MissingRcptTo => SendError::PermanentFailure,
+            mail_send::Error::UnsupportedAuthMechanism => SendError::PermanentFailure,
+            mail_send::Error::Timeout => SendError::TemporaryFailure,
+            mail_send::Error::MissingStartTls => SendError::PermanentFailure,
+        })
     }
 
     #[tracing::instrument(
@@ -681,10 +739,12 @@ impl Handler {
                                     let mut message = match self_clone.message_repository.get(id).await {
                                         Ok(message) => message,
                                         Err(e) => {
-                                            error!("failed to create message: {e:?}");
+                                            error!("failed to get message: {e:?}");
                                             return
                                         },
                                     };
+
+                                    message.attempts += 1;
 
                                     let message_id = message.id().to_string();
                                     if let Err(e) = self_clone.handle_message(&mut message).await {

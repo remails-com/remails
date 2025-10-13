@@ -8,7 +8,7 @@ use crate::{
         auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{get_message, list_messages, remove_message, update_to_retry_asap},
+        messages::{get_message, list_messages, remove_message, retry_now},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_members, list_organizations, remove_member,
@@ -22,6 +22,7 @@ use crate::{
         streams::{create_stream, list_streams, remove_stream, update_stream},
         subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
     },
+    bus::client::BusClient,
     handler::dns::DnsResolver,
     models::{
         ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
@@ -138,11 +139,18 @@ pub struct ApiState {
     moneybird: MoneyBird,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
+    message_bus: BusClient,
 }
 
 impl FromRef<ApiState> for PgPool {
     fn from_ref(state: &ApiState) -> Self {
         state.pool.clone()
+    }
+}
+
+impl FromRef<ApiState> for BusClient {
+    fn from_ref(state: &ApiState) -> Self {
+        state.message_bus.clone()
     }
 }
 
@@ -305,6 +313,7 @@ impl ApiServer {
             resolver: DnsResolver::new(),
             #[cfg(test)]
             resolver: DnsResolver::mock("localhost", 0),
+            message_bus: BusClient::new_from_env_var().expect("Could not connect to message bus"),
         };
 
         let mut router = Router::new()
@@ -367,7 +376,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
-                put(update_to_retry_asap),
+                put(retry_now),
             )
             .route(
                 "/organizations/{org_id}/domains",

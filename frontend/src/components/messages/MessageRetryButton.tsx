@@ -7,6 +7,7 @@ import { useStreams } from "../../hooks/useStreams";
 import { is_in_the_future } from "../../util";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
+import { useState } from "react";
 
 export default function MessageRetryButton({
   message,
@@ -20,15 +21,16 @@ export default function MessageRetryButton({
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { currentStream } = useStreams();
+  const [loading, setLoading] = useState(false);
 
   if (!currentOrganization || !currentProject || !currentStream) {
     return null;
   }
 
-  const retry_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${message.id}/retry`;
+  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${message.id}`;
 
   async function retry() {
-    const res = await fetch(retry_endpoint, {
+    const res = await fetch(`${message_endpoint}/retry`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -39,17 +41,30 @@ export default function MessageRetryButton({
       console.error(res);
       return;
     }
-    const update = await res.json();
-    updateMessage(message.id, update);
 
     notifications.show({
-      title: "(Re-)scheduled retry",
+      title: "Scheduled retry",
       message: "Message will be retried soon",
       color: "blue",
       autoClose: 20000,
       icon: <IconReload size={20} />,
     });
+
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const update = await fetch(message_endpoint);
+    if (update.status !== 200) {
+      errorNotification("Message could not be found");
+      console.error(update);
+      return;
+    }
+    updateMessage(message.id, await update.json());
   }
+
+  const onClick = () => {
+    setLoading(true);
+    retry().finally(() => setLoading(false));
+  };
 
   const status_retryable = !(
     message.status == "Processing" ||
@@ -68,13 +83,26 @@ export default function MessageRetryButton({
 
   if (small) {
     return (
-      <MaintainerActionIcon tooltip={tooltip} disabled={!can_retry} onClick={retry} variant="light" size={30}>
+      <MaintainerActionIcon
+        tooltip={tooltip}
+        disabled={!can_retry}
+        onClick={onClick}
+        variant="light"
+        size={30}
+        loading={loading}
+      >
         <IconReload />
       </MaintainerActionIcon>
     );
   } else {
     return (
-      <MaintainerButton tooltip={tooltip} leftSection={<IconReload />} disabled={!can_retry} onClick={retry}>
+      <MaintainerButton
+        tooltip={tooltip}
+        leftSection={<IconReload />}
+        disabled={!can_retry}
+        onClick={onClick}
+        loading={loading}
+      >
         Retry
       </MaintainerButton>
     );

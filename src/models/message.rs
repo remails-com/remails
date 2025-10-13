@@ -59,6 +59,7 @@ pub struct Message {
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
     pub attempts: i32,
+    pub max_attempts: i32,
 }
 
 #[derive(Serialize)]
@@ -154,15 +155,6 @@ pub struct NewMessage {
     pub message_data: serde_json::Value,
 }
 
-#[derive(Serialize, Debug)]
-#[cfg_attr(test, derive(Deserialize))]
-pub struct MessageRetryUpdate {
-    status: MessageStatus,
-    retry_after: Option<DateTime<Utc>>,
-    attempts: i32,
-    max_attempts: i32,
-}
-
 impl Message {
     pub fn id(&self) -> MessageId {
         self.id
@@ -180,7 +172,9 @@ impl Message {
     }
 
     pub fn set_next_retry(&mut self, config: &RetryConfig) {
-        self.attempts += 1;
+        if self.max_attempts < self.attempts {
+            self.max_attempts = self.attempts;
+        }
 
         if !self.status.should_retry() {
             self.retry_after = None;
@@ -286,6 +280,7 @@ impl TryFrom<PgMessage> for Message {
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             attempts: m.attempts,
+            max_attempts: m.max_attempts,
         })
     }
 }
@@ -427,7 +422,8 @@ impl MessageRepository {
                 reason = $3,
                 delivery_details = $4,
                 retry_after = $5,
-                attempts = $6
+                attempts = $6,
+                max_attempts = $7
             WHERE id = $1
             "#,
             *message.id,
@@ -436,6 +432,7 @@ impl MessageRepository {
             delivery_details_serialized,
             message.retry_after,
             message.attempts,
+            message.max_attempts,
         )
         .execute(&self.pool)
         .await?;
@@ -451,7 +448,8 @@ impl MessageRepository {
                 status = $3,
                 reason = $4,
                 retry_after = $5,
-                attempts = $6
+                attempts = $6,
+                max_attempts = $7
             WHERE id = $1
             "#,
             *message.id,
@@ -460,6 +458,7 @@ impl MessageRepository {
             message.reason,
             message.retry_after,
             message.attempts,
+            message.max_attempts,
         )
         .execute(&self.pool)
         .await?;
@@ -470,8 +469,8 @@ impl MessageRepository {
     pub async fn list_message_metadata(
         &self,
         org_id: OrganizationId,
-        project_id: Option<ProjectId>,
-        stream_id: Option<StreamId>,
+        project_id: ProjectId,
+        stream_id: StreamId,
         filter: MessageFilter,
     ) -> Result<Vec<ApiMessageMetadata>, Error> {
         sqlx::query_as!(
@@ -498,16 +497,16 @@ impl MessageRepository {
                 max_attempts
             FROM messages m
             WHERE organization_id = $1
-                AND ($2::uuid IS NULL OR project_id = $2)
-                AND ($3::uuid IS NULL OR stream_id = $3)
+                AND project_id = $2
+                AND stream_id = $3
                 AND ($5::message_status IS NULL OR status = $5)
                 AND ($6::timestamptz IS NULL OR created_at <= $6)
             ORDER BY created_at DESC
             LIMIT $4
             "#,
             *org_id,
-            project_id.map(|p| p.as_uuid()),
-            stream_id.map(|s| s.as_uuid()),
+            *project_id,
+            *stream_id,
             std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
             filter.status as _,
             filter.before,
@@ -558,8 +557,8 @@ impl MessageRepository {
     pub async fn find_by_id(
         &self,
         org_id: OrganizationId,
-        project_id: Option<ProjectId>,
-        stream_id: Option<StreamId>,
+        project_id: ProjectId,
+        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<ApiMessage, Error> {
         sqlx::query_as!(
@@ -588,13 +587,13 @@ impl MessageRepository {
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
-              AND ($3::uuid IS NULL OR m.project_id = $3)
-              AND ($4::uuid IS NULL OR m.stream_id = $4)
+              AND m.project_id = $3
+              AND m.stream_id = $4
             "#,
             *message_id,
             *org_id,
-            project_id.map(|p| p.as_uuid()),
-            stream_id.map(|s| s.as_uuid()),
+            *project_id,
+            *stream_id,
             API_RAW_TRUNCATE_LENGTH,
         )
         .fetch_one(&self.pool)
@@ -605,8 +604,8 @@ impl MessageRepository {
     pub async fn remove(
         &self,
         org_id: OrganizationId,
-        project_id: Option<ProjectId>,
-        stream_id: Option<StreamId>,
+        project_id: ProjectId,
+        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<MessageId, Error> {
         Ok(sqlx::query_scalar!(
@@ -614,14 +613,14 @@ impl MessageRepository {
             DELETE FROM messages
             WHERE id = $1
               AND organization_id = $2
-              AND ($3::uuid IS NULL OR project_id = $3)
-              AND ($4::uuid IS NULL OR stream_id = $4)
+              AND project_id = $3
+              AND stream_id = $4
             RETURNING id
             "#,
             *message_id,
             *org_id,
-            project_id.map(|p| p.as_uuid()),
-            stream_id.map(|s| s.as_uuid()),
+            *project_id,
+            *stream_id,
         )
         .fetch_one(&self.pool)
         .await?
@@ -652,34 +651,26 @@ impl MessageRepository {
         .collect())
     }
 
-    pub async fn update_to_retry_asap(
+    pub async fn message_status(
         &self,
         org_id: OrganizationId,
-        project_id: Option<ProjectId>,
-        stream_id: Option<StreamId>,
+        project_id: ProjectId,
+        stream_id: StreamId,
         message_id: MessageId,
-    ) -> Result<MessageRetryUpdate, Error> {
-        Ok(sqlx::query_as!(
-            MessageRetryUpdate,
+    ) -> Result<MessageStatus, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
-            UPDATE messages
-            SET retry_after = now(),
-                max_attempts = GREATEST(attempts + 1, max_attempts),
-                status = CASE status
-                    WHEN 'rejected' THEN 'held'
-                    WHEN 'failed' THEN 'reattempt'
-                    ELSE status
-                END
-            WHERE id = $1
-              AND organization_id = $2
-              AND ($3::uuid IS NULL OR project_id = $3)
-              AND ($4::uuid IS NULL OR stream_id = $4)
-            RETURNING status as "status: _", retry_after, attempts, max_attempts
+            SELECT m.status AS "status:MessageStatus"
+            FROM messages m
+            WHERE m.organization_id = $1 
+              AND m.project_id = $2 
+              AND m.stream_id = $3 
+              AND m.id = $4
             "#,
-            *message_id,
             *org_id,
-            project_id.map(|p| p.as_uuid()),
-            stream_id.map(|s| s.as_uuid()),
+            *project_id,
+            *stream_id,
+            *message_id,
         )
         .fetch_one(&self.pool)
         .await?)
@@ -768,7 +759,7 @@ mod test {
         let message = repository.create(&new_message, 5).await.unwrap();
 
         let mut fetched_message = repository
-            .find_by_id(org_id, Some(project_id), Some(stream_id), message.id)
+            .find_by_id(org_id, project_id, stream_id, message.id)
             .await
             .unwrap();
 
@@ -791,8 +782,8 @@ mod test {
         let messages = repository
             .list_message_metadata(
                 org_id,
-                Some(project_id),
-                Some(stream_id),
+                project_id,
+                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
@@ -806,15 +797,15 @@ mod test {
         assert_eq!(messages[0].id, message.id);
 
         repository
-            .remove(org_id, Some(project_id), Some(stream_id), message.id)
+            .remove(org_id, project_id, stream_id, message.id)
             .await
             .unwrap();
 
         let messages = repository
             .list_message_metadata(
                 org_id,
-                Some(project_id),
-                Some(stream_id),
+                project_id,
+                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,

@@ -151,12 +151,7 @@ mod test {
         let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
         let messages = MessageRepository::new(pool);
         let received_messages = messages
-            .list_message_metadata(
-                org_id,
-                Some(project_id),
-                Some(stream_id),
-                Default::default(),
-            )
+            .list_message_metadata(org_id, project_id, stream_id, Default::default())
             .await
             .unwrap();
         assert_eq!(received_messages.len(), 1);

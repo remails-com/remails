@@ -26,6 +26,8 @@ pub enum ApiError {
     PreconditionFailed(String),
     #[error("Moneybird: {0}")]
     Moneybird(#[from] crate::moneybird::Error),
+    #[error("MessageBus: {0}")]
+    MessageBus(reqwest::Error),
 }
 
 impl From<garde::Report> for ApiError {
@@ -88,6 +90,10 @@ impl IntoResponse for ApiError {
                     "Internal server error".to_string(),
                 ),
             },
+            ApiError::MessageBus(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Error".to_string(),
+            ),
         };
 
         (status, Json(json!({ "error": message }))).into_response()

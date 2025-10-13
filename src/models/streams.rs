@@ -12,12 +12,6 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 pub struct StreamId(Uuid);
 
-impl StreamId {
-    pub fn as_uuid(&self) -> Uuid {
-        self.0
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct Stream {

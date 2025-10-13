@@ -49,8 +49,6 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
   }
 
   const create = async (values: FormValues) => {
-    console.log("match", values.username.match(/^[a-zA-Z0-9_-]{2,128}$/));
-
     const res = await fetch(
       `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials`,
       {
