@@ -42,6 +42,7 @@ export default function TotpSetup({ opened, close }: TotpSetupProps) {
 
   useEffect(() => {
     if (opened) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQrSrc(`/api/api_user/${user?.id}/totp/enroll?cacheInvalidator=${Math.random().toString(36).slice(2, 7)}`);
       setActiveStep(0);
     }
