@@ -8,7 +8,7 @@ use sqlx::{
 };
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -36,14 +36,22 @@ async fn main() -> anyhow::Result<()> {
 
     let message_handler =
         Handler::new(pool, Arc::new(handler_config), bus_client, shutdown.clone());
-    message_handler.spawn();
+    let join_handle = message_handler.spawn();
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
     shutdown.cancel();
 
-    // give services the opportunity to shut down
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::select!(
+        // gracefully shutdown
+        _ = join_handle => {
+            info!("Shut down");
+        }
+        // hard shutdown if it takes more than 2 secs
+        _ = tokio::time::sleep(Duration::from_secs(2)) => {
+            warn!("stopping services takes too long, hard shutdown");
+        }
+    );
 
     Ok(())
 }

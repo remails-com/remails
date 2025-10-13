@@ -8,8 +8,8 @@ images:
   management:
     repository: ghcr.io/tweedegolf/remails/management
     pullPolicy: Always
-  retry:
-    repository: ghcr.io/tweedegolf/remails/retry
+  periodic:
+    repository: ghcr.io/tweedegolf/remails/periodic
     pullPolicy: Always
   migrate_db:
     repository: ghcr.io/tweedegolf/remails/migrate_db
@@ -57,9 +57,6 @@ moneybird:
   api_key: "nothing-to-see-here"
   administration: "457129080952718731"
   webhook_url: https://dump.tweede.golf/dump/moneybird
-
-retry:
-  schedule: "*/10 * * * *"
 
 github_oauth:
   client_id: Ov23livRESUJK4twobxj

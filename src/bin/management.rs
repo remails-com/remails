@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,14 +34,22 @@ async fn main() -> anyhow::Result<()> {
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
 
     let shutdown = CancellationToken::new();
-    run_api_server(pool, http_socket, shutdown.clone(), true).await;
+    let join_handle = run_api_server(pool, http_socket, shutdown.clone(), true).await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
     shutdown.cancel();
 
-    // give services the opportunity to shut down
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::select!(
+        // gracefully shutdown
+        _ = join_handle => {
+            info!("Shut down");
+        }
+        // hard shutdown if it takes more than 2 secs
+        _ = tokio::time::sleep(Duration::from_secs(2)) => {
+            warn!("stopping services takes too long, hard shutdown");
+        }
+    );
 
     Ok(())
 }

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: periodic
+  labels:
+    app: periodic
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: periodic
+      environment: {{ .Values.environment }}
+  template:
+    metadata:
+      labels:
+        environment: {{ .Values.environment }}
+        app: periodic
+        version: {{ .Chart.AppVersion }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+          {{- toYaml . | nindent 12 }}
+    {{- end }}
+      containers:
+        - name: retry
+          image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
+          env:
+            - name: VERSION
+              value: {{ .Chart.AppVersion }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: database_url
+            - name: MONEYBIRD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: secrets
+                  key: moneybird_api_key
+            - name: MONEYBIRD_ADMINISTRATION_ID
+              value: {{ .Values.moneybird.administration | quote }}
+            - name: MONEYBIRD_WEBHOOK_URL
+              value: {{ .Values.moneybird.webhook_url }}
+            - name: RUST_LOG
+              value: {{ .Values.rust_log | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.environment | quote }}
+            - name: MESSAGE_BUS_PORT
+              value: {{ .Values.message_bus_port | quote }}
+            - name: MESSAGE_BUS_FQDN
+              value: message-bus
+
+          imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}

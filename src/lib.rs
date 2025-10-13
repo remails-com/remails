@@ -4,7 +4,7 @@ use handler::Handler;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
-use tokio::signal;
+use tokio::{signal, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -83,11 +83,11 @@ pub async fn run_api_server(
     http_socket: SocketAddrV4,
     shutdown: CancellationToken,
     with_frontend: bool,
-) {
+) -> JoinHandle<()> {
     let api_server =
         ApiServer::new(http_socket.into(), pool.clone(), shutdown, with_frontend).await;
 
-    api_server.spawn();
+    api_server.spawn()
 }
 
 pub async fn shutdown_signal(token: CancellationToken) {

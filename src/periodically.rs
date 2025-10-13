@@ -1,18 +1,42 @@
-use chrono::Duration;
-use sqlx::PgPool;
-
 use crate::{
     MoneyBird,
     bus::client::{BusClient, BusMessage},
     models::{self, InviteRepository, MessageRepository},
     moneybird,
 };
+use chrono::Duration;
+use sqlx::PgPool;
+use std::error::Error;
+use tokio::select;
+use tokio_util::sync::CancellationToken;
+use tracing::debug;
 
 pub struct Periodically {
     message_repository: MessageRepository,
     invite_repository: InviteRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
+}
+
+pub fn run_periodically<F, E, Fut>(task: F, period: Duration, cancel: CancellationToken)
+where
+    F: Fn() -> Fut + Send + 'static,
+    E: Error,
+    Fut: Future<Output = Result<(), E>> + Send,
+{
+    tokio::spawn(async move {
+        loop {
+            select!(
+                _ = cancel.cancelled() => {
+                    tracing::info!("Task cancelled");
+                    return;
+                },
+                _ = tokio::time::sleep(period.to_std().unwrap()) => {
+                    task().await.unwrap();
+                }
+            )
+        }
+    });
 }
 
 impl Periodically {
@@ -27,6 +51,7 @@ impl Periodically {
 
     /// Retry all messages that are ready to be retried
     pub async fn retry_messages(&self) -> Result<(), models::Error> {
+        debug!("Retrying messages");
         let messages = self
             .message_repository
             .find_messages_ready_for_retry()

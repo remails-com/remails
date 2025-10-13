@@ -43,7 +43,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, time::Duration};
 use thiserror::Error;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{
@@ -458,7 +458,7 @@ impl ApiServer {
         .map_err(ApiServerError::Serve)
     }
 
-    pub fn spawn(self) {
+    pub fn spawn(self) -> JoinHandle<()> {
         tokio::spawn(async {
             let token = self.shutdown.clone();
             if let Err(e) = self.serve().await {
@@ -466,7 +466,7 @@ impl ApiServer {
                 token.cancel();
                 error!("shutting down API server")
             }
-        });
+        })
     }
 }
 

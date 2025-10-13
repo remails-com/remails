@@ -41,14 +41,14 @@ EXPOSE 3025
 ENV VERSION=${version}
 ENTRYPOINT ["./outbound"]
 
-FROM final-base AS retry
+FROM final-base AS periodic
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/retry ./retry
-RUN chmod 777 retry
+COPY --chown=nonroot:nonroot ./target/release/periodic ./periodic
+RUN chmod 777 periodic
 
 ENV VERSION=${version}
-ENTRYPOINT ["./retry"]
+ENTRYPOINT ["./periodic"]
 
 FROM final-base AS migrate-db
 ARG version=dev

@@ -20,6 +20,7 @@ use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::Semaphore,
+    task::JoinHandle,
 };
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
@@ -646,7 +647,7 @@ impl Handler {
         Ok(())
     }
 
-    pub fn spawn(self) {
+    pub fn spawn(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut bus_stream = self
                 .bus_client
@@ -705,7 +706,7 @@ impl Handler {
                     }
                 }
             }
-        });
+        })
     }
 }
 
