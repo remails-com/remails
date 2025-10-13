@@ -27,9 +27,13 @@ async fn main() -> anyhow::Result<()> {
     let bus_client = BusClient::new_from_env_var().unwrap();
     let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
 
-    periodically.retry_messages().await?;
-    periodically.clean_up_invites().await?;
-    periodically.reset_all_quotas().await?;
+    // should these run on separate cooldowns?
+    periodically.retry_messages().await?; // every minute?
+    periodically.reset_all_quotas().await?; // every 10 minutes?
+    periodically.clean_up_invites().await?; // every 4 hours?
+
+    // use tokio::select! to run the different functions with sleeps in between executions?
+    // I think we want sleeps and not a proper interval in case the operations start taking longer
 
     Ok(())
 }
