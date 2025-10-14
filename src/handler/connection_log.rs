@@ -7,6 +7,7 @@ use std::fmt::Display;
 pub enum LogLevel {
     Info,
     Warn,
+    Error,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]

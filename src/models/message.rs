@@ -125,15 +125,19 @@ pub struct Attachment {
     pub size: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(tag = "type")]
 pub enum DeliveryStatus {
-    Success { delivered: DateTime<Utc> },
+    #[default]
+    None,
+    Success {
+        delivered: DateTime<Utc>,
+    },
     Reattempt,
     Failed,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct DeliveryDetails {
     pub status: DeliveryStatus,
     pub log: ConnectionLog,

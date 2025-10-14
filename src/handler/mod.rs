@@ -7,8 +7,8 @@ use crate::{
         dns::{DnsResolver, ResolveError},
     },
     models::{
-        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository,
-        MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
+        DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
+        NewMessage, OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
@@ -433,20 +433,13 @@ impl Handler {
     async fn send_single_message(
         &self,
         recipient: &EmailAddress,
-        message: &Message,
+        message: smtp::message::Message<'_>,
         security: Protection,
         connection_log: &mut ConnectionLog,
     ) -> Result<(), SendError> {
         let domain = recipient.domain();
 
         let mut priority = 0..65536;
-
-        // restrict the recipients; this object is cheap to clone
-        let message = smtp::message::Message {
-            mail_from: message.from_email.as_str().into(),
-            rcpt_to: vec![recipient.email().into()],
-            body: message.raw_data.as_slice().into(),
-        };
 
         let mut is_temporary_failure = false;
 
@@ -485,9 +478,10 @@ impl Handler {
                 Err(ResolveError::Dns(err)) => {
                     error!(domain, "could not resolve mail domain: {err}");
                     connection_log.log(
-                        LogLevel::Warn,
+                        LogLevel::Error,
                         format!("could not resolve domain '{domain}': {err}"),
                     );
+                    is_temporary_failure = true;
                     break;
                 }
             }
@@ -604,43 +598,63 @@ impl Handler {
         };
 
         'next_rcpt: for recipient in &message.recipients {
-            match message.delivery_details.get(recipient) {
-                None
-                | Some(DeliveryDetails {
-                    status: DeliveryStatus::Reattempt,
-                    ..
-                }) => {} // attempt to (re-)send
-                Some(DeliveryDetails {
-                    status: DeliveryStatus::Success { .. },
-                    ..
-                }) => continue,
-                Some(DeliveryDetails {
-                    status: DeliveryStatus::Failed,
-                    ..
-                }) => {
+            let delivery_details = message
+                .delivery_details
+                .entry(recipient.clone())
+                .or_default();
+            let connection_log = &mut delivery_details.log;
+
+            match delivery_details.status {
+                DeliveryStatus::None | DeliveryStatus::Reattempt => {
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!(
+                            "attempting to send email to {} (attempt {})",
+                            recipient.email(),
+                            message.attempts
+                        ),
+                    );
+                } // attempt to (re-)send
+                DeliveryStatus::Success { .. } => {
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!(
+                            "skipping recipient {} as message was already successfully (attempt {})",
+                            recipient.email(), message.attempts
+                        ),
+                    );
+                    continue;
+                }
+                DeliveryStatus::Failed => {
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!(
+                            "skipping recipient {} as remote reported a permanent failure (attempt {})",
+                            recipient.email(), message.attempts
+                        ),
+                    );
                     failures += 1;
                     continue;
                 }
             }
 
             let mut is_temporary_failure = false;
-            let mut connection_log = ConnectionLog::default();
 
             for &protection in order {
+                // restrict the recipients; this object is cheap to clone
+                let smtp_message = smtp::message::Message {
+                    mail_from: message.from_email.as_str().into(),
+                    rcpt_to: vec![recipient.email().into()],
+                    body: message.raw_data.as_slice().into(),
+                };
                 match self
-                    .send_single_message(recipient, &message, protection, &mut connection_log)
+                    .send_single_message(recipient, smtp_message, protection, connection_log)
                     .await
                 {
                     Ok(()) => {
-                        message.delivery_details.insert(
-                            recipient.clone(),
-                            DeliveryDetails::new(
-                                DeliveryStatus::Success {
-                                    delivered: chrono::Utc::now(),
-                                },
-                                connection_log,
-                            ),
-                        );
+                        delivery_details.status = DeliveryStatus::Success {
+                            delivered: chrono::Utc::now(),
+                        };
                         continue 'next_rcpt;
                     }
                     Err(SendError::TemporaryFailure) => is_temporary_failure = true,
@@ -649,15 +663,12 @@ impl Handler {
             }
             failures += 1;
 
-            message.delivery_details.insert(
-                recipient.clone(),
-                if is_temporary_failure {
-                    should_reattempt = true;
-                    DeliveryDetails::new(DeliveryStatus::Reattempt, connection_log)
-                } else {
-                    DeliveryDetails::new(DeliveryStatus::Failed, connection_log)
-                },
-            );
+            if is_temporary_failure {
+                should_reattempt = true;
+                delivery_details.status = DeliveryStatus::Reattempt;
+            } else {
+                delivery_details.status = DeliveryStatus::Failed;
+            }
         }
 
         message.status = if failures == 0 {
