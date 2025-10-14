@@ -52,5 +52,5 @@ spec:
                       key: restic_password
                 - name: RESTIC_REPOSITORY
                   value: {{ printf "%s:%s" "s3" .Values.backup.s3_url | quote }}
-              imagePullPolicy: {{ .Values.images.retry.pullPolicy }}
+              imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}
   {{- end }}

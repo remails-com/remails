@@ -17,16 +17,8 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_listeners() {
-        let mut rng = rand::rng();
-        let port = rng.random_range(10_000..30_000);
-
-        // spawn message bus
-        let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
-        let (tx, _rx) = broadcast::channel::<String>(100);
-        let bus = Bus::new(socket, tx);
-        tokio::spawn(bus.serve());
-
-        let client = BusClient::new(port, "localhost".to_owned()).unwrap();
+        let bus_port = Bus::spawn_random_port().await;
+        let client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
 
         // two listeners
         let mut stream1 = client.receive().await.unwrap();
@@ -54,6 +46,8 @@ mod tests {
         let mut stream = client.receive_auto_reconnect(std::time::Duration::from_millis(500));
 
         let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+        client.send(&message).await.unwrap_err(); // should error
+        client.try_send(&message).await; // ignores error
 
         let mut listen = async || {
             let received = stream.next().await.unwrap();

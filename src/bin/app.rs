@@ -2,7 +2,7 @@ use anyhow::Context;
 use remails::{
     HandlerConfig, SmtpConfig,
     bus::{client::BusClient, server::Bus},
-    handler::Handler,
+    periodically::Periodically,
     run_api_server, run_mta, shutdown_signal,
 };
 use sqlx::{
@@ -78,20 +78,15 @@ async fn main() -> anyhow::Result<()> {
     run_api_server(pool.clone(), http_socket, shutdown.clone(), true).await;
 
     // Run retry service
-    let message_handler = Handler::new(
-        pool.clone(),
-        handler_config.into(),
-        bus_client,
-        shutdown.clone(),
-    );
+    let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
-            if let Err(e) = message_handler.retry_all().await {
+            if let Err(e) = periodically.retry_messages().await {
                 error!("Error retrying: {e}")
             };
-            if let Err(e) = message_handler.periodic_clean_up().await {
+            if let Err(e) = periodically.clean_up_invites().await {
                 error!("Error during clean up: {e}")
             }
         }

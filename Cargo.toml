@@ -22,8 +22,8 @@ name = "outbound"
 path = "src/bin/outbound.rs"
 
 [[bin]]
-name = "retry"
-path = "src/bin/retry.rs"
+name = "periodic"
+path = "src/bin/periodic.rs"
 
 [[bin]]
 name = "message_bus"

@@ -28,6 +28,10 @@ impl BusClient {
         })
     }
 
+    /// Initialize a `BusClient` by getting the port and domain name from the environment variables
+    /// `MESSAGE_BUS_PORT` and `MESSAGE_BUS_FQDN`
+    ///
+    /// Will panic if `MESSAGE_BUS_PORT` is set to anything that cannot be parsed as a `u16`
     pub fn new_from_env_var() -> Result<Self, reqwest::Error> {
         let port = std::env::var("MESSAGE_BUS_PORT")
             .unwrap_or("4000".to_owned())
@@ -38,6 +42,7 @@ impl BusClient {
         BusClient::new(port, domain_name)
     }
 
+    /// Send a message to the message bus
     pub async fn send(&self, message: &BusMessage) -> Result<(), reqwest::Error> {
         self.client
             .post(format!("http://{}:{}/post", self.domain_name, self.port))
@@ -49,6 +54,17 @@ impl BusClient {
         Ok(())
     }
 
+    /// Send a message to the message bus, in case of error just log the error and ignore the result
+    pub async fn try_send(&self, message: &BusMessage) {
+        let _ = self
+            .send(message)
+            .await
+            .inspect_err(|e| tracing::error!("Error sending bus message: {e}"));
+    }
+
+    /// Receive messages from the message bus
+    ///
+    /// Stream will end when WebSocket disconnects
     pub async fn receive(&'_ self) -> Result<BusStream<'_>, tokio_tungstenite::tungstenite::Error> {
         let ws_address = format!("ws://{}:{}/listen", self.domain_name, self.port);
         let (ws_stream, _) =
@@ -73,6 +89,8 @@ impl BusClient {
         }))
     }
 
+    /// Receive messages from the message bus, while automatically reconnecting the WebSocket
+    /// (with some timeout delay between connection attempts)
     pub fn receive_auto_reconnect(&'_ self, timeout: std::time::Duration) -> BusStream<'_> {
         Box::pin(stream! {
             loop {
@@ -87,5 +105,25 @@ impl BusClient {
                 }
             }
         })
+    }
+
+    /// For testing: wait for a certain number of messages to be ready and attempted by listening
+    /// to the message bus
+    ///
+    /// Times out if no bus message is received for 5 seconds
+    #[cfg(test)]
+    pub async fn wait_for_attempt(messages_to_attempt: u32, stream: &mut BusStream<'_>) {
+        let mut ready = 0;
+        let mut attempted = 0;
+        while ready < messages_to_attempt || attempted < messages_to_attempt {
+            match tokio::time::timeout(tokio::time::Duration::from_secs(5), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                BusMessage::EmailReadyToSend(_) => ready += 1,
+                BusMessage::EmailDeliveryAttempted(_, _) => attempted += 1,
+            }
+        }
     }
 }

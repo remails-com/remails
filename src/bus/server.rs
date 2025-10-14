@@ -41,6 +41,20 @@ impl Bus {
 
         Ok(())
     }
+
+    #[cfg(test)]
+    pub async fn spawn_random_port() -> u16 {
+        let mut rng = rand::rng();
+
+        let bus_port = rand::Rng::random_range(&mut rng, 10_000..30_000);
+        let bus_socket = SocketAddrV4::new(std::net::Ipv4Addr::new(127, 0, 0, 1), bus_port);
+
+        let (tx, _rx) = tokio::sync::broadcast::channel::<String>(100);
+        let bus = Bus::new(bus_socket, tx);
+        tokio::spawn(async { bus.serve().await });
+
+        bus_port
+    }
 }
 
 async fn new_message(State(state): State<BusState>, body: String) -> impl IntoResponse {
@@ -51,8 +65,8 @@ async fn new_message(State(state): State<BusState>, body: String) -> impl IntoRe
             (StatusCode::ACCEPTED, format!("{n}"))
         }
         Err(e) => {
-            tracing::error!("error sending message: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("{e}"))
+            tracing::error!("error sending message (probably no active subscribers): {e}");
+            (StatusCode::ACCEPTED, "0".to_string())
         }
     }
 }

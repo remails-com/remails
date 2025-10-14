@@ -8,7 +8,7 @@ use crate::{
         auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{get_message, list_messages, remove_message, update_to_retry_asap},
+        messages::{get_message, list_messages, remove_message, retry_now},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_members, list_organizations, remove_member,
@@ -22,6 +22,7 @@ use crate::{
         streams::{create_stream, list_streams, remove_stream, update_stream},
         subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
     },
+    bus::client::BusClient,
     handler::dns::DnsResolver,
     models::{
         ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
@@ -43,7 +44,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, time::Duration};
 use thiserror::Error;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{
@@ -138,11 +139,18 @@ pub struct ApiState {
     moneybird: MoneyBird,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
+    message_bus: BusClient,
 }
 
 impl FromRef<ApiState> for PgPool {
     fn from_ref(state: &ApiState) -> Self {
         state.pool.clone()
+    }
+}
+
+impl FromRef<ApiState> for BusClient {
+    fn from_ref(state: &ApiState) -> Self {
+        state.message_bus.clone()
     }
 }
 
@@ -271,6 +279,7 @@ impl ApiServer {
         pool: PgPool,
         shutdown: CancellationToken,
         with_frontend: bool,
+        message_bus: BusClient,
     ) -> ApiServer {
         let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
         let oauth_router = github_oauth.router();
@@ -305,6 +314,7 @@ impl ApiServer {
             resolver: DnsResolver::new(),
             #[cfg(test)]
             resolver: DnsResolver::mock("localhost", 0),
+            message_bus,
         };
 
         let mut router = Router::new()
@@ -367,7 +377,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
-                put(update_to_retry_asap),
+                put(retry_now),
             )
             .route(
                 "/organizations/{org_id}/domains",
@@ -458,7 +468,7 @@ impl ApiServer {
         .map_err(ApiServerError::Serve)
     }
 
-    pub fn spawn(self) {
+    pub fn spawn(self) -> JoinHandle<()> {
         tokio::spawn(async {
             let token = self.shutdown.clone();
             if let Err(e) = self.serve().await {
@@ -466,7 +476,7 @@ impl ApiServer {
                 token.cancel();
                 error!("shutting down API server")
             }
-        });
+        })
     }
 }
 
@@ -529,6 +539,7 @@ async fn append_default_headers(
 
 #[cfg(test)]
 mod tests {
+    use crate::{bus::server::Bus, models::ApiUserId};
     use axum::body::Body;
     use http::Method;
     use std::{
@@ -537,12 +548,11 @@ mod tests {
     };
     use tower::{ServiceExt, util::Oneshot};
 
-    use crate::models::ApiUserId;
-
     use super::*;
 
     pub struct TestServer {
         server: ApiServer,
+        pub message_bus: BusClient,
         pub headers: HashMap<&'static str, String>,
     }
 
@@ -550,13 +560,27 @@ mod tests {
         pub async fn new(pool: PgPool, user: Option<ApiUserId>) -> Self {
             let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
             let shutdown = CancellationToken::new();
-            let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
+            let message_bus_port = Bus::spawn_random_port().await;
+            let message_bus_client =
+                BusClient::new(message_bus_port, "localhost".to_string()).unwrap();
+            let server = ApiServer::new(
+                http_socket.into(),
+                pool.clone(),
+                shutdown,
+                false,
+                message_bus_client.clone(),
+            )
+            .await;
             let mut headers = HashMap::new();
             headers.insert("Content-Type", "application/json".to_string());
             if let Some(user) = user {
                 headers.insert("X-Test-Login-ID", user.to_string());
             }
-            TestServer { server, headers }
+            TestServer {
+                server,
+                headers,
+                message_bus: message_bus_client,
+            }
         }
 
         pub fn set_user(&mut self, user: Option<ApiUserId>) {

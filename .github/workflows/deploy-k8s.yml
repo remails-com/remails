@@ -82,7 +82,7 @@ jobs:
             target/release/migrate_db
             target/release/inbound
             target/release/outbound
-            target/release/retry
+            target/release/periodic
             target/release/message_bus
 
   build-docker:
@@ -135,15 +135,15 @@ jobs:
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
           tags: "ghcr.io/tweedegolf/remails/management:${{ needs.build-frontend.outputs.tag }}"
-      - name: Build and push retry image
+      - name: Build and push periodic image
         uses: docker/build-push-action@v6
         with:
           file: deploy/ci.Dockerfile
-          target: retry
+          target: periodic
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: .
-          tags: "ghcr.io/tweedegolf/remails/retry:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/tweedegolf/remails/periodic:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push migrate_db image
         uses: docker/build-push-action@v6
         with:

@@ -12,7 +12,7 @@ use rand::random_range;
 use sqlx::PgPool;
 use std::{fs::File, io, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::RwLock};
+use tokio::{io::AsyncWriteExt, net::TcpListener, select, sync::RwLock, task::JoinHandle};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
@@ -208,7 +208,7 @@ impl SmtpServer {
                                         trace!("failed to handle connection: {error_string}");
                                         return
                                     }
-                                error!("failed to handle connection: {error_string}");
+                                debug!("failed to handle connection: {error_string}");
                             }
                         });
                     }
@@ -220,11 +220,11 @@ impl SmtpServer {
         }
     }
 
-    pub fn spawn(self) {
+    pub fn spawn(self) -> JoinHandle<()> {
         tokio::spawn(async {
             if let Err(e) = self.serve().await {
                 error!("smtp server error: {:?}", e);
             }
-        });
+        })
     }
 }

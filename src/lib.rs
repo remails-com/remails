@@ -4,13 +4,14 @@ use handler::Handler;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{net::SocketAddrV4, sync::Arc};
-use tokio::signal;
+use tokio::{signal, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod api;
 mod dkim;
 pub mod handler;
+pub mod periodically;
 mod smtp;
 use crate::bus::client::BusClient;
 pub use crate::handler::HandlerConfig;
@@ -82,11 +83,18 @@ pub async fn run_api_server(
     http_socket: SocketAddrV4,
     shutdown: CancellationToken,
     with_frontend: bool,
-) {
-    let api_server =
-        ApiServer::new(http_socket.into(), pool.clone(), shutdown, with_frontend).await;
+) -> JoinHandle<()> {
+    let bus = BusClient::new_from_env_var().expect("Could not connect to message bus");
+    let api_server = ApiServer::new(
+        http_socket.into(),
+        pool.clone(),
+        shutdown,
+        with_frontend,
+        bus,
+    )
+    .await;
 
-    api_server.spawn();
+    api_server.spawn()
 }
 
 pub async fn shutdown_signal(token: CancellationToken) {

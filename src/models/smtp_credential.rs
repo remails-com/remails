@@ -449,7 +449,7 @@ mod test {
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
 
         let message = message_repo
-            .find_by_id(org_id, Some(project_id), Some(stream_id), message_id)
+            .find_by_id(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
 
@@ -469,7 +469,7 @@ mod test {
 
         // Making sure the message is still there
         let message = message_repo
-            .find_by_id(org_id, Some(project_id), Some(stream_id), message_id)
+            .find_by_id(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
 

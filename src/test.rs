@@ -114,11 +114,9 @@ async fn setup(
     let smtp_port = random_port();
     let mailcrab_random_port = random_port();
     let http_port = random_port();
-    let bus_port = random_port();
 
     let smtp_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), smtp_port);
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), http_port);
-    let bus_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), bus_port);
 
     let TestMailServerHandle {
         token,
@@ -146,11 +144,7 @@ async fn setup(
         retry: retry_config,
     };
 
-    // spawn message bus
-    let (tx, _rx) = tokio::sync::broadcast::channel::<String>(100);
-    let bus = Bus::new(bus_socket, tx);
-    tokio::spawn(async { bus.serve().await });
-
+    let bus_port = Bus::spawn_random_port().await;
     let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
     run_mta(
         pool.clone(),

@@ -2,10 +2,13 @@ pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
-    handler::{connection_log::LogLevel, dns::DnsResolver},
+    handler::{
+        connection_log::LogLevel,
+        dns::{DnsResolver, ResolveError},
+    },
     models::{
-        DeliveryDetails, DeliveryStatus, DomainRepository, InviteRepository, Message,
-        MessageRepository, MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
+        DeliveryDetails, DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository,
+        MessageStatus, NewMessage, OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
@@ -20,10 +23,12 @@ use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::Semaphore,
+    task::JoinHandle,
 };
 use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
+
 mod connection_log;
 
 pub mod dns;
@@ -36,6 +41,8 @@ pub enum HandlerError {
     SerializeMessageData(serde_json::Error),
     #[error("message is being {0:?}: {1}")]
     MessageNotAccepted(MessageStatus, String),
+    #[error("Message is in an illegal state: {0}, {1:?}")]
+    IllegalMessageState(MessageStatus, MessageId),
 }
 
 #[derive(Debug, Error)]
@@ -106,7 +113,6 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
-    invite_repository: InviteRepository,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
     shutdown: CancellationToken,
@@ -128,7 +134,6 @@ impl Handler {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
-            invite_repository: InviteRepository::new(pool.clone()),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
             shutdown,
@@ -362,24 +367,30 @@ impl Handler {
             serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
 
         let result = self.check_and_sign_message(message, &parsed_msg).await?;
-        message.status = match result {
+        match result {
             Ok(_) => match &message.status {
                 // For messages being sent for the first time, update message status
-                MessageStatus::Processing | MessageStatus::Held => MessageStatus::Accepted,
-                // For messages that have been processed before, keep the status
-                status @ (MessageStatus::Reattempt
+                MessageStatus::Processing | MessageStatus::Held => {
+                    message.status = MessageStatus::Accepted;
+                }
+                // For messages that have been processed before, keep the status as is
+                MessageStatus::Reattempt
                 | MessageStatus::Failed
-                | MessageStatus::Accepted) => status.clone(),
-                status @ (MessageStatus::Rejected | MessageStatus::Delivered) => {
+                | MessageStatus::Accepted
+                | MessageStatus::Rejected => {}
+                // Other messages should not be processed (but we do want to save the message if this happens)
+                MessageStatus::Delivered => {
                     error!(
                         message_id = message.id().to_string(),
-                        message_status = status.to_string(),
-                        "message should not be processed"
+                        "Delivered message should not be processed"
                     );
-                    status.clone()
+                    return Err(HandlerError::IllegalMessageState(
+                        MessageStatus::Delivered,
+                        message.id(),
+                    ));
                 }
             },
-            Err((ref status, _)) => status.clone(),
+            Err((ref status, _)) => message.status = status.clone(),
         };
         message.reason = result.as_ref().err().map(|e| e.1.clone());
 
@@ -439,26 +450,80 @@ impl Handler {
 
         let mut is_temporary_failure = false;
 
-        while let Ok((hostname, port)) = self
-            .config
-            .resolver
-            .resolve_mail_domain(domain, &mut priority)
-            .await
-        {
-            let smtp = SmtpClientBuilder::new(&hostname, port)
-                .implicit_tls(false)
-                .say_ehlo(true)
-                .helo_host(&self.config.domain)
-                .timeout(std::time::Duration::from_secs(60));
+        loop {
+            match self
+                .config
+                .resolver
+                .resolve_mail_domain(domain, &mut priority)
+                .await
+            {
+                Ok((hostname, port)) => {
+                    match self
+                        .send_single_upstream(
+                            security,
+                            connection_log,
+                            domain,
+                            message.clone(),
+                            &hostname,
+                            port,
+                        )
+                        .await
+                    {
+                        Ok(_) => return Ok(()),
+                        Err(SendError::PermanentFailure) => {} // continue to try the next server
+                        Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                    }
+                }
+                Err(ResolveError::AllServersExhausted) => {
+                    info!(domain, "all mail servers exhausted");
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!("all mail servers for domain {domain} exhausted"),
+                    );
+                    break;
+                }
+                Err(ResolveError::Dns(err)) => {
+                    error!(domain, "could not resolve mail domain: {err}");
+                    connection_log.log(
+                        LogLevel::Warn,
+                        format!("could not resolve domain '{domain}': {err}"),
+                    );
+                    break;
+                }
+            }
+        }
 
-            let result = match security {
+        if is_temporary_failure {
+            Err(SendError::TemporaryFailure)
+        } else {
+            Err(SendError::PermanentFailure)
+        }
+    }
+
+    async fn send_single_upstream(
+        &self,
+        security: Protection,
+        connection_log: &mut ConnectionLog,
+        domain: &str,
+        message: smtp::message::Message<'_>,
+        hostname: &String,
+        port: u16,
+    ) -> Result<(), SendError> {
+        let smtp = SmtpClientBuilder::new(&hostname, port)
+            .implicit_tls(false)
+            .say_ehlo(true)
+            .helo_host(&self.config.domain)
+            .timeout(std::time::Duration::from_secs(60));
+
+        let result =
+            match security {
                 Protection::Tls => match smtp.connect().await {
                     Err(err) => Err(err),
                     Ok(mut client) => {
                         trace!(domain, port, "securely connected to upstream server");
                         connection_log.log(LogLevel::Info, format!(
-                            "securely connected to '{hostname}' with port {port} over TLS",
-                        ));
+                        "securely connected to '{hostname}' with port {port} over TLS",
+                    ));
                         let result = client.send(message.clone()).await;
                         Self::quit_smtp(client, &hostname).await;
                         result
@@ -469,7 +534,7 @@ impl Handler {
                         Err(err) => Err(err),
                         Ok(mut client) => {
                             trace!(domain, port, "INSECURELY connected to upstream server");
-                            connection_log.log(LogLevel::Info,format!(
+                            connection_log.log(LogLevel::Info, format!(
                             "INSECURELY connected to '{hostname}' with port {port} without TLS",
                         ));
                             let result = client.send(message.clone()).await;
@@ -480,49 +545,44 @@ impl Handler {
                 }
             };
 
-            let Err(err) = result else {
-                debug!(domain, port, "successfully send email");
-                connection_log.log(
-                    LogLevel::Info,
-                    format!("successfully sent email using hostname '{hostname}' and port {port}",),
-                );
-                return Ok(());
-            };
-
-            info!(domain, port, "could not use server: {err}");
+        let Err(err) = result else {
+            debug!(domain, port, "successfully send email");
             connection_log.log(
-                LogLevel::Warn,
-                format!("could not use {hostname} on port {port}: {err}",),
+                LogLevel::Info,
+                format!("successfully sent email using hostname '{hostname}' and port {port}",),
             );
+            return Ok(());
+        };
 
-            match err {
-                mail_send::Error::Io(_) => is_temporary_failure = true,
-                mail_send::Error::Tls(_) => is_temporary_failure = true,
-                mail_send::Error::Base64(_) => is_temporary_failure = true,
-                mail_send::Error::Auth(_) => is_temporary_failure = true,
-                mail_send::Error::UnparseableReply => is_temporary_failure = true,
-                mail_send::Error::UnexpectedReply(response)
-                | mail_send::Error::AuthenticationFailed(response) => {
-                    // SMTP 4XX errors are temporary failures
-                    if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
-                        is_temporary_failure = true
-                    }
+        info!(domain, port, "could not use server: {err}");
+        connection_log.log(
+            LogLevel::Warn,
+            format!("could not use {hostname} on port {port}: {err}",),
+        );
+
+        Err(match err {
+            mail_send::Error::Io(_) => SendError::TemporaryFailure,
+            mail_send::Error::Tls(_) => SendError::TemporaryFailure,
+            mail_send::Error::Base64(_) => SendError::TemporaryFailure,
+            mail_send::Error::Auth(_) => SendError::TemporaryFailure,
+            mail_send::Error::UnparseableReply => SendError::TemporaryFailure,
+            mail_send::Error::UnexpectedReply(response)
+            | mail_send::Error::AuthenticationFailed(response) => {
+                // SMTP 4XX errors are temporary failures
+                if response.severity() == smtp_proto::Severity::TransientNegativeCompletion {
+                    SendError::TemporaryFailure
+                } else {
+                    SendError::PermanentFailure
                 }
-                mail_send::Error::InvalidTLSName => is_temporary_failure = true,
-                mail_send::Error::MissingCredentials => {}
-                mail_send::Error::MissingMailFrom => {}
-                mail_send::Error::MissingRcptTo => {}
-                mail_send::Error::UnsupportedAuthMechanism => {}
-                mail_send::Error::Timeout => is_temporary_failure = true,
-                mail_send::Error::MissingStartTls => {}
             }
-        }
-
-        if is_temporary_failure {
-            Err(SendError::TemporaryFailure)
-        } else {
-            Err(SendError::PermanentFailure)
-        }
+            mail_send::Error::InvalidTLSName => SendError::TemporaryFailure,
+            mail_send::Error::MissingCredentials => SendError::PermanentFailure,
+            mail_send::Error::MissingMailFrom => SendError::PermanentFailure,
+            mail_send::Error::MissingRcptTo => SendError::PermanentFailure,
+            mail_send::Error::UnsupportedAuthMechanism => SendError::PermanentFailure,
+            mail_send::Error::Timeout => SendError::TemporaryFailure,
+            mail_send::Error::MissingStartTls => SendError::PermanentFailure,
+        })
     }
 
     #[tracing::instrument(
@@ -635,19 +695,17 @@ impl Handler {
             .await
             .map_err(HandlerError::RepositoryError)?;
 
-        let _ = self
-            .bus_client
-            .send(&BusMessage::EmailDeliveryAttempted(
+        self.bus_client
+            .try_send(&BusMessage::EmailDeliveryAttempted(
                 message.id(),
                 message.status,
             ))
-            .await
-            .inspect_err(|e| tracing::error!("Error sending bus message: {e}"));
+            .await;
 
         Ok(())
     }
 
-    pub fn spawn(self) {
+    pub fn spawn(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut bus_stream = self
                 .bus_client
@@ -681,10 +739,12 @@ impl Handler {
                                     let mut message = match self_clone.message_repository.get(id).await {
                                         Ok(message) => message,
                                         Err(e) => {
-                                            error!("failed to create message: {e:?}");
+                                            error!("failed to get message: {e:?}");
                                             return
                                         },
                                     };
+
+                                    message.attempts += 1;
 
                                     let message_id = message.id().to_string();
                                     if let Err(e) = self_clone.handle_message(&mut message).await {
@@ -696,7 +756,6 @@ impl Handler {
                                         return
                                     };
 
-                                    message.attempts = 0; // reset attempts before sending
                                     if let Err(e) = self_clone.send_message(message).await {
                                         error!(message_id, "failed to send message: {e:?}");
                                     }
@@ -707,63 +766,7 @@ impl Handler {
                     }
                 }
             }
-        });
-    }
-
-    pub async fn retry_all(&self) -> Result<(), HandlerError> {
-        let messages = self
-            .message_repository
-            .find_messages_ready_for_retry()
-            .await
-            .map_err(HandlerError::RepositoryError)?;
-
-        if messages.is_empty() {
-            debug!("There are no messages to retry right now");
-        }
-
-        for mut message in messages {
-            let message_id = message.id().to_string();
-            info!(
-                message_id,
-                "Retrying message from {} (status: {:?})", message.from_email, message.status
-            );
-
-            match message.status {
-                MessageStatus::Held => {
-                    if let Err(e) = self.handle_message(&mut message).await {
-                        error!(message_id, "failed to handle message: {e:?}");
-                        continue;
-                    };
-
-                    message.attempts = 0; // reset attempts before sending
-                    if let Err(e) = self.send_message(message).await {
-                        error!(message_id, "failed to send message: {e:?}");
-                    }
-                }
-                MessageStatus::Reattempt => {
-                    if let Err(e) = self.handle_message(&mut message).await {
-                        error!(message_id, "failed to handle reattempted message: {e:?}");
-                        continue;
-                    };
-
-                    if let Err(e) = self.send_message(message).await {
-                        error!(message_id, "failed to resend message: {e:?}");
-                    }
-                }
-                status => error!("Can't retry message with status {status:?}"),
-            }
-        }
-
-        Ok(())
-    }
-
-    pub async fn periodic_clean_up(&self) -> Result<(), HandlerError> {
-        self.invite_repository
-            .remove_expired_before(chrono::Utc::now())
-            .await
-            .map_err(HandlerError::RepositoryError)?;
-
-        Ok(())
+        })
     }
 }
 
@@ -775,13 +778,12 @@ mod test {
     use super::*;
     use crate::{
         handler::dns::DnsResolver,
-        models::{MessageId, SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{SmtpCredentialRepository, SmtpCredentialRequest},
         test::{TestStreams, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
-    use std::{collections::HashSet, net::Ipv4Addr};
-    use tokio::select;
+    use std::net::Ipv4Addr;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -978,186 +980,5 @@ mod test {
                 .await
                 .unwrap();
         }
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts(
-            "organizations",
-            "projects",
-            "streams",
-            "org_domains",
-            "proj_domains",
-            "smtp_credentials",
-            "messages"
-        )
-    ))]
-    async fn retry_sending_messages(pool: PgPool) {
-        let mailcrab_port = random_port();
-        let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
-        let _drop_guard = token.drop_guard();
-
-        let message_repo = MessageRepository::new(pool.clone());
-
-        let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
-        let message_reattempt_id = "c1e03226-8aad-42a9-8c43-380a5b25cb79".parse().unwrap();
-        let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
-        let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
-
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
-
-        let get_message_status = async |id: MessageId| {
-            message_repo
-                .find_by_id(org_id, Some(project_id), Some(stream_id), id)
-                .await
-                .unwrap()
-                .status()
-                .to_owned()
-        };
-
-        assert_eq!(
-            get_message_status(message_held_id).await,
-            MessageStatus::Held
-        );
-        assert_eq!(
-            get_message_status(message_reattempt_id,).await,
-            MessageStatus::Reattempt
-        );
-        assert_eq!(
-            get_message_status(message_out_of_attempts).await,
-            MessageStatus::Reattempt
-        );
-        assert_eq!(
-            get_message_status(message_on_timeout).await,
-            MessageStatus::Reattempt
-        );
-
-        let config = HandlerConfig {
-            allow_plain: true,
-            domain: "test".to_string(),
-            resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry: RetryConfig {
-                delay: Duration::minutes(60),
-                max_automatic_retries: 3,
-            },
-        };
-        let bus_client = BusClient::new_from_env_var().unwrap();
-        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
-        handler.retry_all().await.unwrap();
-
-        assert_eq!(
-            get_message_status(message_held_id).await,
-            MessageStatus::Delivered
-        );
-        assert_eq!(
-            get_message_status(message_reattempt_id,).await,
-            MessageStatus::Delivered
-        );
-        assert_eq!(
-            get_message_status(message_out_of_attempts).await,
-            MessageStatus::Reattempt
-        );
-        assert_eq!(
-            get_message_status(message_on_timeout).await,
-            MessageStatus::Reattempt
-        );
-
-        message_repo
-            .update_to_retry_asap(
-                org_id,
-                Some(project_id),
-                Some(stream_id),
-                message_out_of_attempts,
-            )
-            .await
-            .unwrap();
-        message_repo
-            .update_to_retry_asap(
-                org_id,
-                Some(project_id),
-                Some(stream_id),
-                message_on_timeout,
-            )
-            .await
-            .unwrap();
-        handler.retry_all().await.unwrap();
-        assert_eq!(
-            get_message_status(message_out_of_attempts).await,
-            MessageStatus::Delivered
-        );
-        assert_eq!(
-            get_message_status(message_on_timeout).await,
-            MessageStatus::Delivered
-        );
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts(
-            "organizations",
-            "projects",
-            "streams",
-            "org_domains",
-            "proj_domains",
-            "smtp_credentials",
-            "messages"
-        )
-    ))]
-    async fn quotas_retries(pool: PgPool) {
-        let mailcrab_port = random_port();
-        let TestMailServerHandle {
-            token,
-            rx: mut mailcrab_rx,
-        } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
-        let _drop_guard = token.drop_guard();
-
-        let org_id = TestStreams::Org1Project1Stream1.org_id();
-
-        let config = HandlerConfig {
-            allow_plain: true,
-            domain: "test".to_string(),
-            resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry: RetryConfig {
-                delay: Duration::minutes(60),
-                max_automatic_retries: 3,
-            },
-        };
-        let handler = Handler::new(
-            pool.clone(),
-            Arc::new(config),
-            BusClient::new_from_env_var().unwrap(),
-            CancellationToken::new(),
-        );
-        handler.retry_all().await.unwrap();
-
-        let mut senders = HashSet::new();
-
-        loop {
-            select! {
-                Ok(recv) = mailcrab_rx.recv() => {
-                    senders.insert(recv.envelope_from.as_str().to_string());
-                }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                    break
-                },
-            }
-        }
-
-        assert!(senders.contains("email-held@test-org-1-project-1.com"));
-        assert!(senders.contains("email-reattempt-2@test-org-1-project-1.com"));
-        assert_eq!(senders.len(), 2);
-
-        let remaining = sqlx::query_scalar!(
-            r#"
-            SELECT total_message_quota - used_message_quota as "remaining!" FROM organizations WHERE id = $1
-            "#,
-            *org_id
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-
-        assert_eq!(remaining, 799);
     }
 }

@@ -1,27 +1,30 @@
-use super::error::ApiResult;
-use crate::models::{
-    ApiMessage, ApiMessageMetadata, ApiUser, MessageFilter, MessageId, MessageRepository,
-    MessageRetryUpdate, OrganizationId, ProjectId, StreamId,
+use super::error::{ApiError, ApiResult};
+use crate::{
+    bus::client::{BusClient, BusMessage},
+    models::{
+        ApiMessage, ApiMessageMetadata, ApiUser, MessageFilter, MessageId, MessageRepository,
+        MessageStatus, OrganizationId, ProjectId, StreamId,
+    },
 };
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Debug, Deserialize)]
 pub struct MessagePath {
     org_id: OrganizationId,
-    project_id: Option<ProjectId>,
-    stream_id: Option<StreamId>,
+    project_id: ProjectId,
+    stream_id: StreamId,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SpecificMessagePath {
     org_id: OrganizationId,
-    project_id: Option<ProjectId>,
-    stream_id: Option<StreamId>,
+    project_id: ProjectId,
+    stream_id: StreamId,
     message_id: MessageId,
 }
 
@@ -44,8 +47,8 @@ pub async fn list_messages(
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
-        stream_id = stream_id.map(|id| id.to_string()),
+        project_id = project_id.to_string(),
+        stream_id = stream_id.to_string(),
         "listed {} messages",
         messages.len()
     );
@@ -72,8 +75,8 @@ pub async fn get_message(
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
-        stream_id = stream_id.map(|id| id.to_string()),
+        project_id = project_id.to_string(),
+        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         "retrieved message",
     );
@@ -99,8 +102,8 @@ pub async fn remove_message(
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
-        stream_id = stream_id.map(|id| id.to_string()),
+        project_id = project_id.to_string(),
+        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         "removed message",
     );
@@ -108,8 +111,9 @@ pub async fn remove_message(
     Ok(Json(()))
 }
 
-pub async fn update_to_retry_asap(
+pub async fn retry_now(
     State(repo): State<MessageRepository>,
+    State(bus): State<BusClient>,
     Path(SpecificMessagePath {
         org_id,
         project_id,
@@ -117,35 +121,51 @@ pub async fn update_to_retry_asap(
         message_id,
     }): Path<SpecificMessagePath>,
     user: ApiUser,
-) -> ApiResult<MessageRetryUpdate> {
+) -> Result<(), ApiError> {
     user.has_org_write_access(&org_id)?;
 
-    let update = repo
-        .update_to_retry_asap(org_id, project_id, stream_id, message_id)
-        .await?;
+    if repo
+        .message_status(org_id, project_id, stream_id, message_id)
+        .await?
+        == MessageStatus::Delivered
+    {
+        warn!(
+            message_id = message_id.to_string(),
+            user_id = user.id().to_string(),
+            "Requested retry for already delivered message"
+        );
+        return Err(ApiError::BadRequest(
+            "Message already delivered".to_string(),
+        ));
+    }
+
+    bus.send(&BusMessage::EmailReadyToSend(message_id))
+        .await
+        .map_err(ApiError::MessageBus)?;
 
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
-        stream_id = stream_id.map(|id| id.to_string()),
+        project_id = project_id.to_string(),
+        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
-        "updated message to retry asap",
+        "requested message retry",
     );
 
-    Ok(axum::Json(update))
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
-    use http::StatusCode;
-    use sqlx::PgPool;
-
     use crate::{
         api::tests::{TestServer, deserialize_body},
         models::MessageStatus,
     };
+    use axum::body::Body;
+    use futures::StreamExt;
+    use http::StatusCode;
+    use ppp::v2::WriteToHeader;
+    use sqlx::PgPool;
 
     use super::*;
 
@@ -166,6 +186,7 @@ mod tests {
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
+        let mut message_stream = server.message_bus.receive().await.unwrap();
 
         // list messages
         let response = server
@@ -199,8 +220,18 @@ mod tests {
             ), Body::empty())
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let _: MessageRetryUpdate = deserialize_body(response.into_body()).await;
+        let status = response.status();
+        let server_response = String::from_utf8(
+            axum::body::to_bytes(response.into_body(), 8192)
+                .await
+                .unwrap()
+                .to_bytes()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(status, StatusCode::OK, "server response: {server_response}");
+        let bus_message = message_stream.next().await.unwrap();
+        assert_eq!(bus_message, BusMessage::EmailReadyToSend(message.id()));
 
         // remove message
         let response = server
