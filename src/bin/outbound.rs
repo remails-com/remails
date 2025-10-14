@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown = CancellationToken::new();
     let handler_config = HandlerConfig::new();
-    let bus_client = BusClient::new_from_env_var().unwrap();
+    let bus_client = BusClient::new_from_env_var()?;
 
     let message_handler =
         Handler::new(pool, Arc::new(handler_config), bus_client, shutdown.clone());
