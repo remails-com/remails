@@ -84,8 +84,15 @@ pub async fn run_api_server(
     shutdown: CancellationToken,
     with_frontend: bool,
 ) -> JoinHandle<()> {
-    let api_server =
-        ApiServer::new(http_socket.into(), pool.clone(), shutdown, with_frontend).await;
+    let bus = BusClient::new_from_env_var().expect("Could not connect to message bus");
+    let api_server = ApiServer::new(
+        http_socket.into(),
+        pool.clone(),
+        shutdown,
+        with_frontend,
+        bus,
+    )
+    .await;
 
     api_server.spawn()
 }

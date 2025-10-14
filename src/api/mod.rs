@@ -279,6 +279,7 @@ impl ApiServer {
         pool: PgPool,
         shutdown: CancellationToken,
         with_frontend: bool,
+        message_bus: BusClient,
     ) -> ApiServer {
         let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
         let oauth_router = github_oauth.router();
@@ -313,7 +314,7 @@ impl ApiServer {
             resolver: DnsResolver::new(),
             #[cfg(test)]
             resolver: DnsResolver::mock("localhost", 0),
-            message_bus: BusClient::new_from_env_var().expect("Could not connect to message bus"),
+            message_bus,
         };
 
         let mut router = Router::new()
@@ -538,6 +539,7 @@ async fn append_default_headers(
 
 #[cfg(test)]
 mod tests {
+    use crate::{bus::server::Bus, models::ApiUserId};
     use axum::body::Body;
     use http::Method;
     use std::{
@@ -546,12 +548,11 @@ mod tests {
     };
     use tower::{ServiceExt, util::Oneshot};
 
-    use crate::models::ApiUserId;
-
     use super::*;
 
     pub struct TestServer {
         server: ApiServer,
+        pub message_bus: BusClient,
         pub headers: HashMap<&'static str, String>,
     }
 
@@ -559,13 +560,27 @@ mod tests {
         pub async fn new(pool: PgPool, user: Option<ApiUserId>) -> Self {
             let http_socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0);
             let shutdown = CancellationToken::new();
-            let server = ApiServer::new(http_socket.into(), pool.clone(), shutdown, false).await;
+            let message_bus_port = Bus::spawn_random_port().await;
+            let message_bus_client =
+                BusClient::new(message_bus_port, "localhost".to_string()).unwrap();
+            let server = ApiServer::new(
+                http_socket.into(),
+                pool.clone(),
+                shutdown,
+                false,
+                message_bus_client.clone(),
+            )
+            .await;
             let mut headers = HashMap::new();
             headers.insert("Content-Type", "application/json".to_string());
             if let Some(user) = user {
                 headers.insert("X-Test-Login-ID", user.to_string());
             }
-            TestServer { server, headers }
+            TestServer {
+                server,
+                headers,
+                message_bus: message_bus_client,
+            }
         }
 
         pub fn set_user(&mut self, user: Option<ApiUserId>) {

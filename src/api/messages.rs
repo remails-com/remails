@@ -157,15 +157,15 @@ pub async fn retry_now(
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
-    use http::StatusCode;
-    use ppp::v2::WriteToHeader;
-    use sqlx::PgPool;
-
     use crate::{
         api::tests::{TestServer, deserialize_body},
         models::MessageStatus,
     };
+    use axum::body::Body;
+    use futures::StreamExt;
+    use http::StatusCode;
+    use ppp::v2::WriteToHeader;
+    use sqlx::PgPool;
 
     use super::*;
 
@@ -186,6 +186,7 @@ mod tests {
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
+        let mut message_stream = server.message_bus.receive().await.unwrap();
 
         // list messages
         let response = server
@@ -229,6 +230,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(status, StatusCode::OK, "server response: {server_response}");
+        let bus_message = message_stream.next().await.unwrap();
+        assert_eq!(bus_message, BusMessage::EmailReadyToSend(message.id()));
 
         // remove message
         let response = server

@@ -65,8 +65,8 @@ async fn new_message(State(state): State<BusState>, body: String) -> impl IntoRe
             (StatusCode::ACCEPTED, format!("{n}"))
         }
         Err(e) => {
-            tracing::error!("error sending message: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("{e}"))
+            tracing::error!("error sending message (probably no active subscribers): {e}");
+            (StatusCode::ACCEPTED, "0".to_string())
         }
     }
 }

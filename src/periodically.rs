@@ -82,23 +82,20 @@ impl Periodically {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashSet, net::Ipv4Addr, sync::Arc};
-
-    use chrono::Duration;
-    use mailcrab::TestMailServerHandle;
-    use tokio::select;
-    use tokio_util::sync::CancellationToken;
-
+    use super::*;
     use crate::{
         HandlerConfig,
         bus::server::Bus,
         handler::{Handler, RetryConfig, dns::DnsResolver},
+        models::{MessageId, MessageStatus},
         test::{TestStreams, random_port},
     };
+    use chrono::Duration;
+    use mailcrab::TestMailServerHandle;
+    use std::{collections::HashSet, net::Ipv4Addr, sync::Arc};
+    use tokio::select;
+    use tokio_util::sync::CancellationToken;
 
-    use super::*;
-
-    /*
     #[sqlx::test(fixtures(
         path = "./fixtures",
         scripts(
@@ -113,8 +110,10 @@ mod test {
     ))]
     async fn retry_sending_messages(pool: PgPool) {
         let mailcrab_port = random_port();
-        let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let TestMailServerHandle {
+            token,
+            rx: mut mailcrab_rx,
+        } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
         let message_repo = MessageRepository::new(pool.clone());
@@ -177,6 +176,11 @@ mod test {
         periodically.retry_messages().await.unwrap();
         BusClient::wait_for_attempt(2, &mut stream).await;
 
+        // Await exactly 4 message at mailcrab (two email with two recipients each)
+        for _ in 0..4 {
+            mailcrab_rx.recv().await.unwrap();
+        }
+
         assert_eq!(
             get_message_status(message_held_id).await,
             MessageStatus::Delivered
@@ -194,26 +198,19 @@ mod test {
             MessageStatus::Reattempt
         );
 
-        message_repo
-            .update_to_retry_asap(
-                org_id,
-                project_id,
-                stream_id,
-                message_out_of_attempts,
-            )
+        bus_client
+            .send(&BusMessage::EmailReadyToSend(message_out_of_attempts))
             .await
             .unwrap();
-        message_repo
-            .update_to_retry_asap(
-                org_id,
-                project_id,
-                stream_id,
-                message_on_timeout,
-            )
+        bus_client
+            .send(&BusMessage::EmailReadyToSend(message_on_timeout))
             .await
             .unwrap();
 
-        periodically.retry_messages().await.unwrap();
+        // Await 4 message at mailcrab (two email with two recipients each)
+        for _ in 0..4 {
+            mailcrab_rx.recv().await.unwrap();
+        }
         BusClient::wait_for_attempt(2, &mut stream).await;
 
         assert_eq!(
@@ -225,7 +222,6 @@ mod test {
             MessageStatus::Delivered
         );
     }
-    */
 
     #[sqlx::test(fixtures(
         path = "./fixtures",
