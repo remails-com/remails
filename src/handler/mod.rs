@@ -18,7 +18,13 @@ use futures::StreamExt;
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, fmt::Display, sync::Arc};
+use std::{
+    borrow::Cow::Borrowed,
+    collections::BTreeSet,
+    fmt::Display,
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -115,6 +121,7 @@ pub struct Handler {
     organization_repository: OrganizationRepository,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
+    sending_ips: BTreeSet<Ipv4Addr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -130,12 +137,14 @@ impl Handler {
             CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
                 .expect("Failed to install crypto provider");
         }
+
         Self {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
+            sending_ips: Default::default(),
             shutdown,
             config,
         }
@@ -716,11 +725,14 @@ impl Handler {
         Ok(())
     }
 
-    pub fn spawn(self) -> JoinHandle<()> {
+    pub fn spawn(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut bus_stream = self
                 .bus_client
                 .receive_auto_reconnect(std::time::Duration::from_secs(1));
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
                 tokio::select! {
@@ -728,56 +740,82 @@ impl Handler {
                         info!("shutting down message handler");
                         return;
                     }
+                    _ = interval.tick() => {
+                        trace!("reload network interfaces");
+                        let new_ips = if_addrs::get_if_addrs()
+                            .expect("Cannot retrieve host network interfaces")
+                            .into_iter()
+                            .map(|iface| iface.ip())
+                            .filter_map(|ip| {match ip {
+                                IpAddr::V4(v4) => Some(v4),
+                                IpAddr::V6(_) => None
+                            }})
+                            .filter(|ip|
+                                !ip.is_loopback() &&
+                                !ip.is_unspecified() &&
+                                !ip.is_multicast() &&
+                                !ip.is_private() &&
+                                !ip.is_broadcast() &&
+                                !ip.is_documentation()
+                            )
+                            .collect();
+                        if new_ips != self.sending_ips {
+                            self.sending_ips = new_ips;
+                            info!("new interface list: {:?}", self.sending_ips);
+                        }
+                    }
                     message = bus_stream.next() => {
                         match message {
                             None => {
                                 error!("Bus stream ended, shutting down");
                                 self.shutdown.cancel();
                             },
-                            Some(BusMessage::EmailReadyToSend(id)) => {
-                                info!("Ready to send {id}");
-
-                                let Ok(permit) = self.workers.clone().acquire_owned().await else {
-                                    error!("failed to acquire worker semaphore permit, shutting down");
-                                    self.shutdown.cancel();
-                                    return
-                                };
-                                let self_clone = self.clone();
-                                tokio::spawn(async move {
-                                    let _p = permit;
-
-                                    // retrieve message from database
-                                    let mut message = match self_clone.message_repository.get(id).await {
-                                        Ok(message) => message,
-                                        Err(e) => {
-                                            error!("failed to get message: {e:?}");
-                                            return
-                                        },
-                                    };
-
-                                    message.attempts += 1;
-
-                                    let message_id = message.id().to_string();
-                                    if let Err(e) = self_clone.handle_message(&mut message).await {
-                                        if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
-                                            warn!(message_id, "Message held: {reason}")
-                                        } else {
-                                            error!(message_id, "failed to handle message: {e:?}");
-                                        }
-                                        return
-                                    };
-
-                                    if let Err(e) = self_clone.send_message(message).await {
-                                        error!(message_id, "failed to send message: {e:?}");
-                                    }
-                                });
-                            },
-                            Some(_) => {} // ignore other bus messages
+                            Some(BusMessage::EmailReadyToSend(id)) => self.handle_ready_to_send(id).await,
+                            _ => {} // ignore other messages
                         }
                     }
                 }
             }
         })
+    }
+
+    async fn handle_ready_to_send(&self, id: MessageId) {
+        info!("Ready to send {id}");
+
+        let Ok(permit) = self.workers.clone().acquire_owned().await else {
+            error!("failed to acquire worker semaphore permit, shutting down");
+            self.shutdown.cancel();
+            return;
+        };
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let _p = permit;
+
+            // retrieve message from database
+            let mut message = match self_clone.message_repository.get(id).await {
+                Ok(message) => message,
+                Err(e) => {
+                    error!("failed to get message: {e:?}");
+                    return;
+                }
+            };
+
+            message.attempts += 1;
+
+            let message_id = message.id().to_string();
+            if let Err(e) = self_clone.handle_message(&mut message).await {
+                if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
+                    warn!(message_id, "Message held: {reason}")
+                } else {
+                    error!(message_id, "failed to handle message: {e:?}");
+                }
+                return;
+            };
+
+            if let Err(e) = self_clone.send_message(message).await {
+                error!(message_id, "failed to send message: {e:?}");
+            }
+        });
     }
 }
 
