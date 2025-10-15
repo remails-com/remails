@@ -1,3 +1,4 @@
+mod api_keys;
 mod api_user;
 mod domains;
 mod invites;
@@ -7,6 +8,7 @@ mod projects;
 mod smtp_credential;
 mod streams;
 
+pub(crate) use api_keys::*;
 pub(crate) use api_user::*;
 pub(crate) use domains::*;
 pub(crate) use invites::*;
