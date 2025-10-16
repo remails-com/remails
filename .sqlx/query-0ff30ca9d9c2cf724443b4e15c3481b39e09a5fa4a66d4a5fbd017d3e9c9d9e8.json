@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            DELETE FROM api_keys\n            WHERE id = $1 AND organization_id = $2\n            RETURNING id\n            ",
+  "query": "\n            DELETE FROM api_keys\n            WHERE organization_id = $1 AND id = $2\n            RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       false
     ]
   },
-  "hash": "959a864360acd922afa90cd1ff50c722f2dfb370cad41da253b9ee943fb2e13e"
+  "hash": "0ff30ca9d9c2cf724443b4e15c3481b39e09a5fa4a66d4a5fbd017d3e9c9d9e8"
 }
