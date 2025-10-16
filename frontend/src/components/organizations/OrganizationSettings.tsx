@@ -1,12 +1,13 @@
 import SubscriptionCard from "./SubscriptionCard.tsx";
 import { useOrganizations, useOrgRole } from "../../hooks/useOrganizations.ts";
 import { notifications } from "@mantine/notifications";
-import { IconBuildings, IconReceiptEuro, IconUsers } from "@tabler/icons-react";
+import { IconBuildings, IconKey, IconReceiptEuro, IconUsers } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
 import Header from "../Header.tsx";
 import { errorNotification } from "../../notify.tsx";
 import Tabs from "../../layout/Tabs.tsx";
 import Members from "./Members.tsx";
+import ApiKeysOverview from "../apiKeys/ApiKeysOverview.tsx";
 
 export default function OrganizationSettings() {
   const { currentOrganization } = useOrganizations();
@@ -62,6 +63,12 @@ export default function OrganizationSettings() {
             name: "Members",
             icon: <IconUsers size={14} />,
             content: <Members />,
+          },
+          {
+            route: "settings.API keys",
+            name: "API Keys",
+            icon: <IconKey size={14} />,
+            content: <ApiKeysOverview />,
           },
         ]}
       />

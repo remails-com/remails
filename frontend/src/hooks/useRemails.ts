@@ -26,6 +26,7 @@ export const RemailsContext = createContext<{
     domains: null,
     organizationDomains: null,
     credentials: null,
+    apiKeys: null,
     config: null,
     routerState: {
       name: "default",
@@ -66,10 +67,11 @@ export function useLoadRemails() {
     domains: null,
     organizationDomains: null,
     credentials: null,
+    error: null,
     config: null,
     routerState: router.initialState,
     nextRouterState: null,
-    error: null,
+    apiKeys: null,
   });
 
   const { navigate, redirect } = useRouter(router, state, dispatch, [apiMiddleware]);
