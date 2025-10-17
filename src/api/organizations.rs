@@ -1,5 +1,8 @@
 use crate::{
-    api::error::{ApiError, ApiResult},
+    api::{
+        auth::Authenticated,
+        error::{ApiError, ApiResult},
+    },
     models::{
         ApiUser, ApiUserId, NewOrganization, Organization, OrganizationId, OrganizationMember,
         OrganizationRepository, Role,
@@ -15,17 +18,13 @@ use tracing::{debug, info};
 
 pub async fn list_organizations(
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Organization>> {
-    let filter = if user.is_super_admin() {
-        None // show all organizations
-    } else {
-        Some(user.viewable_organizations())
-    };
+    let filter = user.viewable_organizations_filter();
     let organizations = repo.list(filter).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         "listed {} organizations",
         organizations.len()
     );
@@ -36,14 +35,14 @@ pub async fn list_organizations(
 pub async fn get_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Organization> {
     user.has_org_read_access(&org_id)?;
 
     let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::NotFound)?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         organization_name = organization.name,
         "retrieved organization",
@@ -54,7 +53,7 @@ pub async fn get_organization(
 
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: ApiUser, // only users are allowed to create organizations
     Json(new): Json<NewOrganization>,
 ) -> Result<impl IntoResponse, ApiError> {
     let org = repo.create(new).await?;
@@ -83,7 +82,7 @@ pub async fn create_organization(
 pub async fn remove_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: ApiUser, // only users are allowed to remove organizations
 ) -> ApiResult<OrganizationId> {
     user.has_org_admin_access(&org_id)?;
 
@@ -101,7 +100,7 @@ pub async fn remove_organization(
 pub async fn update_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: ApiUser, // only users are allowed to update organizations
     Json(update): Json<NewOrganization>,
 ) -> ApiResult<Organization> {
     user.has_org_admin_access(&org_id)?;
@@ -120,14 +119,14 @@ pub async fn update_organization(
 pub async fn list_members(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<OrganizationMember>> {
     user.has_org_read_access(&org_id)?;
 
     let members = repo.list_members(org_id).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         "listed {} members",
         members.len()
@@ -157,7 +156,7 @@ async fn prevent_last_remaining_admin(
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: ApiUser, // only users are allowed to remove members
 ) -> ApiResult<()> {
     // admins can remove any member, non-admin users can remove themselves
     user.has_org_admin_access(&org_id)
@@ -186,7 +185,7 @@ pub async fn remove_member(
 pub async fn update_member_role(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
-    user: ApiUser,
+    user: ApiUser, // only users are allowed to update member roles
     Json(role): Json<Role>,
 ) -> ApiResult<()> {
     user.has_org_admin_access(&org_id)?;

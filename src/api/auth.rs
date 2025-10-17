@@ -1,6 +1,9 @@
 use crate::{
     api::{ApiState, error::ApiError, whoami::WhoamiResponse},
-    models::{ApiUser, ApiUserId, ApiUserRepository, NewApiUser, OrganizationId, Password, Role},
+    models::{
+        ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
+        OrganizationId, Password, Role,
+    },
 };
 use axum::{
     Json,
@@ -11,6 +14,7 @@ use axum::{
 #[cfg(not(test))]
 use axum::{RequestPartsExt, extract::ConnectInfo};
 use axum_extra::extract::PrivateCookieJar;
+use base64ct::Encoding;
 use chrono::{DateTime, Duration, Utc};
 use cookie::{Cookie, SameSite};
 use email_address::EmailAddress;
@@ -24,48 +28,92 @@ use tracing::{debug, trace, warn};
 
 static SESSION_COOKIE_NAME: &str = "SESSION";
 
+/// Objects implementing `Authenticated` may be allowed to use the Remails API if they have the
+/// right level of permissions for the organization.
+/// This is currently implemented by `ApiUser`s, who are logged in through the Remails web
+/// interface, and `ApiKey`s, which can be created by `ApiUser`s.
+///
+/// Note that certain parts of the Remails API may only be accessible for real `ApiUser`s, such
+/// as the API end-points for creating `ApiKey`s.
+pub trait Authenticated: Send + Sync {
+    /// Check if user has a certain access level within an organization
+    fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool;
+
+    fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        self.is_at_least(org_id, Role::ReadOnly)
+            .then_some(())
+            .ok_or(ApiError::Forbidden)
+    }
+
+    fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        self.is_at_least(org_id, Role::Maintainer)
+            .then_some(())
+            .ok_or(ApiError::Forbidden)
+    }
+
+    fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+        self.is_at_least(org_id, Role::Admin)
+            .then_some(())
+            .ok_or(ApiError::Forbidden)
+    }
+
+    /// Get a list of the UUIDs of all organizations that are viewable by this user,
+    /// or None if user is allowed to view all organizations from everyone (for super admins)
+    fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>>;
+
+    /// Get a string with an ID for logging, also include some information about the type of
+    /// Authenticated object that is used
+    fn log_id(&self) -> String;
+}
+
 impl ApiUser {
+    /// Check if user is super admin (has access to all organizations)
     pub fn is_super_admin(&self) -> bool {
         self.global_role
             .as_ref()
             .is_some_and(|role| *role == Role::Admin)
     }
+}
 
+impl Authenticated for ApiUser {
     fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
-        self.org_roles
-            .iter()
-            .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role))
+        self.is_super_admin()
+            || self
+                .org_roles
+                .iter()
+                .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role))
     }
 
-    pub fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
-        if self.is_at_least(org_id, Role::ReadOnly) || self.is_super_admin() {
-            Ok(())
+    fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>> {
+        if self.is_super_admin() {
+            None // show all organizations
         } else {
-            Err(ApiError::Forbidden)
+            Some(
+                self.org_roles
+                    .iter()
+                    .map(|org_role| *org_role.org_id)
+                    .collect(),
+            )
         }
     }
 
-    pub fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
-        if self.is_at_least(org_id, Role::Maintainer) || self.is_super_admin() {
-            Ok(())
-        } else {
-            Err(ApiError::Forbidden)
-        }
+    fn log_id(&self) -> String {
+        format!("ApiUser {}", self.id())
+    }
+}
+
+impl Authenticated for ApiKey {
+    fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
+        org_id == self.organization_id() && self.role().is_at_least(role)
     }
 
-    pub fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
-        if self.is_at_least(org_id, Role::Admin) || self.is_super_admin() {
-            Ok(())
-        } else {
-            Err(ApiError::Forbidden)
-        }
+    fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>> {
+        // API keys can only see one organization
+        Some(vec![**self.organization_id()])
     }
 
-    pub fn viewable_organizations(&self) -> Vec<uuid::Uuid> {
-        self.org_roles
-            .iter()
-            .map(|org_role| *org_role.org_id)
-            .collect()
+    fn log_id(&self) -> String {
+        format!("ApiKey {}", self.id())
     }
 }
 
@@ -135,12 +183,11 @@ impl UserCookie {
     pub fn id(&self) -> &ApiUserId {
         &self.id
     }
+
     pub fn expires_at(&self) -> &DateTime<Utc> {
         &self.expires_at
     }
-}
 
-impl UserCookie {
     fn from_api_user(user: &ApiUser, login_state: LoginState) -> Self {
         Self {
             id: *user.id(),
@@ -422,6 +469,54 @@ where
     }
 }
 
+impl<S> FromRequestParts<S> for Box<dyn Authenticated>
+where
+    S: Send + Sync,
+    ApiState: FromRef<S>,
+    ApiUserRepository: FromRef<S>,
+    ApiKeyRepository: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // check HTTP Basic Auth header for API keys
+        if let Some(header) = parts.headers.get("Authorization") {
+            trace!("Logging in based on `Authorization` header");
+            let header = header.to_str().map_err(|_| ApiError::Unauthorized)?;
+
+            let (auth_type, base64_credentials) =
+                header.split_once(' ').ok_or(ApiError::Unauthorized)?;
+
+            if auth_type.to_lowercase() != "basic" {
+                return Err(ApiError::Unauthorized);
+            }
+
+            let credentials = base64ct::Base64::decode_vec(base64_credentials)
+                .map_err(|_| ApiError::Unauthorized)?;
+            let credentials = String::from_utf8(credentials).map_err(|_| ApiError::Unauthorized)?;
+
+            let (api_key_id, password) =
+                credentials.split_once(':').ok_or(ApiError::Unauthorized)?;
+
+            let api_key_id = api_key_id.parse().map_err(|_| ApiError::Unauthorized)?;
+            let api_key = ApiKeyRepository::from_ref(state)
+                .get(api_key_id)
+                .await
+                .map_err(|_| ApiError::Unauthorized)?;
+
+            if api_key.verify_password(&Password::new(password.to_owned())) {
+                return Ok(Box::new(api_key));
+            } else {
+                return Err(ApiError::Unauthorized);
+            }
+        }
+
+        // otherwise, check if they are logged in as an ApiUser
+        let api_user = <ApiUser as FromRequestParts<S>>::from_request_parts(parts, state).await?;
+        Ok(Box::new(api_user))
+    }
+}
+
 impl<S> OptionalFromRequestParts<S> for MfaPending
 where
     S: Send + Sync,
@@ -669,7 +764,7 @@ mod tests {
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-        // Finsh login with TOTP
+        // Finish login with TOTP
         let response = server
             .post(
                 "/api/login/totp",

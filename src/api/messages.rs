@@ -1,9 +1,10 @@
 use super::error::{ApiError, ApiResult};
 use crate::{
+    api::auth::Authenticated,
     bus::client::{BusClient, BusMessage},
     models::{
-        ApiMessage, ApiMessageMetadata, ApiUser, MessageFilter, MessageId, MessageRepository,
-        MessageStatus, OrganizationId, ProjectId, StreamId,
+        ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository, MessageStatus,
+        OrganizationId, ProjectId, StreamId,
     },
 };
 use axum::{
@@ -36,7 +37,7 @@ pub async fn list_messages(
         stream_id,
     }): Path<MessagePath>,
     Query(filter): Query<MessageFilter>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
     user.has_org_read_access(&org_id)?;
 
@@ -45,7 +46,7 @@ pub async fn list_messages(
         .await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -64,7 +65,7 @@ pub async fn get_message(
         stream_id,
         message_id,
     }): Path<SpecificMessagePath>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<ApiMessage> {
     user.has_org_read_access(&org_id)?;
 
@@ -73,7 +74,7 @@ pub async fn get_message(
         .await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -92,7 +93,7 @@ pub async fn remove_message(
         stream_id,
         message_id,
     }): Path<SpecificMessagePath>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<()> {
     user.has_org_write_access(&org_id)?;
 
@@ -100,7 +101,7 @@ pub async fn remove_message(
         .await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -120,7 +121,7 @@ pub async fn retry_now(
         stream_id,
         message_id,
     }): Path<SpecificMessagePath>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> Result<(), ApiError> {
     user.has_org_write_access(&org_id)?;
 
@@ -131,7 +132,7 @@ pub async fn retry_now(
     {
         warn!(
             message_id = message_id.to_string(),
-            user_id = user.id().to_string(),
+            user_id = user.log_id(),
             "Requested retry for already delivered message"
         );
         return Err(ApiError::BadRequest(
@@ -144,7 +145,7 @@ pub async fn retry_now(
         .map_err(ApiError::MessageBus)?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         stream_id = stream_id.to_string(),

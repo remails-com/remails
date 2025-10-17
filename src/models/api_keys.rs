@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::{Error, OrganizationId, Role};
+use crate::models::{Error, OrganizationId, Password, Role};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct ApiKeyId(Uuid);
@@ -15,6 +15,8 @@ pub struct ApiKeyId(Uuid);
 pub struct ApiKey {
     id: ApiKeyId,
     description: String,
+    #[serde(skip)]
+    password_hash: String,
     organization_id: OrganizationId,
     role: Role,
     created_at: DateTime<Utc>,
@@ -30,9 +32,16 @@ impl ApiKey {
         &self.description
     }
 
-    #[cfg(test)]
+    pub fn organization_id(&self) -> &OrganizationId {
+        &self.organization_id
+    }
+
     pub fn role(&self) -> &Role {
         &self.role
+    }
+
+    pub fn verify_password(&self, password: &Password) -> bool {
+        password.verify_password(&self.password_hash).is_ok()
     }
 }
 
@@ -105,7 +114,7 @@ impl ApiKeyRepository {
             r#"
             INSERT INTO api_keys (id, description, password_hash, organization_id, role)
             VALUES (gen_random_uuid(), $1, $2, $3, $4)
-            RETURNING id, description, organization_id, role as "role: Role", created_at, updated_at
+            RETURNING id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
             "#,
             key.description,
             password_hash,
@@ -126,11 +135,25 @@ impl ApiKeyRepository {
         })
     }
 
+    pub async fn get(&self, key_id: ApiKeyId) -> Result<ApiKey, Error> {
+        Ok(sqlx::query_as!(
+            ApiKey,
+            r#"
+            SELECT id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
+            FROM api_keys
+            WHERE id = $1
+            "#,
+            *key_id
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn list(&self, org_id: OrganizationId) -> Result<Vec<ApiKey>, Error> {
         Ok(sqlx::query_as!(
             ApiKey,
             r#"
-            SELECT id, description, organization_id, role as "role: Role", created_at, updated_at
+            SELECT id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
             FROM api_keys
             WHERE organization_id = $1
             "#,
@@ -159,7 +182,7 @@ impl ApiKeyRepository {
             UPDATE api_keys
             SET description = $1, role = $2
             WHERE organization_id = $3 AND id = $4
-            RETURNING id, description, organization_id, role as "role: Role", created_at, updated_at
+            RETURNING id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
             "#,
             changes.description,
             changes.role as Role,

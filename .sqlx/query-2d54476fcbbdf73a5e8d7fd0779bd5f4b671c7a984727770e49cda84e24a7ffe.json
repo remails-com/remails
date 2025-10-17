@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO api_keys (id, description, password_hash, organization_id, role)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4)\n            RETURNING id, description, organization_id, role as \"role: Role\", created_at, updated_at\n            ",
+  "query": "\n            SELECT id, description, password_hash, organization_id, role as \"role: Role\", created_at, updated_at\n            FROM api_keys\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -15,11 +15,16 @@
       },
       {
         "ordinal": 2,
+        "name": "password_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
         "name": "organization_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "role: Role",
         "type_info": {
           "Custom": {
@@ -35,33 +40,19 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Uuid",
-        {
-          "Custom": {
-            "name": "role",
-            "kind": {
-              "Enum": [
-                "admin",
-                "maintainer",
-                "read_only"
-              ]
-            }
-          }
-        }
+        "Uuid"
       ]
     },
     "nullable": [
@@ -70,8 +61,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "0e628d2a337629c51cf8d0c26f06d8343fe85382a05b07daa203c1d713b2ec6a"
+  "hash": "2d54476fcbbdf73a5e8d7fd0779bd5f4b671c7a984727770e49cda84e24a7ffe"
 }

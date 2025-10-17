@@ -27,6 +27,10 @@ impl Password {
     pub fn verify_password(&self, hash: &str) -> Result<(), password_auth::VerifyError> {
         password_auth::verify_password(&self.0, hash)
     }
+
+    pub fn new(password: String) -> Self {
+        Password(password)
+    }
 }
 
 #[derive(
@@ -42,6 +46,9 @@ pub enum Role {
 }
 
 impl Role {
+    /// Check if role is at least a certain level
+    ///
+    /// Read-only < Maintainer < Admin
     pub fn is_at_least(&self, role: Role) -> bool {
         *self >= role
     }

@@ -1,5 +1,8 @@
 use super::error::{ApiError, ApiResult};
-use crate::models::{ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, OrganizationId};
+use crate::{
+    api::auth::Authenticated,
+    models::{ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, OrganizationId},
+};
 use axum::{
     Json,
     extract::{Path, State},
