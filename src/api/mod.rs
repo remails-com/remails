@@ -559,7 +559,10 @@ async fn append_default_headers(
 
 #[cfg(test)]
 mod tests {
-    use crate::{bus::server::Bus, models::ApiUserId};
+    use crate::{
+        bus::server::Bus,
+        models::{ApiUserId, CreatedApiKeyWithPassword},
+    };
     use axum::body::Body;
     use http::Method;
     use std::{
@@ -609,6 +612,14 @@ mod tests {
             } else {
                 self.headers.remove("X-Test-Login-ID");
             }
+        }
+
+        pub fn set_api_key(&mut self, key: &CreatedApiKeyWithPassword) {
+            let base64_credentials = base64ct::Base64::encode_string(
+                format!("{}:{}", key.id(), key.password()).as_bytes(),
+            );
+            self.headers
+                .insert("Authorization", format!("Basic {base64_credentials}"));
         }
 
         fn request<U: AsRef<str>>(

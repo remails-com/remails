@@ -75,6 +75,11 @@ impl CreatedApiKeyWithPassword {
     pub fn role(&self) -> &Role {
         &self.role
     }
+
+    #[cfg(test)]
+    pub fn password(&self) -> &str {
+        &self.password
+    }
 }
 
 #[derive(Deserialize)]

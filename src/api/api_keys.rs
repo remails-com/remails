@@ -97,7 +97,10 @@ mod tests {
 
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
-        models::{CreatedApiKeyWithPassword, Role},
+        models::{
+            ApiMessage, ApiMessageMetadata, CreatedApiKeyWithPassword, Organization, Project, Role,
+            Stream,
+        },
     };
 
     use super::*;
@@ -122,7 +125,7 @@ mod tests {
 
         // create an API key
         let new_key = ApiKeyRequest {
-            description: "Test Credential".to_string(),
+            description: "Test API Key".to_string(),
             role: Role::Maintainer,
         };
         let response = server
@@ -223,7 +226,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/api_keys"),
                 serialize_body(&ApiKeyRequest {
                     description: "Test Key".to_string(),
-                    role: Role::Maintainer,
+                    role: Role::ReadOnly,
                 }),
             )
             .await
@@ -278,5 +281,122 @@ mod tests {
     async fn test_api_key_no_access_not_logged_in(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
         test_api_key_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_maintainer_api_key_use_api(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+
+        // create an API key
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/api_keys"),
+                serialize_body(&ApiKeyRequest {
+                    description: "Test API Key".to_string(),
+                    role: Role::Maintainer,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created_key: CreatedApiKeyWithPassword = deserialize_body(response.into_body()).await;
+
+        // log out user and start using API key
+        server.set_user(None);
+        server.set_api_key(&created_key);
+
+        // list organizations
+        let response = server.get("/api/organizations").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let orgs: Vec<Organization> = deserialize_body(response.into_body()).await;
+        assert_eq!(orgs.len(), 1);
+        assert_eq!(orgs[0].id(), org_1.parse().unwrap());
+
+        // get specific organization
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let org: Organization = deserialize_body(response.into_body()).await;
+        assert_eq!(org.id(), org_1.parse().unwrap());
+
+        // list projects
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let proj_2 = "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap();
+        let response = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let projects: Vec<Project> = deserialize_body(response.into_body()).await;
+        assert_eq!(projects.len(), 2);
+        assert!(projects.iter().any(|p| p.id() == proj_1));
+        assert!(projects.iter().any(|p| p.id() == proj_2));
+
+        // list streams
+        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let streams: Vec<Stream> = deserialize_body(response.into_body()).await;
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].id(), stream_1);
+
+        // list messages
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        assert_eq!(messages.len(), 5);
+
+        // get a specific message
+        let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let message: ApiMessage = deserialize_body(response.into_body()).await;
+        assert_eq!(message.id(), message_1);
+
+        // delete a message
+        let response = server.delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // check that is was removed
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
