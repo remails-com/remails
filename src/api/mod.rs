@@ -87,6 +87,7 @@ pub struct RemailsConfig {
     pub smtp_ports: Vec<u16>,
     pub spf_include: String,
     pub dkim_selector: String,
+    pub moneybird_administration_id: String,
 }
 
 impl Default for RemailsConfig {
@@ -113,6 +114,8 @@ impl Default for RemailsConfig {
         let spf_include = env::var("SPF_INCLUDE").unwrap_or("include:spf.remails.net".to_string());
 
         let dkim_selector = env::var("DKIM_SELECTOR").expect("DKIM_SELECTOR env var must be set");
+        let moneybird_administration_id = env::var("MONEYBIRD_ADMINISTRATION_ID")
+            .expect("MONEYBIRD_ADMINISTRATION_ID env var must be set");
 
         Self {
             version,
@@ -121,6 +124,7 @@ impl Default for RemailsConfig {
             smtp_ports,
             spf_include,
             dkim_selector,
+            moneybird_administration_id,
         }
     }
 }
