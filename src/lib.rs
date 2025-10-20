@@ -29,6 +29,8 @@ mod test;
 mod fixtures;
 
 mod moneybird;
+mod k8s;
+
 pub use moneybird::*;
 
 #[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
@@ -72,7 +74,7 @@ pub async fn run_mta(
         shutdown.clone(),
     );
 
-    let message_handler = Handler::new(pool, handler_config, bus_client, shutdown);
+    let message_handler = Handler::new(pool, handler_config, bus_client, shutdown).await;
 
     smtp_server.spawn();
     message_handler.spawn();

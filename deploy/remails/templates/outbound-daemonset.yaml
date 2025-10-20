@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: outbound
   namespace: {{ .Release.Namespace }}
@@ -7,7 +7,6 @@ metadata:
     app: outbound
     version: {{ .Chart.AppVersion }}
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: outbound
@@ -19,6 +18,7 @@ spec:
         environment: {{ .Values.environment }}
         version: {{ .Chart.AppVersion }}
     spec:
+      hostNetwork: true
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -29,6 +29,11 @@ spec:
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           # TODO: add a lifeness probe
           env:
+            - name: K8S_NODE_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
             - name: RUST_LOG

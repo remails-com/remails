@@ -1,4 +1,5 @@
 pub use crate::handler::connection_log::ConnectionLog;
+use crate::k8s::Kubernetes;
 use crate::{
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
@@ -22,7 +23,7 @@ use std::{
     borrow::Cow::Borrowed,
     collections::BTreeSet,
     fmt::Display,
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr},
     sync::Arc,
 };
 use thiserror::Error;
@@ -119,15 +120,16 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    k8s: Kubernetes,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
-    sending_ips: BTreeSet<Ipv4Addr>,
+    sending_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
 
 impl Handler {
-    pub fn new(
+    pub async fn new(
         pool: PgPool,
         config: Arc<HandlerConfig>,
         bus_client: BusClient,
@@ -142,6 +144,9 @@ impl Handler {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
+            k8s: Kubernetes::new(pool.clone())
+                .await
+                .expect("Failed to initialize Kubernetes"),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
             sending_ips: Default::default(),
@@ -746,6 +751,7 @@ impl Handler {
                             .expect("Cannot retrieve host network interfaces")
                             .into_iter()
                             .map(|iface| iface.ip())
+                            // For now, we only handle IPv4 addresses. Maybe v6 will follow later
                             .filter_map(|ip| {match ip {
                                 IpAddr::V4(v4) => Some(v4),
                                 IpAddr::V6(_) => None
@@ -754,14 +760,24 @@ impl Handler {
                                 !ip.is_loopback() &&
                                 !ip.is_unspecified() &&
                                 !ip.is_multicast() &&
-                                !ip.is_private() &&
                                 !ip.is_broadcast() &&
-                                !ip.is_documentation()
+                                !ip.is_documentation() &&
+                                // only allow private IPs if we're in debug mode
+                                (!ip.is_private() || cfg!(debug_assertions))
                             )
+                            .map(Into::into)
                             .collect();
                         if new_ips != self.sending_ips {
                             self.sending_ips = new_ips;
                             info!("new interface list: {:?}", self.sending_ips);
+                            match self.k8s.save_available_node_ips(self.sending_ips.clone()).await {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    error!("failed to save available node IPs: {e}");
+                                    error!("Shutting down message handler as sending IPs are out of sync");
+                                    self.shutdown.cancel();
+                                }
+                            }
                         }
                     }
                     message = bus_stream.next() => {
@@ -880,7 +896,8 @@ mod test {
             },
         };
         let bus_client = BusClient::new_from_env_var().unwrap();
-        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
+        let handler =
+            Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new()).await;
 
         let mut message = handler.create_message(message).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
@@ -945,7 +962,8 @@ mod test {
                 Arc::new(config),
                 BusClient::new_from_env_var().unwrap(),
                 CancellationToken::new(),
-            );
+            )
+            .await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
@@ -1019,7 +1037,8 @@ mod test {
                 Arc::new(config),
                 BusClient::new_from_env_var().unwrap(),
                 CancellationToken::new(),
-            );
+            )
+            .await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());

@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     let bus_client = BusClient::new_from_env_var()?;
 
     let message_handler =
-        Handler::new(pool, Arc::new(handler_config), bus_client, shutdown.clone());
+        Handler::new(pool, Arc::new(handler_config), bus_client, shutdown.clone()).await;
     let join_handle = message_handler.spawn();
 
     shutdown_signal(shutdown.clone()).await;

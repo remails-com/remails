@@ -167,7 +167,7 @@ mod test {
             Arc::new(config),
             bus_client.clone(),
             CancellationToken::new(),
-        );
+        ).await;
         handler.spawn();
 
         let periodically = Periodically::new(pool, bus_client.clone()).await.unwrap();
@@ -261,7 +261,7 @@ mod test {
             Arc::new(config),
             bus_client.clone(),
             CancellationToken::new(),
-        );
+        ).await;
         handler.spawn();
 
         let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
