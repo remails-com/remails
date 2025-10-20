@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT m.status AS \"status:MessageStatus\"\n            FROM messages m\n            WHERE m.organization_id = $1 \n              AND m.project_id = $2 \n              AND m.stream_id = $3 \n              AND m.id = $4\n            ",
+  "query": "\n            SELECT m.status AS \"status:MessageStatus\", m.outbound_ip\n            FROM messages m\n            WHERE m.organization_id = $1 \n              AND m.project_id = $2 \n              AND m.stream_id = $3 \n              AND m.id = $4\n            ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
             }
           }
         }
+      },
+      {
+        "ordinal": 1,
+        "name": "outbound_ip",
+        "type_info": "Inet"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       ]
     },
     "nullable": [
-      false
+      false,
+      true
     ]
   },
-  "hash": "8512be401c6bb20cd427a09fa6b6ba31e0efb5d7ee01c5cd5bd87a513cce4a78"
+  "hash": "888bd70b4e4144dba29cb5d410d2344c75ece80a0c3497718812f44df7059c50"
 }

@@ -5,7 +5,7 @@ use smtp_proto::{
     Request,
 };
 use std::{borrow::Cow, fmt::Display, net::SocketAddr};
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::{
     bus::client::{BusClient, BusMessage},
@@ -402,9 +402,19 @@ impl SmtpSession {
                 }
             };
 
+            let Some(outbound_ip) = message.outbound_ip else {
+                error!(
+                    message_id = message.id().to_string(),
+                    "failed to assign outbound IP to message"
+                );
+                // TODO think about being nice and accepting the message anyway.
+                //  This requires automatic recovery from this error, though.
+                return DataReply::ReplyAndContinue(SmtpResponse::INTERNAL_ERROR.into());
+            };
+
             // Send message to message bus
             self.bus_client
-                .try_send(&BusMessage::EmailReadyToSend(message.id()))
+                .try_send(&BusMessage::EmailReadyToSend(message.id(), outbound_ip))
                 .await;
 
             return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_ACCEPTED.into());

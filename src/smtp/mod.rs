@@ -118,7 +118,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_smtp(pool: PgPool) {
         let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;

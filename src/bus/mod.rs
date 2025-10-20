@@ -25,7 +25,8 @@ mod tests {
         let mut stream2 = client.receive().await.unwrap();
 
         // send a message
-        let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+        let message =
+            BusMessage::EmailReadyToSend(Uuid::new_v4().into(), "1.1.1.1".parse().unwrap());
         client.send(&message).await.unwrap();
 
         // both listeners should receive the message
@@ -45,7 +46,8 @@ mod tests {
         let client = BusClient::new(port, "localhost".to_owned()).unwrap();
         let mut stream = client.receive_auto_reconnect(std::time::Duration::from_millis(500));
 
-        let message = BusMessage::EmailReadyToSend(Uuid::new_v4().into());
+        let message =
+            BusMessage::EmailReadyToSend(Uuid::new_v4().into(), "1.1.1.1".parse().unwrap());
         client.send(&message).await.unwrap_err(); // should error
         client.try_send(&message).await; // ignores error
 

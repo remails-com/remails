@@ -57,10 +57,21 @@ impl Periodically {
             .find_messages_ready_for_retry()
             .await?;
 
-        for message_id in messages {
-            tracing::info!("Retrying message {}", message_id);
+        for (message_id, outbound_ip) in messages {
+            let Some(outbound_ip) = outbound_ip else {
+                tracing::error!(
+                    message_id = message_id.to_string(),
+                    "Message has no outbound IP assigned (yet)"
+                );
+                continue;
+            };
+            tracing::info!(
+                message_id = message_id.to_string(),
+                outbound_ip = outbound_ip.to_string(),
+                "Retrying message"
+            );
             self.bus_client
-                .try_send(&BusMessage::EmailReadyToSend(message_id))
+                .try_send(&BusMessage::EmailReadyToSend(message_id, outbound_ip))
                 .await;
         }
 
@@ -167,7 +178,8 @@ mod test {
             Arc::new(config),
             bus_client.clone(),
             CancellationToken::new(),
-        ).await;
+        )
+        .await;
         handler.spawn();
 
         let periodically = Periodically::new(pool, bus_client.clone()).await.unwrap();
@@ -199,19 +211,25 @@ mod test {
         );
 
         bus_client
-            .send(&BusMessage::EmailReadyToSend(message_out_of_attempts))
+            .send(&BusMessage::EmailReadyToSend(
+                message_out_of_attempts,
+                "127.0.0.1".parse().unwrap(),
+            ))
             .await
             .unwrap();
         bus_client
-            .send(&BusMessage::EmailReadyToSend(message_on_timeout))
+            .send(&BusMessage::EmailReadyToSend(
+                message_on_timeout,
+                "127.0.0.1".parse().unwrap(),
+            ))
             .await
             .unwrap();
 
+        BusClient::wait_for_attempt(2, &mut stream).await;
         // Await 4 message at mailcrab (two email with two recipients each)
         for _ in 0..4 {
             mailcrab_rx.recv().await.unwrap();
         }
-        BusClient::wait_for_attempt(2, &mut stream).await;
 
         assert_eq!(
             get_message_status(message_out_of_attempts).await,
@@ -261,8 +279,11 @@ mod test {
             Arc::new(config),
             bus_client.clone(),
             CancellationToken::new(),
-        ).await;
+        )
+        .await;
         handler.spawn();
+
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
 
         let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
         periodically.retry_messages().await.unwrap();
@@ -289,9 +310,9 @@ mod test {
             "#,
             *org_id
         )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(remaining, 799);
     }

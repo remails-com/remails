@@ -1,5 +1,4 @@
 pub use crate::handler::connection_log::ConnectionLog;
-use crate::k8s::Kubernetes;
 use crate::{
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
@@ -7,6 +6,7 @@ use crate::{
         connection_log::LogLevel,
         dns::{DnsResolver, ResolveError},
     },
+    k8s::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
         NewMessage, OrganizationRepository, QuotaStatus,
@@ -19,13 +19,7 @@ use futures::StreamExt;
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{
-    borrow::Cow::Borrowed,
-    collections::BTreeSet,
-    fmt::Display,
-    net::{IpAddr},
-    sync::Arc,
-};
+use std::{borrow::Cow::Borrowed, collections::BTreeSet, fmt::Display, net::IpAddr, sync::Arc};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -757,7 +751,7 @@ impl Handler {
                                 IpAddr::V6(_) => None
                             }})
                             .filter(|ip|
-                                !ip.is_loopback() &&
+                                (!ip.is_loopback() || cfg!(test)) &&
                                 !ip.is_unspecified() &&
                                 !ip.is_multicast() &&
                                 !ip.is_broadcast() &&
@@ -786,7 +780,17 @@ impl Handler {
                                 error!("Bus stream ended, shutting down");
                                 self.shutdown.cancel();
                             },
-                            Some(BusMessage::EmailReadyToSend(id)) => self.handle_ready_to_send(id).await,
+                            Some(BusMessage::EmailReadyToSend(id, from)) => {
+                                if self.sending_ips.contains(&from) {
+                                    self.handle_ready_to_send(id).await;
+                                } else {
+                                    trace!(
+                                        message_id = id.to_string(),
+                                        ip_addr = from.to_string(),
+                                        "skipping message as it should not be send from this node"
+                                    );
+                                }
+                            },
                             _ => {} // ignore other messages
                         }
                     }
@@ -852,7 +856,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_message(pool: PgPool) {
         let mailcrab_port = random_port();
@@ -906,7 +917,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_invalid_mail_from(pool: PgPool) {
         let mailcrab_port = random_port();
@@ -977,7 +995,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_invalid_from(pool: PgPool) {
         let mailcrab_port = random_port();

@@ -28,8 +28,8 @@ mod test;
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
 
-mod moneybird;
 mod k8s;
+mod moneybird;
 
 pub use moneybird::*;
 

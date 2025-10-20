@@ -1,8 +1,7 @@
 use crate::Environment;
 use k8s_openapi::api::core::v1::Node;
 use kube::Api;
-use sqlx::PgPool;
-use sqlx::types::ipnet::IpNet;
+use sqlx::{PgPool, types::ipnet::IpNet};
 use std::env;
 use tracing::{info, warn};
 
@@ -47,6 +46,7 @@ impl Kubernetes {
 
     async fn get_provider_id(&self, node_name: &str) -> Result<String, Error> {
         if matches!(self.environment, Environment::Development) {
+            // TODO: tink of a better way for non-k8s environments (including a better detection)
             return Ok("k8s:////development-node".to_string());
         }
 
@@ -96,15 +96,29 @@ impl Kubernetes {
             }
         };
 
+        let ips = ips.into_iter().map(Into::into).collect::<Vec<IpNet>>();
+
+        // Delete IPs that are no longer available
         sqlx::query!(
             r#"
-            INSERT INTO sending_ips (id, ip, node_id)
-            VALUES (uuid_generate_v4(), unnest($1::inet[]), $2)
-            ON CONFLICT (ip) DO UPDATE
-                SET node_id = $2
+            DELETE FROM outbound_ips WHERE node_id = $1 AND ip = ANY($2::inet[])
             "#,
-            &ips.into_iter().map(Into::into).collect::<Vec<IpNet>>(),
-            node_id
+            node_id,
+            &ips
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Insert new IPs
+        sqlx::query!(
+            r#"
+            INSERT INTO outbound_ips (id, node_id, ip)
+            VALUES (uuid_generate_v4(), $1, unnest($2::inet[]))
+            ON CONFLICT (ip) DO UPDATE
+                SET node_id = $1
+            "#,
+            node_id,
+            &ips,
         )
         .execute(&mut *tx)
         .await?;

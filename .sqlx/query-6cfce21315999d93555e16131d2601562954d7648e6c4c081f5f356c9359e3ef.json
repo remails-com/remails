@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM outbound_ips WHERE node_id = $1 AND ip = ANY($2::inet[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "InetArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cfce21315999d93555e16131d2601562954d7648e6c4c081f5f356c9359e3ef"
+}
