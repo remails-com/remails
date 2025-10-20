@@ -84,6 +84,7 @@ export interface RemailsConfig {
   smtp_ports: number[];
   spf_include: string;
   dkim_selector: string;
+  moneybird_administration_id: string;
 }
 
 export interface State {
@@ -225,6 +226,7 @@ export interface Organization {
   used_message_quota: number;
   current_subscription: SubscriptionStatus;
   quota_reset: string | null;
+  moneybird_contact_id: string | null;
   created_at: string;
   updated_at: string;
 }
