@@ -1,20 +1,20 @@
+mod mock_k8s_api;
 mod node_watcher;
 
 pub use node_watcher::spawn_node_watcher;
 
-use crate::Environment;
+use crate::kubernetes::mock_k8s_api::mock_service;
 use k8s_openapi::api::core::v1::Node;
 use kube::Api;
 use sqlx::{PgPool, types::ipnet::IpNet};
 use std::env;
-use tracing::info;
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct Kubernetes {
     client: kube::Client,
     db: PgPool,
     node_name: String,
-    environment: Environment,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -29,7 +29,19 @@ pub enum Error {
 
 impl Kubernetes {
     pub async fn new(db: PgPool) -> Result<Self, Error> {
-        let client = kube::Client::try_default().await?;
+        let client = if env::var("K8S_API_MOCK")
+            .map(|s| s == "true")
+            .unwrap_or(false)
+        {
+            info!("Requested to use mock K8s API");
+            kube::Client::new(mock_service(), "default")
+        } else {
+            kube::Client::try_default().await.unwrap_or_else(|e| {
+                error!("Cloud not connect to real Kubernetes API, using Mock API instead: {e}");
+                kube::Client::new(mock_service(), "default")
+            })
+        };
+
         let node_name =
             env::var("K8S_NODE_HOSTNAME").expect("Missing K8S_NODE_HOSTNAME environment variable");
 
@@ -37,16 +49,10 @@ impl Kubernetes {
             client,
             db,
             node_name,
-            environment: Environment::from_env(),
         })
     }
 
     async fn get_provider_id(&self, node_name: &str) -> Result<String, Error> {
-        if matches!(self.environment, Environment::Development) {
-            // TODO: tink of a better way for non-k8s environments (including a better detection)
-            return Ok("k8s:////development-node".to_string());
-        }
-
         let nodes: Api<Node> = Api::all(self.client.clone());
         let node = nodes.get(node_name).await?;
         node.spec
