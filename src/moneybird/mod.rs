@@ -185,13 +185,7 @@ impl MoneyBird {
                     .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL")
             });
 
-        let environment: Environment = env::var("ENVIRONMENT")
-            .map(|s| s.parse())
-            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
-            .unwrap_or(Ok(Environment::Development))
-            .expect(
-                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
-            );
+        let environment = Environment::from_env();
 
         let api: Arc<dyn MoneybirdApi + Send + Sync> = match (
             api_key,

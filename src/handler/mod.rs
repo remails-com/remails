@@ -1,12 +1,13 @@
 pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
+    Environment,
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
     handler::{
         connection_log::LogLevel,
         dns::{DnsResolver, ResolveError},
     },
-    k8s::Kubernetes,
+    kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
         NewMessage, OrganizationRepository, QuotaStatus,
@@ -87,6 +88,7 @@ pub struct HandlerConfig {
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
+    pub(crate) environment: Environment,
 }
 
 #[cfg(not(test))]
@@ -98,6 +100,7 @@ impl HandlerConfig {
                 .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
             retry: Default::default(),
+            environment: Environment::from_env(),
         }
     }
 }
@@ -756,8 +759,8 @@ impl Handler {
                                 !ip.is_multicast() &&
                                 !ip.is_broadcast() &&
                                 !ip.is_documentation() &&
-                                // only allow private IPs if we're in debug mode
-                                (!ip.is_private() || cfg!(debug_assertions))
+                                // only allow private IPs if we're in development mode
+                                (!ip.is_private() || matches!(self.config.environment, Environment::Development))
                             )
                             .map(Into::into)
                             .collect();
@@ -901,6 +904,7 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
+            environment: Environment::Development,
             retry: RetryConfig {
                 delay: Duration::minutes(5),
                 max_automatic_retries: 1,
@@ -970,6 +974,7 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
+                environment: Environment::Development,
                 retry: RetryConfig {
                     delay: Duration::minutes(5),
                     max_automatic_retries: 1,
@@ -1052,6 +1057,7 @@ mod test {
                 allow_plain: true,
                 domain: "test".to_string(),
                 resolver: DnsResolver::mock("localhost", mailcrab_port),
+                environment: Environment::Development,
                 retry: RetryConfig {
                     delay: Duration::minutes(5),
                     max_automatic_retries: 1,

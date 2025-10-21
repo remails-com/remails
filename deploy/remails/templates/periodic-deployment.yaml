@@ -22,6 +22,7 @@ spec:
       imagePullSecrets:
           {{- toYaml . | nindent 12 }}
     {{- end }}
+      serviceAccountName: periodic-service-account
       containers:
         - name: retry
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
@@ -49,6 +50,6 @@ spec:
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
-              value: message-bus
+              value: message-bus.{{ .Release.Namespace }}.svc.cluster.local
 
           imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}

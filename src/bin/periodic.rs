@@ -1,5 +1,10 @@
 use anyhow::Context;
-use remails::{bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal};
+use futures::future;
+use kube::Client;
+use remails::{
+    bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal,
+    spawn_node_watcher,
+};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -41,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown_clone = shutdown.clone();
 
-    let join_handle = tokio::spawn(async move {
+    let join_handle1 = tokio::spawn(async move {
         loop {
             tokio::select! {
                 _ = message_retry_interval.tick() => {
@@ -66,13 +71,21 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    let join_handle2 = spawn_node_watcher(
+        pool.clone(),
+        Client::try_default()
+            .await
+            .expect("Cannot create K8s client"),
+        shutdown.clone(),
+    )?;
+
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
     shutdown.cancel();
 
     tokio::select!(
         // gracefully shutdown
-        _ = join_handle => {
+        _ = future::join_all(vec![join_handle1, join_handle2]) => {
             info!("Shut down");
         }
         // hard shutdown if it takes more than 2 secs

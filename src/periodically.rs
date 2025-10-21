@@ -95,7 +95,7 @@ impl Periodically {
 mod test {
     use super::*;
     use crate::{
-        HandlerConfig,
+        Environment, HandlerConfig,
         bus::server::Bus,
         handler::{Handler, RetryConfig, dns::DnsResolver},
         models::{MessageId, MessageStatus},
@@ -168,6 +168,7 @@ mod test {
             allow_plain: true,
             domain: "test".to_string(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
+            environment: Environment::Development,
             retry: RetryConfig {
                 delay: Duration::minutes(60),
                 max_automatic_retries: 3,
@@ -273,6 +274,7 @@ mod test {
                 delay: Duration::minutes(60),
                 max_automatic_retries: 3,
             },
+            environment: Environment::Development,
         };
         let handler = Handler::new(
             pool.clone(),

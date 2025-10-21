@@ -19,10 +19,12 @@ spec:
         version: {{ .Chart.AppVersion }}
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
+      serviceAccountName: outbound-service-account
       containers:
         - name: outbound
           image: "{{ .Values.images.outbound.repository }}:{{ .Chart.AppVersion }}"
@@ -50,4 +52,4 @@ spec:
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
-              value: message-bus
+              value: message-bus.{{ .Release.Namespace }}.svc.cluster.local

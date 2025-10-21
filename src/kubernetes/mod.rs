@@ -1,9 +1,13 @@
+mod node_watcher;
+
+pub use node_watcher::spawn_node_watcher;
+
 use crate::Environment;
 use k8s_openapi::api::core::v1::Node;
 use kube::Api;
 use sqlx::{PgPool, types::ipnet::IpNet};
 use std::env;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Clone)]
 pub struct Kubernetes {
@@ -28,19 +32,12 @@ impl Kubernetes {
         let client = kube::Client::try_default().await?;
         let node_name =
             env::var("K8S_NODE_HOSTNAME").expect("Missing K8S_NODE_HOSTNAME environment variable");
-        let environment: Environment = env::var("ENVIRONMENT")
-            .map(|s| s.parse())
-            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
-            .unwrap_or(Ok(Environment::Development))
-            .expect(
-                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
-            );
 
         Ok(Self {
             client,
             db,
             node_name,
-            environment,
+            environment: Environment::from_env(),
         })
     }
 
@@ -98,10 +95,15 @@ impl Kubernetes {
 
         let ips = ips.into_iter().map(Into::into).collect::<Vec<IpNet>>();
 
-        // Delete IPs that are no longer available
+        // De-assign IPs that are no longer available
+        // They should only be deleted if we are actually not in control over them anymore, e.g.,
+        // if we deleted the FloatingIP in UpCloud
         sqlx::query!(
             r#"
-            DELETE FROM outbound_ips WHERE node_id = $1 AND ip = ANY($2::inet[])
+            UPDATE outbound_ips
+            SET node_id = NULL
+            WHERE node_id = $1
+              AND ip = ANY($2::inet[])
             "#,
             node_id,
             &ips

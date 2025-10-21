@@ -5,6 +5,8 @@ use std::net::IpAddr;
 use crate::models::{MessageId, MessageStatus};
 
 use futures::{Stream, StreamExt};
+use tracing::log::trace;
+
 pub type BusStream<'a> = std::pin::Pin<Box<dyn Stream<Item = BusMessage> + Send + 'a>>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -69,8 +71,8 @@ impl BusClient {
     /// Stream will end when WebSocket disconnects
     pub async fn receive(&'_ self) -> Result<BusStream<'_>, tokio_tungstenite::tungstenite::Error> {
         let ws_address = format!("ws://{}:{}/listen", self.domain_name, self.port);
-        let (ws_stream, _) =
-            tokio_tungstenite::connect_async_with_config(ws_address, None, false).await?;
+        trace!("Connecting to message bus at {ws_address}");
+        let (ws_stream, _) = tokio_tungstenite::connect_async(ws_address).await?;
 
         let (_, mut receiver) = ws_stream.split();
 

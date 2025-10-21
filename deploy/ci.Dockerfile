@@ -14,7 +14,7 @@ USER $user
 FROM final-base AS management
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/management ./management
+COPY --chown=nonroot:nonroot ./management ./management
 RUN chmod 777 management
 
 EXPOSE 3000
@@ -24,7 +24,7 @@ ENTRYPOINT ["./management"]
 FROM final-base AS inbound
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/inbound ./inbound
+COPY --chown=nonroot:nonroot ./inbound ./inbound
 RUN chmod 777 inbound
 
 EXPOSE 3025
@@ -34,7 +34,7 @@ ENTRYPOINT ["./inbound"]
 FROM final-base AS outbound
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/outbound ./outbound
+COPY --chown=nonroot:nonroot ./outbound ./outbound
 RUN chmod 777 outbound
 
 EXPOSE 3025
@@ -44,7 +44,7 @@ ENTRYPOINT ["./outbound"]
 FROM final-base AS periodic
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/periodic ./periodic
+COPY --chown=nonroot:nonroot ./periodic ./periodic
 RUN chmod 777 periodic
 
 ENV VERSION=${version}
@@ -53,7 +53,7 @@ ENTRYPOINT ["./periodic"]
 FROM final-base AS migrate-db
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/migrate_db ./migrate_db
+COPY --chown=nonroot:nonroot ./migrate_db ./migrate_db
 RUN chmod 777 migrate_db
 
 ENV VERSION=${version}
@@ -62,7 +62,7 @@ ENTRYPOINT ["./migrate_db"]
 FROM final-base AS message-bus
 ARG version=dev
 
-COPY --chown=nonroot:nonroot ./target/release/message_bus ./message_bus
+COPY --chown=nonroot:nonroot ./message_bus ./message_bus
 RUN chmod 777 message_bus
 
 ENV VERSION=${version}

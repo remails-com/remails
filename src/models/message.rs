@@ -395,6 +395,8 @@ impl MessageRepository {
                        WHERE s.id = $1),
                  ip AS (SELECT ip AS outbound_ip
                         FROM outbound_ips
+                        JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
+                        WHERE node.ready
                         -- TODO: Do not rely on random outbound IPs
                         ORDER BY RANDOM()
                         LIMIT 1)
@@ -686,7 +688,7 @@ impl MessageRepository {
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
               ) OR (
                 (m.status = 'accepted' OR m.status = 'processing')
-                AND now() > m.updated_at + '1 minutes'
+                AND now() > m.updated_at + '2 minutes'
               )
             "#,
         )

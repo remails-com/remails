@@ -115,7 +115,7 @@ jobs:
           target: inbound
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/inbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push outbound image
         uses: docker/build-push-action@v6
@@ -124,7 +124,7 @@ jobs:
           target: outbound
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/outbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push management image
         uses: docker/build-push-action@v6
@@ -133,7 +133,7 @@ jobs:
           target: management
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/management:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push periodic image
         uses: docker/build-push-action@v6
@@ -142,7 +142,7 @@ jobs:
           target: periodic
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/periodic:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push migrate_db image
         uses: docker/build-push-action@v6
@@ -151,7 +151,7 @@ jobs:
           target: migrate-db
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push message_bus image
         uses: docker/build-push-action@v6
@@ -160,7 +160,7 @@ jobs:
           target: message-bus
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          context: .
+          context: ./target/release
           tags: "ghcr.io/tweedegolf/remails/message_bus:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push backup_db image
         uses: docker/build-push-action@v6

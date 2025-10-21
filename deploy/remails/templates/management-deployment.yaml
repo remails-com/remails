@@ -105,7 +105,7 @@ spec:
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
-              value: message-bus
+              value: message-bus.{{ .Release.Namespace }}.svc.cluster.local
 
           ports:
             - containerPort: 3000

@@ -2,7 +2,8 @@ CREATE TABLE k8s_nodes
 (
     id          uuid NOT NULL PRIMARY KEY,
     provider_id text NOT NULL UNIQUE,
-    hostname    text NOT NULL UNIQUE
+    hostname    text NOT NULL UNIQUE,
+    ready       bool NOT NULL default false
 );
 
 CREATE TABLE outbound_ips
@@ -12,4 +13,5 @@ CREATE TABLE outbound_ips
     node_id uuid REFERENCES k8s_nodes (id)
 );
 
-ALTER TABLE messages ADD COLUMN outbound_ip inet;
+ALTER TABLE messages
+    ADD COLUMN outbound_ip inet;

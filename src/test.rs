@@ -1,4 +1,5 @@
 use crate::{
+    Environment,
     bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
@@ -141,6 +142,7 @@ async fn setup(
         allow_plain: true,
         domain: "test".to_string(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
+        environment: Environment::Development,
         retry: retry_config,
     };
 
@@ -167,9 +169,25 @@ async fn setup(
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn integration_test(pool: PgPool) {
+    // dotenv().unwrap();
+    //
+    // tracing_subscriber::registry()
+    //     .with(
+    //         tracing_subscriber::EnvFilter::try_from_default_env()
+    //             .unwrap_or("remails=trace,tower_http=debug,axum=trace".parse().unwrap()),
+    //     )
+    //     .with(
+    //         tracing_subscriber::fmt::layer()
+    //             .with_file(true)
+    //             .with_line_number(true)
+    //             .without_time(),
+    //     )
+    //     .init();
+
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
     let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
@@ -318,7 +336,8 @@ async fn integration_test(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn quotas_count_atomically(pool: PgPool) {
     let pool = PgPoolOptions::new()
@@ -408,7 +427,8 @@ async fn quotas_count_atomically(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn rate_limit_count_atomically(pool: PgPool) {
     let pool = PgPoolOptions::new()
