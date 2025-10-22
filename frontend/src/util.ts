@@ -1,4 +1,4 @@
-import { Role } from "./types";
+import { KeyRole, Role } from "./types";
 
 export function formatDateTime(date: number | string | Date): string {
   return new Date(date).toLocaleString("en-US", {
@@ -30,5 +30,10 @@ export function is_in_the_future(date: number | string | Date) {
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Admin",
   maintainer: "Maintainer",
+  read_only: "Read-only",
+};
+
+export const KEY_ROLE_LABELS: Record<KeyRole, string> = {
+  maintainer: "Read-write",
   read_only: "Read-only",
 };

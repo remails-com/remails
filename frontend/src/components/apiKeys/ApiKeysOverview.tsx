@@ -1,7 +1,7 @@
 import { useApiKeys } from "../../hooks/useApiKeys.ts";
 import { Loader } from "../../Loader.tsx";
 import { Flex, Table, Text } from "@mantine/core";
-import { formatDateTime, ROLE_LABELS } from "../../util.ts";
+import { formatDateTime, KEY_ROLE_LABELS } from "../../util.ts";
 import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewApiKey } from "./NewApiKey.tsx";
@@ -27,7 +27,7 @@ export default function ApiKeysOverview() {
             {api_key.description}
           </Text>
         </Table.Td>
-        <Table.Td>{ROLE_LABELS[api_key.role]}</Table.Td>
+        <Table.Td>{KEY_ROLE_LABELS[api_key.role]}</Table.Td>
         <Table.Td>{formatDateTime(api_key.updated_at)}</Table.Td>
         <Table.Td align={"right"}>
           <EditButton
@@ -49,7 +49,13 @@ export default function ApiKeysOverview() {
       </InfoAlert>
       <NewApiKey opened={opened} close={close} />
       <StyledTable
-        headers={[{ miw: "10rem", children: "ID" }, "Description", "Role", { miw: "10rem", children: "Updated" }, ""]}
+        headers={[
+          { miw: "10rem", children: "ID" },
+          "Description",
+          "Access level",
+          { miw: "10rem", children: "Updated" },
+          "",
+        ]}
       >
         {rows}
       </StyledTable>

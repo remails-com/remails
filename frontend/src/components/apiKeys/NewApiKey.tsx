@@ -7,7 +7,7 @@ import { Alert, Anchor, Button, Group, Modal, Select, Stack, Stepper, Text, Text
 import { IconInfoCircle } from "@tabler/icons-react";
 import { CopyableCode } from "../CopyableCode.tsx";
 import { errorNotification } from "../../notify.tsx";
-import { ROLE_LABELS } from "../../util.ts";
+import { KEY_ROLE_LABELS } from "../../util.ts";
 
 const ALL_KEY_ROLES: KeyRole[] = ["read_only", "maintainer"];
 export function isValidKeyRole(value: string): value is KeyRole {
@@ -16,7 +16,7 @@ export function isValidKeyRole(value: string): value is KeyRole {
 
 export const roleSelectData: { value: KeyRole; label: string }[] = ALL_KEY_ROLES.map((role) => ({
   value: role,
-  label: ROLE_LABELS[role],
+  label: KEY_ROLE_LABELS[role],
 }));
 
 interface FormValues {
@@ -42,7 +42,7 @@ export function NewApiKey({ opened, close }: NewApiKeyProps) {
       role: "maintainer",
     },
     validate: {
-      role: (value) => (isValidKeyRole(value) ? null : "Invalid role"),
+      role: (value) => (isValidKeyRole(value) ? null : "Invalid access level"),
     },
   });
 
@@ -100,8 +100,8 @@ export function NewApiKey({ opened, close }: NewApiKeyProps) {
                 />
                 <Select
                   data-autofocus
-                  label="Organization role"
-                  placeholder="Pick a role"
+                  label="Access level"
+                  placeholder="Pick an access level"
                   data={roleSelectData}
                   value={form.values.role}
                   error={form.errors.role}

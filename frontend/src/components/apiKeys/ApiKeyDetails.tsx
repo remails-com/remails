@@ -118,8 +118,8 @@ export default function ApiKeyDetails() {
             />
             <Select
               data-autofocus
-              label="Organization role"
-              placeholder="Pick a role"
+              label="Access level"
+              placeholder="Pick an access level"
               data={roleSelectData}
               value={form.values.role}
               error={form.errors.role}
