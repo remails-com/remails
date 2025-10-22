@@ -10,7 +10,7 @@ use crate::{
     kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
-        NewMessage, OrganizationRepository, QuotaStatus,
+        OrganizationRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Base64UrlUnpadded, Encoding};
@@ -321,14 +321,6 @@ impl Handler {
         }
 
         Ok(Ok(dkim_header))
-    }
-
-    pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        self.message_repository
-            .create(&message, self.config.retry.max_automatic_retries)
-            .await
-            .inspect(|m| trace!("stored message {}", m.id()))
-            .map_err(HandlerError::RepositoryError)
     }
 
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
@@ -868,7 +860,7 @@ mod test {
     use super::*;
     use crate::{
         handler::dns::DnsResolver,
-        models::{SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
         test::{TestStreams, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
@@ -942,7 +934,11 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-        let mut message = handler.create_message(message).await.unwrap();
+        let mut message = handler
+            .message_repository
+            .create(&message, 1)
+            .await
+            .unwrap();
         handler.handle_message(&mut message).await.unwrap();
         handler.send_message(message).await.unwrap();
     }
@@ -1000,7 +996,11 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler.create_message(message).await.unwrap();
+            let mut message = handler
+                .message_repository
+                .create(&message, 1)
+                .await
+                .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
@@ -1067,7 +1067,11 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler.create_message(message).await.unwrap();
+            let mut message = handler
+                .message_repository
+                .create(&message, 1)
+                .await
+                .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
