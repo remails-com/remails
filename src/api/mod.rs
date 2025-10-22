@@ -9,7 +9,7 @@ use crate::{
         auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{get_message, list_messages, remove_message, retry_now},
+        messages::{create_message, get_message, list_messages, remove_message, retry_now},
         oauth::GithubOauthService,
         organizations::{
             create_organization, get_organization, list_members, list_organizations, remove_member,
@@ -381,7 +381,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
-                get(list_messages),
+                get(list_messages).post(create_message),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.outbound_ip\n            FROM messages m\n            WHERE m.id = $1\n            ",
+  "query": "\n            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, api_key_id, from_email, recipients, raw_data, max_attempts)\n            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6\n            FROM streams s\n                JOIN projects p ON p.id = s.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $1\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.outbound_ip\n            ",
   "describe": {
     "columns": [
       {
@@ -30,6 +30,11 @@
       },
       {
         "ordinal": 5,
+        "name": "api_key_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -49,74 +54,79 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "reason",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "raw_size!",
         "type_info": "Int4"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "outbound_ip",
         "type_info": "Inet"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Int4"
       ]
     },
     "nullable": [
@@ -124,6 +134,7 @@
       false,
       false,
       false,
+      true,
       true,
       false,
       true,
@@ -141,5 +152,5 @@
       true
     ]
   },
-  "hash": "52e27122dc8edfa30569338f618a48c5a4e949cb6920d0f759995c4eddc03aaa"
+  "hash": "da0f66f3ececb093650100868061a160fbb5e23b79e60c9c1c9264956a068f49"
 }

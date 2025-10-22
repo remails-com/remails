@@ -1,6 +1,8 @@
 use crate::{
     handler::{ConnectionLog, RetryConfig},
-    models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
+    models::{
+        ApiKeyId, Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
+    },
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -49,6 +51,7 @@ pub struct Message {
     pub(crate) project_id: ProjectId,
     pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
+    pub(crate) api_key_id: Option<ApiKeyId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
     pub delivery_details: HashMap<EmailAddress, DeliveryDetails>,
@@ -84,6 +87,10 @@ impl ApiMessage {
         self.metadata.smtp_credential_id
     }
 
+    pub fn api_key_id(&self) -> Option<ApiKeyId> {
+        self.metadata.api_key_id
+    }
+
     pub fn status(&self) -> &MessageStatus {
         &self.metadata.status
     }
@@ -101,6 +108,7 @@ pub struct ApiMessageMetadata {
     reason: Option<String>,
     delivery_details: HashMap<EmailAddress, DeliveryDetails>,
     smtp_credential_id: Option<SmtpCredentialId>,
+    api_key_id: Option<ApiKeyId>,
     pub from_email: EmailAddress,
     recipients: Vec<EmailAddress>,
     /// Human-readable size
@@ -156,16 +164,6 @@ impl DeliveryDetails {
     }
 }
 
-#[derive(Debug)]
-pub struct NewMessage {
-    pub smtp_credential_id: SmtpCredentialId,
-    pub status: MessageStatus,
-    pub from_email: EmailAddress,
-    pub recipients: Vec<EmailAddress>,
-    pub raw_data: Vec<u8>,
-    pub message_data: serde_json::Value,
-}
-
 impl Message {
     pub fn id(&self) -> MessageId {
         self.id
@@ -209,17 +207,35 @@ impl Message {
     }
 }
 
+/// A new email coming from the in-bound SMTP server
+#[derive(Debug)]
+pub struct NewMessage {
+    pub smtp_credential_id: SmtpCredentialId,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Vec<u8>,
+    pub message_data: serde_json::Value,
+}
+
 impl NewMessage {
     pub fn new(smtp_credential_id: SmtpCredentialId, from_email: EmailAddress) -> Self {
         NewMessage {
             smtp_credential_id,
-            status: MessageStatus::Processing,
             from_email,
             recipients: vec![],
             raw_data: vec![],
             message_data: Default::default(),
         }
     }
+}
+
+/// A new email coming from the Remails API
+pub struct NewApiMessage {
+    pub api_key_id: ApiKeyId,
+    pub stream_id: StreamId,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -251,6 +267,7 @@ struct PgMessage {
     project_id: ProjectId,
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
+    api_key_id: Option<Uuid>,
     status: MessageStatus,
     reason: Option<String>,
     delivery_details: serde_json::Value,
@@ -277,6 +294,7 @@ impl TryFrom<PgMessage> for Message {
             project_id: m.project_id,
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            api_key_id: m.api_key_id.map(Into::into),
             status: m.status,
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
@@ -359,6 +377,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            api_key_id: m.api_key_id.map(Into::into),
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
                 .recipients
@@ -385,7 +404,7 @@ impl MessageRepository {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email,
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, from_email,
                                        recipients, raw_data, message_data, max_attempts, outbound_ip)
             WITH m AS (SELECT o.id AS org_id, p.id AS proj_id, streams.id AS stream_id
                        FROM smtp_credentials s
@@ -400,26 +419,15 @@ impl MessageRepository {
                         -- TODO: Do not rely on random outbound IPs
                         ORDER BY RANDOM()
                         LIMIT 1)
-            SELECT gen_random_uuid(),
-                   m.org_id,
-                   m.proj_id,
-                   m.stream_id,
-                   $1,
-                   $2,
-                   $3,
-                   $4,
-                   $5,
-                   $6,
-                   $7,
-                   ip.outbound_ip
-            FROM m,
-                 ip
+            SELECT gen_random_uuid(), m.org_id, m.proj_id, m.stream_id, $1, $2, $3, $4, $5, $6, ip.outbound_ip
+            FROM m, ip
             RETURNING
                 m.id,
                 m.organization_id,
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -436,11 +444,58 @@ impl MessageRepository {
                 m.outbound_ip
             "#,
             *message.smtp_credential_id,
-            message.status as _,
             message.from_email.as_str(),
             &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
             message.raw_data,
             message.message_data,
+            max_attempts
+        )
+            .fetch_one(&self.pool)
+            .await?
+            .try_into()
+    }
+
+    pub async fn create_from_api(
+        &self,
+        message: &NewApiMessage,
+        max_attempts: i32,
+    ) -> Result<ApiMessageMetadata, Error> {
+        sqlx::query_as!(
+            PgMessage,
+            r#"
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, api_key_id, from_email, recipients, raw_data, max_attempts)
+            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6
+            FROM streams s
+                JOIN projects p ON p.id = s.project_id
+                JOIN organizations o ON o.id = p.organization_id
+            WHERE s.id = $1
+            RETURNING
+                m.id,
+                m.organization_id,
+                m.project_id,
+                m.stream_id,
+                m.smtp_credential_id,
+                m.api_key_id,
+                m.status as "status: _",
+                m.reason,
+                m.delivery_details,
+                m.from_email,
+                m.recipients,
+                m.raw_data,
+                octet_length(m.raw_data) as "raw_size!",
+                m.message_data,
+                m.created_at,
+                m.updated_at,
+                m.retry_after,
+                m.attempts,
+                m.max_attempts,
+                m.outbound_ip
+            "#,
+            *message.stream_id,
+            *message.api_key_id,
+            message.from_email.as_str(),
+            &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
+            message.raw_data,
             max_attempts
         )
             .fetch_one(&self.pool)
@@ -519,6 +574,7 @@ impl MessageRepository {
                 project_id,
                 stream_id,
                 smtp_credential_id,
+                api_key_id,
                 status AS "status: _",
                 reason,
                 delivery_details,
@@ -569,6 +625,7 @@ impl MessageRepository {
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -609,6 +666,7 @@ impl MessageRepository {
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -734,12 +792,15 @@ impl MessageRepository {
 
 #[cfg(test)]
 mod test {
-    use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
+    use mail_builder::MessageBuilder;
+    use mail_send::smtp::message::IntoMessage;
     use sqlx::PgPool;
 
     use super::*;
     use crate::{
-        models::{SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{
+            ApiKeyRepository, ApiKeyRequest, Role, SmtpCredentialRepository, SmtpCredentialRequest,
+        },
         test::TestStreams,
     };
 
@@ -748,12 +809,11 @@ mod test {
             value: mail_send::smtp::message::Message<'_>,
             smtp_credential_id: SmtpCredentialId,
         ) -> Self {
-            use mail_send::smtp::message::IntoMessage;
             let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
             for recipient in value.rcpt_to.iter() {
                 message.recipients.push(recipient.email.parse().unwrap());
             }
-            message.raw_data = value.into_message().unwrap().body.to_vec();
+            message.raw_data = value.body.to_vec();
 
             message
         }
@@ -763,12 +823,11 @@ mod test {
             smtp_credential_id: SmtpCredentialId,
             smtp_from: &str,
         ) -> Self {
-            use mail_send::smtp::message::IntoMessage;
             let mut message = Self::new(smtp_credential_id, smtp_from.parse().unwrap());
             for recipient in value.rcpt_to.iter() {
                 message.recipients.push(recipient.email.parse().unwrap());
             }
-            message.raw_data = value.into_message().unwrap().body.to_vec();
+            message.raw_data = value.body.to_vec();
 
             message
         }
@@ -787,6 +846,7 @@ mod test {
     ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
@@ -799,10 +859,9 @@ mod test {
             .text_body("Hello world!")
             .into_message()
             .unwrap();
+
+        // create SMTP credential
         let smtp_credential_repo = SmtpCredentialRepository::new(pool);
-
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
-
         let credential = smtp_credential_repo
             .generate(
                 org_id,
@@ -816,20 +875,21 @@ mod test {
             .await
             .unwrap();
 
+        // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
-
         let message = repository.create(&new_message, 5).await.unwrap();
 
+        // get message
         let mut fetched_message = repository
             .find_by_id(org_id, project_id, stream_id, message.id)
             .await
             .unwrap();
-
+        assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
+        assert_eq!(fetched_message.api_key_id(), None);
         assert_eq!(
             fetched_message.metadata.from_email,
             "john@test-org-1-project-1.com".parse().unwrap()
         );
-
         fetched_message
             .metadata
             .recipients
@@ -838,9 +898,9 @@ mod test {
             "james@test.com".parse().unwrap(),
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
-
         assert_eq!(fetched_message.metadata.recipients, expected);
 
+        // list message metadata
         let messages = repository
             .list_message_metadata(
                 org_id,
@@ -854,15 +914,16 @@ mod test {
             )
             .await
             .unwrap();
-
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].id, message.id);
 
+        // remove message
         repository
             .remove(org_id, project_id, stream_id, message.id)
             .await
             .unwrap();
 
+        // check that message was removed
         let messages = repository
             .list_message_metadata(
                 org_id,
@@ -876,7 +937,74 @@ mod test {
             )
             .await
             .unwrap();
-
         assert_eq!(messages.len(), 0);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+    ))]
+    async fn create_message_from_api(pool: PgPool) {
+        let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+
+        let message = MessageBuilder::new()
+            .from(("John Doe", "john@test-org-1-project-1.com"))
+            .to(vec![
+                ("James Smith", "james@test.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
+            ])
+            .subject("Hi!")
+            .html_body("<h1>Hello, world!</h1>")
+            .text_body("Hello world!")
+            .into_message()
+            .unwrap();
+
+        // create API key
+        let api_key_repository = ApiKeyRepository::new(pool);
+        let api_key = api_key_repository
+            .create(
+                org_id,
+                &ApiKeyRequest {
+                    description: "Test API key".to_string(),
+                    role: Role::Maintainer,
+                },
+            )
+            .await
+            .unwrap();
+
+        // create message
+        let new_message = NewApiMessage {
+            api_key_id: *api_key.id(),
+            stream_id,
+            from_email: "john@test-org-1-project-1.com".parse().unwrap(),
+            recipients: vec![
+                "james@test.com".parse().unwrap(),
+                "jane@test-org-1-project-1.com".parse().unwrap(),
+            ],
+            raw_data: message.into_message().unwrap().body.to_vec(),
+        };
+        let message = repository.create_from_api(&new_message, 5).await.unwrap();
+
+        // get message
+        let mut fetched_message = repository
+            .find_by_id(org_id, project_id, stream_id, message.id)
+            .await
+            .unwrap();
+        assert_eq!(fetched_message.smtp_credential_id(), None);
+        assert_eq!(fetched_message.api_key_id(), Some(*api_key.id()));
+        assert_eq!(
+            fetched_message.metadata.from_email,
+            "john@test-org-1-project-1.com".parse().unwrap()
+        );
+        fetched_message
+            .metadata
+            .recipients
+            .sort_by_key(|x| x.email());
+        let expected = vec![
+            "james@test.com".parse().unwrap(),
+            "jane@test-org-1-project-1.com".parse().unwrap(),
+        ];
+        assert_eq!(fetched_message.metadata.recipients, expected);
     }
 }

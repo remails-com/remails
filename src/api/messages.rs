@@ -2,15 +2,19 @@ use super::error::{ApiError, ApiResult};
 use crate::{
     api::auth::Authenticated,
     bus::client::{BusClient, BusMessage},
+    handler::RetryConfig,
     models::{
-        ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository, MessageStatus,
-        OrganizationId, ProjectId, StreamId,
+        ApiKey, ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository,
+        MessageStatus, NewApiMessage, OrganizationId, ProjectId, StreamId,
     },
 };
 use axum::{
     Json,
     extract::{Path, Query, State},
+    response::IntoResponse,
 };
+use http::StatusCode;
+use mail_builder::MessageBuilder;
 use serde::Deserialize;
 use tracing::{debug, error, warn};
 
@@ -27,6 +31,65 @@ pub struct SpecificMessagePath {
     project_id: ProjectId,
     stream_id: StreamId,
     message_id: MessageId,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailParameters {
+    from: String,
+    to: Vec<String>,
+    subject: String,
+    text_body: String,
+    html_body: String,
+}
+
+pub async fn create_message(
+    State(repo): State<MessageRepository>,
+    Path((org_id, _, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
+    user: ApiKey, // only accessible for API keys
+    Json(message): Json<EmailParameters>,
+) -> Result<impl IntoResponse, ApiError> {
+    user.has_org_write_access(&org_id)?;
+
+    // TODO: rate limiting
+
+    let from_email = message
+        .from
+        .parse()
+        .map_err(|_| ApiError::BadRequest(format!("Invalid from email: {}", message.from)))?;
+
+    let mut recipients = Vec::with_capacity(message.to.len());
+    for recipient in &message.to {
+        recipients.push(
+            recipient.parse().map_err(|_| {
+                ApiError::BadRequest(format!("Invalid recipient email: {recipient}"))
+            })?,
+        );
+    }
+
+    let raw_data = MessageBuilder::new()
+        .from(message.from)
+        .to(message.to)
+        .subject(message.subject)
+        .text_body(message.text_body)
+        .html_body(message.html_body)
+        .write_to_vec()
+        .map_err(|e| ApiError::BadRequest(format!("Error creating email: {e:?}")))?;
+
+    let message = NewApiMessage {
+        api_key_id: *user.id(),
+        stream_id,
+        from_email,
+        recipients,
+        raw_data,
+    };
+
+    let message = repo
+        .create_from_api(&message, RetryConfig::default().max_automatic_retries)
+        .await?;
+
+    // TODO: do basic checks immediately and return an error if it fails?
+
+    Ok((StatusCode::CREATED, Json(message)))
 }
 
 pub async fn list_messages(
