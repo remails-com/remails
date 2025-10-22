@@ -93,13 +93,15 @@ pub async fn remove_api_key(
 
 #[cfg(test)]
 mod tests {
+    use axum::body::Body;
+    use base64ct::Encoding;
     use sqlx::PgPool;
 
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
         models::{
-            ApiMessage, ApiMessageMetadata, CreatedApiKeyWithPassword, Organization, Project, Role,
-            Stream,
+            ApiDomain, ApiMessage, ApiMessageMetadata, CreatedApiKeyWithPassword, NewOrganization,
+            Organization, Project, Role, Stream,
         },
     };
 
@@ -283,6 +285,33 @@ mod tests {
         test_api_key_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
     }
 
+    impl TestServer {
+        async fn use_api_key(&mut self, org_id: OrganizationId, role: Role) {
+            // request an API key using the currently logged-in user
+            let response = self
+                .post(
+                    format!("/api/organizations/{org_id}/api_keys"),
+                    serialize_body(&ApiKeyRequest {
+                        description: "Test API Key".to_string(),
+                        role,
+                    }),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+            let created_key: CreatedApiKeyWithPassword =
+                deserialize_body(response.into_body()).await;
+
+            // log out user and start using API key
+            self.set_user(None);
+            let base64_credentials = base64ct::Base64::encode_string(
+                format!("{}:{}", created_key.id(), created_key.password()).as_bytes(),
+            );
+            self.headers
+                .insert("Authorization", format!("Basic {base64_credentials}"));
+        }
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
         scripts(
@@ -291,38 +320,23 @@ mod tests {
             "projects",
             "streams",
             "smtp_credentials",
-            "messages"
+            "messages",
+            "org_domains",
+            "proj_domains"
         )
     ))]
     async fn test_maintainer_api_key_use_api(pool: PgPool) {
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
-
-        // create an API key
-        let response = server
-            .post(
-                format!("/api/organizations/{org_1}/api_keys"),
-                serialize_body(&ApiKeyRequest {
-                    description: "Test API Key".to_string(),
-                    role: Role::Maintainer,
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let created_key: CreatedApiKeyWithPassword = deserialize_body(response.into_body()).await;
-
-        // log out user and start using API key
-        server.set_user(None);
-        server.set_api_key(&created_key);
+        server.use_api_key(org_1, Role::Maintainer).await;
 
         // list organizations
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let orgs: Vec<Organization> = deserialize_body(response.into_body()).await;
         assert_eq!(orgs.len(), 1);
-        assert_eq!(orgs[0].id(), org_1.parse().unwrap());
+        assert_eq!(orgs[0].id(), org_1);
 
         // get specific organization
         let response = server
@@ -331,7 +345,18 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let org: Organization = deserialize_body(response.into_body()).await;
-        assert_eq!(org.id(), org_1.parse().unwrap());
+        assert_eq!(org.id(), org_1);
+
+        // list organization domains
+        let org_dom_1 = "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap();
+        let response = server
+            .get(format!("/api/organizations/{org_1}/domains"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
+        assert_eq!(domains.len(), 1);
+        assert_eq!(domains[0].id(), org_dom_1);
 
         // list projects
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
@@ -398,5 +423,275 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "api_keys",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages",
+            "invites"
+        )
+    ))]
+    async fn test_api_keys_should_not(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+
+        // API keys should NOT be able to create API keys
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/api_keys"),
+                serialize_body(&ApiKeyRequest {
+                    description: "Test API Key".to_string(),
+                    role: Role::ReadOnly,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to delete API keys
+        let api_key_1 = "951ec618-bcc9-4224-9cf1-ed41a84f41d8";
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/api_keys/{api_key_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to update API keys
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/api_keys/{api_key_1}"),
+                serialize_body(&ApiKeyRequest {
+                    description: "Updated API Key".to_string(),
+                    role: Role::ReadOnly,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to create invites
+        let response = server
+            .post(
+                format!("/api/invite/{org_1}"),
+                serialize_body(Role::ReadOnly),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to delete invites
+        let invite_1 = "32bba198-fdd8-4cb7-8b82-85857dd2527f";
+        let response = server
+            .delete(format!("/api/invite/{org_1}/{invite_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to accept invites
+        let response = server
+            .post(
+                format!("/api/invite/{org_1}/{invite_1}/unsecure"),
+                Body::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to remove members
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/members/{user_4}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to update members
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/members/{user_4}"),
+                serialize_body(Role::ReadOnly),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to create organizations
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // API keys should NOT be able to remove organizations
+        let response = server
+            .delete(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages",
+            "org_domains",
+            "proj_domains"
+        )
+    ))]
+    async fn test_read_only_api_keys(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::ReadOnly).await; // read-only API key
+
+        // Read-only API keys should not be able to delete projects
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462";
+        let response = server
+            .delete(format!("/api/organizations/{org_1}/projects/{proj_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Read-only API keys should not be able to delete streams
+        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Read-only API keys should not be able to delete messages
+        let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
+        let response = server.delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Read-only API keys are able to get organization
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Read-only API keys are able to list messages
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Read-only API keys are able to view messages
+        let response = server.get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Read-only API keys are able to view organization domains
+        let org_dom_1 = "ed28baa5-57f7-413f-8c77-7797ba6a8780";
+        let response = server
+            .get(format!("/api/organizations/{org_1}/domains/{org_dom_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Read-only API keys are able to view project domains
+        let proj_dom_1 = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a";
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/domains/{proj_dom_1}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_keys",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages",
+        )
+    ))]
+    async fn test_invalid_api_keys(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        // not basic auth
+        server
+            .headers
+            .insert("Authorization", "Bearer aGFoYSB5ZXM=".to_owned());
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // nonsense credentials
+        server
+            .headers
+            .insert("Authorization", "Basic aGFoYSB5ZXM=".to_owned());
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // invalid API key id
+        let base64_credentials = base64ct::Base64::encode_string(
+            "000000000-0000-0000-0000-000000000000:unsecure".as_bytes(),
+        );
+        server
+            .headers
+            .insert("Authorization", format!("Basic {base64_credentials}"));
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // incorrect password
+        let base64_credentials = base64ct::Base64::encode_string(
+            "951ec618-bcc9-4224-9cf1-ed41a84f41d8:incorrect".as_bytes(),
+        );
+        server
+            .headers
+            .insert("Authorization", format!("Basic {base64_credentials}"));
+        let response = server
+            .get(format!("/api/organizations/{org_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }
