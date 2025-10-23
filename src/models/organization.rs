@@ -361,10 +361,6 @@ mod test {
     use sqlx::PgPool;
 
     impl Organization {
-        pub fn remaining_message_quota(&self) -> i64 {
-            self.total_message_quota - self.used_message_quota
-        }
-
         pub fn quota_reset(&self) -> Option<DateTime<Utc>> {
             self.quota_reset
         }

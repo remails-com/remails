@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::error::{ApiError, ApiResult};
 use crate::{
     api::auth::Authenticated,
@@ -177,7 +179,7 @@ pub async fn remove_message(
 
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
-    State(bus): State<BusClient>,
+    State(bus): State<Arc<BusClient>>,
     Path(SpecificMessagePath {
         org_id,
         project_id,

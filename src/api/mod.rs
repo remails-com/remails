@@ -24,7 +24,7 @@ use crate::{
         subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
     },
     bus::client::BusClient,
-    handler::dns::DnsResolver,
+    handler::{RetryConfig, dns::DnsResolver},
     models::{
         ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
         OrganizationRepository, ProjectRepository, SmtpCredentialRepository, StreamRepository,
@@ -43,7 +43,7 @@ use base64ct::Encoding;
 use http::{HeaderName, HeaderValue, StatusCode};
 use serde::Serialize;
 use sqlx::PgPool;
-use std::{env, net::SocketAddr, time::Duration};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -131,33 +131,22 @@ impl Default for RemailsConfig {
     }
 }
 
-#[derive(Clone, derive_more::Debug)]
+#[derive(derive_more::Debug)]
 pub struct ApiConfig {
     #[debug("****")]
     session_key: cookie::Key,
     pub remails_config: RemailsConfig,
 }
 
-#[derive(Clone)]
+#[derive(FromRef, Clone)]
 pub struct ApiState {
     pool: PgPool,
-    config: ApiConfig,
+    config: Arc<ApiConfig>,
     moneybird: MoneyBird,
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
-    message_bus: BusClient,
-}
-
-impl FromRef<ApiState> for PgPool {
-    fn from_ref(state: &ApiState) -> Self {
-        state.pool.clone()
-    }
-}
-
-impl FromRef<ApiState> for BusClient {
-    fn from_ref(state: &ApiState) -> Self {
-        state.message_bus.clone()
-    }
+    message_bus: Arc<BusClient>,
+    retry_config: Arc<RetryConfig>,
 }
 
 impl FromRef<ApiState> for MessageRepository {
@@ -202,16 +191,6 @@ impl FromRef<ApiState> for DomainRepository {
     }
 }
 
-impl FromRef<ApiState> for (DomainRepository, DnsResolver, RemailsConfig) {
-    fn from_ref(state: &ApiState) -> Self {
-        (
-            DomainRepository::new(state.pool.clone()),
-            state.resolver.clone(),
-            state.config.remails_config.clone(),
-        )
-    }
-}
-
 impl FromRef<ApiState> for ApiUserRepository {
     fn from_ref(state: &ApiState) -> Self {
         ApiUserRepository::new(state.pool.clone())
@@ -224,30 +203,9 @@ impl FromRef<ApiState> for InviteRepository {
     }
 }
 
-impl FromRef<ApiState> for (InviteRepository, OrganizationRepository) {
-    fn from_ref(state: &ApiState) -> Self {
-        (
-            InviteRepository::new(state.pool.clone()),
-            OrganizationRepository::new(state.pool.clone()),
-        )
-    }
-}
-
-impl FromRef<ApiState> for GithubOauthService {
-    fn from_ref(state: &ApiState) -> Self {
-        state.gh_oauth_service.clone()
-    }
-}
-
 impl FromRef<ApiState> for RemailsConfig {
     fn from_ref(state: &ApiState) -> Self {
         state.config.remails_config.clone()
-    }
-}
-
-impl FromRef<ApiState> for MoneyBird {
-    fn from_ref(state: &ApiState) -> Self {
-        state.moneybird.clone()
     }
 }
 
@@ -316,17 +274,18 @@ impl ApiServer {
 
         let state = ApiState {
             pool,
-            config: ApiConfig {
+            config: Arc::new(ApiConfig {
                 session_key,
                 remails_config: Default::default(),
-            },
+            }),
             moneybird,
             gh_oauth_service: github_oauth,
             #[cfg(not(test))]
             resolver: DnsResolver::new(),
             #[cfg(test)]
             resolver: DnsResolver::mock("localhost", 0),
-            message_bus,
+            message_bus: Arc::new(message_bus),
+            retry_config: Arc::new(RetryConfig::default()),
         };
 
         let mut router = Router::new()
@@ -532,7 +491,7 @@ pub async fn config(State(config): State<RemailsConfig>) -> Response {
 }
 
 async fn append_default_headers(
-    State(config): State<ApiConfig>,
+    State(config): State<Arc<ApiConfig>>,
     req: Request,
     next: middleware::Next,
 ) -> axum::response::Response {

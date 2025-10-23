@@ -30,7 +30,9 @@ pub struct SpecificDomainPath {
 }
 
 pub async fn create_domain(
-    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
@@ -54,7 +56,9 @@ pub async fn create_domain(
 }
 
 pub async fn list_domains(
-    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
 ) -> ApiResult<Vec<ApiDomain>> {
@@ -82,7 +86,9 @@ pub async fn list_domains(
 }
 
 pub async fn get_domain(
-    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(SpecificDomainPath {
         org_id,
@@ -135,7 +141,9 @@ pub async fn delete_domain(
 }
 
 pub(super) async fn verify_domain(
-    State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(SpecificDomainPath {
         org_id,

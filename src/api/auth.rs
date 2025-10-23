@@ -334,7 +334,8 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let api_state: ApiState = FromRef::from_ref(state);
-        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+        let jar =
+            PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
         let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
 
@@ -412,7 +413,8 @@ where
         }
 
         let api_state: ApiState = FromRef::from_ref(state);
-        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+        let jar =
+            PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
         let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
 
