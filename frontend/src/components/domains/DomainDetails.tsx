@@ -209,7 +209,7 @@ export default function DomainDetails() {
           {
             name: "A",
             recordName: currentDomain.domain,
-            recordType: "TXT",
+            recordType: "A",
             recordValue: (
               <Group gap="xs">
                 any

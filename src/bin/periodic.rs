@@ -1,9 +1,7 @@
 use anyhow::Context;
 use futures::future;
-use kube::Client;
 use remails::{
-    bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal,
-    spawn_node_watcher,
+    Kubernetes, bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal,
 };
 use sqlx::{
     ConnectOptions,
@@ -71,13 +69,9 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let join_handle2 = spawn_node_watcher(
-        pool.clone(),
-        Client::try_default()
-            .await
-            .expect("Cannot create K8s client"),
-        shutdown.clone(),
-    )?;
+    let join_handle2 = Kubernetes::new(pool.clone())
+        .await?
+        .spawn_node_watcher(shutdown.clone())?;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");

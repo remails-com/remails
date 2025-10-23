@@ -32,7 +32,7 @@ mod fixtures;
 mod kubernetes;
 mod moneybird;
 
-pub use kubernetes::spawn_node_watcher;
+pub use kubernetes::Kubernetes;
 pub use moneybird::*;
 
 #[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]

@@ -1,10 +1,9 @@
 use anyhow::Context;
-use kube::Client;
 use remails::{
-    HandlerConfig, SmtpConfig,
+    HandlerConfig, Kubernetes, SmtpConfig,
     bus::{client::BusClient, server::Bus},
     periodically::Periodically,
-    run_api_server, run_mta, shutdown_signal, spawn_node_watcher,
+    run_api_server, run_mta, shutdown_signal,
 };
 use sqlx::{
     ConnectOptions,
@@ -93,13 +92,9 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    spawn_node_watcher(
-        pool.clone(),
-        Client::try_default()
-            .await
-            .expect("Cannot create K8s client"),
-        shutdown.clone(),
-    )?;
+    Kubernetes::new(pool.clone())
+        .await?
+        .spawn_node_watcher(shutdown.clone())?;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");

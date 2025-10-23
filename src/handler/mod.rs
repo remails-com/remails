@@ -857,6 +857,28 @@ mod test {
     use mailcrab::TestMailServerHandle;
     use std::net::Ipv4Addr;
 
+    impl Handler {
+        pub(crate) async fn test_handler(pool: PgPool, mailcrab_port: u16) -> Self {
+            let config = HandlerConfig {
+                allow_plain: true,
+                domain: "test".to_string(),
+                resolver: DnsResolver::mock("localhost", mailcrab_port),
+                environment: Environment::Development,
+                retry: RetryConfig {
+                    delay: Duration::minutes(5),
+                    max_automatic_retries: 1,
+                },
+            };
+            Handler::new(
+                pool,
+                Arc::new(config),
+                BusClient::new_from_env_var().unwrap(),
+                CancellationToken::new(),
+            )
+            .await
+        }
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
         scripts(
@@ -900,19 +922,7 @@ mod test {
             .unwrap();
 
         let message = NewMessage::from_builder_message(message, credential.id());
-        let config = HandlerConfig {
-            allow_plain: true,
-            domain: "test".to_string(),
-            resolver: DnsResolver::mock("localhost", mailcrab_port),
-            environment: Environment::Development,
-            retry: RetryConfig {
-                delay: Duration::minutes(5),
-                max_automatic_retries: 1,
-            },
-        };
-        let bus_client = BusClient::new_from_env_var().unwrap();
-        let handler =
-            Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new()).await;
+        let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
         let mut message = handler.create_message(message).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
@@ -970,23 +980,7 @@ mod test {
 
             // Message has invalid "MAIL FROM" and invalid "From"
             let message = NewMessage::from_builder_message(message, credential.id());
-            let config = HandlerConfig {
-                allow_plain: true,
-                domain: "test".to_string(),
-                resolver: DnsResolver::mock("localhost", mailcrab_port),
-                environment: Environment::Development,
-                retry: RetryConfig {
-                    delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
-                },
-            };
-            let handler = Handler::new(
-                pool.clone(),
-                Arc::new(config),
-                BusClient::new_from_env_var().unwrap(),
-                CancellationToken::new(),
-            )
-            .await;
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
@@ -1053,23 +1047,7 @@ mod test {
                 credential.id(),
                 "john@test-org-1-project-1.com",
             );
-            let config = HandlerConfig {
-                allow_plain: true,
-                domain: "test".to_string(),
-                resolver: DnsResolver::mock("localhost", mailcrab_port),
-                environment: Environment::Development,
-                retry: RetryConfig {
-                    delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
-                },
-            };
-            let handler = Handler::new(
-                pool.clone(),
-                Arc::new(config),
-                BusClient::new_from_env_var().unwrap(),
-                CancellationToken::new(),
-            )
-            .await;
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());

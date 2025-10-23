@@ -1,8 +1,6 @@
 mod mock_k8s_api;
 mod node_watcher;
 
-pub use node_watcher::spawn_node_watcher;
-
 use crate::kubernetes::mock_k8s_api::mock_service;
 use k8s_openapi::api::core::v1::Node;
 use kube::Api;
