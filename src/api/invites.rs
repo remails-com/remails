@@ -9,7 +9,10 @@ use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
-    api::error::{ApiError, ApiResult},
+    api::{
+        auth::Authenticated,
+        error::{ApiError, ApiResult},
+    },
     models::{
         ApiInvite, ApiUser, InviteId, InviteRepository, OrganizationId, OrganizationRepository,
         Password, Role,

@@ -1,12 +1,11 @@
 use crate::{
     api::{
         RemailsConfig,
+        auth::Authenticated,
         error::{ApiError, ApiResult},
     },
     handler::dns::{DnsResolver, DomainVerificationStatus},
-    models::{
-        ApiDomain, ApiUser, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId,
-    },
+    models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
 };
 use axum::{
     Json,
@@ -32,7 +31,7 @@ pub struct SpecificDomainPath {
 
 pub async fn create_domain(
     State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     Json(new): Json<NewDomain>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -45,7 +44,7 @@ pub async fn create_domain(
     let domain = ApiDomain::verified(domain, status);
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         domain_id = domain.id().to_string(),
         parent_id = ?domain.parent_id(),
         domain = domain.domain(),
@@ -56,7 +55,7 @@ pub async fn create_domain(
 
 pub async fn list_domains(
     State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
 ) -> ApiResult<Vec<ApiDomain>> {
     user.has_org_read_access(&org_id)?;
@@ -72,7 +71,7 @@ pub async fn list_domains(
     }
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.map(|id| id.to_string()),
         "verified & listed {} domains",
@@ -84,7 +83,7 @@ pub async fn list_domains(
 
 pub async fn get_domain(
     State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(SpecificDomainPath {
         org_id,
         project_id,
@@ -100,7 +99,7 @@ pub async fn get_domain(
     let domain = ApiDomain::verified(domain, status);
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.map(|id| id.to_string()),
         domain_id = domain_id.to_string(),
@@ -113,7 +112,7 @@ pub async fn get_domain(
 
 pub async fn delete_domain(
     State(repo): State<DomainRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(SpecificDomainPath {
         org_id,
         project_id,
@@ -125,7 +124,7 @@ pub async fn delete_domain(
     let domain_id = repo.remove(org_id, project_id, domain_id).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.map(|id| id.to_string()),
         domain_id = domain_id.to_string(),
@@ -137,7 +136,7 @@ pub async fn delete_domain(
 
 pub(super) async fn verify_domain(
     State((repo, resolver, config)): State<(DomainRepository, DnsResolver, RemailsConfig)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(SpecificDomainPath {
         org_id,
         project_id,

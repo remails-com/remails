@@ -27,6 +27,10 @@ impl Password {
     pub fn verify_password(&self, hash: &str) -> Result<(), password_auth::VerifyError> {
         password_auth::verify_password(&self.0, hash)
     }
+
+    pub fn new(password: String) -> Self {
+        Password(password)
+    }
 }
 
 #[derive(
@@ -42,6 +46,9 @@ pub enum Role {
 }
 
 impl Role {
+    /// Check if role is at least a certain level
+    ///
+    /// Read-only < Maintainer < Admin
     pub fn is_at_least(&self, role: Role) -> bool {
         *self >= role
     }
@@ -69,12 +76,12 @@ pub struct NewApiUser {
 pub struct ApiUser {
     id: ApiUserId,
     pub name: String,
-    pub email: EmailAddress,
+    /// Logged-in session users always have an email, but API keys do not
+    pub email: Option<EmailAddress>,
     pub global_role: Option<Role>,
     pub org_roles: Vec<OrgRole>,
-    #[allow(unused)]
-    github_user_id: Option<i64>,
-    password_enabled: bool,
+    pub github_user_id: Option<i64>,
+    pub password_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,7 +169,7 @@ impl TryFrom<PgApiUser> for ApiUser {
         Ok(Self {
             id: u.id,
             name: u.name,
-            email: u.email.parse()?,
+            email: Some(u.email.parse()?),
             global_role: u.global_role,
             org_roles,
             github_user_id: u.github_user_id,
@@ -669,7 +676,7 @@ mod test {
             Self {
                 id: "0b8c948a-8f0c-4b63-a70e-78a9a186f7a2".parse().unwrap(),
                 name: "Test Api User".to_string(),
-                email: "test@test.com".parse().unwrap(),
+                email: Some("test@test.com".parse().unwrap()),
                 global_role,
                 org_roles,
                 github_user_id: None,
@@ -687,7 +694,7 @@ mod test {
             self_org_roles.sort();
 
             self.github_user_id == other.github_user_id
-                && self.email == other.email
+                && self.email.as_ref() == Some(&other.email)
                 && self.name == other.name
                 && self.global_role == other.global_role
                 && self_org_roles == other_org_roles

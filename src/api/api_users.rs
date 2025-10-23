@@ -195,9 +195,18 @@ mod tests {
     use serde_json::json;
     use sqlx::PgPool;
 
-    use crate::api::tests::{TestServer, deserialize_body, serialize_body};
+    use crate::api::{
+        tests::{TestServer, deserialize_body, serialize_body},
+        whoami::Whoami,
+    };
 
     use super::*;
+
+    impl Whoami {
+        fn unwrap_email(&self) -> &str {
+            self.email.as_ref().unwrap().as_str()
+        }
+    }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_update_user(pool: PgPool) {
@@ -213,7 +222,7 @@ mod tests {
         let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Test API User 3");
-        assert_eq!(whoami.email.as_str(), "test-api@user-3");
+        assert_eq!(whoami.unwrap_email(), "test-api@user-3");
         assert_eq!(whoami.github_id, None);
         assert!(whoami.password_enabled);
 
@@ -233,7 +242,7 @@ mod tests {
         let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
-        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.unwrap_email(), "updated-api@user-3");
         assert_eq!(whoami.github_id, None);
         assert!(whoami.password_enabled);
 
@@ -244,7 +253,7 @@ mod tests {
         let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
-        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.unwrap_email(), "updated-api@user-3");
         assert_eq!(whoami.github_id, None);
         assert!(whoami.password_enabled);
 
@@ -317,7 +326,7 @@ mod tests {
         let whoami = whoami.unwrap_logged_in();
         assert_eq!(whoami.id.to_string(), user_3);
         assert_eq!(whoami.name, "Updated API User 3");
-        assert_eq!(whoami.email.as_str(), "updated-api@user-3");
+        assert_eq!(whoami.unwrap_email(), "updated-api@user-3");
         assert_eq!(whoami.github_id, Some("37".to_string()));
         assert!(!whoami.password_enabled);
     }
@@ -351,7 +360,7 @@ mod tests {
         if !user_status_code.is_success() {
             let user = users.find_by_id(&user_3_id).await.unwrap().unwrap();
             assert_eq!(user.name, "Test API User 3");
-            assert_eq!(user.email, "test-api@user-3".parse().unwrap());
+            assert_eq!(user.email, Some("test-api@user-3".parse().unwrap()));
         }
 
         // can't update password
@@ -382,7 +391,7 @@ mod tests {
         let user = users.find_by_id(&user_3_id).await.unwrap().unwrap();
         assert!(user.password_enabled());
         users
-            .check_password(&user.email, "unsecure".to_string().into())
+            .check_password(&user.email.unwrap(), "unsecure".to_string().into())
             .await
             .unwrap();
     }

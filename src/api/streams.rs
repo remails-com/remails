@@ -1,6 +1,9 @@
 use crate::{
-    api::error::{ApiError, ApiResult},
-    models::{ApiUser, NewStream, OrganizationId, ProjectId, Stream, StreamId, StreamRepository},
+    api::{
+        auth::Authenticated,
+        error::{ApiError, ApiResult},
+    },
+    models::{NewStream, OrganizationId, ProjectId, Stream, StreamId, StreamRepository},
 };
 use axum::{
     Json,
@@ -12,7 +15,7 @@ use tracing::{debug, info};
 
 pub async fn list_streams(
     State(repo): State<StreamRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<Vec<Stream>> {
     user.has_org_read_access(&org_id)?;
@@ -20,7 +23,7 @@ pub async fn list_streams(
     let streams = repo.list(org_id, proj_id).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         "listed {} streams",
@@ -32,7 +35,7 @@ pub async fn list_streams(
 
 pub async fn create_stream(
     State(repo): State<StreamRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     Json(new): Json<NewStream>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -41,7 +44,7 @@ pub async fn create_stream(
     let stream = repo.create(new, org_id, proj_id).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream.id().to_string(),
@@ -54,7 +57,7 @@ pub async fn create_stream(
 
 pub async fn update_stream(
     State(repo): State<StreamRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     Json(update): Json<NewStream>,
 ) -> ApiResult<Stream> {
@@ -63,7 +66,7 @@ pub async fn update_stream(
     let stream = repo.update(org_id, proj_id, stream_id, update).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream.id().to_string(),
@@ -76,7 +79,7 @@ pub async fn update_stream(
 
 pub async fn remove_stream(
     State(repo): State<StreamRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
 ) -> ApiResult<StreamId> {
     user.has_org_write_access(&org_id)?;
@@ -84,7 +87,7 @@ pub async fn remove_stream(
     let stream_id = repo.remove(org_id, proj_id, stream_id).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),

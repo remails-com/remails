@@ -1,6 +1,7 @@
 use crate::{
     Environment,
     api::{
+        api_keys::{create_api_key, list_api_keys, remove_api_key, update_api_key},
         api_users::{
             delete_password, delete_totp_code, finish_enroll_totp, start_enroll_totp, totp_codes,
             update_password, update_user,
@@ -25,7 +26,7 @@ use crate::{
     bus::client::BusClient,
     handler::dns::DnsResolver,
     models::{
-        ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
+        ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
         OrganizationRepository, ProjectRepository, SmtpCredentialRepository, StreamRepository,
     },
     moneybird::MoneyBird,
@@ -53,6 +54,7 @@ use tracing::{
     span,
 };
 
+mod api_keys;
 mod api_users;
 mod auth;
 pub mod domains;
@@ -167,6 +169,12 @@ impl FromRef<ApiState> for MessageRepository {
 impl FromRef<ApiState> for SmtpCredentialRepository {
     fn from_ref(state: &ApiState) -> Self {
         SmtpCredentialRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for ApiKeyRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        ApiKeyRepository::new(state.pool.clone())
     }
 }
 
@@ -414,6 +422,14 @@ impl ApiServer {
             .route(
                 "/organizations/{org_id}/members/{user_id}",
                 delete(remove_member).put(update_member_role),
+            )
+            .route(
+                "/organizations/{org_id}/api_keys",
+                get(list_api_keys).post(create_api_key),
+            )
+            .route(
+                "/organizations/{org_id}/api_keys/{api_key_id}",
+                delete(remove_api_key).put(update_api_key),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))

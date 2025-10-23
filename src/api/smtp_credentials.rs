@@ -1,7 +1,10 @@
 use super::error::{ApiError, ApiResult};
-use crate::models::{
-    ApiUser, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-    SmtpCredentialRequest, SmtpCredentialUpdateRequest, StreamId,
+use crate::{
+    api::auth::Authenticated,
+    models::{
+        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
+        SmtpCredentialRequest, SmtpCredentialUpdateRequest, StreamId,
+    },
 };
 use axum::{
     Json,
@@ -13,7 +16,7 @@ use tracing::{debug, info};
 
 pub async fn create_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     Json(request): Json<SmtpCredentialRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -22,7 +25,7 @@ pub async fn create_smtp_credential(
     let new_credential = repo.generate(org_id, proj_id, stream_id, &request).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -36,7 +39,7 @@ pub async fn create_smtp_credential(
 
 pub async fn update_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id, cred_id)): Path<(
         OrganizationId,
         ProjectId,
@@ -52,7 +55,7 @@ pub async fn update_smtp_credential(
         .await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -67,14 +70,14 @@ pub async fn update_smtp_credential(
 pub async fn list_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<SmtpCredential>> {
     user.has_org_read_access(&org_id)?;
 
     let credentials = repo.list(org_id, proj_id, stream_id).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),
@@ -93,7 +96,7 @@ pub async fn remove_smtp_credential(
         StreamId,
         SmtpCredentialId,
     )>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<SmtpCredentialId> {
     user.has_org_write_access(&org_id)?;
 
@@ -102,7 +105,7 @@ pub async fn remove_smtp_credential(
         .await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         stream_id = stream_id.to_string(),

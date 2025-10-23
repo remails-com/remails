@@ -75,6 +75,15 @@ const actionHandler: {
   remove_credential: function (state, action) {
     return { ...state, credentials: state.credentials?.filter((d) => d.id !== action.credentialId) || [] };
   },
+  set_api_keys: function (state, action) {
+    return { ...state, apiKeys: action.apiKeys };
+  },
+  add_api_key: function (state, action) {
+    return { ...state, apiKeys: [...(state.apiKeys || []), action.apiKey] };
+  },
+  remove_api_key: function (state, action) {
+    return { ...state, apiKeys: state.apiKeys?.filter((k) => k.id !== action.apiKeyId) || [] };
+  },
   set_next_router_state: function (state, action) {
     return { ...state, nextRouterState: action.nextRouterState };
   },

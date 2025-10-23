@@ -1,5 +1,8 @@
 use crate::{
-    api::error::{ApiError, ApiResult},
+    api::{
+        auth::Authenticated,
+        error::{ApiError, ApiResult},
+    },
     models::{ApiUser, OrganizationId},
     moneybird::{MoneyBird, MoneybirdWebhookPayload, SubscriptionStatus},
 };

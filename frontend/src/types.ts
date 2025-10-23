@@ -98,6 +98,7 @@ export interface State {
   domains: Domain[] | null;
   organizationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
+  apiKeys: ApiKey[] | null;
   config: RemailsConfig | null;
   routerState: RouterState;
   nextRouterState: RouterState | null;
@@ -196,6 +197,18 @@ export type Action =
   | {
       type: "remove_credential";
       credentialId: string;
+    }
+  | {
+      type: "set_api_keys";
+      apiKeys: ApiKey[] | null;
+    }
+  | {
+      type: "add_api_key";
+      apiKey: ApiKey;
+    }
+  | {
+      type: "remove_api_key";
+      apiKeyId: string;
     }
   | {
       type: "set_next_router_state";
@@ -349,3 +362,16 @@ export type OrganizationMember = {
   added_at: string;
   updated_at: string;
 };
+
+export type KeyRole = Exclude<Role, "admin">;
+
+export type ApiKey = {
+  id: string;
+  description: string;
+  organization_id: string;
+  role: KeyRole;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreatedApiKeyWithPassword = ApiKey & { password: string };

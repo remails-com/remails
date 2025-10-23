@@ -20,6 +20,7 @@ import { ConfirmInvite } from "./components/ConfirmInvite.tsx";
 import Mfa from "./Mfa.tsx";
 import SetupSubscription from "./components/SetupSubscription.tsx";
 import { useSubscription } from "./hooks/useSubscription.ts";
+import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -38,6 +39,8 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "domains.domain": <DomainDetails />,
   settings: <OrganizationSettings />,
   "settings.members": <OrganizationSettings />,
+  "settings.API keys": <OrganizationSettings />,
+  "settings.API keys.API key": <ApiKeyDetails />,
   account: <UserSettings />,
   statistics: <Statistics />,
   organizations: <OrganizationsOverview />,

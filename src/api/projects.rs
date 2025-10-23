@@ -1,6 +1,9 @@
 use crate::{
-    api::error::{ApiError, ApiResult},
-    models::{ApiUser, NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
+    api::{
+        auth::Authenticated,
+        error::{ApiError, ApiResult},
+    },
+    models::{NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
 };
 use axum::{
     Json,
@@ -13,14 +16,14 @@ use tracing::{debug, info};
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
     Path(org_id): Path<OrganizationId>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Project>> {
     user.has_org_read_access(&org_id)?;
 
     let projects = repo.list(org_id).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         "listed {} projects",
         projects.len()
@@ -32,7 +35,7 @@ pub async fn list_projects(
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Json(update): Json<NewProject>,
 ) -> ApiResult<Project> {
     user.has_org_write_access(&org_id)?;
@@ -40,7 +43,7 @@ pub async fn update_project(
     let project = repo.update(org_id, proj_id, update).await?;
 
     debug!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = proj_id.to_string(),
         "updated project",
@@ -51,7 +54,7 @@ pub async fn update_project(
 
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path(org_id): Path<OrganizationId>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -60,7 +63,7 @@ pub async fn create_project(
     let project = repo.create(new, org_id).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project.id().to_string(),
         project_name = project.name,
@@ -72,7 +75,7 @@ pub async fn create_project(
 
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
-    user: ApiUser,
+    user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
     user.has_org_write_access(&org_id)?;
@@ -80,7 +83,7 @@ pub async fn remove_project(
     let project_id = repo.remove(proj_id, org_id).await?;
 
     info!(
-        user_id = user.id().to_string(),
+        user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
         "deleted project",

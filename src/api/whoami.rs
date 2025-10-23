@@ -15,9 +15,11 @@ use serde_json::json;
 pub struct Whoami {
     pub id: ApiUserId,
     pub name: String,
+    /// Logged-in session users always have an email, but API keys do not
+    pub email: Option<EmailAddress>,
     pub global_role: Option<Role>,
     pub org_roles: Vec<OrgRole>,
-    pub email: EmailAddress,
+    /// Unlike in `ApiUser`, here the GitHub ID is a string
     pub github_id: Option<String>,
     pub password_enabled: bool,
 }

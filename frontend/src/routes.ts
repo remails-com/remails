@@ -81,6 +81,16 @@ export const routes = [
         name: "members",
         path: "/members",
       },
+      {
+        name: "API keys",
+        path: "/api_keys",
+        children: [
+          {
+            name: "API key",
+            path: "/{api_key_id}",
+          },
+        ],
+      },
     ],
   },
   {
