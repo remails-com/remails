@@ -46,6 +46,8 @@ pub struct EmailParameters {
 
 pub async fn create_message(
     State(repo): State<MessageRepository>,
+    State(retry_config): State<Arc<RetryConfig>>,
+    State(bus_client): State<Arc<BusClient>>,
     Path((org_id, _, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     user: ApiKey, // only accessible for API keys
     Json(message): Json<EmailParameters>,
@@ -86,10 +88,14 @@ pub async fn create_message(
     };
 
     let message = repo
-        .create_from_api(&message, RetryConfig::default().max_automatic_retries)
+        .create_from_api(&message, retry_config.max_automatic_retries)
         .await?;
 
     // TODO: do basic checks immediately and return an error if it fails?
+
+    bus_client
+        .try_send(&BusMessage::EmailReadyToSend(message.id))
+        .await;
 
     Ok((StatusCode::CREATED, Json(message)))
 }
