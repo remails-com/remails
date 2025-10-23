@@ -1,6 +1,6 @@
 use crate::{
     handler::dns::DomainVerificationStatus,
-    models::{Error, OrganizationId, ProjectId, SmtpCredentialId, projects},
+    models::{Error, OrganizationId, ProjectId, projects},
 };
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
@@ -447,33 +447,44 @@ impl DomainRepository {
         Ok(DomainId(id))
     }
 
-    pub async fn get_domain_id_associated_with_credential(
+    /// Look up a domain name in the database for a specific project, returning either a project
+    /// domain or an organization domain that matches the domain name, or `None` if no matching
+    /// domain was found
+    ///
+    /// The domain is allowed to be a sub-domain of the domain in the database
+    ///
+    /// In case multiple domains match, we will pick the most specific domain
+    pub async fn lookup_domain_name(
         &self,
         domain: &str,
-        smtp_credential_id: SmtpCredentialId,
-    ) -> Result<Option<DomainId>, Error> {
-        let domain_id = sqlx::query_scalar!(
+        project_id: ProjectId,
+    ) -> Result<Option<Domain>, Error> {
+        match sqlx::query_as!(
+            PgDomain,
             r#"
-            SELECT
-                CASE
-                    WHEN $2 SIMILAR TO '(%.)?' || dorg.domain THEN dorg.id
-                    ELSE dp.id
-                END AS "domain_id!"
-            FROM streams s
-                JOIN smtp_credentials ON s.id = smtp_credentials.stream_id
-                JOIN projects p ON s.project_id = p.id
-                LEFT JOIN domains dp ON p.id = dp.project_id
-                LEFT JOIN domains dorg ON p.organization_id = dorg.organization_id
-            WHERE smtp_credentials.id = $1
-                AND ($2 SIMILAR TO '(%.)?' || dp.domain OR $2 SIMILAR TO  '(%.)?' || dorg.domain)
+            SELECT d.id,
+                   d.domain,
+                   d.organization_id,
+                   d.project_id,
+                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
+                   d.dkim_pkcs8_der,
+                   d.created_at,
+                   d.updated_at
+            FROM projects p
+                LEFT JOIN domains d ON p.id = d.project_id OR p.organization_id = d.organization_id
+            WHERE p.id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain
+            ORDER BY char_length(d.domain) DESC
+            LIMIT 1
             "#,
-            *smtp_credential_id,
+            *project_id,
             domain
         )
         .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(domain_id.map(Into::into))
+        .await?
+        {
+            Some(domain) => Ok(Some(domain.try_into()?)),
+            None => Ok(None),
+        }
     }
 }
 
@@ -490,147 +501,114 @@ mod test {
             "api_users",
             "org_domains",
             "proj_domains",
-            "streams",
-            "smtp_credentials",
         )
     ))]
-    async fn check_credential_for_domain(db: PgPool) {
+    async fn check_project_for_domain(db: PgPool) {
         let repo = DomainRepository::new(db);
 
-        let valid_project_domain = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1-project-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
-            .await
-            .unwrap();
+        let org_1_domain_1 = "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap();
+        let org_1_subdomain_1 = "db61e35e-fe1b-46ff-aae2-070d80079626".parse().unwrap();
+        let org_1_project_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let org_1_project_2 = "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap();
+        let org_1_project_1_domain_1 = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap();
+        let org_1_project_1_subdomain_2 = "8ef2c61e-8dd2-45a3-8b64-ef5031a9d05a".parse().unwrap();
 
-        assert_eq!(
-            valid_project_domain,
-            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
-        );
+        let valid_project_domain = repo
+            .lookup_domain_name("test-org-1-project-1.com", org_1_project_1)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(valid_project_domain.id, org_1_project_1_domain_1);
 
         let valid_org_domain = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("test-org-1.com", org_1_project_1)
             .await
+            .unwrap()
             .unwrap();
-
-        assert_eq!(
-            valid_org_domain,
-            Some("ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap())
-        );
+        assert_eq!(valid_org_domain.id, org_1_domain_1);
 
         let domain_from_sibling_project = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1-project-2.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("test-org-1-project-2.com", org_1_project_1)
             .await
             .unwrap();
-
         assert!(domain_from_sibling_project.is_none());
 
         let domain_from_different_org = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-2.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("test-org-2.com", org_1_project_1)
             .await
             .unwrap();
-
         assert!(domain_from_different_org.is_none());
 
         let domain_from_different_org_proj = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-2-project-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("test-org-2-project-1.com", org_1_project_1)
             .await
             .unwrap();
-
         assert!(domain_from_different_org_proj.is_none());
 
-        let credential_from_same_org = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1.com",
-                "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
-            )
+        let project_from_same_org = repo
+            .lookup_domain_name("test-org-1.com", org_1_project_2)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(project_from_same_org.id, org_1_domain_1);
+
+        let domain_from_different_project = repo
+            .lookup_domain_name("test-org-1-project-1.com", org_1_project_2)
             .await
             .unwrap();
-
-        assert_eq!(
-            credential_from_same_org,
-            Some("ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap())
-        );
-
-        let credential_from_different_project = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1-project-1.com",
-                "abbb0388-bdfa-4758-8ad0-80035999ab6c".parse().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert!(credential_from_different_project.is_none());
+        assert!(domain_from_different_project.is_none());
 
         let valid_subdomain = repo
-            .get_domain_id_associated_with_credential(
-                "asdf.test-org-1-project-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("asdf.test-org-1-project-1.com", org_1_project_1)
             .await
+            .unwrap()
             .unwrap();
-
-        assert_eq!(
-            valid_subdomain,
-            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
-        );
+        assert_eq!(valid_subdomain.id, org_1_project_1_domain_1);
 
         let double_valid_subdomain = repo
-            .get_domain_id_associated_with_credential(
-                "remails.asdf.test-org-1-project-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("remails.asdf.test-org-1-project-1.com", org_1_project_1)
             .await
+            .unwrap()
             .unwrap();
-
-        assert_eq!(
-            double_valid_subdomain,
-            Some("c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap())
-        );
+        assert_eq!(double_valid_subdomain.id, org_1_project_1_domain_1);
 
         let invalid_subdomain = repo
-            .get_domain_id_associated_with_credential(
-                "asdftest-org-1-project-1.com",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("asdftest-org-1-project-1.com", org_1_project_1)
             .await
             .unwrap();
-
         assert!(invalid_subdomain.is_none());
 
         let invalid_postfix = repo
-            .get_domain_id_associated_with_credential(
-                "test-org-1-project-1.comasdf",
-                "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap(),
-            )
+            .lookup_domain_name("test-org-1-project-1.comasdf", org_1_project_1)
             .await
             .unwrap();
-
         assert!(invalid_postfix.is_none());
 
-        let credential_does_not_exist = repo
-            .get_domain_id_associated_with_credential(
+        let project_does_not_exist = repo
+            .lookup_domain_name(
                 "test-org-1-project-1.com",
-                "7ba5f972-9536-4d43-9ee1-bde24aae6df3".parse().unwrap(),
+                "00000000-0000-4000-0000-000000000000".parse().unwrap(),
             )
             .await
             .unwrap();
+        assert!(project_does_not_exist.is_none());
 
-        assert!(credential_does_not_exist.is_none());
+        let subdomain_takes_preference_org = repo
+            .lookup_domain_name("subdomain.test-org-1.com", org_1_project_1)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(subdomain_takes_preference_org.id, org_1_subdomain_1);
+
+        let subdomain_takes_preference_proj = repo
+            .lookup_domain_name("subdomain2.test-org-1.com", org_1_project_1)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            subdomain_takes_preference_proj.id,
+            org_1_project_1_subdomain_2
+        );
     }
 
     #[sqlx::test(fixtures(
@@ -854,8 +832,13 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(domains.len(), 1);
-        assert_eq!(domains[0].domain, "test-org-1.com");
+        assert_eq!(domains.len(), 2);
+        assert!(domains.iter().any(|d| d.domain == "test-org-1.com"));
+        assert!(
+            domains
+                .iter()
+                .any(|d| d.domain == "subdomain.test-org-1.com")
+        );
 
         let domains = repo
             .list(
@@ -866,8 +849,17 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(domains.len(), 1);
-        assert_eq!(domains[0].domain, "test-org-1-project-1.com");
+        assert_eq!(domains.len(), 2);
+        assert!(
+            domains
+                .iter()
+                .any(|d| d.domain == "test-org-1-project-1.com")
+        );
+        assert!(
+            domains
+                .iter()
+                .any(|d| d.domain == "subdomain2.test-org-1.com")
+        );
     }
 
     #[sqlx::test(fixtures(

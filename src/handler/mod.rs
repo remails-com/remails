@@ -189,16 +189,9 @@ impl Handler {
     ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
-        // check SMTP credentials
-        let Some(smtp_credential_id) = message.smtp_credential_id else {
-            return Ok(Err((
-                MessageStatus::Rejected,
-                "missing SMTP credential".to_string(),
-            )));
-        };
-        let Some(domain_id) = self
+        let Some(domain) = self
             .domain_repository
-            .get_domain_id_associated_with_credential(sender_domain, smtp_credential_id)
+            .lookup_domain_name(sender_domain, message.project_id)
             .await
             .map_err(HandlerError::RepositoryError)?
         else {
@@ -207,12 +200,6 @@ impl Handler {
                 format!("SMTP credential is not permitted to use domain {sender_domain}"),
             )));
         };
-
-        let domain = self
-            .domain_repository
-            .get_domain_by_id(message.organization_id, domain_id)
-            .await
-            .map_err(HandlerError::RepositoryError)?;
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {

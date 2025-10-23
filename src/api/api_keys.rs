@@ -355,8 +355,8 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
-        assert_eq!(domains.len(), 1);
-        assert_eq!(domains[0].id(), org_dom_1);
+        assert_eq!(domains.len(), 2);
+        assert!(domains.iter().any(|d| d.id() == org_dom_1));
 
         // list projects
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
