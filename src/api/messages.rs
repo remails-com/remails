@@ -21,27 +21,57 @@ use serde::Deserialize;
 use tracing::{debug, error, warn};
 
 #[derive(Debug, Deserialize)]
-pub struct MessagePath {
-    org_id: OrganizationId,
-    project_id: ProjectId,
-    stream_id: StreamId,
+#[serde(untagged)]
+enum EmailAddress {
+    AddressOnly(String),
+    WithName { name: String, address: String },
+}
+
+impl EmailAddress {
+    fn get_mail_address(&self) -> &String {
+        match self {
+            EmailAddress::AddressOnly(address) => address,
+            EmailAddress::WithName { address, .. } => address,
+        }
+    }
+}
+
+impl<'a> From<EmailAddress> for mail_builder::headers::address::Address<'a> {
+    fn from(address: EmailAddress) -> Self {
+        match address {
+            EmailAddress::AddressOnly(address) => address.into(),
+            EmailAddress::WithName { name, address } => (name, address).into(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SpecificMessagePath {
-    org_id: OrganizationId,
-    project_id: ProjectId,
-    stream_id: StreamId,
-    message_id: MessageId,
+#[serde(untagged)]
+enum EmailAddresses {
+    Singular(EmailAddress),
+    Multiple(Vec<EmailAddress>),
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EmailParameters {
-    from: String,
-    to: Vec<String>,
+    from: EmailAddress,
+    to: EmailAddresses,
     subject: String,
-    text_body: String,
-    html_body: String,
+    text_body: Option<String>,
+    html_body: Option<String>,
+    in_reply_to: Option<Vec<String>>,
+    references: Option<Vec<String>>,
+    reply_to: Option<EmailAddress>,
+}
+
+impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
+    fn from(addresses: EmailAddresses) -> Self {
+        match addresses {
+            EmailAddresses::Singular(a) => a.into(),
+            EmailAddresses::Multiple(a) => a.into(),
+        }
+    }
 }
 
 pub async fn create_message(
@@ -56,26 +86,64 @@ pub async fn create_message(
 
     // TODO: rate limiting
 
-    let from_email = message
-        .from
+    // parse from email
+    let from_email = message.from.get_mail_address();
+    let from_email = from_email
         .parse()
-        .map_err(|_| ApiError::BadRequest(format!("Invalid from email: {}", message.from)))?;
+        .map_err(|_| ApiError::BadRequest(format!("Invalid from email: {}", from_email)))?;
 
-    let mut recipients = Vec::with_capacity(message.to.len());
-    for recipient in &message.to {
-        recipients.push(
-            recipient.parse().map_err(|_| {
-                ApiError::BadRequest(format!("Invalid recipient email: {recipient}"))
-            })?,
-        );
-    }
+    // parse recipient's email(s)
+    let recipients =
+        match &message.to {
+            EmailAddresses::Singular(to) => {
+                let address = to.get_mail_address();
+                vec![address.parse().map_err(|_| {
+                    ApiError::BadRequest(format!("Invalid recipient email: {address}"))
+                })?]
+            }
+            EmailAddresses::Multiple(to) => {
+                let mut recipients = Vec::with_capacity(to.len());
+                for recipient in to {
+                    let address = recipient.get_mail_address();
+                    recipients.push(address.parse().map_err(|_| {
+                        ApiError::BadRequest(format!("Invalid recipient email: {address}"))
+                    })?);
+                }
+                recipients
+            }
+        };
 
-    let raw_data = MessageBuilder::new()
+    // set required fields
+    let mut message_builder = MessageBuilder::new()
         .from(message.from)
         .to(message.to)
-        .subject(message.subject)
-        .text_body(message.text_body)
-        .html_body(message.html_body)
+        .subject(message.subject);
+
+    // add body to message
+    if message.text_body.is_none() && message.html_body.is_none() {
+        return Err(ApiError::BadRequest(
+            "Must provide a text_body or html_body".to_owned(),
+        ));
+    }
+    if let Some(text_body) = message.text_body {
+        message_builder = message_builder.text_body(text_body)
+    }
+    if let Some(html_body) = message.html_body {
+        message_builder = message_builder.html_body(html_body);
+    }
+
+    // add optional headers
+    if let Some(in_reply_to) = message.in_reply_to {
+        message_builder = message_builder.in_reply_to(in_reply_to);
+    }
+    if let Some(references) = message.references {
+        message_builder = message_builder.references(references);
+    }
+    if let Some(reply_to) = message.reply_to {
+        message_builder = message_builder.reply_to(reply_to);
+    }
+
+    let raw_data = message_builder
         .write_to_vec()
         .map_err(|e| ApiError::BadRequest(format!("Error creating email: {e:?}")))?;
 
@@ -102,11 +170,7 @@ pub async fn create_message(
 
 pub async fn list_messages(
     State(repo): State<MessageRepository>,
-    Path(MessagePath {
-        org_id,
-        project_id,
-        stream_id,
-    }): Path<MessagePath>,
+    Path((org_id, project_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     Query(filter): Query<MessageFilter>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
@@ -130,12 +194,12 @@ pub async fn list_messages(
 
 pub async fn get_message(
     State(repo): State<MessageRepository>,
-    Path(SpecificMessagePath {
-        org_id,
-        project_id,
-        stream_id,
-        message_id,
-    }): Path<SpecificMessagePath>,
+    Path((org_id, project_id, stream_id, message_id)): Path<(
+        OrganizationId,
+        ProjectId,
+        StreamId,
+        MessageId,
+    )>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<ApiMessage> {
     user.has_org_read_access(&org_id)?;
@@ -158,12 +222,12 @@ pub async fn get_message(
 
 pub async fn remove_message(
     State(repo): State<MessageRepository>,
-    Path(SpecificMessagePath {
-        org_id,
-        project_id,
-        stream_id,
-        message_id,
-    }): Path<SpecificMessagePath>,
+    Path((org_id, project_id, stream_id, message_id)): Path<(
+        OrganizationId,
+        ProjectId,
+        StreamId,
+        MessageId,
+    )>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<()> {
     user.has_org_write_access(&org_id)?;
@@ -186,12 +250,12 @@ pub async fn remove_message(
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
     State(bus): State<Arc<BusClient>>,
-    Path(SpecificMessagePath {
-        org_id,
-        project_id,
-        stream_id,
-        message_id,
-    }): Path<SpecificMessagePath>,
+    Path((org_id, project_id, stream_id, message_id)): Path<(
+        OrganizationId,
+        ProjectId,
+        StreamId,
+        MessageId,
+    )>,
     user: Box<dyn Authenticated>,
 ) -> Result<(), ApiError> {
     user.has_org_write_access(&org_id)?;
