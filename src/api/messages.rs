@@ -84,7 +84,11 @@ pub async fn create_message(
 ) -> Result<impl IntoResponse, ApiError> {
     user.has_org_write_access(&org_id)?;
 
-    // TODO: rate limiting
+    // check email rate limit
+    if repo.email_creation_rate_limit(stream_id).await? <= 0 {
+        debug!("too many email requests for org {org_id}");
+        return Err(ApiError::TooManyRequests);
+    }
 
     // parse from email
     let from_email = message.from.get_mail_address();

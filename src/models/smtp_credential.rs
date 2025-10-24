@@ -2,10 +2,7 @@ use crate::models::{Error, OrganizationId, ProjectId, streams::StreamId};
 use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::types::PgInterval,
-    types::chrono::{DateTime, Utc},
-};
+use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(
@@ -100,27 +97,11 @@ impl SmtpCredential {
 #[derive(Debug, Clone)]
 pub struct SmtpCredentialRepository {
     pool: sqlx::PgPool,
-    rate_limit_timespan: PgInterval,
-    rate_limit_max_messages: i64,
 }
 
 impl SmtpCredentialRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        let rate_limit_minutes = std::env::var("RATE_LIMIT_MINUTES")
-            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MINUTES"))
-            .unwrap_or(1);
-        let rate_limit_max_messages = std::env::var("RATE_LIMIT_MAX_MESSAGES")
-            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MAX_MESSAGES"))
-            .unwrap_or(120);
-
-        Self {
-            pool,
-            rate_limit_timespan: PgInterval::try_from(chrono::Duration::minutes(
-                rate_limit_minutes,
-            ))
-            .expect("Could not set rate limit timespan"),
-            rate_limit_max_messages,
-        }
+        Self { pool }
     }
 
     pub async fn generate(
@@ -195,35 +176,6 @@ impl SmtpCredentialRepository {
         .await?;
 
         Ok(credential)
-    }
-
-    pub async fn rate_limit(&self, id: StreamId) -> Result<i64, Error> {
-        let remaining_rate_limit = sqlx::query_scalar!(
-            r#"
-            UPDATE organizations o
-            SET
-            remaining_rate_limit = CASE
-                WHEN rate_limit_reset < now()
-                THEN $2
-                ELSE GREATEST(remaining_rate_limit - 1, 0)
-            END,
-            rate_limit_reset = CASE
-                WHEN rate_limit_reset < now()
-                THEN now() + $3
-                ELSE rate_limit_reset
-            END
-            FROM streams s JOIN projects p ON p.id = s.project_id
-            WHERE p.organization_id = o.id AND s.id = $1
-            RETURNING remaining_rate_limit
-            "#,
-            *id,
-            self.rate_limit_max_messages,
-            self.rate_limit_timespan
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(remaining_rate_limit)
     }
 
     pub async fn list(

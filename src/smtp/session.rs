@@ -233,8 +233,8 @@ impl SmtpSession {
                 }
 
                 let Ok(ratelimit) = self
-                    .smtp_credentials
-                    .rate_limit(credential.stream_id())
+                    .message_repository
+                    .email_creation_rate_limit(credential.stream_id())
                     .await
                 else {
                     return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());

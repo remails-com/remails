@@ -9,7 +9,7 @@ use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use sqlx::types::ipnet::IpNet;
+use sqlx::{postgres::types::PgInterval, types::ipnet::IpNet};
 use std::{collections::HashMap, mem, net::IpAddr, str::FromStr};
 use uuid::Uuid;
 
@@ -241,6 +241,8 @@ pub struct NewApiMessage {
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
     pool: sqlx::PgPool,
+    rate_limit_timespan: PgInterval,
+    rate_limit_max_messages: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -397,7 +399,21 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
 
 impl MessageRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        let rate_limit_minutes = std::env::var("RATE_LIMIT_MINUTES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MINUTES"))
+            .expect("RATE_LIMIT_MINUTES must be set");
+        let rate_limit_max_messages = std::env::var("RATE_LIMIT_MAX_MESSAGES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MAX_MESSAGES"))
+            .expect("RATE_LIMIT_MAX_MESSAGES must be set");
+
+        Self {
+            pool,
+            rate_limit_timespan: PgInterval::try_from(chrono::Duration::minutes(
+                rate_limit_minutes,
+            ))
+            .expect("Could not set rate limit timespan"),
+            rate_limit_max_messages,
+        }
     }
 
     pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
@@ -787,6 +803,38 @@ impl MessageRepository {
         .await?;
 
         Ok((res.status, res.outbound_ip.map(|net| net.addr())))
+    }
+
+    /// Returns the number of emails that can still be created during the current rate limit time span
+    ///
+    /// Automatically resets when the time span has expired, if so, it starts a new time span
+    pub async fn email_creation_rate_limit(&self, id: StreamId) -> Result<i64, Error> {
+        let remaining_rate_limit = sqlx::query_scalar!(
+            r#"
+            UPDATE organizations o
+            SET
+            remaining_rate_limit = CASE
+                WHEN rate_limit_reset < now()
+                THEN $2
+                ELSE GREATEST(remaining_rate_limit - 1, 0)
+            END,
+            rate_limit_reset = CASE
+                WHEN rate_limit_reset < now()
+                THEN now() + $3
+                ELSE rate_limit_reset
+            END
+            FROM streams s JOIN projects p ON p.id = s.project_id
+            WHERE p.organization_id = o.id AND s.id = $1
+            RETURNING remaining_rate_limit
+            "#,
+            *id,
+            self.rate_limit_max_messages,
+            self.rate_limit_timespan
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(remaining_rate_limit)
     }
 }
 

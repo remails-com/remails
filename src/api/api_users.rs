@@ -172,8 +172,7 @@ pub async fn delete_password(
 
     if user.github_user_id().is_none() {
         Err(ApiError::PreconditionFailed(
-            "You must enable an alternative login method before you can delete your password"
-                .to_string(),
+            "You must enable an alternative login method before you can delete your password",
         ))?
     }
 
