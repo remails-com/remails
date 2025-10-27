@@ -10,7 +10,7 @@ CREATE TABLE outbound_ips
 (
     id      uuid NOT NULL PRIMARY KEY,
     ip      inet NOT NULL UNIQUE,
-    node_id uuid REFERENCES k8s_nodes (id)
+    node_id uuid REFERENCES k8s_nodes (id) ON DELETE SET NULL
 );
 
 ALTER TABLE messages
