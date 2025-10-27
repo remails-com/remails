@@ -45,6 +45,8 @@ pub enum HandlerError {
     MessageNotAccepted(MessageStatus, String),
     #[error("Message is in an illegal state: {0}, {1:?}")]
     IllegalMessageState(MessageStatus, MessageId),
+    #[error("Message must have an outbound IP assigned")]
+    MissingOutboundIp,
 }
 
 #[derive(Debug, Error)]
@@ -446,6 +448,7 @@ impl Handler {
         recipient: &EmailAddress,
         message: smtp::message::Message<'_>,
         security: Protection,
+        outbound_ip: IpAddr,
         connection_log: &mut ConnectionLog,
     ) -> Result<(), SendError> {
         let domain = recipient.domain();
@@ -470,6 +473,7 @@ impl Handler {
                             message.clone(),
                             &hostname,
                             port,
+                            outbound_ip,
                         )
                         .await
                     {
@@ -513,9 +517,11 @@ impl Handler {
         message: smtp::message::Message<'_>,
         hostname: &String,
         port: u16,
+        outbound_ip: IpAddr,
     ) -> Result<(), SendError> {
         let smtp = SmtpClientBuilder::new(&hostname, port)
             .implicit_tls(false)
+            .local_ip(outbound_ip)
             .say_ehlo(true)
             .helo_host(&self.config.domain)
             .timeout(std::time::Duration::from_secs(60));
@@ -596,9 +602,14 @@ impl Handler {
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
             stream_id = message.stream_id.to_string(),
+            outbound_ip = ?message.outbound_ip,
         ))]
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message");
+        let Some(outbound_ip) = message.outbound_ip else {
+            error!("message is missing outbound IP");
+            return Err(HandlerError::MissingOutboundIp);
+        };
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
@@ -659,7 +670,13 @@ impl Handler {
                     body: message.raw_data.as_slice().into(),
                 };
                 match self
-                    .send_single_message(recipient, smtp_message, protection, connection_log)
+                    .send_single_message(
+                        recipient,
+                        smtp_message,
+                        protection,
+                        outbound_ip,
+                        connection_log,
+                    )
                     .await
                 {
                     Ok(()) => {
