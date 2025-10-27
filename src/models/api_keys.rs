@@ -3,11 +3,14 @@ use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{Error, OrganizationId, Password, Role};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
+)]
 pub struct ApiKeyId(Uuid);
 
 #[derive(Serialize)]

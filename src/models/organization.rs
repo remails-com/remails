@@ -5,6 +5,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(
@@ -22,8 +23,11 @@ use uuid::Uuid;
     PartialOrd,
     Ord,
     Eq,
+    ToSchema,
+    IntoParams,
 )]
 #[sqlx(transparent)]
+#[into_params(names("org_id"))]
 pub struct OrganizationId(Uuid);
 
 impl OrganizationId {
@@ -43,7 +47,7 @@ pub enum OrgBlockStatus {
     NoSendingOrReceiving = 2,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, ToSchema)]
 #[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
     id: OrganizationId,
@@ -66,12 +70,12 @@ impl Organization {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct NewOrganization {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct OrganizationMember {
     user_id: ApiUserId,

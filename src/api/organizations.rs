@@ -1,5 +1,6 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
         error::{ApiError, ApiResult},
     },
@@ -15,8 +16,29 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-pub async fn list_organizations(
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(list_organizations, create_organization))
+        .routes(routes!(
+            get_organization,
+            remove_organization,
+            update_organization
+        ))
+        .routes(routes!(list_members))
+        .routes(routes!(remove_member, update_member_role))
+}
+
+/// List organizations
+///
+/// List all organizations the authenticated user has access to
+#[utoipa::path(get, path = "/organizations",
+    responses(
+        (status = 200, description = "Successfully fetched organizations", body = [Organization]),
+        ApiError
+    ))]
+async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Organization>> {
@@ -32,14 +54,26 @@ pub async fn list_organizations(
     Ok(Json(organizations))
 }
 
-pub async fn get_organization(
+/// Get organization by ID
+///
+/// Returns all details about a specific organization if the authenticated user has access to it
+#[utoipa::path(get, path = "/organizations/{org_id}",
+    params(
+        OrganizationId
+    ),
+    responses(
+        (status = 200, description = "Successfully fetched organization", body = Organization),
+        ApiError,
+    )
+)]
+async fn get_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Organization> {
     user.has_org_read_access(&org_id)?;
 
-    let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::NotFound)?;
+    let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::not_found())?;
 
     debug!(
         user_id = user.log_id(),
@@ -51,6 +85,15 @@ pub async fn get_organization(
     Ok(Json(organization))
 }
 
+/// Create a new organization
+#[utoipa::path(post, path = "/organizations",
+    request_body = NewOrganization,
+    tag = "internal",
+    responses(
+        (status = 201, description = "Organization created successfully", body = Organization),
+        ApiError,
+    )
+)]
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to create organizations
@@ -79,6 +122,17 @@ pub async fn create_organization(
     Ok((StatusCode::CREATED, Json(org)))
 }
 
+/// Delete an organization
+#[utoipa::path(delete, path = "/organizations/{org_id}",
+    params(
+        OrganizationId
+    ),
+    tag = "internal",
+    responses(
+        (status = 200, description = "Organization successfully deleted", body = OrganizationId),
+        ApiError,
+    )
+)]
 pub async fn remove_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
@@ -97,6 +151,18 @@ pub async fn remove_organization(
     Ok(Json(organization_id))
 }
 
+/// Update an organization
+#[utoipa::path(put, path = "/organizations/{org_id}",
+    params(
+        OrganizationId
+    ),
+    request_body = NewOrganization,
+    tag = "internal",
+    responses(
+        (status = 200, description = "Organization successfully updated", body = Organization),
+        ApiError,
+    )
+)]
 pub async fn update_organization(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
@@ -116,6 +182,18 @@ pub async fn update_organization(
     Ok(Json(organization))
 }
 
+/// List organization members
+///
+/// Returns all members of the organization. This does not include the API keys, but only the users.
+#[utoipa::path(get, path = "/organizations/{org_id}/members",
+    params(
+        OrganizationId
+    ),
+    responses(
+        (status = 200, description = "Successfully fetched organization members", body = [OrganizationMember]),
+        ApiError,
+    )
+)]
 pub async fn list_members(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
@@ -148,11 +226,23 @@ async fn prevent_last_remaining_admin(
 
     any_other_admins
         .then_some(())
-        .ok_or(ApiError::PreconditionFailed(
-            "At least one admin must remain in the organization",
+        .ok_or(ApiError::precondition_failed(
+            "At least one admin must remain in the organization".to_string(),
         ))
 }
 
+/// Delete organization member
+#[utoipa::path(delete, path = "/organizations/{org_id}/members/{user_id}",
+    params(
+        OrganizationId,
+        ApiUserId
+    ),
+    tag = "internal",
+    responses(
+        (status = 200, description = "Successfully deleted organization member", body = ()),
+        ApiError,
+    )
+)]
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
@@ -163,7 +253,7 @@ pub async fn remove_member(
         .or(user.has_org_read_access(&org_id).and(
             (user_id == *user.id())
                 .then_some(())
-                .ok_or(ApiError::Forbidden),
+                .ok_or(ApiError::forbidden()),
         ))?;
 
     if user.has_org_admin_access(&org_id).is_ok() && *user.id() == user_id {
@@ -182,6 +272,19 @@ pub async fn remove_member(
     Ok(Json(()))
 }
 
+/// Update organization member role
+#[utoipa::path(put, path = "/organizations/{org_id}/members/{user_id}",
+    params(
+        OrganizationId,
+        ApiUserId
+    ),
+    request_body = Role,
+    tag = "internal",
+    responses(
+        (status = 200, description = "Successfully updated organization member role", body = ()),
+        ApiError,
+    )
+)]
 pub async fn update_member_role(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,

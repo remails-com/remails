@@ -94,38 +94,30 @@ where
     fn from(subscriptions: T) -> Self {
         let mut iterator = subscriptions.into_iter().filter_map(|s| {
             if let Some(ref identifier) = s.product.identifier {
-                match identifier {
-                    ProductIdentifier::Unknown(unknown) => {
-                        trace!("Unknown product identifier: {}", unknown);
-                        None
-                    }
-                    identifier => {
-                        if let Some(end_date) = s.end_date
-                            && end_date < Utc::now().date_naive()
-                        {
-                            return Some(SubscriptionStatus::Expired(Subscription {
-                                subscription_id: s.id.clone(),
-                                product: identifier.clone(),
-                                title: s.product.title.clone(),
-                                description: s.product.description.clone(),
-                                recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
-                                start_date: s.start_date,
-                                end_date,
-                                sales_invoices_url: s.contact.sales_invoices_url.clone(),
-                            }));
-                        }
-
-                        Some(SubscriptionStatus::Active(Subscription {
-                            subscription_id: s.id.clone(),
-                            product: identifier.clone(),
-                            title: s.product.title.clone(),
-                            description: s.product.description.clone(),
-                            recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
-                            start_date: s.start_date,
-                            end_date: s.end_date,
-                            sales_invoices_url: s.contact.sales_invoices_url.clone(),
-                        }))
-                    }
+                if let Some(end_date) = s.end_date
+                    && end_date < Utc::now().date_naive()
+                {
+                    Some(SubscriptionStatus::Expired(Subscription {
+                        subscription_id: s.id.clone(),
+                        product: identifier.clone(),
+                        title: s.product.title.clone(),
+                        description: s.product.description.clone(),
+                        recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
+                        start_date: s.start_date,
+                        end_date,
+                        sales_invoices_url: s.contact.sales_invoices_url.clone(),
+                    }))
+                } else {
+                    Some(SubscriptionStatus::Active(Subscription {
+                        subscription_id: s.id.clone(),
+                        product: identifier.clone(),
+                        title: s.product.title.clone(),
+                        description: s.product.description.clone(),
+                        recurring_sales_invoice_id: s.recurring_sales_invoice_id.clone(),
+                        start_date: s.start_date,
+                        end_date: s.end_date,
+                        sales_invoices_url: s.contact.sales_invoices_url.clone(),
+                    }))
                 }
             } else {
                 None

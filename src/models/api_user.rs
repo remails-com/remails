@@ -6,15 +6,32 @@ use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use totp_rs::{Algorithm, Secret, TOTP};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    ToSchema,
+    IntoParams,
+)]
+#[into_params(names("user_id"))]
 pub struct ApiUserId(Uuid);
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
+)]
 pub struct TotpId(Uuid);
 
-#[derive(From, derive_more::Debug, Deserialize, FromStr)]
+#[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema)]
 #[debug("*****")]
 #[serde(transparent)]
 pub struct Password(String);
@@ -34,7 +51,7 @@ impl Password {
 }
 
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type, ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "role", rename_all = "snake_case")]
@@ -54,7 +71,7 @@ impl Role {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[cfg_attr(test, derive(PartialEq, PartialOrd, Ord, Eq))]
 #[serde(rename_all = "snake_case")]
 pub struct OrgRole {

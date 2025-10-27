@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
     Info,
@@ -10,12 +11,12 @@ pub enum LogLevel {
     Error,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, ToSchema)]
 pub struct ConnectionLog {
     lines: Vec<LogLine>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 struct LogLine {
     time: DateTime<Utc>,
     level: LogLevel,

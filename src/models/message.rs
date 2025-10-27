@@ -13,11 +13,14 @@ use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
+)]
 pub struct MessageId(Uuid);
 
 impl MessageId {
@@ -26,7 +29,7 @@ impl MessageId {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display, ToSchema)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,
@@ -105,7 +108,7 @@ impl ApiMessage {
 }
 
 #[cfg_attr(test, derive(Deserialize))]
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ApiMessageMetadata {
     pub id: MessageId,
     pub status: MessageStatus,
@@ -121,7 +124,9 @@ pub struct ApiMessageMetadata {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
+    #[schema(minimum = 0)]
     attempts: i32,
+    #[schema(minimum = 0)]
     max_attempts: i32,
 }
 
@@ -144,19 +149,21 @@ pub struct Attachment {
     pub size: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, ToSchema)]
 #[serde(tag = "type")]
 pub enum DeliveryStatus {
     #[default]
+    #[schema(title = "None")]
     None,
-    Success {
-        delivered: DateTime<Utc>,
-    },
+    #[schema(title = "Success")]
+    Success { delivered: DateTime<Utc> },
+    #[schema(title = "Reattempt")]
     Reattempt,
+    #[schema(title = "Failed")]
     Failed,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, ToSchema)]
 pub struct DeliveryDetails {
     pub status: DeliveryStatus,
     pub log: ConnectionLog,

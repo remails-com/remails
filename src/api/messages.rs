@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ApiResult};
 use crate::{
-    api::{auth::Authenticated, validation::ValidatedJson},
+    api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     bus::client::BusClient,
     handler::RetryConfig,
     models::{
@@ -20,14 +20,24 @@ use http::StatusCode;
 use mail_builder::MessageBuilder;
 use serde::Deserialize;
 use tracing::{debug, error, warn};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-#[derive(Debug, Deserialize, Validate)]
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new().routes(routes!(create_message))
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(untagged)]
 enum EmailAddress {
+    #[schema(title = "AddressOnly", format = "Email")]
     AddressOnly(#[garde(email)] String),
+    #[schema(title = "WithName")]
     WithName {
+        #[schema[min_length = 1, max_length = 100]]
         #[garde(length(min = 1, max = 100))]
         name: String,
+        #[schema(format = "Email")]
         #[garde(email)]
         address: String,
     },
@@ -51,28 +61,34 @@ impl<'a> From<EmailAddress> for mail_builder::headers::address::Address<'a> {
     }
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(untagged)]
 enum EmailAddresses {
     Singular(#[garde(dive)] EmailAddress),
+    /// At most 10 recipients
     Multiple(#[garde(length(min = 1, max = 10))] Vec<EmailAddress>),
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EmailParameters {
     #[garde(dive)]
     from: EmailAddress,
     #[garde(dive)]
     to: EmailAddresses,
+    #[schema[max_length = 500]]
     #[garde(length(max = 500))]
     subject: String,
+    #[schema[max_length = 50_000]]
     #[garde(length(bytes, max = 50_000))]
     text_body: Option<String>,
+    #[schema[max_length = 50_000]]
     #[garde(length(bytes, max = 50_000))]
     html_body: Option<String>,
+    #[schema[max_length = 500]]
     #[garde(length(max = 500))]
     in_reply_to: Option<String>,
+    #[schema[max_items = 50, max_length = 500]]
     #[garde(length(max = 50), inner(length(max = 500)))]
     references: Option<Vec<String>>,
     #[garde(dive)]
@@ -88,11 +104,23 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
     }
 }
 
+/// Send an email message
+///
+/// Use this endpoint to send an email message via the HTTP REST API.
+#[utoipa::path(
+    post,
+    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+    request_body = EmailParameters,
+    responses(
+        (status = 201, description = "Message created successfully", body = ApiMessageMetadata),
+        ApiError
+    )
+)]
 pub async fn create_message(
     State(repo): State<MessageRepository>,
     State(retry_config): State<Arc<RetryConfig>>,
     State(bus_client): State<Arc<BusClient>>,
-    Path((org_id, _, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
+    Path((org_id, _proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     key: ApiKey, // only accessible for API keys
     ValidatedJson(message): ValidatedJson<EmailParameters>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -101,37 +129,36 @@ pub async fn create_message(
     // check email rate limit
     if repo.email_creation_rate_limit(stream_id).await? <= 0 {
         debug!("too many email requests for org {org_id}");
-        return Err(ApiError::TooManyRequests);
+        return Err(ApiError::too_many_requests());
     }
 
     // parse from email
     let from_email = message.from.get_mail_address();
     let from_email = from_email
         .parse()
-        .map_err(|_| ApiError::BadRequest(format!("Invalid from email: {}", from_email)))?;
+        .map_err(|_| ApiError::bad_request(format!("Invalid from email: {}", from_email)))?;
 
     // parse recipient's email(s)
-    let recipients =
-        match &message.to {
-            EmailAddresses::Singular(to) => {
-                let address = to.get_mail_address();
-                vec![address.parse().map_err(|_| {
-                    ApiError::BadRequest(format!("Invalid recipient email: {address}"))
-                })?]
+    let recipients = match &message.to {
+        EmailAddresses::Singular(to) => {
+            let address = to.get_mail_address();
+            vec![address.parse().map_err(|_| {
+                ApiError::bad_request(format!("Invalid recipient email: {address}"))
+            })?]
+        }
+        EmailAddresses::Multiple(to) => {
+            let mut recipients = Vec::with_capacity(to.len());
+            for recipient in to {
+                let address = recipient.get_mail_address();
+                recipients.push(address.parse().map_err(|_| {
+                    ApiError::bad_request(format!("Invalid recipient email: {address}"))
+                })?);
             }
-            EmailAddresses::Multiple(to) => {
-                let mut recipients = Vec::with_capacity(to.len());
-                for recipient in to {
-                    let address = recipient.get_mail_address();
-                    recipients.push(address.parse().map_err(|_| {
-                        ApiError::BadRequest(format!("Invalid recipient email: {address}"))
-                    })?);
-                }
-                recipients
-            }
-        };
+            recipients
+        }
+    };
     if recipients.is_empty() {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Must have at least one recipient".to_owned(),
         ));
     }
@@ -149,7 +176,7 @@ pub async fn create_message(
 
     // add body to message
     if message.text_body.is_none() && message.html_body.is_none() {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Must provide a text_body or html_body".to_owned(),
         ));
     }
@@ -173,7 +200,7 @@ pub async fn create_message(
 
     let raw_data = message_builder
         .write_to_vec()
-        .map_err(|e| ApiError::BadRequest(format!("Error creating email: {e:?}")))?;
+        .map_err(|e| ApiError::bad_request(format!("Error creating email: {e:?}")))?;
 
     let message = NewApiMessage {
         message_id,
@@ -311,7 +338,7 @@ pub async fn retry_now(
             user_id = user.log_id(),
             "Requested retry for already delivered message"
         );
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Message already delivered".to_string(),
         ));
     }
@@ -582,7 +609,7 @@ mod tests {
             .unwrap();
         assert_eq!(too_many_recipients.status(), StatusCode::BAD_REQUEST);
 
-        let invlid_email = server
+        let invalid_email = server
             .post(
                 format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
                 serialize_body(json!({
@@ -593,7 +620,20 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(invlid_email.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(invalid_email.status(), StatusCode::BAD_REQUEST);
+
+        let invalid_email_list = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": ["recipient1atexample.com"]
+
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_email_list.status(), StatusCode::BAD_REQUEST);
 
         let missing_recipient = server
             .post(

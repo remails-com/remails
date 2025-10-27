@@ -25,7 +25,7 @@ fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> 
     if *user.id() == user_id {
         return Ok(());
     }
-    Err(ApiError::Forbidden)
+    Err(ApiError::forbidden())
 }
 
 pub async fn update_user(
@@ -171,8 +171,9 @@ pub async fn delete_password(
     has_write_access(user_id, &user)?;
 
     if user.github_user_id().is_none() {
-        Err(ApiError::PreconditionFailed(
-            "You must enable an alternative login method before you can delete your password",
+        Err(ApiError::precondition_failed(
+            "You must enable an alternative login method before you can delete your password"
+                .to_string(),
         ))?
     }
 

@@ -1,5 +1,5 @@
 use crate::{
-    api::auth::MfaPending,
+    api::{ApiState, auth::MfaPending},
     models::{ApiUser, ApiUserId, OrgRole, Role},
 };
 use axum::{
@@ -9,13 +9,35 @@ use axum::{
 use email_address::EmailAddress;
 use serde::Serialize;
 use serde_json::json;
+use utoipa::{
+    ToSchema,
+    openapi::{Object, ObjectBuilder},
+};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-#[derive(Debug, Serialize)]
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new().routes(routes!(whoami))
+}
+
+fn email_openapi_schema() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::schema::Type::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "email".to_string(),
+        )))
+        .description(Some(
+            "Logged-in session users always have an email, but API keys do not",
+        ))
+        .build()
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 pub struct Whoami {
     pub id: ApiUserId,
     pub name: String,
     /// Logged-in session users always have an email, but API keys do not
+    #[schema(schema_with = email_openapi_schema)]
     pub email: Option<EmailAddress>,
     pub global_role: Option<Role>,
     pub org_roles: Vec<OrgRole>,
@@ -24,7 +46,7 @@ pub struct Whoami {
     pub password_enabled: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(tag = "login_status", rename_all = "snake_case")]
 pub enum WhoamiResponse {
@@ -55,6 +77,14 @@ impl WhoamiResponse {
     }
 }
 
+/// Whoami endpoint
+///
+/// Returns information about the currently logged-in user or API key used
+#[utoipa::path(get, path = "/whoami",
+    responses(
+        (status = 200, description = "Organization successfully deleted", body = WhoamiResponse)
+    )
+)]
 pub async fn whoami(user: Option<ApiUser>, mfa_pending: Option<MfaPending>) -> Response {
     match (user, mfa_pending) {
         (Some(user), None) => Json(WhoamiResponse::logged_in(user)).into_response(),

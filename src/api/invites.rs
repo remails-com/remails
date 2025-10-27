@@ -75,7 +75,7 @@ pub async fn get_invite(
 
     let invite = repo.get_by_id(invite_id, org_id).await?;
     if !invite.verify_password(&password) {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::not_found());
     }
 
     Ok(Json(invite))
@@ -115,11 +115,11 @@ pub async fn accept_invite(
     let invite = invites.get_by_id(invite_id, org_id).await?;
 
     if !invite.verify_password(&password) {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::not_found());
     }
 
     if invite.is_expired() {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::not_found());
     }
 
     organizations
@@ -130,7 +130,7 @@ pub async fn accept_invite(
 
     let Some(organization) = organizations.get_by_id(org_id).await? else {
         tracing::error!("organization not found after accepting invite: {}", org_id);
-        return Err(ApiError::NotFound); // this shouldn't happen
+        return Err(ApiError::not_found()); // this shouldn't happen
     };
 
     Ok((StatusCode::CREATED, Json(organization)))

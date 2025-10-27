@@ -6,26 +6,41 @@ use sqlx::Type;
 use std::str::FromStr;
 use tracing::warn;
 use url::Url;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct MoneybirdContactId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct SubscriptionTemplateId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct SubscriptionId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct ProductId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct RecurringSalesInvoiceId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct AdministrationId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct WebhookId(pub(super) String);
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -82,7 +97,7 @@ pub(super) struct RecurringSalesInvoice {
     pub(super) active: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display, ToSchema)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum ProductIdentifier {
     NotSubscribed,
@@ -95,8 +110,6 @@ pub enum ProductIdentifier {
     RmlsSmallYearly,
     RmlsMediumYearly,
     RmlsLargeYearly,
-    #[serde(untagged)]
-    Unknown(String),
 }
 
 impl FromStr for ProductIdentifier {
@@ -115,7 +128,7 @@ impl FromStr for ProductIdentifier {
             "RmlsLargeYearly" => Self::RmlsLargeYearly,
             unknown => {
                 warn!("Unknown product identifier: {}", unknown);
-                Self::Unknown(unknown.to_string())
+                Self::NotSubscribed
             }
         })
     }
@@ -134,20 +147,22 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 300_000,
             ProductIdentifier::RmlsMediumYearly => 700_000,
             ProductIdentifier::RmlsLargeYearly => 1_500_000,
-            ProductIdentifier::Unknown(_) => 0,
         }
     }
 }
 
-#[derive(Serialize, PartialEq, Debug, Deserialize, Clone)]
+#[derive(Serialize, PartialEq, Debug, Deserialize, Clone, ToSchema)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SubscriptionStatus {
-    Active(Subscription),
+    #[schema(title = "Active")]
+    Active(Subscription<Option<NaiveDate>>),
+    #[schema(title = "Expired")]
     Expired(Subscription<NaiveDate>),
+    #[schema(title = "None")]
     None,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, ToSchema)]
 pub struct Subscription<EndDate = Option<NaiveDate>> {
     pub(super) subscription_id: SubscriptionId,
     pub(super) product: ProductIdentifier,

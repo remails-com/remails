@@ -1,5 +1,6 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
         error::{ApiError, ApiResult},
     },
@@ -12,7 +13,26 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(list_projects, create_project,))
+        .routes(routes!(update_project, remove_project))
+}
+
+/// List projects
+///
+/// List all projects under the requested organization the authenticated user has access to
+#[utoipa::path(get, path = "/organizations/{org_id}/projects",
+    params(
+        OrganizationId
+    ),
+    responses(
+        (status = 200, description = "Successfully fetched projects", body = [Project]),
+        ApiError,
+    )
+)]
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
     Path(org_id): Path<OrganizationId>,
@@ -32,6 +52,19 @@ pub async fn list_projects(
     Ok(Json(projects))
 }
 
+/// Update a project
+///
+/// Update details about that project
+#[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}",
+    params(
+        OrganizationId, ProjectId
+    ),
+    request_body = NewProject,
+    responses(
+        (status = 200, description = "Project successfully updated", body = Project),
+        ApiError,
+    )
+)]
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
@@ -52,6 +85,19 @@ pub async fn update_project(
     Ok(Json(project))
 }
 
+/// Create a new project
+///
+/// Create a new project under the specified organization
+#[utoipa::path(post, path = "/organizations/{org_id}/projects",
+    params(
+        OrganizationId
+    ),
+    request_body = NewProject,
+    responses(
+        (status = 201, description = "Project created successfully", body = Project),
+        ApiError,
+    )
+)]
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     user: Box<dyn Authenticated>,
@@ -73,6 +119,16 @@ pub async fn create_project(
     Ok((StatusCode::CREATED, Json(project)))
 }
 
+/// Delete a project
+#[utoipa::path(delete, path = "/organizations/{org_id}/projects/{proj_id}",
+    params(
+        OrganizationId, ProjectId
+    ),
+    responses(
+        (status = 200, description = "Project successfully deleted", body = ProjectId),
+        ApiError,
+    )
+)]
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
     user: Box<dyn Authenticated>,

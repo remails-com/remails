@@ -3,10 +3,22 @@ use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    ToSchema,
 )]
 #[sqlx(transparent)]
 pub struct SmtpCredentialId(Uuid);

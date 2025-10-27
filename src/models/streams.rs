@@ -4,12 +4,26 @@ use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tracing::debug;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    IntoParams,
+    ToSchema,
 )]
 #[sqlx(transparent)]
+#[into_params(names("stream_id"))]
 pub struct StreamId(Uuid);
 
 #[derive(Debug, Serialize)]

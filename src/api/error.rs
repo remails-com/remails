@@ -1,94 +1,293 @@
 use crate::{api::oauth, models, models::Error};
 use axum::{Json, extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse};
-use serde_json::json;
-use thiserror::Error;
-use tracing::{debug, error};
+use serde::Serialize;
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 pub type ApiResult<T> = Result<Json<T>, ApiError>;
 
-#[derive(Debug, Error)]
+#[derive(utoipa::IntoResponses, Serialize)]
 pub enum ApiError {
-    #[error("database error: {0}")]
-    Database(#[from] models::Error),
-    #[error("not found")]
-    NotFound,
-    #[error("forbidden")]
-    Forbidden,
-    #[error("unauthorized")]
-    Unauthorized,
-    #[error("too many requests, try again later")]
-    TooManyRequests,
-    #[error("OAuth error: {0}")]
-    OAuth(#[from] oauth::Error),
-    #[error("{0}")]
-    Serialization(#[from] serde_json::Error),
-    #[error("{0}")]
-    BadRequest(String),
-    #[error("{0}")]
-    PreconditionFailed(&'static str),
-    #[error("Moneybird: {0}")]
-    Moneybird(#[from] crate::moneybird::Error),
-    #[error("MessageBus: {0}")]
-    MessageBus(reqwest::Error),
+    /// Bad Request
+    #[response(status = BAD_REQUEST)]
+    BadRequest(ApiErrorResponse),
+    /// Not Found
+    #[response(status = NOT_FOUND)]
+    NotFound(ApiErrorResponse),
+    /// Conflict
+    #[response(status = CONFLICT)]
+    Conflict(ApiErrorResponse),
+    /// Too Many Requests
+    #[response(status = TOO_MANY_REQUESTS)]
+    TooManyRequests(ApiErrorResponse),
+    /// Internal Server Error
+    #[response(status = INTERNAL_SERVER_ERROR)]
+    InternalServerError(ApiErrorResponse),
+    /// Forbidden
+    #[response(status = FORBIDDEN)]
+    Forbidden(ApiErrorResponse),
+    /// Unauthorized
+    #[response(status = UNAUTHORIZED)]
+    Unauthorized(ApiErrorResponse),
+    /// Precondition Failed
+    #[response(status = PRECONDITION_FAILED)]
+    PreconditionFailed(ApiErrorResponse),
+    /// Bad Gateway
+    #[response(status = BAD_GATEWAY)]
+    BadGateway(ApiErrorResponse),
+}
+
+#[derive(Serialize, utoipa::ToResponse, utoipa::ToSchema)]
+#[response(description = "API error details")]
+pub struct ApiErrorResponse {
+    description: String,
+    reference: Uuid,
+}
+
+impl ApiError {
+    pub fn unauthorized() -> Self {
+        let reference = Uuid::new_v4();
+        info!(
+            error_reference = reference.to_string(),
+            "API server error: Unauthorized"
+        );
+
+        ApiError::Unauthorized(ApiErrorResponse {
+            description: "Unauthorized".to_string(),
+            reference,
+        })
+    }
+
+    pub fn bad_request(message: String) -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: Bad Request: {message}"
+        );
+
+        ApiError::BadRequest(ApiErrorResponse {
+            description: message,
+            reference,
+        })
+    }
+
+    pub fn forbidden() -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: Forbidden"
+        );
+
+        ApiError::Forbidden(ApiErrorResponse {
+            description: "Forbidden".to_string(),
+            reference,
+        })
+    }
+
+    pub fn precondition_failed(message: String) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: Precondition Failed: {message}"
+        );
+
+        ApiError::PreconditionFailed(ApiErrorResponse {
+            description: message,
+            reference,
+        })
+    }
+
+    pub fn not_found() -> Self {
+        let reference = Uuid::new_v4();
+        info!(
+            error_reference = reference.to_string(),
+            "API server error: Not Found"
+        );
+
+        ApiError::NotFound(ApiErrorResponse {
+            description: "Not found".to_string(),
+            reference,
+        })
+    }
+
+    pub fn too_many_requests() -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: Too many requests"
+        );
+
+        ApiError::TooManyRequests(ApiErrorResponse {
+            description: "Too many requests".to_string(),
+            reference,
+        })
+    }
+
+    pub fn internal() -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: internal server error"
+        );
+
+        ApiError::InternalServerError(ApiErrorResponse {
+            description: "Internal server error".to_string(),
+            reference,
+        })
+    }
+}
+
+impl From<oauth::Error> for ApiError {
+    fn from(err: oauth::Error) -> Self {
+        let message = err.user_message();
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error (OAuth): {message} {err:?}"
+        );
+
+        match err {
+            oauth::Error::MissingEnvironmentVariable(_)
+            | oauth::Error::Json(_)
+            | oauth::Error::Database(_)
+            | oauth::Error::Other(_) => ApiError::InternalServerError(ApiErrorResponse {
+                description: message,
+                reference,
+            }),
+            oauth::Error::FetchUser(_) | oauth::Error::ParseUser(_) => {
+                ApiError::BadGateway(ApiErrorResponse {
+                    description: message,
+                    reference,
+                })
+            }
+            oauth::Error::OauthToken(_)
+            | oauth::Error::MissingCSRFCookie
+            | oauth::Error::CSRFTokenMismatch => ApiError::Unauthorized(ApiErrorResponse {
+                description: message,
+                reference,
+            }),
+            oauth::Error::PreconditionFailed(_) => ApiError::PreconditionFailed(ApiErrorResponse {
+                description: message,
+                reference,
+            }),
+        }
+    }
+}
+
+impl From<crate::moneybird::Error> for ApiError {
+    fn from(err: crate::moneybird::Error) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        ApiError::BadGateway(ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        })
+    }
 }
 
 impl From<garde::Report> for ApiError {
     fn from(err: garde::Report) -> Self {
-        Self::BadRequest(err.to_string())
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        ApiError::BadRequest(ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        })
     }
 }
 
 impl From<JsonRejection> for ApiError {
-    fn from(rejection: JsonRejection) -> Self {
-        Self::BadRequest(rejection.to_string())
+    fn from(err: JsonRejection) -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        ApiError::BadRequest(ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        })
+    }
+}
+
+impl From<serde_json::Error> for ApiError {
+    fn from(err: serde_json::Error) -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        ApiError::BadRequest(ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        })
+    }
+}
+
+impl From<models::Error> for ApiError {
+    fn from(err: models::Error) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        match err {
+            Error::Serialization(_) => ApiError::BadRequest(ApiErrorResponse {
+                description: err.to_string(),
+                reference,
+            }),
+            Error::NotFound(_) => ApiError::NotFound(ApiErrorResponse {
+                description: "Not found".to_string(),
+                reference,
+            }),
+            Error::ForeignKeyViolation => ApiError::BadRequest(ApiErrorResponse {
+                description: "Foreign key violation".to_string(),
+                reference,
+            }),
+            Error::Conflict => ApiError::Conflict(ApiErrorResponse {
+                description: "Conflict".to_string(),
+                reference,
+            }),
+            Error::BadRequest(err) => ApiError::BadRequest(ApiErrorResponse {
+                description: err.to_string(),
+                reference,
+            }),
+            Error::TooManyRequests => ApiError::TooManyRequests(ApiErrorResponse {
+                description: "Too many requests".to_string(),
+                reference,
+            }),
+            _ => ApiError::InternalServerError(ApiErrorResponse {
+                description: "Database error".to_string(),
+                reference,
+            }),
+        }
     }
 }
 
 impl IntoResponse for ApiError {
-    fn into_response(self) -> axum::response::Response<axum::body::Body> {
-        error!("API server error: {self} {self:?}");
-
-        let (status, message): (StatusCode, &str) = match self {
-            ApiError::Database(db) => match db {
-                Error::Serialization(err) => {
-                    error!("{err}");
-                    (StatusCode::BAD_REQUEST, &err.to_string())
-                }
-                Error::NotFound(err) => {
-                    debug!("{err}");
-                    (StatusCode::NOT_FOUND, "Not found")
-                }
-                Error::ForeignKeyViolation => {
-                    debug!("ForeignKeyViolation");
-                    (StatusCode::BAD_REQUEST, "Foreign key violation")
-                }
-                Error::Conflict => (StatusCode::CONFLICT, "Conflict"),
-                Error::BadRequest(err) => (StatusCode::BAD_REQUEST, &err.to_string()),
-                Error::TooManyRequests => {
-                    debug!("Too many requests");
-                    (StatusCode::TOO_MANY_REQUESTS, "Too many requests")
-                }
-                Error::OrgBlocked => (StatusCode::FORBIDDEN, "Organization has been blocked"),
-                _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
-            },
-            ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found"),
-            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
-            ApiError::OAuth(err) => (err.status_code(), &err.user_message()),
-            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-            ApiError::TooManyRequests => {
-                debug!("Too many requests");
-                (StatusCode::TOO_MANY_REQUESTS, "Too many requests")
-            }
-            ApiError::Serialization(err) => (StatusCode::BAD_REQUEST, &err.to_string()),
-            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, &err.clone()),
-            ApiError::PreconditionFailed(err) => (StatusCode::PRECONDITION_FAILED, err),
-            ApiError::Moneybird(err) => match err {
-                crate::moneybird::Error::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-                _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-            },
-            ApiError::MessageBus(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error"),
-        };
-
-        (status, Json(json!({ "error": message }))).into_response()
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ApiError::BadRequest(body) => (StatusCode::BAD_REQUEST, Json(body)),
+            ApiError::NotFound(body) => (StatusCode::NOT_FOUND, Json(body)),
+            ApiError::Conflict(body) => (StatusCode::CONFLICT, Json(body)),
+            ApiError::TooManyRequests(body) => (StatusCode::TOO_MANY_REQUESTS, Json(body)),
+            ApiError::InternalServerError(body) => (StatusCode::INTERNAL_SERVER_ERROR, Json(body)),
+            ApiError::Forbidden(body) => (StatusCode::FORBIDDEN, Json(body)),
+            ApiError::Unauthorized(body) => (StatusCode::UNAUTHORIZED, Json(body)),
+            ApiError::PreconditionFailed(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+            ApiError::BadGateway(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+        }
+        .into_response()
     }
 }

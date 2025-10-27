@@ -9,13 +9,8 @@ use crate::{
         auth::{logout, password_login, password_register, totp_login},
         domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
         invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{create_message, get_message, list_messages, remove_message, retry_now},
+        messages::{get_message, list_messages, remove_message, retry_now},
         oauth::GithubOauthService,
-        organizations::{
-            create_organization, get_organization, list_members, list_organizations, remove_member,
-            remove_organization, update_block_status, update_member_role, update_organization,
-        },
-        projects::{create_project, list_projects, remove_project, update_project},
         smtp_credentials::{
             create_smtp_credential, list_smtp_credential, remove_smtp_credential,
             update_smtp_credential,
@@ -53,6 +48,9 @@ use tracing::{
     log::{trace, warn},
     span,
 };
+// use utoipa_redoc::{Redoc, Servable};
+use crate::api::openapi::openapi_router;
+use utoipa_scalar::{Scalar, Servable};
 
 mod api_keys;
 mod api_users;
@@ -62,6 +60,7 @@ mod error;
 mod invites;
 mod messages;
 mod oauth;
+mod openapi;
 mod organizations;
 mod projects;
 mod smtp_credentials;
@@ -288,9 +287,10 @@ impl ApiServer {
             retry_config: Arc::new(RetryConfig::default()),
         };
 
+        let (router_from_openapi, openapi) = openapi_router().split_for_parts();
+
         let mut router = Router::new()
             .route("/config", get(config))
-            .route("/whoami", get(whoami::whoami))
             .route("/healthy", get(healthy))
             .route("/webhook/moneybird", post(moneybird_webhook))
             .route("/api_user/{user_id}", put(update_user))
@@ -299,28 +299,12 @@ impl ApiServer {
             .route("/api_user/{user_id}/totp", get(totp_codes))
             .route("/api_user/{user_id}/totp/{totp_id}", delete(delete_totp_code))
             .route(
-                "/organizations",
-                get(list_organizations).post(create_organization),
-            )
-            .route(
-                "/organizations/{id}",
-                get(get_organization).put(update_organization).delete(remove_organization),
-            )
-            .route(
                 "/organizations/{id}/subscription",
                 get(get_subscription),
             )
             .route(
                 "/organizations/{id}/subscription/new",
                 get(get_sales_link),
-            )
-            .route(
-                "/organizations/{org_id}/projects",
-                get(list_projects).post(create_project),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}",
-                delete(remove_project).put(update_project),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams",
@@ -340,7 +324,7 @@ impl ApiServer {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
-                get(list_messages).post(create_message),
+                get(list_messages),
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
@@ -375,24 +359,12 @@ impl ApiServer {
                 post(verify_domain),
             )
             .route(
-                "/organizations/{org_id}/members",
-                get(list_members),
-            )
-            .route(
-                "/organizations/{org_id}/members/{user_id}",
-                delete(remove_member).put(update_member_role),
-            )
-            .route(
                 "/organizations/{org_id}/api_keys",
                 get(list_api_keys).post(create_api_key),
             )
             .route(
                 "/organizations/{org_id}/api_keys/{api_key_id}",
                 delete(remove_api_key).put(update_api_key),
-            )
-            .route(
-                "/organizations/{org_id}/admin",
-                put(update_block_status),
             )
             .route("/logout", get(logout))
             .route("/login/password", post(password_login))
@@ -422,10 +394,28 @@ impl ApiServer {
             router = router.merge(memory_router);
         }
 
+        let mut router = router.merge(router_from_openapi).with_state(state.clone());
+
         router = router.layer(middleware::from_fn_with_state(
             state.config.clone(),
             append_default_headers,
         ));
+
+        router = router
+            // .merge(Redoc::with_url_and_config(
+            //     "/openapi-ui",
+            //     openapi.clone(),
+            //     || {
+            //         json!({
+            //             "downloadDefinitionUrl": "/openapi.json",
+            //         })
+            //     },
+            // ))
+            .merge(
+                Scalar::with_url("/openapi-ui", openapi.clone())
+                    .custom_html(include_str!("../static/scalar.html")),
+            )
+            .route("/openapi.json", get(async move || Json(openapi)));
 
         ApiServer {
             socket,

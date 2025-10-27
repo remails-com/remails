@@ -42,19 +42,19 @@ pub trait Authenticated: Send + Sync {
     fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
         self.is_at_least(org_id, Role::ReadOnly)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(ApiError::forbidden())
     }
 
     fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
         self.is_at_least(org_id, Role::Maintainer)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(ApiError::forbidden())
     }
 
     fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
         self.is_at_least(org_id, Role::Admin)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(ApiError::forbidden())
     }
 
     /// Get a list of the UUIDs of all organizations that are viewable by this user,
@@ -213,7 +213,7 @@ pub(super) async fn password_login(
     let user = repo
         .find_by_email(&login_attempt.email)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::not_found())?;
 
     let whoami;
     if repo.mfa_enabled(user.id()).await? {
@@ -240,7 +240,7 @@ pub(super) async fn totp_login(
     let user = repo
         .find_by_id(&user.id())
         .await?
-        .ok_or(ApiError::Unauthorized)?;
+        .ok_or(ApiError::unauthorized())?;
     cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
 
     Ok((
@@ -337,7 +337,9 @@ where
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+        let session_cookie = jar
+            .get(SESSION_COOKIE_NAME)
+            .ok_or(ApiError::unauthorized())?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(cookie) => {
@@ -346,10 +348,10 @@ where
                         user_id = cookie.id().to_string(),
                         "Received expired user cookie"
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(ApiError::unauthorized())?
                 }
                 if !matches!(cookie.state, LoginState::MfaPending) {
-                    Err(ApiError::Unauthorized)?
+                    Err(ApiError::unauthorized())?
                 }
                 trace!(
                     user_id = cookie.id().to_string(),
@@ -359,7 +361,7 @@ where
             }
             Err(err) => {
                 debug!("Invalid session cookie: {err:?}");
-                Err(ApiError::Unauthorized)
+                Err(ApiError::unauthorized())
             }
         }
     }
@@ -380,7 +382,7 @@ where
             let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
                 error!("could not determine client IP address");
 
-                return Err(ApiError::BadRequest(
+                return Err(ApiError::bad_request(
                     "could not determine client IP address".to_string(),
                 ));
             };
@@ -407,7 +409,7 @@ where
                 let user = ApiUserRepository::from_ref(state)
                     .find_by_id(&user_id)
                     .await?
-                    .ok_or(ApiError::Unauthorized)?;
+                    .ok_or(ApiError::unauthorized())?;
                 return Ok(user);
             }
         }
@@ -416,7 +418,9 @@ where
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+        let session_cookie = jar
+            .get(SESSION_COOKIE_NAME)
+            .ok_or(ApiError::unauthorized())?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(user) => {
@@ -425,14 +429,14 @@ where
                         user_id = user.id().to_string(),
                         "Received expired user cookie"
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(ApiError::unauthorized())?
                 }
                 if !matches!(user.state, LoginState::LoggedIn) {
                     warn!(
                         user_id = user.id().to_string(),
                         "Received user cookie that is not in `LoggedIn` state but {:?}", user.state
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(ApiError::unauthorized())?
                 }
                 trace!(
                     user_id = user.id().to_string(),
@@ -441,11 +445,11 @@ where
                 Ok(ApiUserRepository::from_ref(state)
                     .find_by_id(user.id())
                     .await?
-                    .ok_or(ApiError::Unauthorized)?)
+                    .ok_or(ApiError::unauthorized())?)
             }
             Err(err) => {
                 debug!("Invalid session cookie: {err:?}");
-                Err(ApiError::Unauthorized)
+                Err(ApiError::unauthorized())
             }
         }
     }
@@ -482,35 +486,37 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // check HTTP Basic Auth header for API keys
         let Some(header) = parts.headers.get("Authorization") else {
-            return Err(ApiError::Unauthorized);
+            return Err(ApiError::unauthorized());
         };
 
         trace!("Logging in based on `Authorization` header");
-        let header = header.to_str().map_err(|_| ApiError::Unauthorized)?;
+        let header = header.to_str().map_err(|_| ApiError::unauthorized())?;
 
         let (auth_type, base64_credentials) =
-            header.split_once(' ').ok_or(ApiError::Unauthorized)?;
+            header.split_once(' ').ok_or(ApiError::unauthorized())?;
 
         if auth_type.to_lowercase() != "basic" {
-            return Err(ApiError::Unauthorized);
+            return Err(ApiError::unauthorized());
         }
 
-        let credentials =
-            base64ct::Base64::decode_vec(base64_credentials).map_err(|_| ApiError::Unauthorized)?;
-        let credentials = String::from_utf8(credentials).map_err(|_| ApiError::Unauthorized)?;
+        let credentials = base64ct::Base64::decode_vec(base64_credentials)
+            .map_err(|_| ApiError::unauthorized())?;
+        let credentials = String::from_utf8(credentials).map_err(|_| ApiError::unauthorized())?;
 
-        let (api_key_id, password) = credentials.split_once(':').ok_or(ApiError::Unauthorized)?;
+        let (api_key_id, password) = credentials
+            .split_once(':')
+            .ok_or(ApiError::unauthorized())?;
 
-        let api_key_id = api_key_id.parse().map_err(|_| ApiError::Unauthorized)?;
+        let api_key_id = api_key_id.parse().map_err(|_| ApiError::unauthorized())?;
         let api_key = ApiKeyRepository::from_ref(state)
             .get(api_key_id)
             .await
-            .map_err(|_| ApiError::Unauthorized)?;
+            .map_err(|_| ApiError::unauthorized())?;
 
         if api_key.verify_password(&Password::new(password.to_owned())) {
             Ok(api_key)
         } else {
-            Err(ApiError::Unauthorized)
+            Err(ApiError::unauthorized())
         }
     }
 }
