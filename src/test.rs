@@ -173,21 +173,6 @@ async fn setup(
     "k8s_nodes"
 ))]
 async fn integration_test(pool: PgPool) {
-    // dotenv().unwrap();
-    //
-    // tracing_subscriber::registry()
-    //     .with(
-    //         tracing_subscriber::EnvFilter::try_from_default_env()
-    //             .unwrap_or("remails=trace,tower_http=debug,axum=trace".parse().unwrap()),
-    //     )
-    //     .with(
-    //         tracing_subscriber::fmt::layer()
-    //             .with_file(true)
-    //             .with_line_number(true)
-    //             .without_time(),
-    //     )
-    //     .init();
-
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
     let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();

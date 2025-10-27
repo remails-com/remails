@@ -127,6 +127,33 @@ mod test {
         } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+        let config = HandlerConfig {
+            allow_plain: true,
+            domain: "test".to_string(),
+            resolver: DnsResolver::mock("localhost", mailcrab_port),
+            environment: Environment::Development,
+            retry: RetryConfig {
+                delay: Duration::minutes(60),
+                max_automatic_retries: 3,
+            },
+        };
+        let handler = Handler::new(
+            pool.clone(),
+            Arc::new(config),
+            bus_client.clone(),
+            CancellationToken::new(),
+        )
+        .await;
+        handler.spawn();
+
+        let periodically = Periodically::new(pool.clone(), bus_client.clone())
+            .await
+            .unwrap();
+
+        let mut stream = bus_client.receive().await.unwrap();
+
         let message_repo = MessageRepository::new(pool.clone());
 
         let message_held_id = "10d5ad5f-04ae-489b-9f5a-f5d7e73bc12a".parse().unwrap();
@@ -162,30 +189,6 @@ mod test {
             MessageStatus::Reattempt
         );
 
-        let bus_port = Bus::spawn_random_port().await;
-        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
-        let config = HandlerConfig {
-            allow_plain: true,
-            domain: "test".to_string(),
-            resolver: DnsResolver::mock("localhost", mailcrab_port),
-            environment: Environment::Development,
-            retry: RetryConfig {
-                delay: Duration::minutes(60),
-                max_automatic_retries: 3,
-            },
-        };
-        let handler = Handler::new(
-            pool.clone(),
-            Arc::new(config),
-            bus_client.clone(),
-            CancellationToken::new(),
-        )
-        .await;
-        handler.spawn();
-
-        let periodically = Periodically::new(pool, bus_client.clone()).await.unwrap();
-
-        let mut stream = bus_client.receive().await.unwrap();
         periodically.retry_messages().await.unwrap();
         BusClient::wait_for_attempt(2, &mut stream).await;
 

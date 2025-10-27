@@ -1,14 +1,25 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name:
-    debug
+  name: netplan-test
+  namespace: remails-staging
   labels:
-    app: test
+    app: netplan-test
 spec:
+  hostPID: true
   containers:
     - name: ubuntu
       image: ubuntu
+      volumeMounts:
+        - name: host-netplan
+          mountPath: /host/etc/netplan
       command:
         - sleep
         - "10000000"
+      securityContext:
+        privileged: true
+  volumes:
+    - name: host-netplan
+      hostPath:
+        path: /etc/netplan
+        type: Directory
