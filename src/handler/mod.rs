@@ -509,6 +509,7 @@ impl Handler {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn send_single_upstream(
         &self,
         security: Protection,

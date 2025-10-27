@@ -24,11 +24,16 @@ spec:
     {{- end }}
       serviceAccountName: periodic-service-account
       containers:
-        - name: retry
+        - name: periodic
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
           env:
             - name: VERSION
               value: {{ .Chart.AppVersion }}
+            - name: K8S_NODE_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

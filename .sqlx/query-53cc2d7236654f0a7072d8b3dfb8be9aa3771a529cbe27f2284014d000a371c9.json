@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM k8s_nodes WHERE NOT hostname = ANY($1)\n            RETURNING hostname\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "53cc2d7236654f0a7072d8b3dfb8be9aa3771a529cbe27f2284014d000a371c9"
+}

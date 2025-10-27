@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT hostname, ready FROM k8s_nodes\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "ready",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4a83699d893aabc17a9e6c485f6c9dd55b885f37a4d1985c58accd5fce284018"
+}
