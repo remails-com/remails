@@ -1,6 +1,6 @@
 use crate::{
     MoneyBird,
-    bus::client::{BusClient, BusMessage},
+    bus::client::BusClient,
     models::{self, InviteRepository, MessageRepository},
     moneybird,
 };
@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use std::error::Error;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::debug;
+use tracing::{debug, error};
 
 pub struct Periodically {
     message_repository: MessageRepository,
@@ -57,22 +57,16 @@ impl Periodically {
             .find_messages_ready_for_retry()
             .await?;
 
-        for (message_id, outbound_ip) in messages {
-            let Some(outbound_ip) = outbound_ip else {
-                tracing::error!(
-                    message_id = message_id.to_string(),
-                    "Message has no outbound IP assigned (yet)"
-                );
-                continue;
-            };
-            tracing::info!(
-                message_id = message_id.to_string(),
-                outbound_ip = outbound_ip.to_string(),
-                "Retrying message"
-            );
-            self.bus_client
-                .try_send(&BusMessage::EmailReadyToSend(message_id, outbound_ip))
-                .await;
+        for message_id in messages {
+            tracing::info!(message_id = message_id.to_string(), "Retrying message");
+            match self.message_repository.get_ready_to_send(message_id).await {
+                Ok(bus_message) => {
+                    self.bus_client.try_send(&bus_message).await;
+                }
+                Err(e) => {
+                    error!(message_id = message_id.to_string(), "{e:?}");
+                }
+            }
         }
 
         Ok(())
@@ -96,7 +90,7 @@ mod test {
     use super::*;
     use crate::{
         Environment, HandlerConfig,
-        bus::server::Bus,
+        bus::{client::BusMessage, server::Bus},
         handler::{Handler, RetryConfig, dns::DnsResolver},
         models::{MessageId, MessageStatus},
         test::{TestStreams, random_port},
@@ -116,7 +110,8 @@ mod test {
             "org_domains",
             "proj_domains",
             "smtp_credentials",
-            "messages"
+            "messages",
+            "k8s_nodes"
         )
     ))]
     async fn retry_sending_messages(pool: PgPool) {
@@ -254,7 +249,8 @@ mod test {
             "org_domains",
             "proj_domains",
             "smtp_credentials",
-            "messages"
+            "messages",
+            "k8s_nodes"
         )
     ))]
     async fn quotas_retries(pool: PgPool) {

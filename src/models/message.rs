@@ -1,4 +1,5 @@
 use crate::{
+    bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
     models::{
         ApiKeyId, Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
@@ -9,8 +10,8 @@ use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgInterval, types::ipnet::IpNet};
-use std::{collections::HashMap, mem, net::IpAddr, str::FromStr};
+use sqlx::postgres::types::PgInterval;
+use std::{collections::HashMap, mem, str::FromStr};
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -64,7 +65,6 @@ pub struct Message {
     pub retry_after: Option<DateTime<Utc>>,
     pub attempts: i32,
     pub max_attempts: i32,
-    pub outbound_ip: Option<IpAddr>,
 }
 
 #[derive(Serialize)]
@@ -94,10 +94,6 @@ impl ApiMessage {
     pub fn status(&self) -> &MessageStatus {
         &self.metadata.status
     }
-
-    pub fn outbound_ip(&self) -> Option<IpAddr> {
-        self.metadata.outbound_ip
-    }
 }
 
 #[cfg_attr(test, derive(Deserialize))]
@@ -118,7 +114,6 @@ pub struct ApiMessageMetadata {
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
     max_attempts: i32,
-    outbound_ip: Option<IpAddr>,
 }
 
 #[derive(Serialize, Default)]
@@ -283,7 +278,6 @@ struct PgMessage {
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
     max_attempts: i32,
-    outbound_ip: Option<IpNet>,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -313,7 +307,6 @@ impl TryFrom<PgMessage> for Message {
             retry_after: m.retry_after,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
-            outbound_ip: m.outbound_ip.map(|net| net.addr()),
         })
     }
 }
@@ -392,7 +385,6 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             retry_after: m.retry_after,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
-            outbound_ip: m.outbound_ip.map(|net| net.addr()),
         })
     }
 }
@@ -416,27 +408,44 @@ impl MessageRepository {
         }
     }
 
+    pub async fn get_ready_to_send(&self, message_id: MessageId) -> Result<BusMessage, Error> {
+        // TODO: do not rely on random outbound IPs
+        match sqlx::query_scalar!(
+            r#"
+            SELECT ip AS outbound_ip
+            FROM outbound_ips
+            JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
+            WHERE node.ready
+            ORDER BY RANDOM()
+            LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await
+        {
+            Ok(Some(outbound_ip)) => {
+                Ok(BusMessage::EmailReadyToSend(message_id, outbound_ip.addr()))
+            }
+            Ok(None) => Err(Error::Internal(
+                "failed to assign outbound IP to message: none available".to_string(),
+            )),
+            Err(e) => Err(Error::Internal(format!(
+                "failed to assign outbound IP to message: {e:?}"
+            ))),
+        }
+    }
+
     pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, from_email,
-                                       recipients, raw_data, message_data, max_attempts, outbound_ip)
-            WITH m AS (SELECT o.id AS org_id, p.id AS proj_id, streams.id AS stream_id
-                       FROM smtp_credentials s
-                                JOIN streams ON s.stream_id = streams.id
-                                JOIN projects p ON p.id = streams.project_id
-                                JOIN organizations o ON o.id = p.organization_id
-                       WHERE s.id = $1),
-                 ip AS (SELECT ip AS outbound_ip
-                        FROM outbound_ips
-                        JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
-                        WHERE node.ready
-                        -- TODO: Do not rely on random outbound IPs
-                        ORDER BY RANDOM()
-                        LIMIT 1)
-            SELECT gen_random_uuid(), m.org_id, m.proj_id, m.stream_id, $1, $2, $3, $4, $5, $6, ip.outbound_ip
-            FROM m, ip
+            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, from_email, recipients, raw_data, message_data, max_attempts)
+            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            FROM smtp_credentials s
+                JOIN streams ON s.stream_id = streams.id
+                JOIN projects p ON p.id = streams.project_id
+                JOIN organizations o ON o.id = p.organization_id
+            WHERE s.id = $1
             RETURNING
                 m.id,
                 m.organization_id,
@@ -456,8 +465,7 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             "#,
             *message.smtp_credential_id,
             message.from_email.as_str(),
@@ -504,8 +512,7 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             "#,
             *message.stream_id,
             *message.api_key_id,
@@ -603,8 +610,7 @@ impl MessageRepository {
                 updated_at,
                 retry_after,
                 attempts,
-                max_attempts,
-                outbound_ip
+                max_attempts
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
@@ -654,8 +660,7 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             FROM messages m
             WHERE m.id = $1
             "#,
@@ -696,8 +701,7 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -743,20 +747,11 @@ impl MessageRepository {
 
     /// Messages which should be retried are either:
     /// - on `held` or `reattempt`, not on timeout, with attempts left
-    /// - on `accepted` or `processing`, and not having been updated in 15 minutes
-    pub async fn find_messages_ready_for_retry(
-        &self,
-    ) -> Result<Vec<(MessageId, Option<IpAddr>)>, Error> {
-        struct IdAndIp {
-            id: MessageId,
-            outbound_ip: Option<IpNet>,
-        }
-
-        Ok(sqlx::query_as!(
-            IdAndIp,
+    /// - on `accepted` or `processing`, and not having been updated in 2 minutes
+    pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<MessageId>, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
-            SELECT m.id, m.outbound_ip
-            FROM messages m
+            SELECT m.id FROM messages m
             WHERE (
                 (m.status = 'held' OR m.status = 'reattempt')
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
@@ -769,25 +764,20 @@ impl MessageRepository {
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(|elem| (elem.id, elem.outbound_ip.map(|net| net.addr())))
+        .map(Into::into)
         .collect())
     }
 
-    pub async fn message_status_and_outbound_ip(
+    pub async fn message_status(
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
         stream_id: StreamId,
         message_id: MessageId,
-    ) -> Result<(MessageStatus, Option<IpAddr>), Error> {
-        struct StatusAndIp {
-            status: MessageStatus,
-            outbound_ip: Option<IpNet>,
-        }
-        let res = sqlx::query_as!(
-            StatusAndIp,
+    ) -> Result<MessageStatus, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
-            SELECT m.status AS "status:MessageStatus", m.outbound_ip
+            SELECT m.status AS "status:MessageStatus"
             FROM messages m
             WHERE m.organization_id = $1 
               AND m.project_id = $2 
@@ -800,9 +790,7 @@ impl MessageRepository {
             *message_id,
         )
         .fetch_one(&self.pool)
-        .await?;
-
-        Ok((res.status, res.outbound_ip.map(|net| net.addr())))
+        .await?)
     }
 
     /// Returns the number of emails that can still be created during the current rate limit time span

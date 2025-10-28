@@ -122,7 +122,7 @@ pub struct Handler {
     k8s: Kubernetes,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
-    sending_ips: BTreeSet<IpAddr>,
+    outbound_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -148,7 +148,7 @@ impl Handler {
                 .expect("Failed to initialize Kubernetes"),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
-            sending_ips: Default::default(),
+            outbound_ips: Default::default(),
             shutdown,
             config,
         }
@@ -582,14 +582,14 @@ impl Handler {
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
             stream_id = message.stream_id.to_string(),
-            outbound_ip = ?message.outbound_ip,
+            outbound_ip = outbound_ip.to_string(),
         ))]
-    pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
+    pub async fn send_message(
+        &self,
+        mut message: Message,
+        outbound_ip: IpAddr,
+    ) -> Result<(), HandlerError> {
         info!("sending message");
-        let Some(outbound_ip) = message.outbound_ip else {
-            error!("message is missing outbound IP");
-            return Err(HandlerError::MissingOutboundIp);
-        };
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
@@ -761,10 +761,10 @@ impl Handler {
                             )
                             .map(Into::into)
                             .collect();
-                        if new_ips != self.sending_ips {
-                            self.sending_ips = new_ips;
-                            info!("new interface list: {:?}", self.sending_ips);
-                            match self.k8s.save_available_node_ips(self.sending_ips.clone()).await {
+                        if new_ips != self.outbound_ips {
+                            self.outbound_ips = new_ips;
+                            info!("new interface list: {:?}", self.outbound_ips);
+                            match self.k8s.save_available_node_ips(self.outbound_ips.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!("failed to save available node IPs: {e}");
@@ -780,13 +780,13 @@ impl Handler {
                                 error!("Bus stream ended, shutting down");
                                 self.shutdown.cancel();
                             },
-                            Some(BusMessage::EmailReadyToSend(id, from)) => {
-                                if self.sending_ips.contains(&from) {
-                                    self.handle_ready_to_send(id).await;
+                            Some(BusMessage::EmailReadyToSend(id, outbound_ip)) => {
+                                if self.outbound_ips.contains(&outbound_ip) {
+                                    self.handle_ready_to_send(id, outbound_ip).await;
                                 } else {
                                     trace!(
                                         message_id = id.to_string(),
-                                        ip_addr = from.to_string(),
+                                        outbound_ip = outbound_ip.to_string(),
                                         "skipping message as it should not be send from this node"
                                     );
                                 }
@@ -799,7 +799,7 @@ impl Handler {
         })
     }
 
-    async fn handle_ready_to_send(&self, id: MessageId) {
+    async fn handle_ready_to_send(&self, id: MessageId, outbound_ip: IpAddr) {
         info!("Ready to send {id}");
 
         let Ok(permit) = self.workers.clone().acquire_owned().await else {
@@ -832,7 +832,7 @@ impl Handler {
                 return;
             };
 
-            if let Err(e) = self_clone.send_message(message).await {
+            if let Err(e) = self_clone.send_message(message, outbound_ip).await {
                 error!(message_id, "failed to send message: {e:?}");
             }
         });
@@ -927,7 +927,10 @@ mod test {
             .await
             .unwrap();
         handler.handle_message(&mut message).await.unwrap();
-        handler.send_message(message).await.unwrap();
+        handler
+            .send_message(message, "127.0.0.1".parse().unwrap())
+            .await
+            .unwrap();
     }
 
     #[sqlx::test(fixtures(

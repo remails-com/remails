@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::error::{ApiError, ApiResult};
 use crate::{
     api::auth::Authenticated,
-    bus::client::{BusClient, BusMessage},
+    bus::client::BusClient,
     handler::RetryConfig,
     models::{
         ApiKey, ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository,
@@ -163,11 +163,14 @@ pub async fn create_message(
         .create_from_api(&message, retry_config.max_automatic_retries)
         .await?;
 
-    // TODO: do basic checks immediately and return an error if it fails?
-
-    bus_client
-        .try_send(&BusMessage::EmailReadyToSend(message.id))
-        .await;
+    match repo.get_ready_to_send(message.id).await {
+        Ok(bus_message) => {
+            bus_client.try_send(&bus_message).await;
+        }
+        Err(e) => {
+            error!(message_id = message.id.to_string(), "{e:?}");
+        }
+    }
 
     Ok((StatusCode::CREATED, Json(message)))
 }
@@ -253,7 +256,7 @@ pub async fn remove_message(
 
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
-    State(bus): State<Arc<BusClient>>,
+    State(bus_client): State<Arc<BusClient>>,
     Path((org_id, project_id, stream_id, message_id)): Path<(
         OrganizationId,
         ProjectId,
@@ -264,15 +267,9 @@ pub async fn retry_now(
 ) -> Result<(), ApiError> {
     user.has_org_write_access(&org_id)?;
 
-    let (status, Some(outbound_ip)) = repo
-        .message_status_and_outbound_ip(org_id, project_id, stream_id, message_id)
-        .await?
-    else {
-        error!("Requested retry for message that doesn't have an outbound IP assigned (yet)");
-        return Err(ApiError::BadRequest(
-            "Message doesn't have an outbound IP assigned (yet)".to_string(),
-        ));
-    };
+    let status = repo
+        .message_status(org_id, project_id, stream_id, message_id)
+        .await?;
 
     if status == MessageStatus::Delivered {
         warn!(
@@ -285,9 +282,14 @@ pub async fn retry_now(
         ));
     }
 
-    bus.send(&BusMessage::EmailReadyToSend(message_id, outbound_ip))
-        .await
-        .map_err(ApiError::MessageBus)?;
+    match repo.get_ready_to_send(message_id).await {
+        Ok(bus_message) => {
+            bus_client.try_send(&bus_message).await;
+        }
+        Err(e) => {
+            error!(message_id = message_id.to_string(), "{e:?}");
+        }
+    }
 
     debug!(
         user_id = user.log_id(),
@@ -303,8 +305,11 @@ pub async fn retry_now(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::{
         api::tests::{TestServer, deserialize_body},
+        bus::client::BusMessage,
         models::MessageStatus,
     };
     use axum::body::Body;
@@ -323,7 +328,8 @@ mod tests {
             "projects",
             "streams",
             "smtp_credentials",
-            "messages"
+            "messages",
+            "k8s_nodes"
         )
     ))]
     async fn test_messages_lifecycle(pool: PgPool) {
@@ -376,10 +382,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(status, StatusCode::OK, "server response: {server_response}");
-        let bus_message = message_stream.next().await.unwrap();
+
+        let bus_message = tokio::time::timeout(Duration::from_secs(10), message_stream.next())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(
             bus_message,
-            BusMessage::EmailReadyToSend(message.id(), message.outbound_ip().unwrap())
+            BusMessage::EmailReadyToSend(message.id(), "127.0.0.1".parse().unwrap())
         );
 
         // remove message
