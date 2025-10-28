@@ -13,7 +13,7 @@ use crate::{
         OrganizationRepository, QuotaStatus,
     },
 };
-use base64ct::{Base64, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use futures::StreamExt;
@@ -197,7 +197,7 @@ impl Handler {
         else {
             return Ok(Err((
                 MessageStatus::Held,
-                format!("SMTP credential is not permitted to use domain {sender_domain}"),
+                format!("Project is not permitted to use domain {sender_domain}"),
             )));
         };
 
@@ -333,12 +333,12 @@ impl Handler {
         let mut new_headers = Vec::new();
 
         if !has_header(HeaderName::MessageId) {
-            trace!("adding Message-ID header");
-            use aws_lc_rs::digest;
-            let hash = digest::digest(&digest::SHA224, &message.raw_data);
-            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
-            let sender_domain = message.from_email.domain();
-            new_headers.push(format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+            let message_id_header =
+                MessageRepository::generate_message_id_header(&message.id(), &message.from_email);
+            trace!("adding Message-ID header: {message_id_header}");
+
+            new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
+            message.message_id_header = Some(message_id_header);
         }
 
         if !has_header(HeaderName::Date) {

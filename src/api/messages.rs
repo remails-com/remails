@@ -79,10 +79,10 @@ pub async fn create_message(
     State(retry_config): State<Arc<RetryConfig>>,
     State(bus_client): State<Arc<BusClient>>,
     Path((org_id, _, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
-    user: ApiKey, // only accessible for API keys
+    key: ApiKey, // only accessible for API keys
     Json(message): Json<EmailParameters>,
 ) -> Result<impl IntoResponse, ApiError> {
-    user.has_org_write_access(&org_id)?;
+    key.has_org_write_access(&org_id)?;
 
     // check email rate limit
     if repo.email_creation_rate_limit(stream_id).await? <= 0 {
@@ -117,11 +117,16 @@ pub async fn create_message(
             }
         };
 
+    // generate message ID
+    let message_id = MessageId::new_v4();
+    let message_id_header = MessageRepository::generate_message_id_header(&message_id, &from_email);
+
     // set required fields
     let mut message_builder = MessageBuilder::new()
         .from(message.from)
         .to(message.to)
-        .subject(message.subject);
+        .subject(message.subject)
+        .message_id(message_id_header.as_str());
 
     // add body to message
     if message.text_body.is_none() && message.html_body.is_none() {
@@ -152,7 +157,9 @@ pub async fn create_message(
         .map_err(|e| ApiError::BadRequest(format!("Error creating email: {e:?}")))?;
 
     let message = NewApiMessage {
-        api_key_id: *user.id(),
+        message_id,
+        message_id_header,
+        api_key_id: *key.id(),
         stream_id,
         from_email,
         recipients,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.outbound_ip\n            FROM messages m\n            WHERE m.id = $1\n            ",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, stream_id, smtp_credential_id,\n                from_email, recipients, raw_data, message_data, max_attempts\n            )\n            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6\n            FROM smtp_credentials s\n                JOIN streams ON s.stream_id = streams.id\n                JOIN projects p ON p.id = streams.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $1\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            ",
   "describe": {
     "columns": [
       {
@@ -90,38 +90,43 @@
       },
       {
         "ordinal": 14,
+        "name": "message_id_header",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "max_attempts",
         "type_info": "Int4"
-      },
-      {
-        "ordinal": 19,
-        "name": "outbound_ip",
-        "type_info": "Inet"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Jsonb",
+        "Int4"
       ]
     },
     "nullable": [
@@ -139,13 +144,13 @@
       false,
       null,
       true,
+      true,
       false,
       false,
       true,
       false,
-      false,
-      true
+      false
     ]
   },
-  "hash": "40104fcacc1bc6f0376985f0affe39e8ffd71463e168ec81c2b7a54bcc172d22"
+  "hash": "83242e59ba8173ae643897844ad4e86a02e34f82b73d57afdfe3f232363cea13"
 }

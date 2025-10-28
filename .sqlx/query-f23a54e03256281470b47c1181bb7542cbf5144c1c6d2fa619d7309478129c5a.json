@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.outbound_ip\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND m.project_id = $3\n              AND m.stream_id = $4\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages m\n            WHERE m.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -75,7 +75,7 @@
       },
       {
         "ordinal": 11,
-        "name": "raw_data!",
+        "name": "raw_data",
         "type_info": "Bytea"
       },
       {
@@ -90,42 +90,38 @@
       },
       {
         "ordinal": 14,
+        "name": "message_id_header",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "max_attempts",
         "type_info": "Int4"
-      },
-      {
-        "ordinal": 19,
-        "name": "outbound_ip",
-        "type_info": "Inet"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Uuid",
-        "Uuid",
-        "Uuid",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -140,16 +136,16 @@
       false,
       false,
       false,
+      false,
       null,
-      null,
+      true,
       true,
       false,
       false,
       true,
       false,
-      false,
-      true
+      false
     ]
   },
-  "hash": "4523dbcf7cd1ca0ecb27b81a38de5ae0cc306ab5515f5f4ecb8b50273657b16d"
+  "hash": "f23a54e03256281470b47c1181bb7542cbf5144c1c6d2fa619d7309478129c5a"
 }

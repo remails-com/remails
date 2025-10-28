@@ -19,6 +19,12 @@ const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
 
+impl MessageId {
+    pub fn new_v4() -> Self {
+        MessageId(Uuid::new_v4())
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
@@ -60,6 +66,7 @@ pub struct Message {
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
+    pub message_id_header: Option<String>,
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
@@ -109,6 +116,7 @@ pub struct ApiMessageMetadata {
     recipients: Vec<EmailAddress>,
     /// Human-readable size
     raw_size: String,
+    message_id_header: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
@@ -226,6 +234,8 @@ impl NewMessage {
 
 /// A new email coming from the Remails API
 pub struct NewApiMessage {
+    pub message_id: MessageId,
+    pub message_id_header: String,
     pub api_key_id: ApiKeyId,
     pub stream_id: StreamId,
     pub from_email: EmailAddress,
@@ -273,6 +283,7 @@ struct PgMessage {
     raw_data: Vec<u8>,
     raw_size: i32,
     message_data: serde_json::Value,
+    message_id_header: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
@@ -302,6 +313,7 @@ impl TryFrom<PgMessage> for Message {
                 .collect::<Result<Vec<_>, _>>()?,
             raw_data: m.raw_data,
             message_data: m.message_data,
+            message_id_header: m.message_id_header,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
@@ -380,6 +392,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
                 .map(|addr| addr.parse())
                 .collect::<Result<Vec<_>, _>>()?,
             raw_size: humansize::format_size(m.raw_size.unsigned_abs(), humansize::DECIMAL),
+            message_id_header: m.message_id_header,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
@@ -435,11 +448,22 @@ impl MessageRepository {
         }
     }
 
+    /// Generate a unique message ID to be included as email header in case no message ID was provided
+    pub fn generate_message_id_header(id: &MessageId, from_email: &EmailAddress) -> String {
+        let sender_domain = from_email.domain();
+
+        // including the Remails message UUID ensure uniqueness
+        format!("REMAILS-{id}@{sender_domain}")
+    }
+
     pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, from_email, recipients, raw_data, message_data, max_attempts)
+            INSERT INTO messages AS m (
+                id, organization_id, project_id, stream_id, smtp_credential_id,
+                from_email, recipients, raw_data, message_data, max_attempts
+            )
             SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
             FROM smtp_credentials s
                 JOIN streams ON s.stream_id = streams.id
@@ -461,6 +485,7 @@ impl MessageRepository {
                 m.raw_data,
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
@@ -469,14 +494,18 @@ impl MessageRepository {
             "#,
             *message.smtp_credential_id,
             message.from_email.as_str(),
-            &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
+            &message
+                .recipients
+                .iter()
+                .map(|r| r.email())
+                .collect::<Vec<_>>(),
             message.raw_data,
             message.message_data,
-            max_attempts
+            max_attempts,
         )
-            .fetch_one(&self.pool)
-            .await?
-            .try_into()
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
     }
 
     pub async fn create_from_api(
@@ -487,12 +516,15 @@ impl MessageRepository {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, api_key_id, from_email, recipients, raw_data, max_attempts)
-            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6
+            INSERT INTO messages AS m (
+                id, organization_id, project_id, stream_id, api_key_id, 
+                from_email, recipients, raw_data, max_attempts, message_id_header
+            )
+            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8
             FROM streams s
                 JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
-            WHERE s.id = $1
+            WHERE s.id = $2
             RETURNING
                 m.id,
                 m.organization_id,
@@ -508,22 +540,29 @@ impl MessageRepository {
                 m.raw_data,
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
                 m.max_attempts
             "#,
+            *message.message_id,
             *message.stream_id,
             *message.api_key_id,
             message.from_email.as_str(),
-            &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
+            &message
+                .recipients
+                .iter()
+                .map(|r| r.email())
+                .collect::<Vec<_>>(),
             message.raw_data,
-            max_attempts
+            max_attempts,
+            message.message_id_header
         )
-            .fetch_one(&self.pool)
-            .await?
-            .try_into()
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
     }
 
     pub async fn update_message_status(&self, message: &mut Message) -> Result<(), Error> {
@@ -564,7 +603,8 @@ impl MessageRepository {
                 reason = $4,
                 retry_after = $5,
                 attempts = $6,
-                max_attempts = $7
+                max_attempts = $7,
+                message_id_header = $8
             WHERE id = $1
             "#,
             *message.id,
@@ -574,6 +614,7 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
             message.max_attempts,
+            message.message_id_header,
         )
         .execute(&self.pool)
         .await?;
@@ -606,6 +647,7 @@ impl MessageRepository {
                 ''::bytea AS "raw_data!",
                 NULL::jsonb AS "message_data",
                 octet_length(raw_data) AS "raw_size!",
+                message_id_header,
                 created_at,
                 updated_at,
                 retry_after,
@@ -656,6 +698,7 @@ impl MessageRepository {
                 m.raw_data,
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
@@ -697,6 +740,7 @@ impl MessageRepository {
                 substring(m.raw_data FOR $5) as "raw_data!",
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
@@ -984,6 +1028,10 @@ mod test {
         let repository = MessageRepository::new(pool.clone());
         let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
+        let from = "john@test-org-1-project-1.com";
+        let message_id = MessageId::new_v4();
+        let message_id_header =
+            MessageRepository::generate_message_id_header(&message_id, &from.parse().unwrap());
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
             .to(vec![
@@ -993,6 +1041,7 @@ mod test {
             .subject("Hi!")
             .html_body("<h1>Hello, world!</h1>")
             .text_body("Hello world!")
+            .message_id(message_id_header.as_str())
             .into_message()
             .unwrap();
 
@@ -1011,6 +1060,8 @@ mod test {
 
         // create message
         let new_message = NewApiMessage {
+            message_id,
+            message_id_header,
             api_key_id: *api_key.id(),
             stream_id,
             from_email: "john@test-org-1-project-1.com".parse().unwrap(),
