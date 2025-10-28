@@ -24,6 +24,21 @@ pub enum Error {
     NotFound,
 }
 
+#[derive(Default)]
+struct K8sApiServerNodes {
+    hostnames: Vec<String>,
+    provider_ids: Vec<String>,
+    ready: Vec<bool>,
+}
+
+impl K8sApiServerNodes {
+    fn push(&mut self, hostname: String, provider_id: String, is_ready: bool) {
+        self.hostnames.push(hostname);
+        self.provider_ids.push(provider_id);
+        self.ready.push(is_ready);
+    }
+}
+
 impl Kubernetes {
     pub async fn new(db: PgPool) -> Result<Self, Error> {
         let client = if env::var("K8S_API_MOCK")
@@ -50,21 +65,9 @@ impl Kubernetes {
     }
 
     /// Queries the Kubernetes API server for all nodes and their health status.
-    ///
-    /// ## Returns
-    /// A tuple containing three vectors:
-    /// 1. A vector of node hostnames.
-    /// 2. A vector of provider IDs.
-    /// 3. A vector of booleans indicating whether each node is ready
-    ///
-    /// The reason to make this a tuple of vectors is that it allows easier interaction with SQLx
-    async fn list_nodes_health_from_api_server(
-        &self,
-    ) -> Result<(Vec<String>, Vec<String>, Vec<bool>), Error> {
+    async fn list_nodes_health_from_api_server(&self) -> Result<K8sApiServerNodes, Error> {
         let node_api: Api<Node> = Api::all(self.client.clone());
-        let mut hostnames = Vec::new();
-        let mut provider_ids = Vec::new();
-        let mut ready = Vec::new();
+        let mut nodes = K8sApiServerNodes::default();
 
         let mut list_params = ListParams::default();
         loop {
@@ -103,9 +106,7 @@ impl Kubernetes {
                     })
                     .unwrap_or(false);
 
-                hostnames.push(node_name);
-                provider_ids.push(provider_id);
-                ready.push(is_ready);
+                nodes.push(node_name, provider_id, is_ready);
             }
 
             match list_res.metadata.continue_ {
@@ -113,14 +114,16 @@ impl Kubernetes {
                 Some(token) => list_params.continue_token = Some(token),
             }
         }
-        debug_assert!(hostnames.len() == ready.len());
-        debug_assert!(hostnames.len() == provider_ids.len());
 
-        Ok((hostnames, provider_ids, ready))
+        Ok(nodes)
     }
 
     pub async fn check_node_health(&self) -> Result<(), Error> {
-        let (hostnames, provider_ids, ready) = self.list_nodes_health_from_api_server().await?;
+        let K8sApiServerNodes {
+            hostnames,
+            provider_ids,
+            ready,
+        } = self.list_nodes_health_from_api_server().await?;
 
         // Remove all nodes that are not in the API server anymore
         let removed_hostnames = sqlx::query_scalar!(

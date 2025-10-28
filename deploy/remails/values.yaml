@@ -60,6 +60,7 @@ moneybird:
 
 github_oauth:
   client_id: Ov23livRESUJK4twobxj
+  # This is a secret for a GitHub OAuth App that only allows localhost so it's not a big deal that it's public
   client_secret: 5ce7b559ede6e0744eee42bbcee5c838ab539cae
 
 backup:
