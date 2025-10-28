@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO k8s_nodes (id, hostname, provider_id, ready)\n            VALUES (gen_random_uuid(), unnest($1::text[]), unnest($2::text[]), unnest($3::bool[]))\n            ON CONFLICT (hostname) DO UPDATE\n                SET ready = EXCLUDED.ready\n            RETURNING hostname, ready\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "ready",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "80a859914abf3e09c1878a4cd128b1015d2ecb1d1096cc64063e7056ec580fed"
+}

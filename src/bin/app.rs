@@ -1,6 +1,6 @@
 use anyhow::Context;
 use remails::{
-    HandlerConfig, SmtpConfig,
+    HandlerConfig, Kubernetes, SmtpConfig,
     bus::{client::BusClient, server::Bus},
     periodically::Periodically,
     run_api_server, run_mta, shutdown_signal,
@@ -77,6 +77,8 @@ async fn main() -> anyhow::Result<()> {
     .await;
     run_api_server(pool.clone(), http_socket, shutdown.clone(), true).await;
 
+    let kubernetes = Kubernetes::new(pool.clone()).await.unwrap();
+
     // Run retry service
     let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
     tokio::spawn(async move {
@@ -89,6 +91,9 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = periodically.clean_up_invites().await {
                 error!("Error during clean up: {e}")
             }
+            if let Err(e) = kubernetes.check_node_health().await {
+                error!("Error during k8s node check: {e}")
+            };
         }
     });
 

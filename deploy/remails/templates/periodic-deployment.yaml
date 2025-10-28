@@ -22,12 +22,18 @@ spec:
       imagePullSecrets:
           {{- toYaml . | nindent 12 }}
     {{- end }}
+      serviceAccountName: periodic-service-account
       containers:
-        - name: retry
+        - name: periodic
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
           env:
             - name: VERSION
               value: {{ .Chart.AppVersion }}
+            - name: K8S_NODE_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -49,6 +55,6 @@ spec:
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
-              value: message-bus
+              value: message-bus.{{ .Release.Namespace }}.svc.cluster.local
 
           imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}

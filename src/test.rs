@@ -1,4 +1,5 @@
 use crate::{
+    Environment,
     bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
@@ -141,6 +142,7 @@ async fn setup(
         allow_plain: true,
         domain: "test".to_string(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
+        environment: Environment::Development,
         retry: retry_config,
     };
 
@@ -167,7 +169,8 @@ async fn setup(
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn integration_test(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
@@ -318,7 +321,8 @@ async fn integration_test(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn quotas_count_atomically(pool: PgPool) {
     let pool = PgPoolOptions::new()
@@ -408,7 +412,8 @@ async fn quotas_count_atomically(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams"
+    "streams",
+    "k8s_nodes"
 ))]
 async fn rate_limit_count_atomically(pool: PgPool) {
     let pool = PgPoolOptions::new()

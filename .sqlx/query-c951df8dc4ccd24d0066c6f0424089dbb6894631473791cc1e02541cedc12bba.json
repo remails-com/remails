@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO outbound_ips (id, node_id, ip)\n            VALUES (uuid_generate_v4(), $1, unnest($2::inet[]))\n            ON CONFLICT (ip) DO UPDATE\n                SET node_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "InetArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c951df8dc4ccd24d0066c6f0424089dbb6894631473791cc1e02541cedc12bba"
+}

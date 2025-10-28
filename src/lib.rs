@@ -3,9 +3,10 @@ use derive_more::FromStr;
 use handler::Handler;
 use serde::Serialize;
 use sqlx::PgPool;
-use std::{net::SocketAddrV4, sync::Arc};
+use std::{env, net::SocketAddrV4, sync::Arc};
 use tokio::{signal, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod api;
@@ -28,7 +29,10 @@ mod test;
 #[cfg(feature = "load-fixtures")]
 mod fixtures;
 
+mod kubernetes;
 mod moneybird;
+
+pub use kubernetes::Kubernetes;
 pub use moneybird::*;
 
 #[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
@@ -38,6 +42,18 @@ pub enum Environment {
     Production,
     #[default]
     Development,
+}
+
+impl Environment {
+    pub fn from_env() -> Self {
+        env::var("ENVIRONMENT")
+            .map(|s| s.parse())
+            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
+            .unwrap_or(Ok(Environment::Development))
+            .expect(
+                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
+            )
+    }
 }
 
 pub fn init_tracing() {
@@ -72,7 +88,7 @@ pub async fn run_mta(
         shutdown.clone(),
     );
 
-    let message_handler = Handler::new(pool, handler_config, bus_client, shutdown);
+    let message_handler = Handler::new(pool, handler_config, bus_client, shutdown).await;
 
     smtp_server.spawn();
     message_handler.spawn();

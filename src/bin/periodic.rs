@@ -1,5 +1,7 @@
 use anyhow::Context;
-use remails::{bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal};
+use remails::{
+    Kubernetes, bus::client::BusClient, init_tracing, periodically::Periodically, shutdown_signal,
+};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -30,11 +32,14 @@ async fn main() -> anyhow::Result<()> {
 
     let bus_client = BusClient::new_from_env_var()?;
     let periodically = Periodically::new(pool.clone(), bus_client).await?;
+    let kubernetes = Kubernetes::new(pool.clone()).await?;
 
     let shutdown = CancellationToken::new();
+    let mut chech_nodes_interval = time::interval(Duration::from_secs(10)); // Every 30 seconds
     let mut message_retry_interval = time::interval(Duration::from_secs(60)); // Every minute
     let mut reset_all_quotas_interval = time::interval(Duration::from_secs(10 * 60)); // Every 10 minutes
     let mut clean_up_invites_interval = time::interval(Duration::from_secs(4 * 60 * 60)); // Every 4 hours
+    chech_nodes_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     message_retry_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     reset_all_quotas_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     clean_up_invites_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
@@ -44,6 +49,11 @@ async fn main() -> anyhow::Result<()> {
     let join_handle = tokio::spawn(async move {
         loop {
             tokio::select! {
+                _ = chech_nodes_interval.tick() => {
+                    if let Err(err) = kubernetes.check_node_health().await {
+                        error!("Failed to check K8s nodes health: {}", err);
+                    }
+                },
                 _ = message_retry_interval.tick() => {
                     if let Err(err) = periodically.retry_messages().await {
                         error!("Failed to retry messages: {}", err);

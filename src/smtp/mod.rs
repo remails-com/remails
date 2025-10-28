@@ -1,6 +1,5 @@
 use crate::{Environment, handler::RetryConfig};
 use std::{env, path::PathBuf};
-use tracing::warn;
 
 mod connection;
 mod proxy_protocol;
@@ -33,20 +32,13 @@ impl Default for SmtpConfig {
             .expect("Missing SMTP_KEY_FILE environment variable")
             .parse()
             .expect("Invalid SMTP_KEY_FILE path");
-        let environment: Environment = env::var("ENVIRONMENT")
-            .map(|s| s.parse())
-            .inspect_err(|_| warn!("Did not find ENVIRONMENT env var, defaulting to development"))
-            .unwrap_or(Ok(Environment::Development))
-            .expect(
-                "Invalid ENVIRONMENT env var, must be one of: development, production, or staging",
-            );
 
         Self {
             listen_addr,
             server_name,
             cert_file,
             key_file,
-            environment,
+            environment: Environment::from_env(),
             retry: Default::default(),
         }
     }
@@ -118,7 +110,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_smtp(pool: PgPool) {
         let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;

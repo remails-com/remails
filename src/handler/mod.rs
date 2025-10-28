@@ -1,11 +1,13 @@
 pub use crate::handler::connection_log::ConnectionLog;
 use crate::{
+    Environment,
     bus::client::{BusClient, BusMessage},
     dkim::PrivateKey,
     handler::{
         connection_log::LogLevel,
         dns::{DnsResolver, ResolveError},
     },
+    kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
         NewMessage, OrganizationRepository, QuotaStatus,
@@ -18,7 +20,7 @@ use futures::StreamExt;
 use mail_parser::{HeaderName, MessageParser};
 use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, fmt::Display, sync::Arc};
+use std::{borrow::Cow::Borrowed, collections::BTreeSet, fmt::Display, net::IpAddr, sync::Arc};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -43,6 +45,8 @@ pub enum HandlerError {
     MessageNotAccepted(MessageStatus, String),
     #[error("Message is in an illegal state: {0}, {1:?}")]
     IllegalMessageState(MessageStatus, MessageId),
+    #[error("Message must have an outbound IP assigned")]
+    MissingOutboundIp,
 }
 
 #[derive(Debug, Error)]
@@ -86,6 +90,7 @@ pub struct HandlerConfig {
     pub(crate) domain: String,
     pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
+    pub(crate) environment: Environment,
 }
 
 #[cfg(not(test))]
@@ -97,6 +102,7 @@ impl HandlerConfig {
                 .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
             retry: Default::default(),
+            environment: Environment::from_env(),
         }
     }
 }
@@ -113,14 +119,16 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    k8s: Kubernetes,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
+    sending_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
 
 impl Handler {
-    pub fn new(
+    pub async fn new(
         pool: PgPool,
         config: Arc<HandlerConfig>,
         bus_client: BusClient,
@@ -130,12 +138,17 @@ impl Handler {
             CryptoProvider::install_default(crypto::aws_lc_rs::default_provider())
                 .expect("Failed to install crypto provider");
         }
+
         Self {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
+            k8s: Kubernetes::new(pool.clone())
+                .await
+                .expect("Failed to initialize Kubernetes"),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
+            sending_ips: Default::default(),
             shutdown,
             config,
         }
@@ -435,6 +448,7 @@ impl Handler {
         recipient: &EmailAddress,
         message: smtp::message::Message<'_>,
         security: Protection,
+        outbound_ip: IpAddr,
         connection_log: &mut ConnectionLog,
     ) -> Result<(), SendError> {
         let domain = recipient.domain();
@@ -459,6 +473,7 @@ impl Handler {
                             message.clone(),
                             &hostname,
                             port,
+                            outbound_ip,
                         )
                         .await
                     {
@@ -494,6 +509,7 @@ impl Handler {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn send_single_upstream(
         &self,
         security: Protection,
@@ -502,9 +518,11 @@ impl Handler {
         message: smtp::message::Message<'_>,
         hostname: &String,
         port: u16,
+        outbound_ip: IpAddr,
     ) -> Result<(), SendError> {
         let smtp = SmtpClientBuilder::new(&hostname, port)
             .implicit_tls(false)
+            .local_ip(outbound_ip)
             .say_ehlo(true)
             .helo_host(&self.config.domain)
             .timeout(std::time::Duration::from_secs(60));
@@ -585,9 +603,14 @@ impl Handler {
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
             stream_id = message.stream_id.to_string(),
+            outbound_ip = ?message.outbound_ip,
         ))]
     pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
         info!("sending message");
+        let Some(outbound_ip) = message.outbound_ip else {
+            error!("message is missing outbound IP");
+            return Err(HandlerError::MissingOutboundIp);
+        };
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
@@ -648,7 +671,13 @@ impl Handler {
                     body: message.raw_data.as_slice().into(),
                 };
                 match self
-                    .send_single_message(recipient, smtp_message, protection, connection_log)
+                    .send_single_message(
+                        recipient,
+                        smtp_message,
+                        protection,
+                        outbound_ip,
+                        connection_log,
+                    )
                     .await
                 {
                     Ok(()) => {
@@ -716,11 +745,14 @@ impl Handler {
         Ok(())
     }
 
-    pub fn spawn(self) -> JoinHandle<()> {
+    pub fn spawn(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut bus_stream = self
                 .bus_client
                 .receive_auto_reconnect(std::time::Duration::from_secs(1));
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
                 tokio::select! {
@@ -728,56 +760,103 @@ impl Handler {
                         info!("shutting down message handler");
                         return;
                     }
+                    _ = interval.tick() => {
+                        trace!("reload network interfaces");
+                        let new_ips = if_addrs::get_if_addrs()
+                            .expect("Cannot retrieve host network interfaces")
+                            .into_iter()
+                            .map(|iface| iface.ip())
+                            // For now, we only handle IPv4 addresses. Maybe v6 will follow later
+                            .filter_map(|ip| {match ip {
+                                IpAddr::V4(v4) => Some(v4),
+                                IpAddr::V6(_) => None
+                            }})
+                            .filter(|ip|
+                                (!ip.is_loopback() || cfg!(test)) &&
+                                !ip.is_unspecified() &&
+                                !ip.is_multicast() &&
+                                !ip.is_broadcast() &&
+                                !ip.is_documentation() &&
+                                // only allow private IPs if we're in development mode
+                                (!ip.is_private() || matches!(self.config.environment, Environment::Development))
+                            )
+                            .map(Into::into)
+                            .collect();
+                        if new_ips != self.sending_ips {
+                            self.sending_ips = new_ips;
+                            info!("new interface list: {:?}", self.sending_ips);
+                            match self.k8s.save_available_node_ips(self.sending_ips.clone()).await {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    error!("failed to save available node IPs: {e}");
+                                    error!("Shutting down message handler as sending IPs are out of sync");
+                                    self.shutdown.cancel();
+                                }
+                            }
+                        }
+                    }
                     message = bus_stream.next() => {
                         match message {
                             None => {
                                 error!("Bus stream ended, shutting down");
                                 self.shutdown.cancel();
                             },
-                            Some(BusMessage::EmailReadyToSend(id)) => {
-                                info!("Ready to send {id}");
-
-                                let Ok(permit) = self.workers.clone().acquire_owned().await else {
-                                    error!("failed to acquire worker semaphore permit, shutting down");
-                                    self.shutdown.cancel();
-                                    return
-                                };
-                                let self_clone = self.clone();
-                                tokio::spawn(async move {
-                                    let _p = permit;
-
-                                    // retrieve message from database
-                                    let mut message = match self_clone.message_repository.get(id).await {
-                                        Ok(message) => message,
-                                        Err(e) => {
-                                            error!("failed to get message: {e:?}");
-                                            return
-                                        },
-                                    };
-
-                                    message.attempts += 1;
-
-                                    let message_id = message.id().to_string();
-                                    if let Err(e) = self_clone.handle_message(&mut message).await {
-                                        if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
-                                            warn!(message_id, "Message held: {reason}")
-                                        } else {
-                                            error!(message_id, "failed to handle message: {e:?}");
-                                        }
-                                        return
-                                    };
-
-                                    if let Err(e) = self_clone.send_message(message).await {
-                                        error!(message_id, "failed to send message: {e:?}");
-                                    }
-                                });
+                            Some(BusMessage::EmailReadyToSend(id, from)) => {
+                                if self.sending_ips.contains(&from) {
+                                    self.handle_ready_to_send(id).await;
+                                } else {
+                                    trace!(
+                                        message_id = id.to_string(),
+                                        ip_addr = from.to_string(),
+                                        "skipping message as it should not be send from this node"
+                                    );
+                                }
                             },
-                            Some(_) => {} // ignore other bus messages
+                            _ => {} // ignore other messages
                         }
                     }
                 }
             }
         })
+    }
+
+    async fn handle_ready_to_send(&self, id: MessageId) {
+        info!("Ready to send {id}");
+
+        let Ok(permit) = self.workers.clone().acquire_owned().await else {
+            error!("failed to acquire worker semaphore permit, shutting down");
+            self.shutdown.cancel();
+            return;
+        };
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let _p = permit;
+
+            // retrieve message from database
+            let mut message = match self_clone.message_repository.get(id).await {
+                Ok(message) => message,
+                Err(e) => {
+                    error!("failed to get message: {e:?}");
+                    return;
+                }
+            };
+
+            message.attempts += 1;
+
+            let message_id = message.id().to_string();
+            if let Err(e) = self_clone.handle_message(&mut message).await {
+                if let HandlerError::MessageNotAccepted(MessageStatus::Held, reason) = &e {
+                    warn!(message_id, "Message held: {reason}")
+                } else {
+                    error!(message_id, "failed to handle message: {e:?}");
+                }
+                return;
+            };
+
+            if let Err(e) = self_clone.send_message(message).await {
+                error!(message_id, "failed to send message: {e:?}");
+            }
+        });
     }
 }
 
@@ -796,9 +875,38 @@ mod test {
     use mailcrab::TestMailServerHandle;
     use std::net::Ipv4Addr;
 
+    impl Handler {
+        pub(crate) async fn test_handler(pool: PgPool, mailcrab_port: u16) -> Self {
+            let config = HandlerConfig {
+                allow_plain: true,
+                domain: "test".to_string(),
+                resolver: DnsResolver::mock("localhost", mailcrab_port),
+                environment: Environment::Development,
+                retry: RetryConfig {
+                    delay: Duration::minutes(5),
+                    max_automatic_retries: 1,
+                },
+            };
+            Handler::new(
+                pool,
+                Arc::new(config),
+                BusClient::new_from_env_var().unwrap(),
+                CancellationToken::new(),
+            )
+            .await
+        }
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_message(pool: PgPool) {
         let mailcrab_port = random_port();
@@ -832,17 +940,7 @@ mod test {
             .unwrap();
 
         let message = NewMessage::from_builder_message(message, credential.id());
-        let config = HandlerConfig {
-            allow_plain: true,
-            domain: "test".to_string(),
-            resolver: DnsResolver::mock("localhost", mailcrab_port),
-            retry: RetryConfig {
-                delay: Duration::minutes(5),
-                max_automatic_retries: 1,
-            },
-        };
-        let bus_client = BusClient::new_from_env_var().unwrap();
-        let handler = Handler::new(pool, Arc::new(config), bus_client, CancellationToken::new());
+        let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
         let mut message = handler.create_message(message).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
@@ -851,7 +949,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_invalid_mail_from(pool: PgPool) {
         let mailcrab_port = random_port();
@@ -893,21 +998,7 @@ mod test {
 
             // Message has invalid "MAIL FROM" and invalid "From"
             let message = NewMessage::from_builder_message(message, credential.id());
-            let config = HandlerConfig {
-                allow_plain: true,
-                domain: "test".to_string(),
-                resolver: DnsResolver::mock("localhost", mailcrab_port),
-                retry: RetryConfig {
-                    delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
-                },
-            };
-            let handler = Handler::new(
-                pool.clone(),
-                Arc::new(config),
-                BusClient::new_from_env_var().unwrap(),
-                CancellationToken::new(),
-            );
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
@@ -921,7 +1012,14 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "k8s_nodes"
+        )
     ))]
     async fn test_handle_invalid_from(pool: PgPool) {
         let mailcrab_port = random_port();
@@ -967,21 +1065,7 @@ mod test {
                 credential.id(),
                 "john@test-org-1-project-1.com",
             );
-            let config = HandlerConfig {
-                allow_plain: true,
-                domain: "test".to_string(),
-                resolver: DnsResolver::mock("localhost", mailcrab_port),
-                retry: RetryConfig {
-                    delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
-                },
-            };
-            let handler = Handler::new(
-                pool.clone(),
-                Arc::new(config),
-                BusClient::new_from_env_var().unwrap(),
-                CancellationToken::new(),
-            );
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
             let mut message = handler.create_message(message).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());

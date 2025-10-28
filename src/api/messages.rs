@@ -12,7 +12,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Deserialize)]
 pub struct MessagePath {
@@ -125,11 +125,17 @@ pub async fn retry_now(
 ) -> Result<(), ApiError> {
     user.has_org_write_access(&org_id)?;
 
-    if repo
-        .message_status(org_id, project_id, stream_id, message_id)
+    let (status, Some(outbound_ip)) = repo
+        .message_status_and_outbound_ip(org_id, project_id, stream_id, message_id)
         .await?
-        == MessageStatus::Delivered
-    {
+    else {
+        error!("Requested retry for message that doesn't have an outbound IP assigned (yet)");
+        return Err(ApiError::BadRequest(
+            "Message doesn't have an outbound IP assigned (yet)".to_string(),
+        ));
+    };
+
+    if status == MessageStatus::Delivered {
         warn!(
             message_id = message_id.to_string(),
             user_id = user.log_id(),
@@ -140,7 +146,7 @@ pub async fn retry_now(
         ));
     }
 
-    bus.send(&BusMessage::EmailReadyToSend(message_id))
+    bus.send(&BusMessage::EmailReadyToSend(message_id, outbound_ip))
         .await
         .map_err(ApiError::MessageBus)?;
 
@@ -232,7 +238,10 @@ mod tests {
         .unwrap();
         assert_eq!(status, StatusCode::OK, "server response: {server_response}");
         let bus_message = message_stream.next().await.unwrap();
-        assert_eq!(bus_message, BusMessage::EmailReadyToSend(message.id()));
+        assert_eq!(
+            bus_message,
+            BusMessage::EmailReadyToSend(message.id(), message.outbound_ip().unwrap())
+        );
 
         // remove message
         let response = server

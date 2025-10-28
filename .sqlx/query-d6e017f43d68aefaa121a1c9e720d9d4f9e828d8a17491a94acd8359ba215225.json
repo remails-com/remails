@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE outbound_ips\n            SET node_id = NULL\n            WHERE node_id = $1\n              AND ip = ANY($2::inet[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "InetArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6e017f43d68aefaa121a1c9e720d9d4f9e828d8a17491a94acd8359ba215225"
+}
