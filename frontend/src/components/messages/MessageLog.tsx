@@ -1,4 +1,4 @@
-import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, NativeSelect, Text, Tooltip } from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, NativeSelect, Text } from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
@@ -106,9 +106,13 @@ export function MessageLog() {
         <Group justify="space-between" align="end">
           <Text fz="sm" c="dimmed">
             Message ID:{" "}
-            <Tooltip label={message.id}>
-              <Code>{message.id.slice(0, 8)}</Code>
-            </Tooltip>
+            {message.message_id_header ? (
+              <Code>{message.message_id_header}</Code>
+            ) : (
+              <Text c="dimmed" fs="italic" span>
+                Email has not yet been assigned a message ID
+              </Text>
+            )}
           </Text>
           <Group>
             <MessageDeleteButton message={message} small />
