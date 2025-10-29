@@ -75,7 +75,14 @@ async fn main() -> anyhow::Result<()> {
         shutdown.clone(),
     )
     .await;
-    run_api_server(pool.clone(), http_socket, shutdown.clone(), true).await;
+    run_api_server(
+        pool.clone(),
+        bus_client.clone(),
+        http_socket,
+        shutdown.clone(),
+        true,
+    )
+    .await;
 
     let kubernetes = Kubernetes::new(pool.clone()).await.unwrap();
 

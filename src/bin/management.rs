@@ -1,5 +1,5 @@
 use anyhow::Context;
-use remails::{init_tracing, run_api_server, shutdown_signal};
+use remails::{bus::client::BusClient, init_tracing, run_api_server, shutdown_signal};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -34,7 +34,8 @@ async fn main() -> anyhow::Result<()> {
     let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
 
     let shutdown = CancellationToken::new();
-    let join_handle = run_api_server(pool, http_socket, shutdown.clone(), true).await;
+    let bus = BusClient::new_from_env_var().expect("Could not connect to message bus");
+    let join_handle = run_api_server(pool, bus, http_socket, shutdown.clone(), true).await;
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");

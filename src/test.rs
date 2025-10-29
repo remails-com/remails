@@ -3,8 +3,8 @@ use crate::{
     bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
-        ApiMessageMetadata, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
-        StreamId,
+        ApiKey, ApiMessageMetadata, CreatedApiKeyWithPassword, OrganizationId, ProjectId,
+        SmtpCredential, SmtpCredentialResponse, StreamId,
     },
     run_api_server, run_mta,
     smtp::SmtpConfig,
@@ -152,11 +152,11 @@ async fn setup(
         pool.clone(),
         smtp_config,
         handler_config,
-        bus_client,
+        bus_client.clone(),
         token.clone(),
     )
     .await;
-    run_api_server(pool, http_socket, token.clone(), false).await;
+    run_api_server(pool, bus_client, http_socket, token.clone(), false).await;
 
     let _drop_guard = token.drop_guard();
 
@@ -175,13 +175,13 @@ async fn setup(
 async fn integration_test(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
-
+    // create John's SMTP credential
+    let (jorg, jproj, jstream) = TestStreams::Org1Project1Stream1.get_stringified_ids();
     let john_cred = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/smtp_credentials"
         ))
-        .header("X-Test-Login", org_id)
+        .header("X-Test-Login", &jorg)
         .json(&json!({
             "username": "john",
             "description": "John test credential"
@@ -193,38 +193,53 @@ async fn integration_test(pool: PgPool) {
         .await
         .unwrap();
 
-    let (org_id, project_id, stream_id) = TestStreams::Org2Project1Stream1.get_stringified_ids();
-
-    let eddy_cred = client
-        .post(format!(
-            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
-        ))
-        .header("X-Test-Login", &org_id)
-        .json(&json!({
-            "username": "eddy",
-            "description": "Eddy test credential"
-        }))
-        .send()
-        .await
-        .unwrap()
-        .json::<SmtpCredentialResponse>()
-        .await
-        .unwrap();
-
+    // check Johns's SMTP credential exists
     let credentials: Vec<SmtpCredential> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/smtp_credentials"
         ))
-        .header("X-Test-Login", org_id)
+        .header("X-Test-Login", &jorg)
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-
     assert_eq!(credentials.len(), 1);
 
+    // create Eddy's REST API credential
+    let (eorg, eproj, estream) = TestStreams::Org2Project1Stream1.get_stringified_ids();
+    let eddy_cred = client
+        .post(format!(
+            "http://localhost:{http_port}/api/organizations/{eorg}/api_keys"
+        ))
+        .header("X-Test-Login", &eorg)
+        .json(&json!({
+            "role": "maintainer", // read-write
+            "description": "Eddy test credential"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json::<CreatedApiKeyWithPassword>()
+        .await
+        .unwrap();
+
+    // check Eddy's REST API credential exists
+    let credentials: Vec<ApiKey> = client
+        .get(format!(
+            "http://localhost:{http_port}/api/organizations/{eorg}/api_keys"
+        ))
+        .header("X-Test-Login", &eorg)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(credentials.len(), 1);
+
+    // John sends some message via SMTP
     let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
         .implicit_tls(true)
         .allow_invalid_certs()
@@ -235,7 +250,6 @@ async fn integration_test(pool: PgPool) {
         .connect()
         .await
         .unwrap();
-
     for i in 1..=10 {
         let message = MessageBuilder::new()
             .from(("John", "john@test-org-1-project-1.com"))
@@ -243,10 +257,12 @@ async fn integration_test(pool: PgPool) {
             .subject("TPS reports")
             .text_body(format!(
                 "Have you finished the TPS reports yet? This is the {i}th reminder!!!"
-            ));
+            ))
+            .message_id(format!("tps-{i}@test-org-1-project-1.com"));
         john_smtp_client.send(message).await.unwrap();
     }
 
+    // check messages were received
     for i in 1..=10 {
         select! {
             Ok(recv) = mailcrab_rx.recv() => {
@@ -258,29 +274,30 @@ async fn integration_test(pool: PgPool) {
         }
     }
 
-    let message = MessageBuilder::new()
-        .from(("Eddy", "eddy@test-org-2-project-1.com"))
-        .to(vec![
-            ("John", "john@test-org-1-project-1.com"),
-        ])
-        .subject("Re: TPS reports")
-        .text_body("Ah! Yeah. It's just we're putting new coversheets on all the TPS reports before they go out now.
-        So if you could go ahead and try to remember to do that from now on, that'd be great. All right!");
-
-    SmtpClientBuilder::new("localhost", smtp_port)
-        .implicit_tls(true)
-        .allow_invalid_certs()
-        .credentials((
-            eddy_cred.username().as_str(),
-            eddy_cred.cleartext_password().as_str(),
+    // Eddy sends a message via the Remails REST API
+    let message: ApiMessageMetadata = client
+        .post(format!(
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/streams/{estream}/messages"
         ))
-        .connect()
+        .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
+        .json(&json!({
+            "from": {"name": "Eddy", "address": "eddy@test-org-2-project-1.com"},
+            "to": {"name": "John", "address": "john@test-org-1-project-1.com"},
+            "subject": "Re: TPS reports",
+            "text_body": "Ah! Yeah. It's just we're putting new coversheets on all the TPS reports before they go out now.
+        So if you could go ahead and try to remember to do that from now on, that'd be great. All right!",
+            "in_reply_to": "tps-10@test-org-1-project-1.com"
+        }))
+        .send()
         .await
         .unwrap()
-        .send(message)
+        .json()
         .await
         .unwrap();
+    assert_eq!(message.smtp_credential_id, None);
+    assert_eq!(message.api_key_id, Some(*eddy_cred.id()));
 
+    // check message was received
     select! {
         Ok(recv) = mailcrab_rx.recv() => {
             assert_eq!(recv.envelope_from.as_str(), "eddy@test-org-2-project-1.com");
@@ -290,28 +307,27 @@ async fn integration_test(pool: PgPool) {
         _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("timed out receiving email"),
     }
 
+    // check John's sent messages
     let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
-        .header("X-Test-Login", "44729d9f-a7dc-4226-b412-36a7537f5176")
+        .header("X-Test-Login", &jorg)
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-
     assert_eq!(messages.len(), 10);
 
+    // cannot check someone else's messages
     let status = client
         .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
-        // Non-existent organization
-        .header("X-Test-Login", "ab5647ee-ea7c-40f8-ad70-bdcbff7fa4cd")
+        .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
         .send()
         .await
         .unwrap()
         .status();
-
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 

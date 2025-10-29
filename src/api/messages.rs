@@ -60,7 +60,7 @@ pub struct EmailParameters {
     subject: String,
     text_body: Option<String>,
     html_body: Option<String>,
-    in_reply_to: Option<Vec<String>>,
+    in_reply_to: Option<String>,
     references: Option<Vec<String>>,
     reply_to: Option<EmailAddress>,
 }
@@ -116,6 +116,11 @@ pub async fn create_message(
                 recipients
             }
         };
+    if recipients.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Must have at least one recipient".to_owned(),
+        ));
+    }
 
     // generate message ID
     let message_id = MessageId::new_v4();
@@ -165,6 +170,14 @@ pub async fn create_message(
         recipients,
         raw_data,
     };
+
+    debug!(
+        organization_id = org_id.to_string(),
+        stream_id = stream_id.to_string(),
+        message_id = message_id.to_string(),
+        api_key_id = key.id().to_string(),
+        "creating message from API"
+    );
 
     let message = repo
         .create_from_api(&message, retry_config.max_automatic_retries)
@@ -315,14 +328,16 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        api::tests::{TestServer, deserialize_body},
+        api::tests::{TestServer, deserialize_body, serialize_body},
         bus::client::BusMessage,
-        models::MessageStatus,
+        models::{MessageStatus, Role},
+        test::TestStreams,
     };
     use axum::body::Body;
     use futures::StreamExt;
     use http::StatusCode;
     use ppp::v2::WriteToHeader;
+    use serde_json::json;
     use sqlx::PgPool;
 
     use super::*;
@@ -341,9 +356,7 @@ mod tests {
     ))]
     async fn test_messages_lifecycle(pool: PgPool) {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
         let mut message_stream = server.message_bus.receive().await.unwrap();
 
@@ -426,9 +439,7 @@ mod tests {
         read_status_code: StatusCode,
         write_status_code: StatusCode,
     ) {
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a"; // stream 1 in project 1
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
 
         // can't list messages
         let response = server
@@ -517,4 +528,215 @@ mod tests {
         let server = TestServer::new(pool.clone(), None).await;
         test_messages_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
     }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials"
+        )
+    ))]
+    async fn test_create_message(pool: PgPool) {
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        let api_key_id = server.use_api_key(org_1, Role::Maintainer).await;
+
+        // send email with 1 recipient, text and HTML body, `in_reply_to`, `references` and `reply_to`
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": "recipient@example.com",
+                    "subject": "subject",
+                    "text_body": "text body",
+                    "html_body": "<h1>html body</h1>",
+                    "in_reply_to": "some-message@example.com",
+                    "references": ["some-message@example.com", "some-other-message@example.com"],
+                    "reply_to": "support@example.com",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let message: ApiMessageMetadata = deserialize_body(response.into_body()).await;
+        assert_eq!(message.from_email.as_str(), "test@example.com");
+        assert_eq!(message.recipients.len(), 1);
+        assert_eq!(message.recipients[0].as_str(), "recipient@example.com");
+        assert_eq!(message.smtp_credential_id, None);
+        assert_eq!(message.api_key_id, Some(api_key_id));
+        assert_eq!(
+            message.message_id_header,
+            Some(format!("REMAILS-{}@example.com", message.id))
+        );
+
+        // send email with 2 recipients, only text body, and custom from name
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": {"name": "Test", "address": "test@example.com"},
+                    "to": ["recipient1@example.com", "recipient2@example.com"],
+                    "subject": "subject",
+                    "text_body": "text body",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let message: ApiMessageMetadata = deserialize_body(response.into_body()).await;
+        assert_eq!(message.from_email.as_str(), "test@example.com");
+        let mut recipients = message
+            .recipients
+            .into_iter()
+            .map(|e| e.as_str().to_owned())
+            .collect::<Vec<_>>();
+        recipients.sort();
+        assert_eq!(
+            recipients,
+            vec!["recipient1@example.com", "recipient2@example.com"]
+        );
+
+        // send email with 3 recipients, only HTML body
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": ["recipient1@example.com", "recipient2@example.com", {"name": "Recipient 3", "address": "recipient3@example.com"}],
+                    "subject": "subject",
+                    "text_body": "text body",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let message: ApiMessageMetadata = deserialize_body(response.into_body()).await;
+        assert_eq!(message.from_email.as_str(), "test@example.com");
+        let mut recipients = message
+            .recipients
+            .into_iter()
+            .map(|e| e.as_str().to_owned())
+            .collect::<Vec<_>>();
+        recipients.sort();
+        assert_eq!(
+            recipients,
+            vec![
+                "recipient1@example.com",
+                "recipient2@example.com",
+                "recipient3@example.com"
+            ]
+        );
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials"
+        )
+    ))]
+    async fn test_create_message_reject(pool: PgPool) {
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+
+        // reject emails without body
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": "recipient@example.com",
+                    "subject": "subject",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // reject emails without recipients
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": [],
+                    "subject": "subject",
+                    "text_body": "text body",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // reject emails with invalid from email
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "remails.net",
+                    "to": "recipient@example.com",
+                    "subject": "subject",
+                    "text_body": "text body",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials"
+        )
+    ))]
+    async fn test_create_message_no_access(pool: PgPool) {
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        let message_request = json!({
+            "from": "test@example.com",
+            "to": "recipient@example.com",
+            "subject": "subject",
+            "text_body": "text body",
+        });
+        let try_post = |server: &TestServer| {
+            server.post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(message_request.clone()),
+            )
+        };
+
+        // not logged-in user cannot create emails
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // logged-in user also cannot create emails (only API keys can)
+        server.set_user(Some(user_4));
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // read-only API keys cannot create emails
+        server.use_api_key(org_1, Role::ReadOnly).await;
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    // TODO: test messages from the API are attempted to be delivered immediately
+    // maybe test this in test.rs?
 }

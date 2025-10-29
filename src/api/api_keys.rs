@@ -286,7 +286,7 @@ mod tests {
     }
 
     impl TestServer {
-        async fn use_api_key(&mut self, org_id: OrganizationId, role: Role) {
+        pub async fn use_api_key(&mut self, org_id: OrganizationId, role: Role) -> ApiKeyId {
             // request an API key using the currently logged-in user
             let response = self
                 .post(
@@ -309,6 +309,8 @@ mod tests {
             );
             self.headers
                 .insert("Authorization", format!("Basic {base64_credentials}"));
+
+            *created_key.id()
         }
     }
 
