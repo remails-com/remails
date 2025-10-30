@@ -68,6 +68,7 @@ impl IntoResponse for ApiError {
                     debug!("Too many requests");
                     (StatusCode::TOO_MANY_REQUESTS, "Too many requests")
                 }
+                Error::OrgBlocked => (StatusCode::FORBIDDEN, "Organization has been blocked"),
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
             },
             ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found"),

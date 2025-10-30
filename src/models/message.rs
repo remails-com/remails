@@ -2,7 +2,8 @@ use crate::{
     bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
     models::{
-        ApiKeyId, Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
+        ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, projects::ProjectId,
+        streams::StreamId,
     },
 };
 use chrono::{DateTime, Utc};
@@ -428,10 +429,13 @@ impl MessageRepository {
             SELECT ip AS outbound_ip
             FROM outbound_ips
             JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
-            WHERE node.ready
+            JOIN messages m ON m.id = $1
+            JOIN organizations o ON o.id = m.organization_id
+            WHERE node.ready AND o.block_status = 'not_blocked'
             ORDER BY RANDOM()
             LIMIT 1
-            "#
+            "#,
+            *message_id
         )
         .fetch_optional(&self.pool)
         .await
@@ -660,10 +664,10 @@ impl MessageRepository {
         .collect::<Result<Vec<_>, Error>>()
     }
 
-    /// Get a specific message
+    /// Get a specific message, but only if the organization is allowed to send
     ///
     /// Unlike [`find_by_id`] this returns a `Message` with the full raw data
-    pub async fn get(&self, message_id: MessageId) -> Result<Message, Error> {
+    pub async fn get_if_org_may_send(&self, message_id: MessageId) -> Result<Message, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
@@ -689,7 +693,8 @@ impl MessageRepository {
                 m.attempts,
                 m.max_attempts
             FROM messages m
-            WHERE m.id = $1
+            JOIN organizations o ON o.id = m.organization_id
+            WHERE m.id = $1 AND o.block_status = 'not_blocked'
             "#,
             *message_id,
         )
@@ -774,13 +779,17 @@ impl MessageRepository {
     }
 
     /// Messages which should be retried are either:
+    ///
     /// - on `held` or `reattempt`, not on timeout, with attempts left
     /// - on `accepted` or `processing`, and not having been updated in 2 minutes
+    ///
+    /// and the organization must be allowed to send messages (must not be blocked)
     pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<MessageId>, Error> {
         Ok(sqlx::query_scalar!(
             r#"
             SELECT m.id FROM messages m
-            WHERE (
+            JOIN organizations o ON o.id = m.organization_id 
+            WHERE o.block_status = 'not_blocked' AND (
                 (m.status = 'held' OR m.status = 'reattempt')
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
               ) OR (
@@ -824,8 +833,10 @@ impl MessageRepository {
     /// Returns the number of emails that can still be created during the current rate limit time span
     ///
     /// Automatically resets when the time span has expired, if so, it starts a new time span
+    ///
+    /// Also checks if the organization is allowed to receive new emails (is not blocked)
     pub async fn email_creation_rate_limit(&self, id: StreamId) -> Result<i64, Error> {
-        let remaining_rate_limit = sqlx::query_scalar!(
+        let result = sqlx::query!(
             r#"
             UPDATE organizations o
             SET
@@ -839,9 +850,10 @@ impl MessageRepository {
                 THEN now() + $3
                 ELSE rate_limit_reset
             END
-            FROM streams s JOIN projects p ON p.id = s.project_id
+            FROM streams s
+              JOIN projects p ON p.id = s.project_id
             WHERE p.organization_id = o.id AND s.id = $1
-            RETURNING remaining_rate_limit
+            RETURNING remaining_rate_limit, o.block_status as "block_status: OrgBlockStatus"
             "#,
             *id,
             self.rate_limit_max_messages,
@@ -850,7 +862,11 @@ impl MessageRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(remaining_rate_limit)
+        if result.block_status == OrgBlockStatus::NoSendingOrReceiving {
+            return Err(Error::OrgBlocked);
+        }
+
+        Ok(result.remaining_rate_limit)
     }
 }
 

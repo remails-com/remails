@@ -32,6 +32,18 @@ impl OrganizationId {
     }
 }
 
+/// If `OrgBlockStatus` is not NULL, we assume the organization is not allowed to send emails
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "role", rename_all = "snake_case")]
+pub enum OrgBlockStatus {
+    NotBlocked = 0,
+    NoSending = 1,
+    NoSendingOrReceiving = 2,
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
@@ -46,6 +58,7 @@ pub struct Organization {
     current_subscription: SubscriptionStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    block_status: Option<OrgBlockStatus>,
 }
 
 impl Organization {
@@ -92,6 +105,7 @@ struct PgOrganization {
     current_subscription: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    block_status: Option<OrgBlockStatus>,
 }
 
 impl TryFrom<PgOrganization> for Organization {
@@ -110,6 +124,7 @@ impl TryFrom<PgOrganization> for Organization {
             current_subscription: serde_json::from_value(pg.current_subscription)?,
             created_at: pg.created_at,
             updated_at: pg.updated_at,
+            block_status: pg.block_status,
         })
     }
 }
@@ -166,7 +181,8 @@ impl OrganizationRepository {
                       moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                       rate_limit_reset,
                       remaining_rate_limit,
-                      current_subscription
+                      current_subscription,
+                      block_status as "block_status: OrgBlockStatus"
             "#,
             organization.name.trim(),
         )
@@ -197,7 +213,8 @@ impl OrganizationRepository {
                 moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                 rate_limit_reset,
                 remaining_rate_limit,
-                current_subscription
+                current_subscription,
+                block_status as "block_status: OrgBlockStatus"
             "#,
             *id,
             organization.name.trim(),
@@ -221,7 +238,8 @@ impl OrganizationRepository {
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
                    remaining_rate_limit,
-                   current_subscription
+                   current_subscription,
+                   block_status as "block_status: OrgBlockStatus"
             FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
             ORDER BY updated_at DESC
@@ -249,7 +267,8 @@ impl OrganizationRepository {
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
                    remaining_rate_limit,
-                   current_subscription
+                   current_subscription,
+                   block_status as "block_status: OrgBlockStatus"
             FROM organizations
             WHERE id = $1
             "#,

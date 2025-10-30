@@ -812,7 +812,7 @@ impl Handler {
             let _p = permit;
 
             // retrieve message from database
-            let mut message = match self_clone.message_repository.get(id).await {
+            let mut message = match self_clone.message_repository.get_if_org_may_send(id).await {
                 Ok(message) => message,
                 Err(e) => {
                     error!("failed to get message: {e:?}");
