@@ -7,7 +7,7 @@ const actionHandler: {
     return { ...state, organizations: action.organizations };
   },
   add_organization: function (state, action) {
-    return { ...state, organizations: [...(state.organizations || []), action.organization] };
+    return { ...state, organizations: [action.organization, ...(state.organizations || [])] };
   },
   remove_organization: function (state, action) {
     return { ...state, organizations: state.organizations?.filter((o) => o.id !== action.organizationId) || [] };

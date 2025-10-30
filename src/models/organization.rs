@@ -224,7 +224,7 @@ impl OrganizationRepository {
                    current_subscription
             FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
-            ORDER BY name
+            ORDER BY updated_at DESC
             "#,
             filter.as_deref(),
         )
@@ -394,7 +394,7 @@ mod test {
         assert_eq!(org2.name, "TestOrg2");
 
         let orgs = repo.list(None).await.unwrap();
-        assert_eq!(orgs, vec![org1.clone(), org2.clone()]);
+        assert_eq!(orgs, vec![org2.clone(), org1.clone()]);
 
         repo.remove(org1.id).await.unwrap();
         let orgs = repo.list(None).await.unwrap();
