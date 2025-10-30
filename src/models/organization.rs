@@ -155,7 +155,7 @@ impl OrganizationRepository {
             PgOrganization,
             r#"
             INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())
+            VALUES (gen_random_uuid(), $1, 0, 0, now(), 0, now())
             RETURNING id,
                       name,
                       total_message_quota,
