@@ -390,7 +390,7 @@ impl SmtpSession {
             trace!("received message ({} bytes)", message.raw_data.len());
 
             // Store message in database
-            let message = match self
+            let message_id = match self
                 .message_repository
                 .create(&message, self.max_automatic_retries)
                 .await
@@ -402,16 +402,12 @@ impl SmtpSession {
                 }
             };
 
-            match self
-                .message_repository
-                .get_ready_to_send(message.id())
-                .await
-            {
+            match self.message_repository.get_ready_to_send(message_id).await {
                 Ok(bus_message) => {
                     self.bus_client.try_send(&bus_message).await;
                 }
                 Err(e) => {
-                    error!(message_id = message.id().to_string(), "{e:?}");
+                    error!(message_id = message_id.to_string(), "{e:?}");
                 }
             }
 

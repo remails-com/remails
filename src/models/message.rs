@@ -456,9 +456,12 @@ impl MessageRepository {
         format!("REMAILS-{id}@{sender_domain}")
     }
 
-    pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
-        sqlx::query_as!(
-            PgMessage,
+    pub async fn create(
+        &self,
+        message: &NewMessage,
+        max_attempts: i32,
+    ) -> Result<MessageId, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, stream_id, smtp_credential_id,
@@ -471,26 +474,7 @@ impl MessageRepository {
                 JOIN organizations o ON o.id = p.organization_id
             WHERE s.id = $1
             RETURNING
-                m.id,
-                m.organization_id,
-                m.project_id,
-                m.stream_id,
-                m.smtp_credential_id,
-                m.api_key_id,
-                m.status as "status: _",
-                m.reason,
-                m.delivery_details,
-                m.from_email,
-                m.recipients,
-                m.raw_data,
-                octet_length(m.raw_data) as "raw_size!",
-                m.message_data,
-                m.message_id_header,
-                m.created_at,
-                m.updated_at,
-                m.retry_after,
-                m.attempts,
-                m.max_attempts
+                m.id
             "#,
             *message.smtp_credential_id,
             message.from_email.as_str(),
@@ -505,7 +489,7 @@ impl MessageRepository {
         )
         .fetch_one(&self.pool)
         .await?
-        .try_into()
+        .into())
     }
 
     pub async fn create_from_api(
@@ -957,11 +941,11 @@ mod test {
 
         // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
-        let message = repository.create(&new_message, 5).await.unwrap();
+        let message_id = repository.create(&new_message, 5).await.unwrap();
 
         // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message.id)
+            .find_by_id(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
@@ -995,11 +979,11 @@ mod test {
             .await
             .unwrap();
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].id, message.id);
+        assert_eq!(messages[0].id, message_id);
 
         // remove message
         repository
-            .remove(org_id, project_id, stream_id, message.id)
+            .remove(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
 

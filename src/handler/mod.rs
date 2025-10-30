@@ -921,11 +921,12 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-        let mut message = handler
+        let message_id = handler
             .message_repository
             .create(&message, 1)
             .await
             .unwrap();
+        let mut message = handler.message_repository.get(message_id).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
         handler
             .send_message(message, "127.0.0.1".parse().unwrap())
@@ -986,11 +987,12 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler
+            let message_id = handler
                 .message_repository
                 .create(&message, 1)
                 .await
                 .unwrap();
+            let mut message = handler.message_repository.get(message_id).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
@@ -1057,11 +1059,12 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler
+            let message_id = handler
                 .message_repository
                 .create(&message, 1)
                 .await
                 .unwrap();
+            let mut message = handler.message_repository.get(message_id).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
