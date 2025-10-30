@@ -21,6 +21,7 @@ import Mfa from "./Mfa.tsx";
 import SetupSubscription from "./components/SetupSubscription.tsx";
 import { useSubscription } from "./hooks/useSubscription.ts";
 import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
+import Admin from "./components/admin/Admin.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -41,6 +42,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "settings.members": <OrganizationSettings />,
   "settings.API keys": <OrganizationSettings />,
   "settings.API keys.API key": <ApiKeyDetails />,
+  admin: <Admin />,
   account: <UserSettings />,
   statistics: <Statistics />,
   organizations: <OrganizationsOverview />,
@@ -63,6 +65,7 @@ function Page() {
   if (
     !routerState.name.startsWith("settings") &&
     !routerState.name.startsWith("organizations") &&
+    !routerState.name.startsWith("admin") &&
     subscription &&
     subscription.status !== "active"
   ) {
