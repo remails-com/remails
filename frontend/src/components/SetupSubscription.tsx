@@ -22,7 +22,10 @@ export default function SetupSubscription() {
           <RemailsLogo />
         </Group>
         <Stack mt="lg">
-          <Text>Before getting started. please register your company details. No worries, there is a free tier.</Text>
+          <Stack gap="5">
+            <Text>Before getting started, please register a subscription with your company details.</Text>
+            <Text>Just testing things out? No worries, there is a free tier!</Text>
+          </Stack>
           <Group>
             <Button flex={1} onClick={navigateToSales}>
               Choose your subscription
