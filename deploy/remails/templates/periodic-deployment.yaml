@@ -27,6 +27,10 @@ spec:
         - name: periodic
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
           env:
+            - name: RATE_LIMIT_MINUTES
+              value: {{ .Values.smtp.rate_limit_minutes | quote }}
+            - name: RATE_LIMIT_MAX_MESSAGES
+              value: {{ .Values.smtp.rate_limit_max_messages | quote }}
             - name: VERSION
               value: {{ .Chart.AppVersion }}
             - name: K8S_NODE_HOSTNAME

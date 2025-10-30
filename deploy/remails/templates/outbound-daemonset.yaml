@@ -31,6 +31,10 @@ spec:
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
           # TODO: add a lifeness probe
           env:
+            - name: RATE_LIMIT_MINUTES
+              value: {{ .Values.smtp.rate_limit_minutes | quote }}
+            - name: RATE_LIMIT_MAX_MESSAGES
+              value: {{ .Values.smtp.rate_limit_max_messages | quote }}
             - name: K8S_NODE_HOSTNAME
               valueFrom:
                 fieldRef:
