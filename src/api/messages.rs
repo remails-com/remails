@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ApiResult};
 use crate::{
-    api::auth::Authenticated,
+    api::{auth::Authenticated, validation::ValidatedJson},
     bus::client::BusClient,
     handler::RetryConfig,
     models::{
@@ -15,16 +15,22 @@ use axum::{
     extract::{Path, Query, State},
     response::IntoResponse,
 };
+use garde::Validate;
 use http::StatusCode;
 use mail_builder::MessageBuilder;
 use serde::Deserialize;
 use tracing::{debug, error, warn};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 #[serde(untagged)]
 enum EmailAddress {
-    AddressOnly(String),
-    WithName { name: String, address: String },
+    AddressOnly(#[garde(email)] String),
+    WithName {
+        #[garde(length(min = 1, max = 100))]
+        name: String,
+        #[garde(email)]
+        address: String,
+    },
 }
 
 impl EmailAddress {
@@ -45,23 +51,31 @@ impl<'a> From<EmailAddress> for mail_builder::headers::address::Address<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 #[serde(untagged)]
 enum EmailAddresses {
-    Singular(EmailAddress),
-    Multiple(Vec<EmailAddress>),
+    Singular(#[garde(dive)] EmailAddress),
+    Multiple(#[garde(length(min = 1, max = 10))] Vec<EmailAddress>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct EmailParameters {
+    #[garde(dive)]
     from: EmailAddress,
+    #[garde(dive)]
     to: EmailAddresses,
+    #[garde(length(max = 500))]
     subject: String,
+    #[garde(length(bytes, max = 50_000))]
     text_body: Option<String>,
+    #[garde(length(bytes, max = 50_000))]
     html_body: Option<String>,
+    #[garde(length(max = 500))]
     in_reply_to: Option<String>,
+    #[garde(length(max = 50), inner(length(max = 500)))]
     references: Option<Vec<String>>,
+    #[garde(dive)]
     reply_to: Option<EmailAddress>,
 }
 
@@ -80,7 +94,7 @@ pub async fn create_message(
     State(bus_client): State<Arc<BusClient>>,
     Path((org_id, _, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     key: ApiKey, // only accessible for API keys
-    Json(message): Json<EmailParameters>,
+    ValidatedJson(message): ValidatedJson<EmailParameters>,
 ) -> Result<impl IntoResponse, ApiError> {
     key.has_org_write_access(&org_id)?;
 
@@ -327,6 +341,7 @@ pub async fn retry_now(
 mod tests {
     use std::time::Duration;
 
+    use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
         bus::client::BusMessage,
@@ -339,8 +354,6 @@ mod tests {
     use ppp::v2::WriteToHeader;
     use serde_json::json;
     use sqlx::PgPool;
-
-    use super::*;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -527,6 +540,85 @@ mod tests {
     async fn test_messages_no_access_not_logged_in(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
         test_messages_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials"
+        )
+    ))]
+    async fn test_create_message_validation(pool: PgPool) {
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+
+        let too_many_recipients = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": [
+                        "recipient1@example.com",
+                        "recipient2@example.com",
+                        "recipient3@example.com",
+                        "recipient4@example.com",
+                        "recipient5@example.com",
+                        "recipient6@example.com",
+                        "recipient7@example.com",
+                        "recipient8@example.com",
+                        "recipient9@example.com",
+                        "recipient10@example.com",
+                        "recipient11@example.com",
+                    ],
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(too_many_recipients.status(), StatusCode::BAD_REQUEST);
+
+        let invlid_email = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": "recipient1atexample.com"
+
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invlid_email.status(), StatusCode::BAD_REQUEST);
+
+        let missing_recipient = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": [],
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_recipient.status(), StatusCode::BAD_REQUEST);
+
+        let too_long_subject = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": ["recipient1@example.com"],
+                    "subject": "A".repeat(501)
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(too_long_subject.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(fixtures(
