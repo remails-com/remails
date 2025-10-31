@@ -96,17 +96,17 @@ pub async fn run_mta(
 
 pub async fn run_api_server(
     pool: PgPool,
+    bus_client: BusClient,
     http_socket: SocketAddrV4,
     shutdown: CancellationToken,
     with_frontend: bool,
 ) -> JoinHandle<()> {
-    let bus = BusClient::new_from_env_var().expect("Could not connect to message bus");
     let api_server = ApiServer::new(
         http_socket.into(),
         pool.clone(),
         shutdown,
         with_frontend,
-        bus,
+        bus_client,
     )
     .await;
 

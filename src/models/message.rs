@@ -1,20 +1,29 @@
 use crate::{
+    bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
-    models::{Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId},
+    models::{
+        ApiKeyId, Error, OrganizationId, SmtpCredentialId, projects::ProjectId, streams::StreamId,
+    },
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
-use sqlx::types::ipnet::IpNet;
-use std::{collections::HashMap, mem, net::IpAddr, str::FromStr};
+use sqlx::postgres::types::PgInterval;
+use std::{collections::HashMap, mem, str::FromStr};
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
 pub struct MessageId(Uuid);
+
+impl MessageId {
+    pub fn new_v4() -> Self {
+        MessageId(Uuid::new_v4())
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
@@ -49,6 +58,7 @@ pub struct Message {
     pub(crate) project_id: ProjectId,
     pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
+    pub(crate) api_key_id: Option<ApiKeyId>,
     pub status: MessageStatus,
     pub reason: Option<String>,
     pub delivery_details: HashMap<EmailAddress, DeliveryDetails>,
@@ -56,12 +66,12 @@ pub struct Message {
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
+    pub message_id_header: Option<String>,
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
     pub attempts: i32,
     pub max_attempts: i32,
-    pub outbound_ip: Option<IpAddr>,
 }
 
 #[derive(Serialize)]
@@ -84,12 +94,12 @@ impl ApiMessage {
         self.metadata.smtp_credential_id
     }
 
-    pub fn status(&self) -> &MessageStatus {
-        &self.metadata.status
+    pub fn api_key_id(&self) -> Option<ApiKeyId> {
+        self.metadata.api_key_id
     }
 
-    pub fn outbound_ip(&self) -> Option<IpAddr> {
-        self.metadata.outbound_ip
+    pub fn status(&self) -> &MessageStatus {
+        &self.metadata.status
     }
 }
 
@@ -100,17 +110,18 @@ pub struct ApiMessageMetadata {
     pub status: MessageStatus,
     reason: Option<String>,
     delivery_details: HashMap<EmailAddress, DeliveryDetails>,
-    smtp_credential_id: Option<SmtpCredentialId>,
+    pub smtp_credential_id: Option<SmtpCredentialId>,
+    pub api_key_id: Option<ApiKeyId>,
     pub from_email: EmailAddress,
-    recipients: Vec<EmailAddress>,
+    pub recipients: Vec<EmailAddress>,
     /// Human-readable size
     raw_size: String,
+    pub message_id_header: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
     max_attempts: i32,
-    outbound_ip: Option<IpAddr>,
 }
 
 #[derive(Serialize, Default)]
@@ -156,16 +167,6 @@ impl DeliveryDetails {
     }
 }
 
-#[derive(Debug)]
-pub struct NewMessage {
-    pub smtp_credential_id: SmtpCredentialId,
-    pub status: MessageStatus,
-    pub from_email: EmailAddress,
-    pub recipients: Vec<EmailAddress>,
-    pub raw_data: Vec<u8>,
-    pub message_data: serde_json::Value,
-}
-
 impl Message {
     pub fn id(&self) -> MessageId {
         self.id
@@ -209,11 +210,20 @@ impl Message {
     }
 }
 
+/// A new email coming from the in-bound SMTP server
+#[derive(Debug)]
+pub struct NewMessage {
+    pub smtp_credential_id: SmtpCredentialId,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Vec<u8>,
+    pub message_data: serde_json::Value,
+}
+
 impl NewMessage {
     pub fn new(smtp_credential_id: SmtpCredentialId, from_email: EmailAddress) -> Self {
         NewMessage {
             smtp_credential_id,
-            status: MessageStatus::Processing,
             from_email,
             recipients: vec![],
             raw_data: vec![],
@@ -222,9 +232,22 @@ impl NewMessage {
     }
 }
 
+/// A new email coming from the Remails API
+pub struct NewApiMessage {
+    pub message_id: MessageId,
+    pub message_id_header: String,
+    pub api_key_id: ApiKeyId,
+    pub stream_id: StreamId,
+    pub from_email: EmailAddress,
+    pub recipients: Vec<EmailAddress>,
+    pub raw_data: Vec<u8>,
+}
+
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
     pool: sqlx::PgPool,
+    rate_limit_timespan: PgInterval,
+    rate_limit_max_messages: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,6 +274,7 @@ struct PgMessage {
     project_id: ProjectId,
     stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
+    api_key_id: Option<Uuid>,
     status: MessageStatus,
     reason: Option<String>,
     delivery_details: serde_json::Value,
@@ -259,12 +283,12 @@ struct PgMessage {
     raw_data: Vec<u8>,
     raw_size: i32,
     message_data: serde_json::Value,
+    message_id_header: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     attempts: i32,
     max_attempts: i32,
-    outbound_ip: Option<IpNet>,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -277,6 +301,7 @@ impl TryFrom<PgMessage> for Message {
             project_id: m.project_id,
             stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            api_key_id: m.api_key_id.map(Into::into),
             status: m.status,
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
@@ -288,12 +313,12 @@ impl TryFrom<PgMessage> for Message {
                 .collect::<Result<Vec<_>, _>>()?,
             raw_data: m.raw_data,
             message_data: m.message_data,
+            message_id_header: m.message_id_header,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
-            outbound_ip: m.outbound_ip.map(|net| net.addr()),
         })
     }
 }
@@ -359,6 +384,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
+            api_key_id: m.api_key_id.map(Into::into),
             from_email: EmailAddress::from_str(&m.from_email)?,
             recipients: m
                 .recipients
@@ -366,60 +392,130 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
                 .map(|addr| addr.parse())
                 .collect::<Result<Vec<_>, _>>()?,
             raw_size: humansize::format_size(m.raw_size.unsigned_abs(), humansize::DECIMAL),
+            message_id_header: m.message_id_header,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
-            outbound_ip: m.outbound_ip.map(|net| net.addr()),
         })
     }
 }
 
 impl MessageRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        let rate_limit_minutes = std::env::var("RATE_LIMIT_MINUTES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MINUTES"))
+            .expect("RATE_LIMIT_MINUTES must be set");
+        let rate_limit_max_messages = std::env::var("RATE_LIMIT_MAX_MESSAGES")
+            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MAX_MESSAGES"))
+            .expect("RATE_LIMIT_MAX_MESSAGES must be set");
+
+        Self {
+            pool,
+            rate_limit_timespan: PgInterval::try_from(chrono::Duration::minutes(
+                rate_limit_minutes,
+            ))
+            .expect("Could not set rate limit timespan"),
+            rate_limit_max_messages,
+        }
     }
 
-    pub async fn create(&self, message: &NewMessage, max_attempts: i32) -> Result<Message, Error> {
+    pub async fn get_ready_to_send(&self, message_id: MessageId) -> Result<BusMessage, Error> {
+        // TODO: do not rely on random outbound IPs
+        match sqlx::query_scalar!(
+            r#"
+            SELECT ip AS outbound_ip
+            FROM outbound_ips
+            JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
+            WHERE node.ready
+            ORDER BY RANDOM()
+            LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await
+        {
+            Ok(Some(outbound_ip)) => {
+                Ok(BusMessage::EmailReadyToSend(message_id, outbound_ip.addr()))
+            }
+            Ok(None) => Err(Error::Internal(
+                "failed to assign outbound IP to message: none available".to_string(),
+            )),
+            Err(e) => Err(Error::Internal(format!(
+                "failed to assign outbound IP to message: {e:?}"
+            ))),
+        }
+    }
+
+    /// Generate a unique message ID to be included as email header in case no message ID was provided
+    pub fn generate_message_id_header(id: &MessageId, from_email: &EmailAddress) -> String {
+        let sender_domain = from_email.domain();
+
+        // including the Remails message UUID ensure uniqueness
+        format!("REMAILS-{id}@{sender_domain}")
+    }
+
+    pub async fn create(
+        &self,
+        message: &NewMessage,
+        max_attempts: i32,
+    ) -> Result<MessageId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            INSERT INTO messages AS m (
+                id, organization_id, project_id, stream_id, smtp_credential_id,
+                from_email, recipients, raw_data, message_data, max_attempts
+            )
+            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            FROM smtp_credentials s
+                JOIN streams ON s.stream_id = streams.id
+                JOIN projects p ON p.id = streams.project_id
+                JOIN organizations o ON o.id = p.organization_id
+            WHERE s.id = $1
+            RETURNING
+                m.id
+            "#,
+            *message.smtp_credential_id,
+            message.from_email.as_str(),
+            &message
+                .recipients
+                .iter()
+                .map(|r| r.email())
+                .collect::<Vec<_>>(),
+            message.raw_data,
+            message.message_data,
+            max_attempts,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
+
+    pub async fn create_from_api(
+        &self,
+        message: &NewApiMessage,
+        max_attempts: i32,
+    ) -> Result<ApiMessageMetadata, Error> {
         sqlx::query_as!(
             PgMessage,
             r#"
-            INSERT INTO messages AS m (id, organization_id, project_id, stream_id, smtp_credential_id, status, from_email,
-                                       recipients, raw_data, message_data, max_attempts, outbound_ip)
-            WITH m AS (SELECT o.id AS org_id, p.id AS proj_id, streams.id AS stream_id
-                       FROM smtp_credentials s
-                                JOIN streams ON s.stream_id = streams.id
-                                JOIN projects p ON p.id = streams.project_id
-                                JOIN organizations o ON o.id = p.organization_id
-                       WHERE s.id = $1),
-                 ip AS (SELECT ip AS outbound_ip
-                        FROM outbound_ips
-                        JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
-                        WHERE node.ready
-                        -- TODO: Do not rely on random outbound IPs
-                        ORDER BY RANDOM()
-                        LIMIT 1)
-            SELECT gen_random_uuid(),
-                   m.org_id,
-                   m.proj_id,
-                   m.stream_id,
-                   $1,
-                   $2,
-                   $3,
-                   $4,
-                   $5,
-                   $6,
-                   $7,
-                   ip.outbound_ip
-            FROM m,
-                 ip
+            INSERT INTO messages AS m (
+                id, organization_id, project_id, stream_id, api_key_id, 
+                from_email, recipients, raw_data, max_attempts, message_id_header
+            )
+            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8
+            FROM streams s
+                JOIN projects p ON p.id = s.project_id
+                JOIN organizations o ON o.id = p.organization_id
+            WHERE s.id = $2
             RETURNING
                 m.id,
                 m.organization_id,
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -428,24 +524,29 @@ impl MessageRepository {
                 m.raw_data,
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             "#,
-            *message.smtp_credential_id,
-            message.status as _,
+            *message.message_id,
+            *message.stream_id,
+            *message.api_key_id,
             message.from_email.as_str(),
-            &message.recipients.iter().map(|r| r.email()).collect::<Vec<_>>(),
+            &message
+                .recipients
+                .iter()
+                .map(|r| r.email())
+                .collect::<Vec<_>>(),
             message.raw_data,
-            message.message_data,
-            max_attempts
+            max_attempts,
+            message.message_id_header
         )
-            .fetch_one(&self.pool)
-            .await?
-            .try_into()
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
     }
 
     pub async fn update_message_status(&self, message: &mut Message) -> Result<(), Error> {
@@ -486,7 +587,8 @@ impl MessageRepository {
                 reason = $4,
                 retry_after = $5,
                 attempts = $6,
-                max_attempts = $7
+                max_attempts = $7,
+                message_id_header = $8
             WHERE id = $1
             "#,
             *message.id,
@@ -496,6 +598,7 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
             message.max_attempts,
+            message.message_id_header,
         )
         .execute(&self.pool)
         .await?;
@@ -519,6 +622,7 @@ impl MessageRepository {
                 project_id,
                 stream_id,
                 smtp_credential_id,
+                api_key_id,
                 status AS "status: _",
                 reason,
                 delivery_details,
@@ -527,12 +631,12 @@ impl MessageRepository {
                 ''::bytea AS "raw_data!",
                 NULL::jsonb AS "message_data",
                 octet_length(raw_data) AS "raw_size!",
+                message_id_header,
                 created_at,
                 updated_at,
                 retry_after,
                 attempts,
-                max_attempts,
-                outbound_ip
+                max_attempts
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
@@ -569,6 +673,7 @@ impl MessageRepository {
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -577,12 +682,12 @@ impl MessageRepository {
                 m.raw_data,
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             FROM messages m
             WHERE m.id = $1
             "#,
@@ -609,6 +714,7 @@ impl MessageRepository {
                 m.project_id,
                 m.stream_id,
                 m.smtp_credential_id,
+                m.api_key_id,
                 m.status as "status: _",
                 m.reason,
                 m.delivery_details,
@@ -618,12 +724,12 @@ impl MessageRepository {
                 substring(m.raw_data FOR $5) as "raw_data!",
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
+                m.message_id_header,
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts,
-                m.outbound_ip
+                m.max_attempts
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -669,20 +775,11 @@ impl MessageRepository {
 
     /// Messages which should be retried are either:
     /// - on `held` or `reattempt`, not on timeout, with attempts left
-    /// - on `accepted` or `processing`, and not having been updated in 15 minutes
-    pub async fn find_messages_ready_for_retry(
-        &self,
-    ) -> Result<Vec<(MessageId, Option<IpAddr>)>, Error> {
-        struct IdAndIp {
-            id: MessageId,
-            outbound_ip: Option<IpNet>,
-        }
-
-        Ok(sqlx::query_as!(
-            IdAndIp,
+    /// - on `accepted` or `processing`, and not having been updated in 2 minutes
+    pub async fn find_messages_ready_for_retry(&self) -> Result<Vec<MessageId>, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
-            SELECT m.id, m.outbound_ip
-            FROM messages m
+            SELECT m.id FROM messages m
             WHERE (
                 (m.status = 'held' OR m.status = 'reattempt')
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
@@ -695,25 +792,20 @@ impl MessageRepository {
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(|elem| (elem.id, elem.outbound_ip.map(|net| net.addr())))
+        .map(Into::into)
         .collect())
     }
 
-    pub async fn message_status_and_outbound_ip(
+    pub async fn message_status(
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
         stream_id: StreamId,
         message_id: MessageId,
-    ) -> Result<(MessageStatus, Option<IpAddr>), Error> {
-        struct StatusAndIp {
-            status: MessageStatus,
-            outbound_ip: Option<IpNet>,
-        }
-        let res = sqlx::query_as!(
-            StatusAndIp,
+    ) -> Result<MessageStatus, Error> {
+        Ok(sqlx::query_scalar!(
             r#"
-            SELECT m.status AS "status:MessageStatus", m.outbound_ip
+            SELECT m.status AS "status:MessageStatus"
             FROM messages m
             WHERE m.organization_id = $1 
               AND m.project_id = $2 
@@ -726,20 +818,53 @@ impl MessageRepository {
             *message_id,
         )
         .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Returns the number of emails that can still be created during the current rate limit time span
+    ///
+    /// Automatically resets when the time span has expired, if so, it starts a new time span
+    pub async fn email_creation_rate_limit(&self, id: StreamId) -> Result<i64, Error> {
+        let remaining_rate_limit = sqlx::query_scalar!(
+            r#"
+            UPDATE organizations o
+            SET
+            remaining_rate_limit = CASE
+                WHEN rate_limit_reset < now()
+                THEN $2
+                ELSE GREATEST(remaining_rate_limit - 1, 0)
+            END,
+            rate_limit_reset = CASE
+                WHEN rate_limit_reset < now()
+                THEN now() + $3
+                ELSE rate_limit_reset
+            END
+            FROM streams s JOIN projects p ON p.id = s.project_id
+            WHERE p.organization_id = o.id AND s.id = $1
+            RETURNING remaining_rate_limit
+            "#,
+            *id,
+            self.rate_limit_max_messages,
+            self.rate_limit_timespan
+        )
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok((res.status, res.outbound_ip.map(|net| net.addr())))
+        Ok(remaining_rate_limit)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
+    use mail_builder::MessageBuilder;
+    use mail_send::smtp::message::IntoMessage;
     use sqlx::PgPool;
 
     use super::*;
     use crate::{
-        models::{SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{
+            ApiKeyRepository, ApiKeyRequest, Role, SmtpCredentialRepository, SmtpCredentialRequest,
+        },
         test::TestStreams,
     };
 
@@ -748,12 +873,11 @@ mod test {
             value: mail_send::smtp::message::Message<'_>,
             smtp_credential_id: SmtpCredentialId,
         ) -> Self {
-            use mail_send::smtp::message::IntoMessage;
             let mut message = Self::new(smtp_credential_id, value.mail_from.email.parse().unwrap());
             for recipient in value.rcpt_to.iter() {
                 message.recipients.push(recipient.email.parse().unwrap());
             }
-            message.raw_data = value.into_message().unwrap().body.to_vec();
+            message.raw_data = value.body.to_vec();
 
             message
         }
@@ -763,12 +887,11 @@ mod test {
             smtp_credential_id: SmtpCredentialId,
             smtp_from: &str,
         ) -> Self {
-            use mail_send::smtp::message::IntoMessage;
             let mut message = Self::new(smtp_credential_id, smtp_from.parse().unwrap());
             for recipient in value.rcpt_to.iter() {
                 message.recipients.push(recipient.email.parse().unwrap());
             }
-            message.raw_data = value.into_message().unwrap().body.to_vec();
+            message.raw_data = value.body.to_vec();
 
             message
         }
@@ -787,6 +910,7 @@ mod test {
     ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
@@ -799,10 +923,9 @@ mod test {
             .text_body("Hello world!")
             .into_message()
             .unwrap();
+
+        // create SMTP credential
         let smtp_credential_repo = SmtpCredentialRepository::new(pool);
-
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
-
         let credential = smtp_credential_repo
             .generate(
                 org_id,
@@ -816,20 +939,21 @@ mod test {
             .await
             .unwrap();
 
+        // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
+        let message_id = repository.create(&new_message, 5).await.unwrap();
 
-        let message = repository.create(&new_message, 5).await.unwrap();
-
+        // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message.id)
+            .find_by_id(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
-
+        assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
+        assert_eq!(fetched_message.api_key_id(), None);
         assert_eq!(
             fetched_message.metadata.from_email,
             "john@test-org-1-project-1.com".parse().unwrap()
         );
-
         fetched_message
             .metadata
             .recipients
@@ -838,9 +962,9 @@ mod test {
             "james@test.com".parse().unwrap(),
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
-
         assert_eq!(fetched_message.metadata.recipients, expected);
 
+        // list message metadata
         let messages = repository
             .list_message_metadata(
                 org_id,
@@ -854,15 +978,16 @@ mod test {
             )
             .await
             .unwrap();
-
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].id, message.id);
+        assert_eq!(messages[0].id, message_id);
 
+        // remove message
         repository
-            .remove(org_id, project_id, stream_id, message.id)
+            .remove(org_id, project_id, stream_id, message_id)
             .await
             .unwrap();
 
+        // check that message was removed
         let messages = repository
             .list_message_metadata(
                 org_id,
@@ -876,7 +1001,81 @@ mod test {
             )
             .await
             .unwrap();
-
         assert_eq!(messages.len(), 0);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+    ))]
+    async fn create_message_from_api(pool: PgPool) {
+        let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+
+        let from = "john@test-org-1-project-1.com";
+        let message_id = MessageId::new_v4();
+        let message_id_header =
+            MessageRepository::generate_message_id_header(&message_id, &from.parse().unwrap());
+        let message = MessageBuilder::new()
+            .from(("John Doe", "john@test-org-1-project-1.com"))
+            .to(vec![
+                ("James Smith", "james@test.com"),
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
+            ])
+            .subject("Hi!")
+            .html_body("<h1>Hello, world!</h1>")
+            .text_body("Hello world!")
+            .message_id(message_id_header.as_str())
+            .into_message()
+            .unwrap();
+
+        // create API key
+        let api_key_repository = ApiKeyRepository::new(pool);
+        let api_key = api_key_repository
+            .create(
+                org_id,
+                &ApiKeyRequest {
+                    description: "Test API key".to_string(),
+                    role: Role::Maintainer,
+                },
+            )
+            .await
+            .unwrap();
+
+        // create message
+        let new_message = NewApiMessage {
+            message_id,
+            message_id_header,
+            api_key_id: *api_key.id(),
+            stream_id,
+            from_email: "john@test-org-1-project-1.com".parse().unwrap(),
+            recipients: vec![
+                "james@test.com".parse().unwrap(),
+                "jane@test-org-1-project-1.com".parse().unwrap(),
+            ],
+            raw_data: message.into_message().unwrap().body.to_vec(),
+        };
+        let message = repository.create_from_api(&new_message, 5).await.unwrap();
+
+        // get message
+        let mut fetched_message = repository
+            .find_by_id(org_id, project_id, stream_id, message.id)
+            .await
+            .unwrap();
+        assert_eq!(fetched_message.smtp_credential_id(), None);
+        assert_eq!(fetched_message.api_key_id(), Some(*api_key.id()));
+        assert_eq!(
+            fetched_message.metadata.from_email,
+            "john@test-org-1-project-1.com".parse().unwrap()
+        );
+        fetched_message
+            .metadata
+            .recipients
+            .sort_by_key(|x| x.email());
+        let expected = vec![
+            "james@test.com".parse().unwrap(),
+            "jane@test-org-1-project-1.com".parse().unwrap(),
+        ];
+        assert_eq!(fetched_message.metadata.recipients, expected);
     }
 }

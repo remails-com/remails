@@ -58,6 +58,15 @@ export default function MessageDetails() {
       value: <Recipients message={completeMessage} mr="sm" />,
     },
     {
+      header: "Message ID",
+      info: "The Message-ID email header is used to identify emails (e.g. used to send replies)",
+      value: completeMessage.message_id_header ?? (
+        <Text c="dimmed" fs="italic">
+          Emails has not yet been assigned a message ID
+        </Text>
+      ),
+    },
+    {
       header: "Date",
       info: "The time mentioned in the Date header of the message",
       value: completeMessage.message_data.date ? (

@@ -100,7 +100,8 @@ pub async fn remove_invite(
 }
 
 pub async fn accept_invite(
-    State((invites, organizations)): State<(InviteRepository, OrganizationRepository)>,
+    State(invites): State<InviteRepository>,
+    State(organizations): State<OrganizationRepository>,
     Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, ApiError> {

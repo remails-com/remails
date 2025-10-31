@@ -149,7 +149,7 @@ async fn prevent_last_remaining_admin(
     any_other_admins
         .then_some(())
         .ok_or(ApiError::PreconditionFailed(
-            "At least one admin must remain in the organization".to_owned(),
+            "At least one admin must remain in the organization",
         ))
 }
 

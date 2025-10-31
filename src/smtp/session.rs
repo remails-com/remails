@@ -8,7 +8,7 @@ use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tracing::{debug, error, trace};
 
 use crate::{
-    bus::client::{BusClient, BusMessage},
+    bus::client::BusClient,
     models::{MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
 };
 
@@ -233,8 +233,8 @@ impl SmtpSession {
                 }
 
                 let Ok(ratelimit) = self
-                    .smtp_credentials
-                    .rate_limit(credential.stream_id())
+                    .message_repository
+                    .email_creation_rate_limit(credential.stream_id())
                     .await
                 else {
                     return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());
@@ -390,7 +390,7 @@ impl SmtpSession {
             trace!("received message ({} bytes)", message.raw_data.len());
 
             // Store message in database
-            let message = match self
+            let message_id = match self
                 .message_repository
                 .create(&message, self.max_automatic_retries)
                 .await
@@ -402,20 +402,14 @@ impl SmtpSession {
                 }
             };
 
-            let Some(outbound_ip) = message.outbound_ip else {
-                error!(
-                    message_id = message.id().to_string(),
-                    "failed to assign outbound IP to message"
-                );
-                // TODO think about being nice and accepting the message anyway.
-                //  This requires automatic recovery from this error, though.
-                return DataReply::ReplyAndContinue(SmtpResponse::INTERNAL_ERROR.into());
-            };
-
-            // Send message to message bus
-            self.bus_client
-                .try_send(&BusMessage::EmailReadyToSend(message.id(), outbound_ip))
-                .await;
+            match self.message_repository.get_ready_to_send(message_id).await {
+                Ok(bus_message) => {
+                    self.bus_client.try_send(&bus_message).await;
+                }
+                Err(e) => {
+                    error!(message_id = message_id.to_string(), "{e:?}");
+                }
+            }
 
             return DataReply::ReplyAndContinue(SmtpResponse::MESSAGE_ACCEPTED.into());
         }

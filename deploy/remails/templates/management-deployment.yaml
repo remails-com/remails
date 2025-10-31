@@ -84,6 +84,10 @@ spec:
                 secretKeyRef:
                   name: secrets
                   key: github_client_secret
+            - name: RATE_LIMIT_MINUTES
+              value: {{ .Values.smtp.rate_limit_minutes | quote }}
+            - name: RATE_LIMIT_MAX_MESSAGES
+              value: {{ .Values.smtp.rate_limit_max_messages | quote }}
             - name: MONEYBIRD_API_KEY
               valueFrom:
                 secretKeyRef:

@@ -334,7 +334,8 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let api_state: ApiState = FromRef::from_ref(state);
-        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+        let jar =
+            PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
         let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
 
@@ -412,7 +413,8 @@ where
         }
 
         let api_state: ApiState = FromRef::from_ref(state);
-        let jar = PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key);
+        let jar =
+            PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
         let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
 
@@ -469,6 +471,50 @@ where
     }
 }
 
+impl<S> FromRequestParts<S> for ApiKey
+where
+    S: Send + Sync,
+    ApiState: FromRef<S>,
+    ApiKeyRepository: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // check HTTP Basic Auth header for API keys
+        let Some(header) = parts.headers.get("Authorization") else {
+            return Err(ApiError::Unauthorized);
+        };
+
+        trace!("Logging in based on `Authorization` header");
+        let header = header.to_str().map_err(|_| ApiError::Unauthorized)?;
+
+        let (auth_type, base64_credentials) =
+            header.split_once(' ').ok_or(ApiError::Unauthorized)?;
+
+        if auth_type.to_lowercase() != "basic" {
+            return Err(ApiError::Unauthorized);
+        }
+
+        let credentials =
+            base64ct::Base64::decode_vec(base64_credentials).map_err(|_| ApiError::Unauthorized)?;
+        let credentials = String::from_utf8(credentials).map_err(|_| ApiError::Unauthorized)?;
+
+        let (api_key_id, password) = credentials.split_once(':').ok_or(ApiError::Unauthorized)?;
+
+        let api_key_id = api_key_id.parse().map_err(|_| ApiError::Unauthorized)?;
+        let api_key = ApiKeyRepository::from_ref(state)
+            .get(api_key_id)
+            .await
+            .map_err(|_| ApiError::Unauthorized)?;
+
+        if api_key.verify_password(&Password::new(password.to_owned())) {
+            Ok(api_key)
+        } else {
+            Err(ApiError::Unauthorized)
+        }
+    }
+}
+
 impl<S> FromRequestParts<S> for Box<dyn Authenticated>
 where
     S: Send + Sync,
@@ -479,36 +525,10 @@ where
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // check HTTP Basic Auth header for API keys
-        if let Some(header) = parts.headers.get("Authorization") {
-            trace!("Logging in based on `Authorization` header");
-            let header = header.to_str().map_err(|_| ApiError::Unauthorized)?;
-
-            let (auth_type, base64_credentials) =
-                header.split_once(' ').ok_or(ApiError::Unauthorized)?;
-
-            if auth_type.to_lowercase() != "basic" {
-                return Err(ApiError::Unauthorized);
-            }
-
-            let credentials = base64ct::Base64::decode_vec(base64_credentials)
-                .map_err(|_| ApiError::Unauthorized)?;
-            let credentials = String::from_utf8(credentials).map_err(|_| ApiError::Unauthorized)?;
-
-            let (api_key_id, password) =
-                credentials.split_once(':').ok_or(ApiError::Unauthorized)?;
-
-            let api_key_id = api_key_id.parse().map_err(|_| ApiError::Unauthorized)?;
-            let api_key = ApiKeyRepository::from_ref(state)
-                .get(api_key_id)
-                .await
-                .map_err(|_| ApiError::Unauthorized)?;
-
-            if api_key.verify_password(&Password::new(password.to_owned())) {
-                return Ok(Box::new(api_key));
-            } else {
-                return Err(ApiError::Unauthorized);
-            }
+        // first check if they are using a valid API key
+        if let Ok(api_key) = <ApiKey as FromRequestParts<S>>::from_request_parts(parts, state).await
+        {
+            return Ok(Box::new(api_key));
         }
 
         // otherwise, check if they are logged in as an ApiUser

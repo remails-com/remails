@@ -10,10 +10,10 @@ use crate::{
     kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
-        NewMessage, OrganizationRepository, QuotaStatus,
+        OrganizationRepository, QuotaStatus,
     },
 };
-use base64ct::{Base64, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use futures::StreamExt;
@@ -122,7 +122,7 @@ pub struct Handler {
     k8s: Kubernetes,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
-    sending_ips: BTreeSet<IpAddr>,
+    outbound_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
 }
@@ -148,7 +148,7 @@ impl Handler {
                 .expect("Failed to initialize Kubernetes"),
             workers: Arc::new(Semaphore::new(100)),
             bus_client,
-            sending_ips: Default::default(),
+            outbound_ips: Default::default(),
             shutdown,
             config,
         }
@@ -189,30 +189,17 @@ impl Handler {
     ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
-        // check SMTP credentials
-        let Some(smtp_credential_id) = message.smtp_credential_id else {
-            return Ok(Err((
-                MessageStatus::Rejected,
-                "missing SMTP credential".to_string(),
-            )));
-        };
-        let Some(domain_id) = self
+        let Some(domain) = self
             .domain_repository
-            .get_domain_id_associated_with_credential(sender_domain, smtp_credential_id)
+            .lookup_domain_name(sender_domain, message.project_id)
             .await
             .map_err(HandlerError::RepositoryError)?
         else {
             return Ok(Err((
                 MessageStatus::Held,
-                format!("SMTP credential is not permitted to use domain {sender_domain}"),
+                format!("Project is not permitted to use domain {sender_domain}"),
             )));
         };
-
-        let domain = self
-            .domain_repository
-            .get_domain_by_id(message.organization_id, domain_id)
-            .await
-            .map_err(HandlerError::RepositoryError)?;
 
         // check MAIL FROM domain (can be a subdomain)
         if !Self::is_subdomain(sender_domain, &domain.domain) {
@@ -323,14 +310,6 @@ impl Handler {
         Ok(Ok(dkim_header))
     }
 
-    pub async fn create_message(&self, message: NewMessage) -> Result<Message, HandlerError> {
-        self.message_repository
-            .create(&message, self.config.retry.max_automatic_retries)
-            .await
-            .inspect(|m| trace!("stored message {}", m.id()))
-            .map_err(HandlerError::RepositoryError)
-    }
-
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
         fn parse_message<'a>(raw_data: &'a Vec<u8>) -> mail_parser::Message<'a> {
             MessageParser::default()
@@ -354,12 +333,12 @@ impl Handler {
         let mut new_headers = Vec::new();
 
         if !has_header(HeaderName::MessageId) {
-            trace!("adding Message-ID header");
-            use aws_lc_rs::digest;
-            let hash = digest::digest(&digest::SHA224, &message.raw_data);
-            let hash = Base64UrlUnpadded::encode_string(hash.as_ref());
-            let sender_domain = message.from_email.domain();
-            new_headers.push(format!("Message-ID: <REMAILS-{hash}@{sender_domain}>\r\n"));
+            let message_id_header =
+                MessageRepository::generate_message_id_header(&message.id(), &message.from_email);
+            trace!("adding Message-ID header: {message_id_header}");
+
+            new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
+            message.message_id_header = Some(message_id_header);
         }
 
         if !has_header(HeaderName::Date) {
@@ -603,14 +582,14 @@ impl Handler {
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
             stream_id = message.stream_id.to_string(),
-            outbound_ip = ?message.outbound_ip,
+            outbound_ip = outbound_ip.to_string(),
         ))]
-    pub async fn send_message(&self, mut message: Message) -> Result<(), HandlerError> {
+    pub async fn send_message(
+        &self,
+        mut message: Message,
+        outbound_ip: IpAddr,
+    ) -> Result<(), HandlerError> {
         info!("sending message");
-        let Some(outbound_ip) = message.outbound_ip else {
-            error!("message is missing outbound IP");
-            return Err(HandlerError::MissingOutboundIp);
-        };
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
@@ -782,10 +761,10 @@ impl Handler {
                             )
                             .map(Into::into)
                             .collect();
-                        if new_ips != self.sending_ips {
-                            self.sending_ips = new_ips;
-                            info!("new interface list: {:?}", self.sending_ips);
-                            match self.k8s.save_available_node_ips(self.sending_ips.clone()).await {
+                        if new_ips != self.outbound_ips {
+                            self.outbound_ips = new_ips;
+                            info!("new interface list: {:?}", self.outbound_ips);
+                            match self.k8s.save_available_node_ips(self.outbound_ips.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!("failed to save available node IPs: {e}");
@@ -801,13 +780,13 @@ impl Handler {
                                 error!("Bus stream ended, shutting down");
                                 self.shutdown.cancel();
                             },
-                            Some(BusMessage::EmailReadyToSend(id, from)) => {
-                                if self.sending_ips.contains(&from) {
-                                    self.handle_ready_to_send(id).await;
+                            Some(BusMessage::EmailReadyToSend(id, outbound_ip)) => {
+                                if self.outbound_ips.contains(&outbound_ip) {
+                                    self.handle_ready_to_send(id, outbound_ip).await;
                                 } else {
                                     trace!(
                                         message_id = id.to_string(),
-                                        ip_addr = from.to_string(),
+                                        outbound_ip = outbound_ip.to_string(),
                                         "skipping message as it should not be send from this node"
                                     );
                                 }
@@ -820,7 +799,7 @@ impl Handler {
         })
     }
 
-    async fn handle_ready_to_send(&self, id: MessageId) {
+    async fn handle_ready_to_send(&self, id: MessageId, outbound_ip: IpAddr) {
         info!("Ready to send {id}");
 
         let Ok(permit) = self.workers.clone().acquire_owned().await else {
@@ -853,7 +832,7 @@ impl Handler {
                 return;
             };
 
-            if let Err(e) = self_clone.send_message(message).await {
+            if let Err(e) = self_clone.send_message(message, outbound_ip).await {
                 error!(message_id, "failed to send message: {e:?}");
             }
         });
@@ -868,7 +847,7 @@ mod test {
     use super::*;
     use crate::{
         handler::dns::DnsResolver,
-        models::{SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
         test::{TestStreams, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
@@ -942,9 +921,17 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-        let mut message = handler.create_message(message).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(&message, 1)
+            .await
+            .unwrap();
+        let mut message = handler.message_repository.get(message_id).await.unwrap();
         handler.handle_message(&mut message).await.unwrap();
-        handler.send_message(message).await.unwrap();
+        handler
+            .send_message(message, "127.0.0.1".parse().unwrap())
+            .await
+            .unwrap();
     }
 
     #[sqlx::test(fixtures(
@@ -1000,7 +987,12 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler.create_message(message).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(&message, 1)
+                .await
+                .unwrap();
+            let mut message = handler.message_repository.get(message_id).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
@@ -1067,7 +1059,12 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let mut message = handler.create_message(message).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(&message, 1)
+                .await
+                .unwrap();
+            let mut message = handler.message_repository.get(message_id).await.unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
