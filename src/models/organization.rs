@@ -4,6 +4,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -48,6 +49,7 @@ pub enum OrgBlockStatus {
 }
 
 #[derive(Debug, Serialize, PartialEq, ToSchema)]
+#[schema(title = "Organization")]
 #[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
     id: OrganizationId,
@@ -70,8 +72,10 @@ impl Organization {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
 pub struct NewOrganization {
+    #[garde(length(min = 1, max = 256))]
+    #[schema(min_length = 1, max_length = 256)]
     pub name: String,
 }
 

@@ -1,23 +1,6 @@
 use crate::{
     Environment,
-    api::{
-        api_keys::{create_api_key, list_api_keys, remove_api_key, update_api_key},
-        api_users::{
-            delete_password, delete_totp_code, finish_enroll_totp, start_enroll_totp, totp_codes,
-            update_password, update_user,
-        },
-        auth::{logout, password_login, password_register, totp_login},
-        domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-        invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{get_message, list_messages, remove_message, retry_now},
-        oauth::GithubOauthService,
-        smtp_credentials::{
-            create_smtp_credential, list_smtp_credential, remove_smtp_credential,
-            update_smtp_credential,
-        },
-        streams::{create_stream, list_streams, remove_stream, update_stream},
-        subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
-    },
+    api::{error::ApiError, oauth::GithubOauthService, openapi::openapi_router},
     bus::client::BusClient,
     handler::{RetryConfig, dns::DnsResolver},
     models::{
@@ -27,12 +10,13 @@ use crate::{
     moneybird::MoneyBird,
 };
 use axum::{
-    Json, RequestExt, Router,
+    BoxError, Json, RequestExt, Router,
+    error_handling::HandleErrorLayer,
     extract::{ConnectInfo, FromRef, Request, State},
     middleware,
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::get,
 };
 use base64ct::Encoding;
 use http::{HeaderName, HeaderValue, StatusCode};
@@ -42,14 +26,14 @@ use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower::ServiceBuilder;
+use tower_http::{limit::RequestBodyLimitLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
     span,
 };
-// use utoipa_redoc::{Redoc, Servable};
-use crate::api::openapi::openapi_router;
+use utoipa::ToSchema;
 use utoipa_scalar::{Scalar, Servable};
 
 mod api_keys;
@@ -79,7 +63,7 @@ pub enum ApiServerError {
     Serve(std::io::Error),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RemailsConfig {
     pub version: String,
@@ -287,93 +271,9 @@ impl ApiServer {
             retry_config: Arc::new(RetryConfig::default()),
         };
 
-        let (router_from_openapi, openapi) = openapi_router().split_for_parts();
+        let (router, openapi) = openapi_router().split_for_parts();
 
-        let mut router = Router::new()
-            .route("/config", get(config))
-            .route("/healthy", get(healthy))
-            .route("/webhook/moneybird", post(moneybird_webhook))
-            .route("/api_user/{user_id}", put(update_user))
-            .route("/api_user/{user_id}/password", put(update_password).delete(delete_password))
-            .route("/api_user/{user_id}/totp/enroll", get(start_enroll_totp).post(finish_enroll_totp))
-            .route("/api_user/{user_id}/totp", get(totp_codes))
-            .route("/api_user/{user_id}/totp/{totp_id}", delete(delete_totp_code))
-            .route(
-                "/organizations/{id}/subscription",
-                get(get_subscription),
-            )
-            .route(
-                "/organizations/{id}/subscription/new",
-                get(get_sales_link),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams",
-                get(list_streams).post(create_stream),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
-                delete(remove_stream).put(update_stream),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-                get(list_smtp_credential).post(create_smtp_credential),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
-                delete(remove_smtp_credential).put(update_smtp_credential),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
-                get(list_messages),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
-                get(get_message).delete(remove_message),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
-                put(retry_now),
-            )
-            .route(
-                "/organizations/{org_id}/domains",
-                get(list_domains).post(create_domain),
-            )
-            .route(
-                "/organizations/{org_id}/domains/{domain_id}",
-                get(get_domain).delete(delete_domain),
-            )
-            .route(
-                "/organizations/{org_id}/domains/{domain_id}/verify",
-                post(verify_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains",
-                get(list_domains).post(create_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
-                get(get_domain).delete(delete_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
-                post(verify_domain),
-            )
-            .route(
-                "/organizations/{org_id}/api_keys",
-                get(list_api_keys).post(create_api_key),
-            )
-            .route(
-                "/organizations/{org_id}/api_keys/{api_key_id}",
-                delete(remove_api_key).put(update_api_key),
-            )
-            .route("/logout", get(logout))
-            .route("/login/password", post(password_login))
-            .route("/login/totp", post(totp_login))
-            .route("/register/password", post(password_register))
-            .route("/invite/{org_id}", get(get_org_invites).post(create_invite))
-            .route("/invite/{org_id}/{invite_id}", delete(remove_invite))
-            .route("/invite/{org_id}/{invite_id}/{password}", get(get_invite).post(accept_invite))
-            .fallback(api_fallback)
+        let mut router = router
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
@@ -381,8 +281,6 @@ impl ApiServer {
                 TimeoutLayer::new(Duration::from_secs(10)),
             ))
             .with_state(state.clone());
-
-        router = Router::new().nest("/api", router);
 
         if with_frontend {
             let memory_router = memory_serve::from_local_build!()
@@ -394,28 +292,40 @@ impl ApiServer {
             router = router.merge(memory_router);
         }
 
-        let mut router = router.merge(router_from_openapi).with_state(state.clone());
-
         router = router.layer(middleware::from_fn_with_state(
             state.config.clone(),
             append_default_headers,
         ));
 
         router = router
-            // .merge(Redoc::with_url_and_config(
-            //     "/openapi-ui",
-            //     openapi.clone(),
-            //     || {
-            //         json!({
-            //             "downloadDefinitionUrl": "/openapi.json",
-            //         })
-            //     },
-            // ))
             .merge(
                 Scalar::with_url("/openapi-ui", openapi.clone())
                     .custom_html(include_str!("../static/scalar.html")),
             )
             .route("/openapi.json", get(async move || Json(openapi)));
+
+        // Set a hard limit to the size of all requests. Currently, we allow at most 50,000 bytes
+        // for the text and HTML body of an email message created via the API. Rounding this up
+        // a bit, results in the limit of 120,000 bytes chosen here. If we increase the size limit
+        // for messages, we should consider setting a higher limit specifically to the API endpoints
+        // that require it and a smaller to the rest.
+        router = router
+            .layer(RequestBodyLimitLayer::new(120_000))
+            .layer(middleware::from_fn(|req, next: Next| async move {
+                // TODO I'd prefer a more clean solution for catching errors produced by the
+                //  RequestBodyLimitLayer, but could not find any. Also note the [`ValidatedJson`]
+                let res = next.run(req).await;
+                if res.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    return ApiError::payload_too_large().into_response();
+                }
+                res
+            }));
+
+        router = router.layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_timeout_error))
+                .timeout(Duration::from_secs(30)),
+        );
 
         ApiServer {
             socket,
@@ -457,12 +367,19 @@ async fn wait_for_shutdown(token: CancellationToken) {
     token.cancelled().await;
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct HealthyResponse {
     healthy: bool,
     status: &'static str,
 }
 
+/// Remails health check
+#[utoipa::path(get, path = "/healthy",
+    tags = ["internal", "Misc"],
+    responses(
+        (status = 200, description = "Remails health status", body = HealthyResponse),
+    )
+)]
 async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
     match sqlx::query("SELECT 1").execute(&pool).await {
         Ok(_) => Json(HealthyResponse {
@@ -480,6 +397,15 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
     }
 }
 
+/// Remails configuration
+///
+/// Get the configuration and environment details of the Remails server
+#[utoipa::path(get, path = "/config",
+    tags = ["Misc"],
+    responses(
+        (status = 200, description = "Remails configuration", body = RemailsConfig),
+    )
+)]
 pub async fn config(State(config): State<RemailsConfig>) -> Response {
     Json(config).into_response()
 }
@@ -510,18 +436,26 @@ async fn append_default_headers(
     res
 }
 
+async fn handle_timeout_error(err: BoxError) -> ApiError {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        ApiError::request_timeout()
+    } else {
+        ApiError::internal()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{bus::server::Bus, models::ApiUserId};
     use axum::body::Body;
-    use http::Method;
+    use http::{Method, header::CONTENT_LENGTH};
     use std::{
         collections::HashMap,
         net::{Ipv4Addr, SocketAddrV4},
     };
     use tower::{ServiceExt, util::Oneshot};
-
-    use super::*;
+    use tower_http::body::Full;
 
     pub struct TestServer {
         server: ApiServer,
@@ -638,5 +572,47 @@ mod tests {
         let response = server.get("/api/config").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let _: RemailsConfig = deserialize_body(response.into_body()).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_request_size_limit(pool: PgPool) {
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        let mut request = Request::builder().method(Method::GET).uri("/api/healthy");
+
+        for (&name, value) in server.headers.iter() {
+            request = request.header(name, value);
+        }
+        request = request.header(CONTENT_LENGTH, HeaderValue::from_static("120001"));
+
+        let request = request.body(Full::default()).unwrap();
+
+        let response = server.server.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let msg = String::from_utf8(bytes.to_vec()).unwrap();
+        println!("{msg}");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+
+        server.set_user(Some(
+            "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(),
+        ));
+        let response = server
+            .post(
+                "/api/organizations",
+                Body::from(format!(r#""name":"{}""#, "a".repeat(120_000))),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let msg = String::from_utf8(bytes.to_vec()).unwrap();
+        println!("{msg}");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

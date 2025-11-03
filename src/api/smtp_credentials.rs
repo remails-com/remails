@@ -1,9 +1,9 @@
 use super::error::{ApiError, ApiResult};
 use crate::{
-    api::auth::Authenticated,
+    api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{
         OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-        SmtpCredentialRequest, SmtpCredentialUpdateRequest, StreamId,
+        SmtpCredentialRequest, SmtpCredentialResponse, SmtpCredentialUpdateRequest, StreamId,
     },
 };
 use axum::{
@@ -13,12 +13,28 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(create_smtp_credential, list_smtp_credential))
+        .routes(routes!(update_smtp_credential, remove_smtp_credential))
+}
+
+/// Create a new SMTP credential
+#[utoipa::path(post, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}/smtp_credentials",
+    tags = ["SMTP Credentials"],
+    request_body = SmtpCredentialRequest,
+    responses(
+        (status = 201, description = "Successfully created SMTP credential", body = SmtpCredentialResponse),
+        ApiError,
+    )
+)]
 pub async fn create_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
-    Json(request): Json<SmtpCredentialRequest>,
+    ValidatedJson(request): ValidatedJson<SmtpCredentialRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     user.has_org_write_access(&org_id)?;
 
@@ -37,21 +53,30 @@ pub async fn create_smtp_credential(
     Ok((StatusCode::CREATED, Json(new_credential)))
 }
 
+/// Update an SMTP credential
+#[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
+    tags = ["SMTP Credentials"],
+    request_body = SmtpCredentialUpdateRequest,
+    responses(
+        (status = 200, description = "Successfully updated SMTP credential", body = SmtpCredential),
+        ApiError,
+    )
+)]
 pub async fn update_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     user: Box<dyn Authenticated>,
-    Path((org_id, proj_id, stream_id, cred_id)): Path<(
+    Path((org_id, proj_id, stream_id, credential_id)): Path<(
         OrganizationId,
         ProjectId,
         StreamId,
         SmtpCredentialId,
     )>,
-    Json(request): Json<SmtpCredentialUpdateRequest>,
+    ValidatedJson(request): ValidatedJson<SmtpCredentialUpdateRequest>,
 ) -> ApiResult<SmtpCredential> {
     user.has_org_write_access(&org_id)?;
 
     let update = repo
-        .update(org_id, proj_id, stream_id, cred_id, &request)
+        .update(org_id, proj_id, stream_id, credential_id, &request)
         .await?;
 
     info!(
@@ -67,6 +92,14 @@ pub async fn update_smtp_credential(
     Ok(Json(update))
 }
 
+/// List all active SMTP credentials
+#[utoipa::path(get, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}/smtp_credentials",
+    tags = ["SMTP Credentials"],
+    responses(
+        (status = 200, description = "Successfully fetched SMTP credentials", body = [SmtpCredential]),
+        ApiError,
+    )
+)]
 pub async fn list_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
@@ -88,6 +121,14 @@ pub async fn list_smtp_credential(
     Ok(Json(credentials))
 }
 
+/// Delete an SMTP credential
+#[utoipa::path(delete, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
+    tags = ["SMTP Credentials"],
+    responses(
+        (status = 200, description = "Successfully delete SMTP credential", body = SmtpCredentialId),
+        ApiError,
+    )
+)]
 pub async fn remove_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
     Path((org_id, proj_id, stream_id, credential_id)): Path<(

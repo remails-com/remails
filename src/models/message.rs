@@ -9,11 +9,12 @@ use crate::{
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
+use garde::Validate;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
@@ -78,12 +79,13 @@ pub struct Message {
     pub max_attempts: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct ApiMessage {
     #[serde(flatten)]
     metadata: ApiMessageMetadata,
     pub truncated_raw_data: String,
+    /// Indicates if the `truncated_raw_data` are actually truncated.
     is_truncated: bool,
     message_data: ApiMessageData,
 }
@@ -113,6 +115,8 @@ pub struct ApiMessageMetadata {
     pub id: MessageId,
     pub status: MessageStatus,
     reason: Option<String>,
+    /// Delivery details for each recipient Remails tried to deliver to already.
+    /// Uses the recipient email as key and `DeliveryDetails` as value.
     delivery_details: HashMap<EmailAddress, DeliveryDetails>,
     pub smtp_credential_id: Option<SmtpCredentialId>,
     pub api_key_id: Option<ApiKeyId>,
@@ -130,7 +134,7 @@ pub struct ApiMessageMetadata {
     max_attempts: i32,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct ApiMessageData {
     pub subject: Option<String>,
@@ -140,7 +144,7 @@ pub struct ApiMessageData {
     pub attachments: Vec<Attachment>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct Attachment {
     pub filename: String,
@@ -163,6 +167,7 @@ pub enum DeliveryStatus {
     Failed,
 }
 
+/// Details of the email transmission for a specific recipient
 #[derive(Debug, Deserialize, Serialize, Default, ToSchema)]
 pub struct DeliveryDetails {
     pub status: DeliveryStatus,
@@ -258,11 +263,15 @@ pub struct MessageRepository {
     rate_limit_max_messages: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, Validate)]
 #[serde(default)]
 pub struct MessageFilter {
+    #[param(minimum = 1, maximum = 100, default = 10)]
+    #[garde(range(min = 1, max = 100))]
     limit: i64,
+    #[garde(skip)]
     status: Option<MessageStatus>,
+    #[garde(skip)]
     before: Option<DateTime<Utc>>,
 }
 
@@ -795,7 +804,7 @@ impl MessageRepository {
         Ok(sqlx::query_scalar!(
             r#"
             SELECT m.id FROM messages m
-            JOIN organizations o ON o.id = m.organization_id 
+            JOIN organizations o ON o.id = m.organization_id
             WHERE o.block_status = 'not_blocked' AND (
                 (m.status = 'held' OR m.status = 'reattempt')
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
@@ -1101,6 +1110,40 @@ mod test {
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
         assert_eq!(fetched_message.metadata.recipients, expected);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "streams", "messages_length_truncation")
+    ))]
+    async fn truncation(pool: PgPool) {
+        let repository = MessageRepository::new(pool.clone());
+
+        let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let proj_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
+        let message_just_fits = "525f7d40-cb6d-402b-9078-0275c22808d7".parse().unwrap();
+        let message_just_too_log = "c1d2c3d6-1521-4f77-804a-2034d121c9b0".parse().unwrap();
+
+        let message = repository
+            .find_by_id(org_id, proj_id, stream_id, message_just_fits)
+            .await
+            .unwrap();
+        assert!(!message.is_truncated);
+        assert_eq!(
+            message.truncated_raw_data,
+            format!("{}Y", "x".repeat((API_RAW_TRUNCATE_LENGTH - 1) as usize))
+        );
+
+        let message = repository
+            .find_by_id(org_id, proj_id, stream_id, message_just_too_log)
+            .await
+            .unwrap();
+        assert!(message.is_truncated);
+        assert_eq!(
+            message.truncated_raw_data,
+            "x".repeat(API_RAW_TRUNCATE_LENGTH as usize)
+        );
     }
 
     #[sqlx::test(fixtures(

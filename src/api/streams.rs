@@ -1,7 +1,9 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
         error::{ApiError, ApiResult},
+        validation::ValidatedJson,
     },
     models::{NewStream, OrganizationId, ProjectId, Stream, StreamId, StreamRepository},
 };
@@ -12,7 +14,22 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(list_streams, create_stream))
+        .routes(routes!(update_stream, remove_stream))
+}
+
+/// List all streams
+#[utoipa::path(get, path = "/organizations/{org_id}/projects/{proj_id}/streams",
+    tags = ["Streams"],
+    responses(
+        (status = 200, description = "Successfully fetched streams", body = [Stream]),
+        ApiError,
+    )
+)]
 pub async fn list_streams(
     State(repo): State<StreamRepository>,
     user: Box<dyn Authenticated>,
@@ -33,11 +50,20 @@ pub async fn list_streams(
     Ok(Json(streams))
 }
 
+/// Create a new stream
+#[utoipa::path(post, path = "/organizations/{org_id}/projects/{proj_id}/streams",
+    tags = ["Streams"],
+    request_body = NewStream,
+    responses(
+        (status = 201, description = "Successfully created stream", body = Stream),
+        ApiError,
+    )
+)]
 pub async fn create_stream(
     State(repo): State<StreamRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
-    Json(new): Json<NewStream>,
+    ValidatedJson(new): ValidatedJson<NewStream>,
 ) -> Result<impl IntoResponse, ApiError> {
     user.has_org_write_access(&org_id)?;
 
@@ -55,11 +81,20 @@ pub async fn create_stream(
     Ok((StatusCode::CREATED, Json(stream)))
 }
 
+/// Update stream
+#[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}",
+    tags = ["Streams"],
+    request_body = NewStream,
+    responses(
+        (status = 200, description = "Successfully updated stream", body = Stream),
+        ApiError,
+    )
+)]
 pub async fn update_stream(
     State(repo): State<StreamRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
-    Json(update): Json<NewStream>,
+    ValidatedJson(update): ValidatedJson<NewStream>,
 ) -> ApiResult<Stream> {
     user.has_org_write_access(&org_id)?;
 
@@ -77,6 +112,14 @@ pub async fn update_stream(
     Ok(Json(stream))
 }
 
+/// Delete stream
+#[utoipa::path(delete, path = "/organizations/{org_id}/projects/{proj_id}/streams/{stream_id}",
+    tags = ["Streams"],
+    responses(
+        (status = 200, description = "Successfully deleted stream", body = StreamId),
+        ApiError,
+    )
+)]
 pub async fn remove_stream(
     State(repo): State<StreamRepository>,
     user: Box<dyn Authenticated>,

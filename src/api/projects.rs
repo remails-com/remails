@@ -25,9 +25,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
 ///
 /// List all projects under the requested organization the authenticated user has access to
 #[utoipa::path(get, path = "/organizations/{org_id}/projects",
-    params(
-        OrganizationId
-    ),
+    tags = ["Projects"],
     responses(
         (status = 200, description = "Successfully fetched projects", body = [Project]),
         ApiError,
@@ -35,7 +33,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Project>> {
     user.has_org_read_access(&org_id)?;
@@ -56,9 +54,7 @@ pub async fn list_projects(
 ///
 /// Update details about that project
 #[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}",
-    params(
-        OrganizationId, ProjectId
-    ),
+    tags = ["Projects"],
     request_body = NewProject,
     responses(
         (status = 200, description = "Project successfully updated", body = Project),
@@ -89,9 +85,7 @@ pub async fn update_project(
 ///
 /// Create a new project under the specified organization
 #[utoipa::path(post, path = "/organizations/{org_id}/projects",
-    params(
-        OrganizationId
-    ),
+    tags = ["Projects"],
     request_body = NewProject,
     responses(
         (status = 201, description = "Project created successfully", body = Project),
@@ -101,7 +95,7 @@ pub async fn update_project(
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     user: Box<dyn Authenticated>,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, ApiError> {
     user.has_org_write_access(&org_id)?;
@@ -121,9 +115,7 @@ pub async fn create_project(
 
 /// Delete a project
 #[utoipa::path(delete, path = "/organizations/{org_id}/projects/{proj_id}",
-    params(
-        OrganizationId, ProjectId
-    ),
+    tags = ["Projects"],
     responses(
         (status = 200, description = "Project successfully deleted", body = ProjectId),
         ApiError,

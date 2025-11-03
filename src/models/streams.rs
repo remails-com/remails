@@ -1,6 +1,7 @@
 use crate::models::{Error, OrganizationId, ProjectId, projects};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tracing::debug;
@@ -26,7 +27,7 @@ use uuid::Uuid;
 #[into_params(names("stream_id"))]
 pub struct StreamId(Uuid);
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct Stream {
     id: StreamId,
@@ -42,9 +43,11 @@ impl Stream {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct NewStream {
+    #[garde(length(min = 1, max = 256))]
+    #[schema(min_length = 1, max_length = 256)]
     pub name: String,
 }
 

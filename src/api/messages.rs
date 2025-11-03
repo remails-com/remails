@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ApiResult};
 use crate::{
-    api::{ApiState, auth::Authenticated, validation::ValidatedJson},
+    api::{
+        ApiState,
+        auth::Authenticated,
+        validation::{ValidatedJson, ValidatedQuery},
+    },
     bus::client::BusClient,
     handler::RetryConfig,
     models::{
@@ -12,7 +16,7 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     response::IntoResponse,
 };
 use garde::Validate;
@@ -24,12 +28,16 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
-    OpenApiRouter::new().routes(routes!(create_message))
+    OpenApiRouter::new()
+        .routes(routes!(create_message, list_messages))
+        .routes(routes!(get_message, remove_message))
+        .routes(routes!(retry_now))
 }
 
+/// Contains either a simple email address or a name and email address
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(untagged)]
-enum EmailAddress {
+enum JsonEmailAddress {
     #[schema(title = "AddressOnly", format = "Email")]
     AddressOnly(#[garde(email)] String),
     #[schema(title = "WithName")]
@@ -43,20 +51,20 @@ enum EmailAddress {
     },
 }
 
-impl EmailAddress {
+impl JsonEmailAddress {
     fn get_mail_address(&self) -> &String {
         match self {
-            EmailAddress::AddressOnly(address) => address,
-            EmailAddress::WithName { address, .. } => address,
+            JsonEmailAddress::AddressOnly(address) => address,
+            JsonEmailAddress::WithName { address, .. } => address,
         }
     }
 }
 
-impl<'a> From<EmailAddress> for mail_builder::headers::address::Address<'a> {
-    fn from(address: EmailAddress) -> Self {
+impl<'a> From<JsonEmailAddress> for mail_builder::headers::address::Address<'a> {
+    fn from(address: JsonEmailAddress) -> Self {
         match address {
-            EmailAddress::AddressOnly(address) => address.into(),
-            EmailAddress::WithName { name, address } => (name, address).into(),
+            JsonEmailAddress::AddressOnly(address) => address.into(),
+            JsonEmailAddress::WithName { name, address } => (name, address).into(),
         }
     }
 }
@@ -64,21 +72,24 @@ impl<'a> From<EmailAddress> for mail_builder::headers::address::Address<'a> {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(untagged)]
 enum EmailAddresses {
-    Singular(#[garde(dive)] EmailAddress),
+    Singular(#[garde(dive)] JsonEmailAddress),
     /// At most 10 recipients
-    Multiple(#[garde(length(min = 1, max = 10))] Vec<EmailAddress>),
+    Multiple(#[garde(length(min = 1, max = 10))] Vec<JsonEmailAddress>),
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EmailParameters {
     #[garde(dive)]
-    from: EmailAddress,
+    from: JsonEmailAddress,
     #[garde(dive)]
     to: EmailAddresses,
     #[schema[max_length = 500]]
     #[garde(length(max = 500))]
     subject: String,
+    // In case we ever increase the size limits or introduce the option to add attachments,
+    // we have to take care the global axum request size limitation is adopted accordingly.
+    // It's currently limited to 120,000 bytes
     #[schema[max_length = 50_000]]
     #[garde(length(bytes, max = 50_000))]
     text_body: Option<String>,
@@ -92,7 +103,7 @@ pub struct EmailParameters {
     #[garde(length(max = 50), inner(length(max = 500)))]
     references: Option<Vec<String>>,
     #[garde(dive)]
-    reply_to: Option<EmailAddress>,
+    reply_to: Option<JsonEmailAddress>,
 }
 
 impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
@@ -110,6 +121,7 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
 #[utoipa::path(
     post,
     path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+    tags = ["Messages"],
     request_body = EmailParameters,
     responses(
         (status = 201, description = "Message created successfully", body = ApiMessageMetadata),
@@ -236,10 +248,26 @@ pub async fn create_message(
     Ok((StatusCode::CREATED, Json(message)))
 }
 
+/// List all email messages
+///
+/// By default, the last 10 messages are returned. To retrieve more on a single request, please set
+/// the query parameter `limit` between 1 and 100. Pagination is achieved via the `before` query
+/// parameter, i.e., to get older messages, please set the `before` param to the oldest `created_at`
+/// of the previous request.
+#[utoipa::path(
+    get,
+    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+    params(MessageFilter),
+    tags = ["Messages"],
+    responses(
+        (status = 200, description = "Successfully fetched messages", body = [ApiMessageMetadata]),
+        ApiError
+    )
+)]
 pub async fn list_messages(
     State(repo): State<MessageRepository>,
     Path((org_id, project_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
-    Query(filter): Query<MessageFilter>,
+    ValidatedQuery(filter): ValidatedQuery<MessageFilter>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
     user.has_org_read_access(&org_id)?;
@@ -260,6 +288,20 @@ pub async fn list_messages(
     Ok(Json(messages))
 }
 
+/// Get full email message by ID
+///
+/// The message data is truncated to 10,000 ASCII characters.
+/// The `is_truncated` field in the response indicates weather the content
+/// was actually truncated or did fit into the 10,000-character limit.
+#[utoipa::path(
+    get,
+    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+    tags = ["Messages"],
+    responses(
+        (status = 200, description = "Successfully fetched message", body = ApiMessage),
+        ApiError
+    )
+)]
 pub async fn get_message(
     State(repo): State<MessageRepository>,
     Path((org_id, project_id, stream_id, message_id)): Path<(
@@ -288,6 +330,16 @@ pub async fn get_message(
     Ok(Json(message))
 }
 
+/// Delete email message
+#[utoipa::path(
+    delete,
+    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+    tags = ["Messages"],
+    responses(
+        (status = 200, description = "Successfully deleted message", body = MessageId),
+        ApiError
+    )
+)]
 pub async fn remove_message(
     State(repo): State<MessageRepository>,
     Path((org_id, project_id, stream_id, message_id)): Path<(
@@ -297,10 +349,11 @@ pub async fn remove_message(
         MessageId,
     )>,
     user: Box<dyn Authenticated>,
-) -> ApiResult<()> {
+) -> ApiResult<MessageId> {
     user.has_org_write_access(&org_id)?;
 
-    repo.remove(org_id, project_id, stream_id, message_id)
+    let id = repo
+        .remove(org_id, project_id, stream_id, message_id)
         .await?;
 
     debug!(
@@ -312,9 +365,23 @@ pub async fn remove_message(
         "removed message",
     );
 
-    Ok(Json(()))
+    Ok(Json(id))
 }
 
+/// Retry email message
+///
+/// This will trigger a retry.
+/// It will try sending the message to all recipients that the message wasn't successfully delivered
+/// yet and that did not indicate a permanent failure on an earlier try.
+#[utoipa::path(
+    put,
+    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
+    tags = ["Messages"],
+    responses(
+        (status = 200, description = "Successfully initiated retry"),
+        ApiError
+    )
+)]
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
     State(bus_client): State<Arc<BusClient>>,
@@ -381,6 +448,7 @@ mod tests {
     use ppp::v2::WriteToHeader;
     use serde_json::json;
     use sqlx::PgPool;
+    use crate::api::error::ApiErrorResponse;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -567,6 +635,51 @@ mod tests {
     async fn test_messages_no_access_not_logged_in(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
         test_messages_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "streams",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_fetch_message_validation(pool: PgPool) {
+        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+
+        let too_low_limit = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?limit=0"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(too_low_limit.status(), StatusCode::BAD_REQUEST);
+        let _: ApiErrorResponse = deserialize_body(too_low_limit.into_body()).await;
+
+        let too_high_limit = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?limit=101"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(too_high_limit.status(), StatusCode::BAD_REQUEST);
+        let _: ApiErrorResponse = deserialize_body(too_high_limit.into_body()).await;
+
+        let invalid_timestamp = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?before=invalid_time"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(invalid_timestamp.status(), StatusCode::BAD_REQUEST);
+        let _: ApiErrorResponse = deserialize_body(invalid_timestamp.into_body()).await;
     }
 
     #[sqlx::test(fixtures(

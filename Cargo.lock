@@ -885,6 +885,7 @@ dependencies = [
 [[package]]
 name = "email_address"
 version = "0.2.9"
+source = "git+https://github.com/pohlm01/rust-email_address.git#d07e290ae7f71a57a875aa1f057957c6eb641edf"
 dependencies = [
  "serde",
  "utoipa",
@@ -3151,7 +3152,6 @@ dependencies = [
  "url",
  "utoipa",
  "utoipa-axum",
- "utoipa-redoc",
  "utoipa-scalar",
  "uuid",
 ]
@@ -4193,6 +4193,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
  "iri-string",
  "mime",
  "pin-project-lite",
@@ -4486,18 +4487,6 @@ dependencies = [
  "syn",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "utoipa-redoc"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6427547f6db7ec006cbbef95f7565952a16f362e298b416d2d497d9706fef72d"
-dependencies = [
- "axum",
- "serde",
- "serde_json",
- "utoipa",
 ]
 
 [[package]]

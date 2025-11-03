@@ -1,8 +1,9 @@
 use crate::{
     api::{
-        RemailsConfig,
+        ApiState, RemailsConfig,
         auth::Authenticated,
         error::{ApiError, ApiResult},
+        validation::ValidatedJson,
     },
     handler::dns::{DnsResolver, DomainVerificationStatus},
     models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
@@ -15,6 +16,14 @@ use axum::{
 use http::StatusCode;
 use serde::Deserialize;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(create_domain, list_domains))
+        .routes(routes!(get_domain, delete_domain))
+        .routes(routes!(verify_domain))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct DomainPath {
@@ -29,13 +38,26 @@ pub struct SpecificDomainPath {
     domain_id: DomainId,
 }
 
-pub async fn create_domain(
+/// Create a new domain
+///
+/// TODO: utoipa does not support registering the same handler with to different paths yet.
+///  Looking at #344, I did not spend effort making this possible.
+#[utoipa::path(post, path = "/organizations/{org_id}/domains",
+    tags = ["Domains"],
+    params(OrganizationId),
+    request_body = NewDomain,
+    responses(
+        (status = 201, description = "Domain successfully created", body = ApiDomain),
+        ApiError,
+    )
+)]
+pub(crate) async fn create_domain(
     State(repo): State<DomainRepository>,
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
-    Json(new): Json<NewDomain>,
+    ValidatedJson(new): ValidatedJson<NewDomain>,
 ) -> Result<impl IntoResponse, ApiError> {
     user.has_org_write_access(&org_id)?;
 
@@ -55,7 +77,19 @@ pub async fn create_domain(
     Ok((StatusCode::CREATED, Json(domain)))
 }
 
-pub async fn list_domains(
+/// List all domains
+///
+/// TODO: utoipa does not support registering the same handler with to different paths yet.
+///  Looking at #344, I did not spend effort making this possible.
+#[utoipa::path(get, path = "/organizations/{org_id}/domains",
+    tags = ["Domains"],
+    params(OrganizationId),
+    responses(
+        (status = 200, description = "Successfully fetched domains", body = [ApiDomain]),
+        ApiError,
+    )
+)]
+pub(crate) async fn list_domains(
     State(repo): State<DomainRepository>,
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
@@ -85,6 +119,18 @@ pub async fn list_domains(
     Ok(Json(verified_domains))
 }
 
+/// Get domain by ID
+///
+/// TODO: utoipa does not support registering the same handler with to different paths yet.
+///  Looking at #344, I did not spend effort making this possible.
+#[utoipa::path(get, path = "/organizations/{org_id}/domains/{domain_id}",
+    tags = ["Domains"],
+    params(OrganizationId, DomainId),
+    responses(
+        (status = 200, description = "Successfully fetched domain", body = ApiDomain),
+        ApiError,
+    )
+)]
 pub async fn get_domain(
     State(repo): State<DomainRepository>,
     State(resolver): State<DnsResolver>,
@@ -116,6 +162,18 @@ pub async fn get_domain(
     Ok(Json(domain))
 }
 
+/// Delete domain
+///
+/// TODO: utoipa does not support registering the same handler with to different paths yet.
+///  Looking at #344, I did not spend effort making this possible.
+#[utoipa::path(delete, path = "/organizations/{org_id}/domains/{domain_id}",
+    tags = ["Domains"],
+    params(OrganizationId, DomainId),
+    responses(
+        (status = 200, description = "Successfully deleted domain", body = DomainId),
+        ApiError,
+    )
+)]
 pub async fn delete_domain(
     State(repo): State<DomainRepository>,
     user: Box<dyn Authenticated>,
@@ -140,6 +198,20 @@ pub async fn delete_domain(
     Ok(Json(domain_id))
 }
 
+/// Verify domain
+///
+/// Checks if the various DNS entries required or recommended for sending are set correctly.
+///
+/// TODO: utoipa does not support registering the same handler with to different paths yet.
+///  Looking at #344, I did not spend effort making this possible.
+#[utoipa::path(post, path = "/organizations/{org_id}/domains/{domain_id}/verify",
+    tags = ["Domains"],
+    params(OrganizationId, DomainId),
+    responses(
+        (status = 200, description = "Successfully verified domain", body = DomainVerificationStatus),
+        ApiError,
+    )
+)]
 pub(super) async fn verify_domain(
     State(repo): State<DomainRepository>,
     State(resolver): State<DnsResolver>,

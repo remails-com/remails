@@ -27,14 +27,27 @@ use uuid::Uuid;
 pub struct ApiUserId(Uuid);
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    ToSchema,
+    IntoParams,
 )]
+#[into_params(names("totp_id"))]
 pub struct TotpId(Uuid);
 
-#[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema)]
+#[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema, Validate)]
 #[debug("*****")]
 #[serde(transparent)]
-pub struct Password(String);
+#[schema(format = Password)]
+pub struct Password(#[garde(length(min = 10, max = 256))] String);
 
 impl Password {
     pub fn generate_hash(&self) -> String {
@@ -51,7 +64,17 @@ impl Password {
 }
 
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type, ToSchema,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Display,
+    PartialEq,
+    PartialOrd,
+    sqlx::Type,
+    ToSchema,
+    Validate,
 )]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "role", rename_all = "snake_case")]
@@ -101,36 +124,55 @@ pub struct ApiUser {
     pub password_enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct ApiUserUpdate {
+    #[garde(length(min = 1, max = 100))]
     pub name: String,
+    #[garde(skip)]
     pub email: EmailAddress,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct PasswordUpdate {
+    #[garde(dive)]
+    #[schema(min_length = 10, max_length = 256)]
     pub new_password: Password,
+    #[garde(dive)]
+    #[schema(min_length = 10, max_length = 256)]
     pub current_password: Password,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct TotpFinishEnroll {
-    #[garde(pattern("^[0-9]{6}$"))]
-    code: String,
-    #[garde(length(max = 100))]
+    #[garde(dive)]
+    code: TotpCode,
+    #[schema(max_length = 500)]
+    #[garde(length(max = 500))]
+    #[serde(default)]
     description: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Deserialize, Validate, Debug, ToSchema)]
+#[serde(transparent)]
+#[schema(pattern = "^[0-9]{6}$")]
+pub struct TotpCode(#[garde(pattern("^[0-9]{6}$"))] String);
+
+impl AsRef<str> for TotpCode {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
-pub struct TotpCode {
+pub struct TotpCodeDetails {
     pub id: TotpId,
     pub description: String,
     pub last_used: Option<DateTime<Utc>>,
 }
 
-impl TotpCode {
+impl TotpCodeDetails {
     pub fn id(&self) -> &TotpId {
         &self.id
     }
@@ -291,7 +333,7 @@ impl ApiUserRepository {
         &self,
         user_id: &ApiUserId,
         finish: TotpFinishEnroll,
-    ) -> Result<TotpCode, Error> {
+    ) -> Result<TotpCodeDetails, Error> {
         let mut tx = self.pool.begin().await?;
 
         let url = sqlx::query_scalar!(
@@ -305,12 +347,12 @@ impl ApiUserRepository {
 
         let totp = TOTP::from_url(url)?;
 
-        if !totp.check(&finish.code, Utc::now().timestamp() as u64) {
+        if !totp.check(finish.code.as_ref(), Utc::now().timestamp() as u64) {
             return Err(Error::BadRequest("Invalid TOTP code".to_string()));
         }
 
         let code = sqlx::query_as!(
-            TotpCode,
+            TotpCodeDetails,
             r#"
             UPDATE totp SET state = 'enabled',
                             description = $2
@@ -406,9 +448,9 @@ impl ApiUserRepository {
         }
     }
 
-    pub async fn totp_codes(&self, user_id: &ApiUserId) -> Result<Vec<TotpCode>, Error> {
+    pub async fn totp_codes(&self, user_id: &ApiUserId) -> Result<Vec<TotpCodeDetails>, Error> {
         Ok(sqlx::query_as!(
-            TotpCode,
+            TotpCodeDetails,
             r#"
             SELECT id, description, last_used FROM totp
             WHERE state = 'enabled'

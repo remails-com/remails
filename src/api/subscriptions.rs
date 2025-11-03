@@ -1,7 +1,9 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
         error::{ApiError, ApiResult},
+        validation::ValidatedJson,
     },
     models::{ApiUser, OrganizationId},
     moneybird::{MoneyBird, MoneybirdWebhookPayload, SubscriptionStatus},
@@ -12,11 +14,26 @@ use axum::{
 };
 use tracing::debug;
 use url::Url;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(get_subscription))
+        .routes(routes!(get_sales_link))
+        .routes(routes!(moneybird_webhook))
+}
+
+/// Get current subscription status
+#[utoipa::path(get, path = "/organizations/{org_id}/subscription",
+    tags = ["internal", "Subscription"],
+    responses(
+        (status = 200, description = "Successfully fetched subscription status", body = SubscriptionStatus),
+        ApiError
+))]
 pub async fn get_subscription(
     State(moneybird): State<MoneyBird>,
     user: ApiUser,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
 ) -> ApiResult<SubscriptionStatus> {
     user.has_org_read_access(&org_id)?;
 
@@ -29,10 +46,20 @@ pub async fn get_subscription(
     Ok(Json(moneybird.refresh_subscription_status(org_id).await?))
 }
 
+/// Get sales link
+///
+/// Creates a new 'sales link' in Moneybird with the [contact id](crate::MoneybirdContactId) prefilled
+/// and returns it
+#[utoipa::path(get, path = "/organizations/{org_id}/subscription/new",
+    tags = ["internal", "Subscription"],
+    responses(
+        (status = 200, description = "Successfully created sales link", body = SubscriptionStatus),
+        ApiError
+))]
 pub async fn get_sales_link(
     State(moneybird): State<MoneyBird>,
     user: ApiUser,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
 ) -> ApiResult<Url> {
     user.has_org_read_access(&org_id)?;
 
@@ -45,9 +72,17 @@ pub async fn get_sales_link(
     Ok(Json(moneybird.create_sales_link(org_id).await?))
 }
 
+/// Moneybird webhook endpoint
+#[utoipa::path(post, path = "/webhook/moneybird",
+    request_body = MoneybirdWebhookPayload,
+    tags = ["internal", "Subscription"],
+    responses(
+        (status = 200, description = "Successfully handled webhook"),
+        ApiError
+))]
 pub async fn moneybird_webhook(
     State(moneybird): State<MoneyBird>,
-    Json(payload): Json<MoneybirdWebhookPayload>,
+    ValidatedJson(payload): ValidatedJson<MoneybirdWebhookPayload>,
 ) -> Result<(), ApiError> {
     debug!("received moneybird webhook");
     moneybird.webhook_handler(payload).await?;

@@ -1,6 +1,7 @@
 use crate::models::Password;
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use std::str::FromStr;
@@ -34,14 +35,36 @@ pub struct ProductId(pub(super) String);
 pub(super) struct RecurringSalesInvoiceId(pub(super) String);
 
 #[derive(
-    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+    Debug,
+    Clone,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    Type,
+    ToSchema,
+    Validate,
 )]
-pub(super) struct AdministrationId(pub(super) String);
+pub(super) struct AdministrationId(#[garde(length(min = 1, max = 100))] pub(super) String);
 
 #[derive(
-    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+    Debug,
+    Clone,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    Type,
+    ToSchema,
+    Validate,
 )]
-pub(super) struct WebhookId(pub(super) String);
+pub(super) struct WebhookId(#[garde(length(min = 1, max = 100))] pub(super) String);
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Contact {
@@ -175,17 +198,24 @@ pub struct Subscription<EndDate = Option<NaiveDate>> {
 }
 
 /// This models the content of a webhook we received from Moneybird
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct MoneybirdWebhookPayload {
-    // The webhook_id is not present in the `test_webhook`, otherwise it is present
+    /// The webhook_id is not present in the `test_webhook`, otherwise it is present
     #[serde(default)]
+    #[garde(dive)]
     pub(super) webhook_id: Option<WebhookId>,
+    #[garde(dive)]
     pub(super) administration_id: AdministrationId,
+    #[garde(dive)]
     pub(super) action: Action,
     // Strangely, the `test_webhook` does not call this `webhook_token`, but `token`
     #[serde(alias = "token")]
+    #[garde(dive)]
+    #[schema(min_length = 10, max_length = 256)]
     pub(super) webhook_token: Password,
+    #[garde(dive)]
     pub(super) entity_type: EntityType,
+    #[garde(skip)]
     pub(super) entity: serde_json::Value,
 }
 
@@ -198,16 +228,16 @@ pub(super) struct Webhook {
     pub(super) token: Password,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, ToSchema, Validate)]
 pub(super) enum EntityType {
     Contact,
     Subscription,
     RecurringSalesInvoice,
     #[serde(untagged)]
-    Unknown(String),
+    Unknown(#[garde(length(min = 1, max = 100))] String),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Action {
     SubscriptionCancelled,
@@ -217,7 +247,7 @@ pub(super) enum Action {
     SubscriptionUpdated,
     TestWebhook,
     #[serde(untagged)]
-    Unknown(String),
+    Unknown(#[garde(length(min = 1, max = 100))] String),
 }
 
 #[derive(Debug, thiserror::Error)]

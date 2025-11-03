@@ -1,8 +1,8 @@
 use crate::{
-    api::{ApiState, error::ApiError, whoami::WhoamiResponse},
+    api::{ApiState, error::ApiError, validation::ValidatedJson, whoami::WhoamiResponse},
     models::{
         ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
-        OrganizationId, Password, Role,
+        OrganizationId, Password, Role, TotpCode,
     },
 };
 use axum::{
@@ -18,6 +18,7 @@ use base64ct::Encoding;
 use chrono::{DateTime, Duration, Utc};
 use cookie::{Cookie, SameSite};
 use email_address::EmailAddress;
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 #[cfg(not(test))]
@@ -25,6 +26,7 @@ use std::net::SocketAddr;
 #[cfg(not(test))]
 use tracing::error;
 use tracing::{debug, trace, warn};
+use utoipa::ToSchema;
 
 static SESSION_COOKIE_NAME: &str = "SESSION";
 
@@ -197,16 +199,18 @@ impl UserCookie {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema, Validate)]
 pub(super) struct PasswordLogin {
+    #[garde(skip)]
     email: EmailAddress,
+    #[garde(dive)]
     password: Password,
 }
 
 pub(super) async fn password_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
-    Json(login_attempt): Json<PasswordLogin>,
+    ValidatedJson(login_attempt): ValidatedJson<PasswordLogin>,
 ) -> Result<Response, ApiError> {
     repo.check_password(&login_attempt.email, login_attempt.password)
         .await?;
@@ -231,9 +235,9 @@ pub(super) async fn totp_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
     user: MfaPending,
-    Json(totp_code): Json<String>,
+    ValidatedJson(totp_code): ValidatedJson<TotpCode>,
 ) -> Result<Response, ApiError> {
-    if !repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
+    if !repo.check_totp_code(&user.id(), totp_code.as_ref()).await? {
         return Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response());
     }
 
@@ -251,17 +255,22 @@ pub(super) async fn totp_login(
         .into_response())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate, ToSchema)]
 pub(super) struct PasswordRegister {
+    #[garde(length(min = 1, max = 256))]
+    #[schema(min_length = 1, max_length = 256)]
     name: String,
+    #[garde(skip)]
     email: EmailAddress,
+    #[garde(dive)]
+    #[schema(min_length = 10, max_length = 256)]
     password: Password,
 }
 
 pub(super) async fn password_register(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
-    Json(register_attempt): Json<PasswordRegister>,
+    ValidatedJson(register_attempt): ValidatedJson<PasswordRegister>,
 ) -> Result<Response, ApiError> {
     let new = NewApiUser {
         email: register_attempt.email,
@@ -568,7 +577,7 @@ mod tests {
     use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
-        models::TotpCode,
+        models::TotpCodeDetails,
     };
     use axum::body::Body;
     use serde_json::json;
@@ -601,7 +610,7 @@ mod tests {
                 serialize_body(json!({
                     "name": "New User",
                     "email": "test-api@new-user",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -631,7 +640,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-api@new-user",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -662,7 +671,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -708,7 +717,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 0);
 
         // finish 2FA sign up
@@ -735,7 +744,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes[0].description, "test code");
         assert!(codes[0].last_used.is_none());
 
@@ -752,7 +761,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -784,7 +793,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // Still can't access API routes
         let response = server.get("/api/organizations").await.unwrap();
@@ -812,7 +821,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 1);
         assert_eq!(codes[0].description, "test code");
         assert!(codes[0].last_used.is_some());
@@ -833,7 +842,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 0);
 
         // logout
@@ -849,7 +858,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -882,7 +891,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -946,7 +955,7 @@ mod tests {
                     "/api/login/password",
                     serialize_body(json!({
                         "email": "test-totp-rate-limit@user-4",
-                        "password": "wrong"
+                        "password": "wrongwrong"
                     })),
                 )
                 .await
@@ -960,7 +969,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -974,7 +983,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await

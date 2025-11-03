@@ -81,8 +81,9 @@ impl WhoamiResponse {
 ///
 /// Returns information about the currently logged-in user or API key used
 #[utoipa::path(get, path = "/whoami",
+    tags = ["Misc"],
     responses(
-        (status = 200, description = "Organization successfully deleted", body = WhoamiResponse)
+        (status = 200, description = "Current authentication status", body = WhoamiResponse)
     )
 )]
 pub async fn whoami(user: Option<ApiUser>, mfa_pending: Option<MfaPending>) -> Response {

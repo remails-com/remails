@@ -1,5 +1,10 @@
 use crate::{api::oauth, models, models::Error};
-use axum::{Json, extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::rejection::{JsonRejection, QueryRejection},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::Serialize;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -35,10 +40,17 @@ pub enum ApiError {
     /// Bad Gateway
     #[response(status = BAD_GATEWAY)]
     BadGateway(ApiErrorResponse),
+    /// Payload Too Large
+    #[response(status = PAYLOAD_TOO_LARGE)]
+    PayloadToLarge(ApiErrorResponse),
+    /// Request Timeout
+    #[response(status = REQUEST_TIMEOUT)]
+    RequestTimeout(ApiErrorResponse),
 }
 
 #[derive(Serialize, utoipa::ToResponse, utoipa::ToSchema)]
 #[response(description = "API error details")]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct ApiErrorResponse {
     description: String,
     reference: Uuid,
@@ -54,6 +66,32 @@ impl ApiError {
 
         ApiError::Unauthorized(ApiErrorResponse {
             description: "Unauthorized".to_string(),
+            reference,
+        })
+    }
+
+    pub fn request_timeout() -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: Request timeout"
+        );
+
+        ApiError::RequestTimeout(ApiErrorResponse {
+            description: "Request timeout".to_string(),
+            reference,
+        })
+    }
+
+    pub fn payload_too_large() -> Self {
+        let reference = Uuid::new_v4();
+        warn!(
+            error_reference = reference.to_string(),
+            "API server error: Payload too large"
+        );
+
+        ApiError::PayloadToLarge(ApiErrorResponse {
+            description: "Payload too large".to_string(),
             reference,
         })
     }
@@ -219,8 +257,8 @@ impl From<JsonRejection> for ApiError {
     }
 }
 
-impl From<serde_json::Error> for ApiError {
-    fn from(err: serde_json::Error) -> Self {
+impl From<QueryRejection> for ApiError {
+    fn from(err: QueryRejection) -> Self {
         let reference = Uuid::new_v4();
         warn!(
             error_reference = reference.to_string(),
@@ -228,6 +266,21 @@ impl From<serde_json::Error> for ApiError {
         );
 
         ApiError::BadRequest(ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        })
+    }
+}
+
+impl From<serde_json::Error> for ApiError {
+    fn from(err: serde_json::Error) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        ApiError::InternalServerError(ApiErrorResponse {
             description: err.to_string(),
             reference,
         })
@@ -287,6 +340,8 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized(body) => (StatusCode::UNAUTHORIZED, Json(body)),
             ApiError::PreconditionFailed(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
             ApiError::BadGateway(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+            ApiError::PayloadToLarge(body) => (StatusCode::PAYLOAD_TOO_LARGE, Json(body)),
+            ApiError::RequestTimeout(body) => (StatusCode::REQUEST_TIMEOUT, Json(body)),
         }
         .into_response()
     }

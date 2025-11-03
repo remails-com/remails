@@ -10,9 +10,9 @@ VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', 'test-api@user-2', 'Test API Use
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('94a98d6f-1ec0-49d2-a951-92dc0ff3042a', '5d55aec5-136a-407c-952f-5348d4398204', 'admin');
 
-INSERT INTO api_users (id, email, name, password_hash) -- user 3: not in any organization, password is unsecure
+INSERT INTO api_users (id, email, name, password_hash) -- user 3: not in any organization, password is unsecure123
 VALUES ('54432300-128a-46a0-8a83-fe39ce3ce5ef', 'test-api@user-3', 'Test API User 3',
-        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+        '$argon2id$v=19$m=16,t=2,p=1$VlZ0SUUzdXRBZVFldEZpbQ$rNhHR3o94Zw1B4YVqty6xQ');
 
 INSERT INTO api_users (id, email, name) -- user 4: maintainer of org 1
 VALUES ('c33dbd88-43ed-404b-9367-1659a73c8f3a', 'test-api@user-4', 'Test API User 4');
@@ -27,14 +27,14 @@ VALUES ('703bf1cb-7a3e-4640-83bf-1b07ce18cd2e', '44729d9f-a7dc-4226-b412-36a7537
 INSERT INTO api_users (id, email, name, global_role) -- super admin
 VALUES ('deadbeef-4e43-4a66-bbb9-fbcd4a933a34', 'sudo@remails', 'Super Admin', 'admin');
 
-INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
+INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure123
 VALUES ('820128b1-e08f-404d-ad08-e679a7d6b515', 'test-totp@user-4', 'TOTP API User user 4',
-        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+        '$argon2id$v=19$m=16,t=2,p=1$VlZ0SUUzdXRBZVFldEZpbQ$rNhHR3o94Zw1B4YVqty6xQ');
 
-INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure
+INSERT INTO api_users (id, email, name, password_hash) -- not in any organization, password is unsecure123
 VALUES ('672be18f-a89e-4a1d-adaa-45a0b4e2f350', 'test-totp-rate-limit@user-4',
         'TOTP API User user for rate limit testing',
-        '$argon2id$v=19$m=16,t=2,p=1$WWJQYkFxb0lXc0JkSHFDTw$4BYwZvcePs/l2WewT+TpcQ');
+        '$argon2id$v=19$m=16,t=2,p=1$VlZ0SUUzdXRBZVFldEZpbQ$rNhHR3o94Zw1B4YVqty6xQ');
 INSERT INTO totp (id, description, user_id, url, state, last_used)
 VALUES ('448f8b7c-e6b9-4038-ab73-bc35826fd5da', '', '672be18f-a89e-4a1d-adaa-45a0b4e2f350',
         'otpauth://totp/Remails:test-totp-rate-limit%40user-4?secret=CP32OBJWEI6FDV3Z7UDMAQT5YDYUS36L&algorithm=SHA256&issuer=Remails',
