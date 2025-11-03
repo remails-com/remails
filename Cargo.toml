@@ -35,7 +35,7 @@ load-fixtures = []
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.6", features = ["macros", "ws"] }
-axum-extra = { version = "0.10.3", features = ["cookie-private", "typed-header"] }
+axum-extra = { version = "0.12.1", features = ["cookie-private", "typed-header"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.11.1", features = ["serde"] }
@@ -52,7 +52,7 @@ tokio = { version = "1.48.0", features = ["full"] }
 tokio-rustls = "0.26.4"
 futures = "0.3.31"
 tokio-tungstenite = "0.28.0"
-tokio-util = { version = "0.7.16", features = ["io"] }
+tokio-util = { version = "0.7.17", features = ["io"] }
 tower = "0.5"
 tower-http = { version = "0.6.6", features = ["trace", "timeout"] }
 tracing = "0.1"
