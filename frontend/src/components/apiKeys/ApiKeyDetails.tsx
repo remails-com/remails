@@ -2,7 +2,6 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useApiKeys } from "../../hooks/useApiKeys.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useForm } from "@mantine/form";
-import { useEffect } from "react";
 import { Loader } from "../../Loader.tsx";
 import { ApiKey, KeyRole } from "../../types.ts";
 import { modals } from "@mantine/modals";
@@ -26,19 +25,10 @@ export default function ApiKeyDetails() {
 
   const form = useForm<FormValues>({
     initialValues: {
-      description: "",
-      role: "maintainer",
+      description: currentApiKey?.description ?? "",
+      role: currentApiKey?.role ?? "maintainer",
     },
   });
-
-  useEffect(() => {
-    form.setValues({
-      description: currentApiKey?.description || "",
-      role: currentApiKey?.role || "maintainer",
-    });
-    form.resetDirty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentApiKey]);
 
   if (!currentOrganization || !currentApiKey) {
     return <Loader />;
@@ -99,6 +89,7 @@ export default function ApiKeyDetails() {
     });
     dispatch({ type: "remove_api_key", apiKeyId: apiKey.id });
     dispatch({ type: "add_api_key", apiKey });
+    form.resetDirty();
   };
 
   return (

@@ -62,6 +62,7 @@ export default function Admin() {
     });
     dispatch({ type: "remove_organization", organizationId: currentOrganization.id });
     dispatch({ type: "add_organization", organization });
+    form.resetDirty();
   };
 
   return (

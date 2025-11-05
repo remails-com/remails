@@ -118,6 +118,7 @@ export default function ProjectSettings() {
     });
     dispatch({ type: "remove_project", projectId: currentProject.id });
     dispatch({ type: "add_project", project });
+    form.resetDirty();
   };
 
   return (
