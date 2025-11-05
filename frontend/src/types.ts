@@ -233,6 +233,8 @@ export type Action =
       error: RemailsError;
     };
 
+export type OrgBlockStatus = "not_blocked" | "no_sending" | "no_sending_or_receiving";
+
 export interface Organization {
   id: string;
   name: string;
@@ -243,6 +245,7 @@ export interface Organization {
   moneybird_contact_id: string | null;
   created_at: string;
   updated_at: string;
+  block_status: OrgBlockStatus;
 }
 
 export interface Project {

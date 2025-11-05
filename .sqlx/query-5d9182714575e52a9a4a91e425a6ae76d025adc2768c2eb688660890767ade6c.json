@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit,\n                   current_subscription\n            FROM organizations\n            WHERE ($1::uuid[] IS NULL OR id = ANY($1))\n            ORDER BY name\n            ",
+  "query": "\n            UPDATE organizations\n            SET block_status = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_reset,\n                remaining_rate_limit,\n                current_subscription,\n                block_status as \"block_status: OrgBlockStatus\"\n            ",
   "describe": {
     "columns": [
       {
@@ -57,11 +57,39 @@
         "ordinal": 10,
         "name": "current_subscription",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "UuidArray"
+        "Uuid",
+        {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
       ]
     },
     "nullable": [
@@ -75,8 +103,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "329ca3e168c2ecac61931d596c544f2a57a95a8c3027f194551bc5321dcbfdd7"
+  "hash": "5d9182714575e52a9a4a91e425a6ae76d025adc2768c2eb688660890767ade6c"
 }

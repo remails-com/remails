@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE organizations\n            SET name = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_reset,\n                remaining_rate_limit,\n                current_subscription\n            ",
+  "query": "\n            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 0, 0, now(), 0, now())\n            RETURNING id,\n                      name,\n                      total_message_quota,\n                      used_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit,\n                      current_subscription,\n                      block_status as \"block_status: OrgBlockStatus\"\n            ",
   "describe": {
     "columns": [
       {
@@ -57,11 +57,26 @@
         "ordinal": 10,
         "name": "current_subscription",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Varchar"
       ]
     },
@@ -76,8 +91,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "4d80cfb8b386c8e3592ae23f290f3dd6d8185e4c7e2f9ebb043869c30b7dfad2"
+  "hash": "62afa058ca514571c33d8ac34f4c686ccdb4ba8aa2a27aaf89d7a3ba66d64362"
 }

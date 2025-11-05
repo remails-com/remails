@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)\n            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())\n            RETURNING id,\n                      name,\n                      total_message_quota,\n                      used_message_quota,\n                      quota_reset,\n                      created_at,\n                      updated_at,\n                      moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                      rate_limit_reset,\n                      remaining_rate_limit,\n                      current_subscription\n            ",
+  "query": "\n            UPDATE organizations\n            SET name = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_reset,\n                remaining_rate_limit,\n                current_subscription,\n                block_status as \"block_status: OrgBlockStatus\"\n            ",
   "describe": {
     "columns": [
       {
@@ -57,10 +57,27 @@
         "ordinal": 10,
         "name": "current_subscription",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Varchar"
       ]
     },
@@ -75,8 +92,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ec38f706b8b729bd54a255ba014c9bf7b6c3887f5bd9da973cda25879e983283"
+  "hash": "aae48303660accde42380f42326db6cc4df7e80dedc4c008cb783fd076c9e028"
 }

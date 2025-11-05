@@ -4,8 +4,8 @@ use crate::{
         error::{ApiError, ApiResult},
     },
     models::{
-        ApiUser, ApiUserId, NewOrganization, Organization, OrganizationId, OrganizationMember,
-        OrganizationRepository, Role,
+        ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
+        OrganizationMember, OrganizationRepository, Role,
     },
 };
 use axum::{
@@ -204,6 +204,28 @@ pub async fn update_member_role(
     );
 
     Ok(Json(()))
+}
+
+pub async fn update_block_status(
+    Path(org_id): Path<OrganizationId>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser, // only users (super admins) are allowed to update block status
+    Json(block_status): Json<OrgBlockStatus>,
+) -> ApiResult<Organization> {
+    user.is_super_admin()
+        .then_some(())
+        .ok_or(ApiError::Forbidden)?;
+
+    let organization = repo.update_block_status(org_id, block_status).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        block_status = block_status.to_string(),
+        "updated organization block status",
+    );
+
+    Ok(Json(organization))
 }
 
 #[cfg(test)]

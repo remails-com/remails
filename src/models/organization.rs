@@ -32,12 +32,11 @@ impl OrganizationId {
     }
 }
 
-/// If `OrgBlockStatus` is not NULL, we assume the organization is not allowed to send emails
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
 )]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "role", rename_all = "snake_case")]
+#[sqlx(type_name = "org_block_status", rename_all = "snake_case")]
 pub enum OrgBlockStatus {
     NotBlocked = 0,
     NoSending = 1,
@@ -371,6 +370,39 @@ impl OrganizationRepository {
         .fetch_one(&self.pool)
         .await?
         .into())
+    }
+
+    pub async fn update_block_status(
+        &self,
+        org_id: OrganizationId,
+        block_status: OrgBlockStatus,
+    ) -> Result<Organization, Error> {
+        Ok(sqlx::query_as!(
+            PgOrganization,
+            r#"
+            UPDATE organizations
+            SET block_status = $2
+            WHERE id = $1
+            RETURNING
+                id,
+                name,
+                total_message_quota,
+                used_message_quota,
+                quota_reset,
+                created_at,
+                updated_at,
+                moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                rate_limit_reset,
+                remaining_rate_limit,
+                current_subscription,
+                block_status as "block_status: OrgBlockStatus"
+            "#,
+            *org_id,
+            block_status as OrgBlockStatus,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()?)
     }
 }
 
