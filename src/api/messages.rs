@@ -345,7 +345,7 @@ mod tests {
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
         bus::client::BusMessage,
-        models::{MessageStatus, Role},
+        models::{MessageStatus, OrganizationRepository, Role},
         test::TestStreams,
     };
     use axum::body::Body;
@@ -827,8 +827,19 @@ mod tests {
         server.use_api_key(org_1, Role::ReadOnly).await;
         let response = try_post(&server).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
 
-    // TODO: test messages from the API are attempted to be delivered immediately
-    // maybe test this in test.rs?
+        // API keys cannot create emails when organization has been blocked
+        server.set_user(Some(user_4));
+        server.use_api_key(org_1, Role::Maintainer).await;
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED); // not yet blocked
+
+        let organizations = OrganizationRepository::new(pool);
+        organizations
+            .update_block_status(org_1, crate::models::OrgBlockStatus::NoSendingOrReceiving)
+            .await
+            .unwrap();
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN); // blocked
+    }
 }

@@ -879,7 +879,8 @@ mod test {
     use super::*;
     use crate::{
         models::{
-            ApiKeyRepository, ApiKeyRequest, Role, SmtpCredentialRepository, SmtpCredentialRequest,
+            ApiKeyRepository, ApiKeyRequest, OrganizationRepository, Role,
+            SmtpCredentialRepository, SmtpCredentialRequest,
         },
         test::TestStreams,
     };
@@ -1093,5 +1094,68 @@ mod test {
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
         assert_eq!(fetched_message.metadata.recipients, expected);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "streams",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_blocked_checks(pool: PgPool) {
+        let organizations = OrganizationRepository::new(pool.clone());
+        let messages = MessageRepository::new(pool.clone());
+
+        let (org_id, _proj_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
+
+        // org 1 starts out as Not Blocked
+        let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send
+        assert_eq!(message.id(), message_id);
+
+        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+
+        // set org 1 to No Sending
+        organizations
+            .update_block_status(org_id, OrgBlockStatus::NoSending)
+            .await
+            .unwrap();
+
+        let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
+        assert!(matches!(err, Error::NotFound(_)));
+
+        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+
+        // set org 1 to No Sending Or Receiving
+        organizations
+            .update_block_status(org_id, OrgBlockStatus::NoSendingOrReceiving)
+            .await
+            .unwrap();
+
+        let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
+        assert!(matches!(err, Error::NotFound(_)));
+
+        let err = messages
+            .email_creation_rate_limit(stream_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::OrgBlocked)); // can't receive
+
+        // reset org 1 to Not Blocked
+        organizations
+            .update_block_status(org_id, OrgBlockStatus::NotBlocked)
+            .await
+            .unwrap();
+
+        let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send again
+        assert_eq!(message.id(), message_id);
+
+        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive again
     }
 }
