@@ -437,7 +437,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        api::tests::{TestServer, deserialize_body, serialize_body},
+        api::{
+            error::ApiErrorResponse,
+            tests::{TestServer, deserialize_body, serialize_body},
+        },
         bus::client::BusMessage,
         models::{MessageStatus, OrganizationRepository, Role},
         test::TestStreams,
@@ -448,7 +451,6 @@ mod tests {
     use ppp::v2::WriteToHeader;
     use serde_json::json;
     use sqlx::PgPool;
-    use crate::api::error::ApiErrorResponse;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",

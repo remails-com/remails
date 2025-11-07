@@ -138,11 +138,11 @@ impl GithubOauthService {
     pub fn router(&self) -> Router<ApiState> {
         Router::new()
             .route(
-                "/login/github",
+                "/api/login/github",
                 get(oauth_login::<GithubOauthService>).delete(disconnect_github),
             )
             .route(
-                "/oauth/authorize/github",
+                "/api/oauth/authorize/github",
                 get(authorize::<GithubOauthService>),
             )
     }

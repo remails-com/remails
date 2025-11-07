@@ -401,6 +401,7 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
 ///
 /// Get the configuration and environment details of the Remails server
 #[utoipa::path(get, path = "/config",
+    security(()),
     tags = ["Misc"],
     responses(
         (status = 200, description = "Remails configuration", body = RemailsConfig),
