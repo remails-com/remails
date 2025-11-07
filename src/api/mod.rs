@@ -27,7 +27,7 @@ use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
-use tower_http::{limit::RequestBodyLimitLayer, timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
@@ -278,9 +278,16 @@ impl ApiServer {
             .layer((
                 TraceLayer::new_for_http(),
                 middleware::from_fn(ip_middleware),
-                TimeoutLayer::new(Duration::from_secs(10)),
             ))
             .with_state(state.clone());
+
+        router = router
+            .merge(
+                Scalar::with_url("/openapi-ui", openapi.clone())
+                    .custom_html(include_str!("../static/scalar.html")),
+            )
+            .route("/openapi.json", get(async move || Json(openapi)))
+            .layer(CompressionLayer::new().br(true));
 
         if with_frontend {
             let memory_router = memory_serve::from_local_build!()
@@ -296,13 +303,6 @@ impl ApiServer {
             state.config.clone(),
             append_default_headers,
         ));
-
-        router = router
-            .merge(
-                Scalar::with_url("/openapi-ui", openapi.clone())
-                    .custom_html(include_str!("../static/scalar.html")),
-            )
-            .route("/openapi.json", get(async move || Json(openapi)));
 
         // Set a hard limit to the size of all requests. Currently, we allow at most 50,000 bytes
         // for the text and HTML body of an email message created via the API. Rounding this up
@@ -324,7 +324,7 @@ impl ApiServer {
         router = router.layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(handle_timeout_error))
-                .timeout(Duration::from_secs(30)),
+                .timeout(Duration::from_secs(10)),
         );
 
         ApiServer {
