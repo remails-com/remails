@@ -88,10 +88,10 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             .email(Some("info@remails.com"))
             .build(),
     );
-    // info.description = Some(
-    //     "Remails is a transactional email service focused on privacy and deliverability."
-    //         .to_string(),
-    // );
+    api_doc.info.description = Some(
+        "**Please note that this API is still heavily evolving and not yet stable**"
+            .to_string(),
+    );
 
     router
 }
