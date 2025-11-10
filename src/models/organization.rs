@@ -38,7 +38,17 @@ impl OrganizationId {
 }
 
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Display,
+    PartialEq,
+    PartialOrd,
+    sqlx::Type,
+    ToSchema,
+    Validate,
 )]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "org_block_status", rename_all = "snake_case")]

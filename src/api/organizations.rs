@@ -29,6 +29,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
         ))
         .routes(routes!(list_members))
         .routes(routes!(remove_member, update_member_role))
+        .routes(routes!(update_block_status))
 }
 
 /// List organizations
@@ -87,6 +88,7 @@ async fn get_organization(
 
 /// Create a new organization
 #[utoipa::path(post, path = "/organizations",
+    security(("cookieAuth" = [])),
     request_body = NewOrganization,
     tags = ["internal", "Organizations"],
     responses(
@@ -124,6 +126,7 @@ pub async fn create_organization(
 
 /// Delete an organization
 #[utoipa::path(delete, path = "/organizations/{org_id}",
+    security(("cookieAuth" = [])),
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Organization successfully deleted", body = OrganizationId),
@@ -150,6 +153,7 @@ pub async fn remove_organization(
 
 /// Update an organization
 #[utoipa::path(put, path = "/organizations/{org_id}",
+    security(("cookieAuth" = [])),
     request_body = NewOrganization,
     tags = ["internal", "Organizations"],
     responses(
@@ -225,6 +229,7 @@ async fn prevent_last_remaining_admin(
 
 /// Delete organization member
 #[utoipa::path(delete, path = "/organizations/{org_id}/members/{user_id}",
+    security(("cookieAuth" = [])),
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Successfully deleted organization member"),
@@ -263,6 +268,7 @@ pub async fn remove_member(
 /// Update organization member role
 #[utoipa::path(put, path = "/organizations/{org_id}/members/{user_id}",
     request_body = Role,
+    security(("cookieAuth" = [])),
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Successfully updated organization member role"),
@@ -293,15 +299,27 @@ pub async fn update_member_role(
     Ok(Json(()))
 }
 
+/// Update organization admin details
+///
+/// For example, this includes the block status of an organization
+#[utoipa::path(put, path = "/organizations/{org_id}/admin",
+    request_body = OrgBlockStatus,
+    security(("cookieAuth" = [])),
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully updated admin details", body = Organization),
+        ApiError,
+    )
+)]
 pub async fn update_block_status(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users (super admins) are allowed to update block status
-    Json(block_status): Json<OrgBlockStatus>,
+    ValidatedJson(block_status): ValidatedJson<OrgBlockStatus>,
 ) -> ApiResult<Organization> {
     user.is_super_admin()
         .then_some(())
-        .ok_or(ApiError::Forbidden)?;
+        .ok_or(ApiError::forbidden())?;
 
     let organization = repo.update_block_status(org_id, block_status).await?;
 

@@ -156,7 +156,7 @@ async fn setup(
         token.clone(),
     )
     .await;
-    run_api_server(pool, bus_client, http_socket, token.clone(), false).await;
+    run_api_server(pool, bus_client, http_socket, token.clone(), false, false).await;
 
     let _drop_guard = token.drop_guard();
 

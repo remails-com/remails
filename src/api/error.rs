@@ -336,6 +336,12 @@ impl From<models::Error> for ApiError {
                 description: "Too many requests".to_string(),
                 reference,
             }),
+            Error::OrgBlocked => ApiError::Forbidden(ApiErrorResponse {
+                description:
+                    "Your organization is blocked from sending email. Please contact the support"
+                        .to_string(),
+                reference,
+            }),
             _ => ApiError::InternalServerError(ApiErrorResponse {
                 description: "Database error".to_string(),
                 reference,
