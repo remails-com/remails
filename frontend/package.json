@@ -12,24 +12,24 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@mantine/core": "^8.3.6",
-    "@mantine/dates": "^8.3.6",
-    "@mantine/form": "^8.3.6",
-    "@mantine/hooks": "^8.3.6",
-    "@mantine/modals": "^8.3.6",
-    "@mantine/notifications": "^8.3.6",
-    "@mantine/nprogress": "^8.3.6",
+    "@mantine/core": "^8.3.7",
+    "@mantine/dates": "^8.3.7",
+    "@mantine/form": "^8.3.7",
+    "@mantine/hooks": "^8.3.7",
+    "@mantine/modals": "^8.3.7",
+    "@mantine/notifications": "^8.3.7",
+    "@mantine/nprogress": "^8.3.7",
     "@tabler/icons-react": "^3.35.0",
     "dayjs": "^1.11.19",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
+    "@eslint/js": "^9.39.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "@vitejs/plugin-react-swc": "^4.2.0",
-    "eslint": "^9.39.0",
+    "@vitejs/plugin-react-swc": "^4.2.1",
+    "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -39,9 +39,9 @@
     "postcss-simple-vars": "^7.0.1",
     "prettier": "3.6.2",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.46.2",
-    "vite": "^7.1.12",
-    "vitest": "^4.0.6"
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.2.2",
+    "vitest": "^4.0.8"
   },
   "prettier": {
     "trailingComma": "es5",
