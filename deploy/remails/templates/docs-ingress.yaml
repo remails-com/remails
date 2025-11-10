@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: remails-docs-{{ .Values.environment }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ printf "letsencrypt-%s-http" .Values.management.certificate_type }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: docs.{{ .Values.management.server_name }}
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: docs
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - docs.{{ .Values.management.server_name }}
+      secretName: docs-tls-cert

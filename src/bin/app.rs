@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
         error!("Failed to load fixtures: {e:?}");
     }
 
-    let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
+    let api_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
     let smtp_config = SmtpConfig::default();
     let handler_config = HandlerConfig::new();
     let shutdown = CancellationToken::new();
@@ -78,8 +78,9 @@ async fn main() -> anyhow::Result<()> {
     run_api_server(
         pool.clone(),
         bus_client.clone(),
-        http_socket,
+        api_socket,
         shutdown.clone(),
+        true,
         true,
     )
     .await;

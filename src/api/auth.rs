@@ -27,8 +27,18 @@ use std::net::SocketAddr;
 use tracing::error;
 use tracing::{debug, trace, warn};
 use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-static SESSION_COOKIE_NAME: &str = "SESSION";
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
+pub static SESSION_COOKIE_NAME: &str = "__Host-SESSION";
+
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(password_login))
+        .routes(routes!(totp_login))
+        .routes(routes!(password_register))
+        .routes(routes!(logout))
+}
 
 /// Objects implementing `Authenticated` may be allowed to use the Remails API if they have the
 /// right level of permissions for the organization.
@@ -204,9 +214,26 @@ pub(super) struct PasswordLogin {
     #[garde(skip)]
     email: EmailAddress,
     #[garde(dive)]
+    #[schema(min_length = 10, max_length = 256)]
     password: Password,
 }
 
+/// Password login
+///
+/// Returns an authentication cookie.
+/// If the user configured 2FA, you have to call the corresponding path hereafter,
+/// currently only TOTP (`/login/totp`) is supported
+#[utoipa::path(post, path = "/login/password",
+    tags = ["internal", "Auth"],
+    security(()),
+    request_body = PasswordLogin,
+    responses(
+        (status = 200, description = "Successfully logged in", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        ApiError,
+))]
 pub(super) async fn password_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
@@ -231,6 +258,21 @@ pub(super) async fn password_login(
     Ok((StatusCode::OK, cookie_storage, Json(whoami)).into_response())
 }
 
+/// TOTP login
+///
+/// Second factor authentication with Time-Based One-time Password (TOTP).
+/// Returns an updated authentication cookie
+#[utoipa::path(post, path = "/login/totp",
+    tags = ["internal", "Auth"],
+    request_body = TotpCode,
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "Successfully logged in", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        ApiError,
+))]
 pub(super) async fn totp_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
@@ -267,6 +309,20 @@ pub(super) struct PasswordRegister {
     password: Password,
 }
 
+/// Register with password
+///
+/// Creates a new ApiUser and returns the corresponding authentication cookie.
+#[utoipa::path(post, path = "/register/password",
+    tags = ["internal", "Auth"],
+    security(()),
+    request_body = PasswordRegister,
+    responses(
+        (status = 201, description = "Successfully created API user", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        ApiError,
+))]
 pub(super) async fn password_register(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
@@ -308,6 +364,17 @@ pub(super) fn login(
     Ok(cookie_storage.add(session_cookie))
 }
 
+/// Logout
+#[utoipa::path(get, path = "/logout",
+    tags = ["internal", "Auth"],
+    security(()),
+    responses(
+        (status = 303, description = "Successfully logged out",
+            headers(
+                ("set-cookie", description = "removes the authentication cookie")
+        )),
+        ApiError,
+))]
 pub(super) async fn logout(storage: SecureCookieStorage) -> impl IntoResponse {
     let mut jar = storage.jar;
 

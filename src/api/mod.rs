@@ -1,6 +1,10 @@
 use crate::{
     Environment,
-    api::{error::ApiError, oauth::GithubOauthService, openapi::openapi_router},
+    api::{
+        error::ApiError,
+        oauth::GithubOauthService,
+        openapi::{docs_router, openapi_router},
+    },
     bus::client::BusClient,
     handler::{RetryConfig, dns::DnsResolver},
     models::{
@@ -15,7 +19,7 @@ use axum::{
     extract::{ConnectInfo, FromRef, Request, State},
     middleware,
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::get,
 };
 use base64ct::Encoding;
@@ -27,14 +31,13 @@ use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
-use tower_http::{compression::CompressionLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
     span,
 };
 use utoipa::ToSchema;
-use utoipa_scalar::{Scalar, Servable};
 
 mod api_keys;
 mod api_users;
@@ -44,7 +47,7 @@ mod error;
 mod invites;
 mod messages;
 mod oauth;
-mod openapi;
+pub mod openapi;
 mod organizations;
 mod projects;
 mod smtp_credentials;
@@ -67,6 +70,7 @@ pub enum ApiServerError {
 #[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RemailsConfig {
     pub version: String,
+    pub api_server_name: String,
     pub environment: Environment,
     pub smtp_domain_name: String,
     pub smtp_ports: Vec<u16>,
@@ -78,6 +82,7 @@ pub struct RemailsConfig {
 impl Default for RemailsConfig {
     fn default() -> Self {
         let version = env::var("VERSION").unwrap_or("dev".to_string());
+        let api_server_name = env::var("API_SERVER_NAME").expect("API_SERVER_NAME not set");
         let environment: Environment = env::var("ENVIRONMENT")
             .map(|s| s.parse())
             .inspect_err(|_| {
@@ -104,6 +109,7 @@ impl Default for RemailsConfig {
 
         Self {
             version,
+            api_server_name,
             environment,
             smtp_domain_name,
             smtp_ports,
@@ -232,6 +238,7 @@ impl ApiServer {
         pool: PgPool,
         shutdown: CancellationToken,
         with_frontend: bool,
+        with_docs: bool,
         message_bus: BusClient,
     ) -> ApiServer {
         let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
@@ -271,7 +278,7 @@ impl ApiServer {
             retry_config: Arc::new(RetryConfig::default()),
         };
 
-        let (router, openapi) = openapi_router().split_for_parts();
+        let (router, _) = openapi_router().split_for_parts();
 
         let mut router = router
             .merge(oauth_router)
@@ -281,14 +288,6 @@ impl ApiServer {
             ))
             .with_state(state.clone());
 
-        router = router
-            .merge(
-                Scalar::with_url("/openapi-ui", openapi.clone())
-                    .custom_html(include_str!("../static/scalar.html")),
-            )
-            .route("/openapi.json", get(async move || Json(openapi)))
-            .layer(CompressionLayer::new().br(true));
-
         if with_frontend {
             let memory_router = memory_serve::from_local_build!()
                 .index_file(Some("/index.html"))
@@ -297,6 +296,12 @@ impl ApiServer {
                 .into_router();
 
             router = router.merge(memory_router);
+        }
+
+        if with_docs {
+            router = router
+                .nest("/docs/", docs_router())
+                .route("/docs", get(async || Redirect::permanent("/docs/")))
         }
 
         router = router.layer(middleware::from_fn_with_state(
@@ -475,6 +480,7 @@ mod tests {
                 http_socket.into(),
                 pool.clone(),
                 shutdown,
+                false,
                 false,
                 message_bus_client.clone(),
             )

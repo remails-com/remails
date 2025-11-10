@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Serialize;
+use tokio::task::JoinError;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -166,6 +167,21 @@ impl ApiError {
         error!(
             error_reference = reference.to_string(),
             "API server error: internal server error"
+        );
+
+        ApiError::InternalServerError(ApiErrorResponse {
+            description: "Internal server error".to_string(),
+            reference,
+        })
+    }
+}
+
+impl From<JoinError> for ApiError {
+    fn from(err: JoinError) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "tokio task error: {err}"
         );
 
         ApiError::InternalServerError(ApiErrorResponse {

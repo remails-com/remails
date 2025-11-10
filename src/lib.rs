@@ -101,12 +101,14 @@ pub async fn run_api_server(
     http_socket: SocketAddrV4,
     shutdown: CancellationToken,
     with_frontend: bool,
+    with_docs: bool,
 ) -> JoinHandle<()> {
     let api_server = ApiServer::new(
         http_socket.into(),
         pool.clone(),
         shutdown,
         with_frontend,
+        with_docs,
         bus_client,
     )
     .await;

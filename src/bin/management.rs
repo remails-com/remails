@@ -1,5 +1,8 @@
 use anyhow::Context;
-use remails::{bus::client::BusClient, init_tracing, run_api_server, shutdown_signal};
+use futures::future;
+use remails::{
+    api::openapi::spawn_docs, bus::client::BusClient, init_tracing, run_api_server, shutdown_signal,
+};
 use sqlx::{
     ConnectOptions,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -31,11 +34,14 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    let http_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
+    let api_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
 
     let shutdown = CancellationToken::new();
     let bus = BusClient::new_from_env_var().expect("Could not connect to message bus");
-    let join_handle = run_api_server(pool, bus, http_socket, shutdown.clone(), true).await;
+    let api_join = run_api_server(pool, bus, api_socket, shutdown.clone(), true, false).await;
+
+    let docs_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3001);
+    let docs_join = spawn_docs(docs_socket.into(), shutdown.clone());
 
     shutdown_signal(shutdown.clone()).await;
     info!("received shutdown signal, stopping services");
@@ -43,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::select!(
         // gracefully shutdown
-        _ = join_handle => {
+        _ = future::try_join_all([api_join, docs_join]) => {
             info!("Shut down");
         }
         // hard shutdown if it takes more than 2 secs
