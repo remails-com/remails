@@ -23,7 +23,7 @@ use axum::{
     routing::get,
 };
 use base64ct::Encoding;
-use http::{HeaderName, HeaderValue, StatusCode};
+use http::{HeaderName, HeaderValue, Method, StatusCode};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
@@ -31,7 +31,7 @@ use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
-use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
@@ -286,6 +286,19 @@ impl ApiServer {
                 TraceLayer::new_for_http(),
                 middleware::from_fn(ip_middleware),
             ))
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(
+                        format!(
+                            "https://docs.{}",
+                            state.config.remails_config.api_server_name
+                        )
+                        .parse::<HeaderValue>()
+                        .expect("Could not parse CORS allow origin"),
+                    )
+                    .allow_credentials(true)
+                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE]),
+            )
             .with_state(state.clone());
 
         if with_frontend {
