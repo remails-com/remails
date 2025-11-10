@@ -1,8 +1,8 @@
 import { useApiKeys } from "../../hooks/useApiKeys.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Table, Text } from "@mantine/core";
+import { Button, Flex, Table, Text } from "@mantine/core";
 import { formatDateTime, KEY_ROLE_LABELS } from "../../util.ts";
-import { IconPlus } from "@tabler/icons-react";
+import { IconExternalLink, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewApiKey } from "./NewApiKey.tsx";
 import EditButton from "../EditButton.tsx";
@@ -17,6 +17,14 @@ export default function ApiKeysOverview() {
   if (apiKeys === null) {
     return <Loader />;
   }
+
+  let docs_url;
+  if (window.location.host.startsWith("localhost")) {
+    docs_url = `http://${window.location.host}/docs/`;
+  } else {
+    docs_url = `https://docs.${window.location.host}`;
+  }
+  console.log(docs_url);
 
   const rows = apiKeys.map((api_key) => {
     return (
@@ -47,6 +55,7 @@ export default function ApiKeysOverview() {
         Create API keys for this organization. API keys can be used to automate actions within this organization, such
         as viewing email statuses, managing streams, and tracking your quota.
       </InfoAlert>
+
       <NewApiKey opened={opened} close={close} />
       <StyledTable
         headers={[
@@ -63,6 +72,16 @@ export default function ApiKeysOverview() {
         <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New API Key
         </MaintainerButton>
+        <Button
+          ms="xl"
+          component="a"
+          href={docs_url}
+          target="_blank"
+          variant="outline"
+          rightSection={<IconExternalLink size={18} />}
+        >
+          API documentation
+        </Button>
       </Flex>
     </>
   );

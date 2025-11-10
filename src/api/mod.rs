@@ -23,7 +23,10 @@ use axum::{
     routing::get,
 };
 use base64ct::Encoding;
-use http::{HeaderName, HeaderValue, Method, StatusCode};
+use http::{
+    HeaderName, HeaderValue, Method, StatusCode,
+    header::{ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, USER_AGENT},
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
@@ -297,7 +300,8 @@ impl ApiServer {
                         .expect("Could not parse CORS allow origin"),
                     )
                     .allow_credentials(true)
-                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE]),
+                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+                    .allow_headers([AUTHORIZATION, ACCEPT, ACCEPT_ENCODING, USER_AGENT]),
             )
             .with_state(state.clone());
 

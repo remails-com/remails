@@ -63,7 +63,7 @@ function Page() {
   }
 
   if (
-    !routerState.name.startsWith("settings") &&
+    !(routerState.name === "settings") &&
     !routerState.name.startsWith("organizations") &&
     !routerState.name.startsWith("admin") &&
     subscription &&
