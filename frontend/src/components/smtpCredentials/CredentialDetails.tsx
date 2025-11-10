@@ -4,7 +4,6 @@ import { useProjects } from "../../hooks/useProjects.ts";
 import { useCredentials } from "../../hooks/useCredentials.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useForm } from "@mantine/form";
-import { useEffect } from "react";
 import { Loader } from "../../Loader.tsx";
 import { SmtpCredential } from "../../types.ts";
 import { modals } from "@mantine/modals";
@@ -28,17 +27,9 @@ export default function CredentialDetails() {
 
   const form = useForm<FormValues>({
     initialValues: {
-      description: "",
+      description: currentCredential?.description ?? "",
     },
   });
-
-  useEffect(() => {
-    form.setValues({
-      description: currentCredential?.description || "",
-    });
-    form.resetDirty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCredential]);
 
   if (!currentStream || !currentOrganization || !currentProject || !currentCredential) {
     return <Loader />;
@@ -105,6 +96,7 @@ export default function CredentialDetails() {
     });
     dispatch({ type: "remove_credential", credentialId: credential.id });
     dispatch({ type: "add_credential", credential });
+    form.resetDirty();
   };
 
   return (

@@ -32,6 +32,17 @@ impl OrganizationId {
     }
 }
 
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "org_block_status", rename_all = "snake_case")]
+pub enum OrgBlockStatus {
+    NotBlocked = 0,
+    NoSending = 1,
+    NoSendingOrReceiving = 2,
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
@@ -46,6 +57,7 @@ pub struct Organization {
     current_subscription: SubscriptionStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    block_status: Option<OrgBlockStatus>,
 }
 
 impl Organization {
@@ -92,6 +104,7 @@ struct PgOrganization {
     current_subscription: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    block_status: Option<OrgBlockStatus>,
 }
 
 impl TryFrom<PgOrganization> for Organization {
@@ -110,6 +123,7 @@ impl TryFrom<PgOrganization> for Organization {
             current_subscription: serde_json::from_value(pg.current_subscription)?,
             created_at: pg.created_at,
             updated_at: pg.updated_at,
+            block_status: pg.block_status,
         })
     }
 }
@@ -155,7 +169,7 @@ impl OrganizationRepository {
             PgOrganization,
             r#"
             INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
-            VALUES (gen_random_uuid(), $1, 50, 0, now(), 0, now())
+            VALUES (gen_random_uuid(), $1, 0, 0, now(), 0, now())
             RETURNING id,
                       name,
                       total_message_quota,
@@ -166,7 +180,8 @@ impl OrganizationRepository {
                       moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                       rate_limit_reset,
                       remaining_rate_limit,
-                      current_subscription
+                      current_subscription,
+                      block_status as "block_status: OrgBlockStatus"
             "#,
             organization.name.trim(),
         )
@@ -197,7 +212,8 @@ impl OrganizationRepository {
                 moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                 rate_limit_reset,
                 remaining_rate_limit,
-                current_subscription
+                current_subscription,
+                block_status as "block_status: OrgBlockStatus"
             "#,
             *id,
             organization.name.trim(),
@@ -221,10 +237,11 @@ impl OrganizationRepository {
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
                    remaining_rate_limit,
-                   current_subscription
+                   current_subscription,
+                   block_status as "block_status: OrgBlockStatus"
             FROM organizations
             WHERE ($1::uuid[] IS NULL OR id = ANY($1))
-            ORDER BY name
+            ORDER BY updated_at DESC
             "#,
             filter.as_deref(),
         )
@@ -249,7 +266,8 @@ impl OrganizationRepository {
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
                    rate_limit_reset,
                    remaining_rate_limit,
-                   current_subscription
+                   current_subscription,
+                   block_status as "block_status: OrgBlockStatus"
             FROM organizations
             WHERE id = $1
             "#,
@@ -353,6 +371,39 @@ impl OrganizationRepository {
         .await?
         .into())
     }
+
+    pub async fn update_block_status(
+        &self,
+        org_id: OrganizationId,
+        block_status: OrgBlockStatus,
+    ) -> Result<Organization, Error> {
+        Ok(sqlx::query_as!(
+            PgOrganization,
+            r#"
+            UPDATE organizations
+            SET block_status = $2
+            WHERE id = $1
+            RETURNING
+                id,
+                name,
+                total_message_quota,
+                used_message_quota,
+                quota_reset,
+                created_at,
+                updated_at,
+                moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
+                rate_limit_reset,
+                remaining_rate_limit,
+                current_subscription,
+                block_status as "block_status: OrgBlockStatus"
+            "#,
+            *org_id,
+            block_status as OrgBlockStatus,
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()?)
+    }
 }
 
 #[cfg(test)]
@@ -394,7 +445,7 @@ mod test {
         assert_eq!(org2.name, "TestOrg2");
 
         let orgs = repo.list(None).await.unwrap();
-        assert_eq!(orgs, vec![org1.clone(), org2.clone()]);
+        assert_eq!(orgs, vec![org2.clone(), org1.clone()]);
 
         repo.remove(org1.id).await.unwrap();
         let orgs = repo.list(None).await.unwrap();

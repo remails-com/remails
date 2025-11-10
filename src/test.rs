@@ -3,8 +3,8 @@ use crate::{
     bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
-        ApiKey, ApiMessageMetadata, CreatedApiKeyWithPassword, OrganizationId, ProjectId,
-        SmtpCredential, SmtpCredentialResponse, StreamId,
+        ApiKey, ApiMessageMetadata, CreatedApiKeyWithPassword, MessageStatus, OrgBlockStatus,
+        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse, StreamId,
     },
     run_api_server, run_mta,
     smtp::SmtpConfig,
@@ -308,9 +308,8 @@ async fn integration_test(pool: PgPool) {
     }
 
     // check John's sent messages
-    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
     let messages: Vec<ApiMessageMetadata> = client
-        .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
+        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
         .header("X-Test-Login", &jorg)
         .send()
         .await
@@ -322,13 +321,109 @@ async fn integration_test(pool: PgPool) {
 
     // cannot check someone else's messages
     let status = client
-        .get(format!("http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages"))
+        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
         .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
         .send()
         .await
         .unwrap()
         .status();
     assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // super admin blocks John's organization from sending emails
+    let status = client
+        .put(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/admin"
+        ))
+        .header("X-Test-Login-ID", "deadbeef-4e43-4a66-bbb9-fbcd4a933a34") // super admin
+        .json(&OrgBlockStatus::NoSending)
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::OK);
+
+    // John can still send emails
+    let message = MessageBuilder::new()
+        .from(("John2", "john2@test-org-1-project-1.com"))
+        .to(vec![("Eddy", "eddy@test-org-2-project-1.com")])
+        .subject("Hello?!1")
+        .text_body("Is this working?")
+        .message_id("hello@test-org-1-project-1.com");
+    john_smtp_client.send(message).await.unwrap();
+
+    // check John's sent messages
+    let messages: Vec<ApiMessageMetadata> = client
+        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
+        .header("X-Test-Login", &jorg)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(messages.len(), 11);
+    let message = messages
+        .into_iter()
+        .find(|m| m.from_email.as_str() == "john2@test-org-1-project-1.com")
+        .unwrap();
+    // the message is left on Processing because it does not get send to a handler
+    assert_eq!(message.status, MessageStatus::Processing);
+
+    // super admin blocks John's organization from sending and receiving emails
+    let status = client
+        .put(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/admin"
+        ))
+        .header("X-Test-Login-ID", "deadbeef-4e43-4a66-bbb9-fbcd4a933a34") // super admin
+        .json(&OrgBlockStatus::NoSendingOrReceiving)
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::OK);
+
+    // John can no longer send emails via the SMTP in-bound server
+    let message = MessageBuilder::new()
+        .from(("John2", "john2@test-org-1-project-1.com"))
+        .to(vec![("Eddy", "eddy@test-org-2-project-1.com")])
+        .subject("Hello??!1")
+        .text_body("Is this working??")
+        .message_id("hello2@test-org-1-project-1.com");
+    let err = john_smtp_client.send(message).await.unwrap_err();
+    assert!(matches!(err, mail_send::Error::UnexpectedReply(_)));
+
+    // super admin blocks Eddy's organization from sending and receiving emails
+    let status = client
+        .put(format!(
+            "http://localhost:{http_port}/api/organizations/{eorg}/admin"
+        ))
+        .header("X-Test-Login-ID", "deadbeef-4e43-4a66-bbb9-fbcd4a933a34") // super admin
+        .json(&OrgBlockStatus::NoSendingOrReceiving)
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::OK);
+
+    // Eddy can no longer send emails via the REST API
+    let res = client
+        .post(format!(
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/streams/{estream}/messages"
+        ))
+        .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
+        .json(&json!({
+            "from": {"name": "Eddy", "address": "eddy@test-org-2-project-1.com"},
+            "to": {"name": "John", "address": "john@test-org-1-project-1.com"},
+            "subject": "Re: TPS reports",
+            "text_body": "Ah! Yeah. It's just we're putting new coversheets on all the TPS reports before they go out now.
+        So if you could go ahead and try to remember to do that from now on, that'd be great. All right!",
+            "in_reply_to": "tps-10@test-org-1-project-1.com"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
 #[sqlx::test(fixtures(

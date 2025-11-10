@@ -812,7 +812,7 @@ impl Handler {
             let _p = permit;
 
             // retrieve message from database
-            let mut message = match self_clone.message_repository.get(id).await {
+            let mut message = match self_clone.message_repository.get_if_org_may_send(id).await {
                 Ok(message) => message,
                 Err(e) => {
                     error!("failed to get message: {e:?}");
@@ -926,7 +926,11 @@ mod test {
             .create(&message, 1)
             .await
             .unwrap();
-        let mut message = handler.message_repository.get(message_id).await.unwrap();
+        let mut message = handler
+            .message_repository
+            .get_if_org_may_send(message_id)
+            .await
+            .unwrap();
         handler.handle_message(&mut message).await.unwrap();
         handler
             .send_message(message, "127.0.0.1".parse().unwrap())
@@ -992,7 +996,11 @@ mod test {
                 .create(&message, 1)
                 .await
                 .unwrap();
-            let mut message = handler.message_repository.get(message_id).await.unwrap();
+            let mut message = handler
+                .message_repository
+                .get_if_org_may_send(message_id)
+                .await
+                .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
@@ -1064,7 +1072,11 @@ mod test {
                 .create(&message, 1)
                 .await
                 .unwrap();
-            let mut message = handler.message_repository.get(message_id).await.unwrap();
+            let mut message = handler
+                .message_repository
+                .get_if_org_may_send(message_id)
+                .await
+                .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo

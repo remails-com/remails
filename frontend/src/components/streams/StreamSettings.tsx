@@ -1,7 +1,6 @@
 import { Group, Stack, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconTrash } from "@tabler/icons-react";
-import { useEffect } from "react";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
@@ -29,7 +28,7 @@ export default function StreamSettings() {
 
   const form = useForm<FormValues>({
     initialValues: {
-      name: currentStream?.name || "",
+      name: currentStream?.name ?? "",
     },
     validate: {
       name: (value) => {
@@ -43,12 +42,6 @@ export default function StreamSettings() {
       },
     },
   });
-
-  useEffect(() => {
-    form.setValues({ name: currentStream?.name || "" });
-    form.resetDirty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStream]);
 
   if (!currentStream || !currentOrganization || !currentProject) {
     return <Loader />;
@@ -114,6 +107,7 @@ export default function StreamSettings() {
     });
     dispatch({ type: "remove_stream", streamId: currentStream.id });
     dispatch({ type: "add_stream", stream });
+    form.resetDirty();
   };
 
   return (

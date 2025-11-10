@@ -41,7 +41,7 @@ export function NewStream({ opened, close }: NewStreamProps) {
 
   if (!currentOrganization || !currentProject) {
     console.error("Cannot create stream without a selected organization and project");
-    return <></>;
+    return null;
   }
 
   const save = async (values: FormValues) => {

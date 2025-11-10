@@ -1,8 +1,8 @@
-import { Anchor, Button, Flex, Table, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Anchor, Button, Flex, Table, Text, Tooltip } from "@mantine/core";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
-import { IconExternalLink, IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
+import { IconExternalLink, IconGavel, IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import { NewOrganization } from "./NewOrganization.tsx";
 import StyledTable from "../StyledTable.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
@@ -28,7 +28,17 @@ export default function OrganizationsOverview() {
         </Tooltip>
       </Table.Td>
       <Table.Td>{organization.name}</Table.Td>
-      <Table.Td>{formatDateTime(organization.updated_at)}</Table.Td>
+      <Table.Td>
+        <Button
+          leftSection={currentOrganization?.id == organization.id ? <IconSquareCheck /> : <IconSquare />}
+          variant="subtle"
+          onClick={() => {
+            navigate("organizations", { org_id: organization.id });
+          }}
+        >
+          Act as this organization
+        </Button>
+      </Table.Td>
       <Table.Td>
         {config && organization.moneybird_contact_id && (
           <Anchor
@@ -41,16 +51,20 @@ export default function OrganizationsOverview() {
           </Anchor>
         )}
       </Table.Td>
-      <Table.Td align={"right"}>
-        <Button
-          rightSection={currentOrganization?.id == organization.id ? <IconSquareCheck /> : <IconSquare />}
+      <Table.Td>
+        {organization.used_message_quota} / {organization.total_message_quota}
+      </Table.Td>
+      <Table.Td>{formatDateTime(organization.updated_at)}</Table.Td>
+      <Table.Td align={"right"} pl="0">
+        <ActionIcon
+          size="30"
           variant="subtle"
           onClick={() => {
-            navigate("organizations", { org_id: organization.id });
+            navigate("admin", { org_id: organization.id });
           }}
         >
-          Act as this organization
-        </Button>
+          <IconGavel />
+        </ActionIcon>
       </Table.Td>
     </Table.Tr>
   ));
@@ -62,7 +76,7 @@ export default function OrganizationsOverview() {
         close={close}
         done={(newOrg) => navigate("organizations", { org_id: newOrg.id })}
       />
-      <StyledTable headers={["ID", "Name", "Updated", "Moneybird contact ID", ""]}>{rows}</StyledTable>
+      <StyledTable headers={["ID", "Name", "", "Moneybird contact ID", "Quota", "Updated", ""]}>{rows}</StyledTable>
 
       <Flex justify="center" mt="md">
         <Button onClick={() => open()} leftSection={<IconPlus />}>

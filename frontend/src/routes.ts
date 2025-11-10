@@ -106,6 +106,10 @@ export const routes = [
     path: "/{org_id}/organizations",
   },
   {
+    name: "admin",
+    path: "/{org_id}/admin",
+  },
+  {
     name: "default",
     path: "/",
   },

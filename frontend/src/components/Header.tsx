@@ -3,6 +3,7 @@ import { Icon, IconProps } from "@tabler/icons-react";
 import Rename from "./Rename";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import classes from "./Header.module.css";
+import { ReactNode } from "react";
 
 interface HeaderProps {
   name: string;
@@ -10,9 +11,10 @@ interface HeaderProps {
   saveRename?: (values: { name: string }) => Promise<void>;
   Icon: React.ForwardRefExoticComponent<IconProps & React.RefAttributes<Icon>>;
   divider?: boolean; // we don't want the divider if we are using tabs
+  addendum?: ReactNode;
 }
 
-export default function Header({ name, entityType, saveRename, Icon, divider = false }: HeaderProps) {
+export default function Header({ name, entityType, saveRename, Icon, divider = false, addendum }: HeaderProps) {
   return (
     <>
       <Group className={classes.header} px="lg" py="md" pt="xs" mx="-lg" mt="-lg">
@@ -29,13 +31,16 @@ export default function Header({ name, entityType, saveRename, Icon, divider = f
               <Text mb="0" c="remails-red" size="xs" tt="uppercase" fw="bold">
                 {entityType}
               </Text>
-              {saveRename ? (
-                <Rename name={name} save={saveRename} />
-              ) : (
-                <Title order={3} mt="0">
-                  {name}
-                </Title>
-              )}
+              <Group>
+                {saveRename ? (
+                  <Rename name={name} save={saveRename} />
+                ) : (
+                  <Title order={3} mt="0">
+                    {name}
+                  </Title>
+                )}
+                {addendum}
+              </Group>
             </Stack>
           </Flex>
         </Stack>

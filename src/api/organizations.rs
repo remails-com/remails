@@ -4,8 +4,8 @@ use crate::{
         error::{ApiError, ApiResult},
     },
     models::{
-        ApiUser, ApiUserId, NewOrganization, Organization, OrganizationId, OrganizationMember,
-        OrganizationRepository, Role,
+        ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
+        OrganizationMember, OrganizationRepository, Role,
     },
 };
 use axum::{
@@ -204,6 +204,28 @@ pub async fn update_member_role(
     );
 
     Ok(Json(()))
+}
+
+pub async fn update_block_status(
+    Path(org_id): Path<OrganizationId>,
+    State(repo): State<OrganizationRepository>,
+    user: ApiUser, // only users (super admins) are allowed to update block status
+    Json(block_status): Json<OrgBlockStatus>,
+) -> ApiResult<Organization> {
+    user.is_super_admin()
+        .then_some(())
+        .ok_or(ApiError::Forbidden)?;
+
+    let organization = repo.update_block_status(org_id, block_status).await?;
+
+    info!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        block_status = block_status.to_string(),
+        "updated organization block status",
+    );
+
+    Ok(Json(organization))
 }
 
 #[cfg(test)]
@@ -454,6 +476,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
+
+        // nobody (except super admins) can update the organization's block status
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/admin"),
+                serialize_body(OrgBlockStatus::NoSendingOrReceiving),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), write_status_code);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -494,6 +526,23 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_organization_no_access_admin(pool: PgPool) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let server = TestServer::new(pool.clone(), Some(user_1)).await;
+
+        // nobody (except super admins) can update the organization's block status
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/admin"),
+                serialize_body(OrgBlockStatus::NoSendingOrReceiving),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
