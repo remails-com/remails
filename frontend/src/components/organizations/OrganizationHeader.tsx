@@ -9,10 +9,7 @@ export default function OrganizationHeader() {
   let blocked_warning = null;
 
   if (currentOrganization?.block_status != "not_blocked") {
-    let warning = "This organization has been blocked by the Remails admins from sending emails";
-    if (currentOrganization?.block_status == "no_sending_or_receiving") {
-      warning = "This organization has been blocked by the Remails admins from sending and receiving emails";
-    }
+    const warning = "This organization has been blocked by the Remails admins from sending emails";
     blocked_warning = (
       <Tooltip label={warning}>
         <ThemeIcon variant="transparent">
