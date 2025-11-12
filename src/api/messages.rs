@@ -250,7 +250,7 @@ pub async fn create_message(
 
 /// List all email messages
 ///
-/// By default, the last 10 messages are returned. To retrieve more on a single request, please set
+/// By default, the 10 most recently created messages are returned. To retrieve more on a single request, please set
 /// the query parameter `limit` between 1 and 100. Pagination is achieved via the `before` query
 /// parameter, i.e., to get older messages, please set the `before` param to the oldest `created_at`
 /// of the previous request.
@@ -371,8 +371,8 @@ pub async fn remove_message(
 /// Retry email message
 ///
 /// This will trigger a retry.
-/// It will try sending the message to all recipients that the message wasn't successfully delivered
-/// yet and that did not indicate a permanent failure on an earlier try.
+/// It will try to resend the message to any recipients whose delivery attempts did not yet succeed and
+/// who have not previously generated a permanent failure response.
 #[utoipa::path(
     put,
     path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",

@@ -34,7 +34,9 @@ pub fn router() -> OpenApiRouter<ApiState> {
 
 /// List organizations
 ///
-/// List all organizations the authenticated user has access to
+/// List all organizations the authenticated user has access to.
+/// Note that API keys are always valid for a single organization, thus a request to this API
+/// endpoint that is authenticated via an API key will always return exactly one organization.
 #[utoipa::path(get, path = "/organizations",
     tags = ["Organizations"],
     responses(
