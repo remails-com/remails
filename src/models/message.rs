@@ -3,7 +3,6 @@ use crate::{
     handler::{ConnectionLog, RetryConfig},
     models::{
         ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, projects::ProjectId,
-        streams::StreamId,
     },
 };
 use chrono::{DateTime, Utc};
@@ -61,7 +60,6 @@ pub struct Message {
     id: MessageId,
     pub(crate) organization_id: OrganizationId,
     pub(crate) project_id: ProjectId,
-    pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub(crate) api_key_id: Option<ApiKeyId>,
     pub status: MessageStatus,
@@ -250,7 +248,7 @@ pub struct NewApiMessage {
     pub message_id: MessageId,
     pub message_id_header: String,
     pub api_key_id: ApiKeyId,
-    pub stream_id: StreamId,
+    pub project_id: ProjectId,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
@@ -289,7 +287,6 @@ struct PgMessage {
     id: MessageId,
     organization_id: OrganizationId,
     project_id: ProjectId,
-    stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
     api_key_id: Option<Uuid>,
     status: MessageStatus,
@@ -316,7 +313,6 @@ impl TryFrom<PgMessage> for Message {
             id: m.id,
             organization_id: m.organization_id,
             project_id: m.project_id,
-            stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             api_key_id: m.api_key_id.map(Into::into),
             status: m.status,
@@ -484,13 +480,12 @@ impl MessageRepository {
         Ok(sqlx::query_scalar!(
             r#"
             INSERT INTO messages AS m (
-                id, organization_id, project_id, stream_id, smtp_credential_id,
+                id, organization_id, project_id, smtp_credential_id,
                 from_email, recipients, raw_data, message_data, max_attempts
             )
-            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6
             FROM smtp_credentials s
-                JOIN streams ON s.stream_id = streams.id
-                JOIN projects p ON p.id = streams.project_id
+                JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
             WHERE s.id = $1
             RETURNING
@@ -521,19 +516,17 @@ impl MessageRepository {
             PgMessage,
             r#"
             INSERT INTO messages AS m (
-                id, organization_id, project_id, stream_id, api_key_id, 
+                id, organization_id, project_id, api_key_id,
                 from_email, recipients, raw_data, max_attempts, message_id_header
             )
-            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8
-            FROM streams s
-                JOIN projects p ON p.id = s.project_id
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8
+            FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
-            WHERE s.id = $2
+            WHERE p.id = $2
             RETURNING
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -552,7 +545,7 @@ impl MessageRepository {
                 m.max_attempts
             "#,
             *message.message_id,
-            *message.stream_id,
+            *message.project_id,
             *message.api_key_id,
             message.from_email.as_str(),
             &message
@@ -630,7 +623,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         filter: MessageFilter,
     ) -> Result<Vec<ApiMessageMetadata>, Error> {
         sqlx::query_as!(
@@ -640,7 +632,6 @@ impl MessageRepository {
                 id,
                 organization_id,
                 project_id,
-                stream_id,
                 smtp_credential_id,
                 api_key_id,
                 status AS "status: _",
@@ -660,15 +651,13 @@ impl MessageRepository {
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
-                AND stream_id = $3
-                AND ($5::message_status IS NULL OR status = $5)
-                AND ($6::timestamptz IS NULL OR created_at <= $6)
+                AND ($4::message_status IS NULL OR status = $4)
+                AND ($5::timestamptz IS NULL OR created_at <= $5)
             ORDER BY created_at DESC
-            LIMIT $4
+            LIMIT $3
             "#,
             *org_id,
             *project_id,
-            *stream_id,
             std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
             filter.status as _,
             filter.before,
@@ -691,7 +680,6 @@ impl MessageRepository {
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -723,7 +711,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<ApiMessage, Error> {
         sqlx::query_as!(
@@ -733,7 +720,6 @@ impl MessageRepository {
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -742,7 +728,7 @@ impl MessageRepository {
                 m.from_email,
                 m.recipients,
                 -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.
-                substring(m.raw_data FOR $5) as "raw_data!",
+                substring(m.raw_data FOR $4) as "raw_data!",
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.message_id_header,
@@ -755,12 +741,10 @@ impl MessageRepository {
             WHERE m.id = $1
               AND m.organization_id = $2
               AND m.project_id = $3
-              AND m.stream_id = $4
             "#,
             *message_id,
             *org_id,
             *project_id,
-            *stream_id,
             API_RAW_TRUNCATE_LENGTH,
         )
         .fetch_one(&self.pool)
@@ -772,7 +756,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<MessageId, Error> {
         Ok(sqlx::query_scalar!(
@@ -781,13 +764,11 @@ impl MessageRepository {
             WHERE id = $1
               AND organization_id = $2
               AND project_id = $3
-              AND stream_id = $4
             RETURNING id
             "#,
             *message_id,
             *org_id,
             *project_id,
-            *stream_id,
         )
         .fetch_one(&self.pool)
         .await?
@@ -825,7 +806,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<MessageStatus, Error> {
         Ok(sqlx::query_scalar!(
@@ -833,13 +813,11 @@ impl MessageRepository {
             SELECT m.status AS "status:MessageStatus"
             FROM messages m
             WHERE m.organization_id = $1 
-              AND m.project_id = $2 
-              AND m.stream_id = $3 
-              AND m.id = $4
+              AND m.project_id = $2
+              AND m.id = $3
             "#,
             *org_id,
             *project_id,
-            *stream_id,
             *message_id,
         )
         .fetch_one(&self.pool)
@@ -851,7 +829,7 @@ impl MessageRepository {
     /// Automatically resets when the time span has expired, if so, it starts a new time span
     ///
     /// Also checks if the organization is allowed to receive new emails (is not blocked)
-    pub async fn email_creation_rate_limit(&self, id: StreamId) -> Result<i64, Error> {
+    pub async fn email_creation_rate_limit(&self, id: ProjectId) -> Result<i64, Error> {
         let result = sqlx::query!(
             r#"
             UPDATE organizations o
@@ -866,9 +844,9 @@ impl MessageRepository {
                 THEN now() + $3
                 ELSE rate_limit_reset
             END
-            FROM streams s
-              JOIN projects p ON p.id = s.project_id
-            WHERE p.organization_id = o.id AND s.id = $1
+            FROM projects p
+            WHERE p.organization_id = o.id
+              AND p.id = $1
             RETURNING remaining_rate_limit, o.block_status as "block_status: OrgBlockStatus"
             "#,
             *id,
@@ -898,7 +876,7 @@ mod test {
             ApiKeyRepository, ApiKeyRequest, OrganizationRepository, Role,
             SmtpCredentialRepository, SmtpCredentialRequest,
         },
-        test::TestStreams,
+        test::TestProjects,
     };
 
     impl NewMessage {
@@ -937,13 +915,12 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
@@ -963,7 +940,6 @@ mod test {
             .generate(
                 org_id,
                 project_id,
-                stream_id,
                 &SmtpCredentialRequest {
                     username: "user".to_string(),
                     description: "Test SMTP credential description".to_string(),
@@ -978,7 +954,7 @@ mod test {
 
         // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message_id)
+            .find_by_id(org_id, project_id, message_id)
             .await
             .unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
@@ -1002,7 +978,6 @@ mod test {
             .list_message_metadata(
                 org_id,
                 project_id,
-                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
@@ -1016,7 +991,7 @@ mod test {
 
         // remove message
         repository
-            .remove(org_id, project_id, stream_id, message_id)
+            .remove(org_id, project_id, message_id)
             .await
             .unwrap();
 
@@ -1025,7 +1000,6 @@ mod test {
             .list_message_metadata(
                 org_id,
                 project_id,
-                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
@@ -1039,11 +1013,11 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_message_from_api(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let from = "john@test-org-1-project-1.com";
         let message_id = MessageId::new_v4();
@@ -1080,7 +1054,7 @@ mod test {
             message_id,
             message_id_header,
             api_key_id: *api_key.id(),
-            stream_id,
+            project_id,
             from_email: "john@test-org-1-project-1.com".parse().unwrap(),
             recipients: vec![
                 "james@test.com".parse().unwrap(),
@@ -1092,7 +1066,7 @@ mod test {
 
         // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message.id)
+            .find_by_id(org_id, project_id, message.id)
             .await
             .unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), None);
@@ -1114,19 +1088,18 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "streams", "messages_length_truncation")
+        scripts("organizations", "projects", "messages_length_truncation")
     ))]
     async fn truncation(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
 
         let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let proj_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
         let message_just_fits = "525f7d40-cb6d-402b-9078-0275c22808d7".parse().unwrap();
         let message_just_too_log = "c1d2c3d6-1521-4f77-804a-2034d121c9b0".parse().unwrap();
 
         let message = repository
-            .find_by_id(org_id, proj_id, stream_id, message_just_fits)
+            .find_by_id(org_id, proj_id, message_just_fits)
             .await
             .unwrap();
         assert!(!message.is_truncated);
@@ -1136,7 +1109,7 @@ mod test {
         );
 
         let message = repository
-            .find_by_id(org_id, proj_id, stream_id, message_just_too_log)
+            .find_by_id(org_id, proj_id, message_just_too_log)
             .await
             .unwrap();
         assert!(message.is_truncated);
@@ -1153,7 +1126,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "smtp_credentials",
             "messages"
         )
@@ -1162,14 +1134,14 @@ mod test {
         let organizations = OrganizationRepository::new(pool.clone());
         let messages = MessageRepository::new(pool.clone());
 
-        let (org_id, _proj_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, proj_id) = TestProjects::Org1Project1.get_ids();
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
 
         // org 1 starts out as Not Blocked
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
 
         // set org 1 to No Sending
         organizations
@@ -1180,7 +1152,7 @@ mod test {
         let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
         assert!(matches!(err, Error::NotFound(_)));
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
 
         // set org 1 to No Sending Or Receiving
         organizations
@@ -1192,7 +1164,7 @@ mod test {
         assert!(matches!(err, Error::NotFound(_)));
 
         let err = messages
-            .email_creation_rate_limit(stream_id)
+            .email_creation_rate_limit(proj_id)
             .await
             .unwrap_err();
         assert!(matches!(err, Error::OrgBlocked)); // can't receive
@@ -1206,6 +1178,6 @@ mod test {
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send again
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive again
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive again
     }
 }

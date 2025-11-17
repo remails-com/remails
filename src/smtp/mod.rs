@@ -52,7 +52,7 @@ mod test {
             MessageRepository, MessageStatus, SmtpCredentialRepository, SmtpCredentialRequest,
         },
         smtp::{SmtpConfig, server::SmtpServer},
-        test::{TestStreams, random_port},
+        test::{TestProjects, random_port},
     };
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
@@ -68,7 +68,7 @@ mod test {
     ) -> (CancellationToken, JoinHandle<()>, u16, String, String) {
         let smtp_port = random_port();
 
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let credential_request = SmtpCredentialRequest {
             username: "john".to_string(),
@@ -77,7 +77,7 @@ mod test {
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
-            .generate(org_id, project_id, stream_id, &credential_request)
+            .generate(org_id, project_id, &credential_request)
             .await
             .unwrap();
 
@@ -115,7 +115,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -147,10 +146,10 @@ mod test {
         server_handle.await.unwrap();
 
         // message should now be received and stored in the database
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let messages = MessageRepository::new(pool);
         let received_messages = messages
-            .list_message_metadata(org_id, project_id, stream_id, Default::default())
+            .list_message_metadata(org_id, project_id, Default::default())
             .await
             .unwrap();
         assert_eq!(received_messages.len(), 1);
@@ -163,7 +162,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, port, username, _) = setup_server(pool).await;

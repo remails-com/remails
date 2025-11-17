@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1 AND o.block_status = 'not_blocked'\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $4) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND m.project_id = $3\n            ",
   "describe": {
     "columns": [
       {
@@ -20,21 +20,16 @@
       },
       {
         "ordinal": 3,
-        "name": "stream_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 4,
         "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "api_key_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -54,81 +49,83 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "reason",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 11,
-        "name": "raw_data",
+        "ordinal": 10,
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "raw_size!",
         "type_info": "Int4"
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "message_id_header",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 16,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 18,
+        "ordinal": 17,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 19,
+        "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
       true,
       true,
       false,
@@ -136,7 +133,7 @@
       false,
       false,
       false,
-      false,
+      null,
       null,
       true,
       true,
@@ -147,5 +144,5 @@
       false
     ]
   },
-  "hash": "b6db36f6e557b4f4c473cbc5d833af3ed9131683e84033c9bbbc2931703446d7"
+  "hash": "c632ca355c6f2636598fda6e88de4fbf944185fd5299306dc58f07403fa8be8a"
 }

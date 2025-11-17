@@ -581,7 +581,6 @@ impl Handler {
         fields(
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
-            stream_id = message.stream_id.to_string(),
             outbound_ip = outbound_ip.to_string(),
         ))]
     pub async fn send_message(
@@ -848,7 +847,7 @@ mod test {
     use crate::{
         handler::dns::DnsResolver,
         models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
-        test::{TestStreams, random_port},
+        test::{TestProjects, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
@@ -883,7 +882,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -910,11 +908,11 @@ mod test {
             description: "Test SMTP credential description".to_string(),
         };
 
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
-            .generate(org_id, project_id, stream_id, &credential_request)
+            .generate(org_id, project_id, &credential_request)
             .await
             .unwrap();
 
@@ -945,7 +943,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -979,11 +976,11 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
-                .generate(org_id, project_id, stream_id, &credential_request)
+                .generate(org_id, project_id, &credential_request)
                 .await
                 .unwrap();
 
@@ -1004,7 +1001,7 @@ mod test {
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
-                .remove(org_id, project_id, stream_id, credential.id())
+                .remove(org_id, project_id, credential.id())
                 .await
                 .unwrap();
         }
@@ -1017,7 +1014,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -1051,11 +1047,11 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
-                .generate(org_id, project_id, stream_id, &credential_request)
+                .generate(org_id, project_id, &credential_request)
                 .await
                 .unwrap();
 
@@ -1080,7 +1076,7 @@ mod test {
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
-                .remove(org_id, project_id, stream_id, credential.id())
+                .remove(org_id, project_id, credential.id())
                 .await
                 .unwrap();
         }

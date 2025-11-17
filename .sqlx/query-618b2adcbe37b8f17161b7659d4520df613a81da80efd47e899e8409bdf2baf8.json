@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $5) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND m.project_id = $3\n              AND m.stream_id = $4\n            ",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, api_key_id,\n                from_email, recipients, raw_data, max_attempts, message_id_header\n            )\n            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8\n            FROM projects p\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE p.id = $2\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            ",
   "describe": {
     "columns": [
       {
@@ -20,21 +20,16 @@
       },
       {
         "ordinal": 3,
-        "name": "stream_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 4,
         "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "api_key_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -54,67 +49,67 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "reason",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 11,
-        "name": "raw_data!",
+        "ordinal": 10,
+        "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "raw_size!",
         "type_info": "Int4"
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "message_id_header",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 16,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 18,
+        "ordinal": 17,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 19,
+        "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
       }
@@ -124,15 +119,17 @@
         "Uuid",
         "Uuid",
         "Uuid",
-        "Uuid",
-        "Int4"
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Int4",
+        "Varchar"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
       true,
       true,
       false,
@@ -140,7 +137,7 @@
       false,
       false,
       false,
-      null,
+      false,
       null,
       true,
       true,
@@ -151,5 +148,5 @@
       false
     ]
   },
-  "hash": "33cf1fe2853926c690d62819937a9d618e03d9dde34533e103dda892c5c92116"
+  "hash": "618b2adcbe37b8f17161b7659d4520df613a81da80efd47e899e8409bdf2baf8"
 }

@@ -4,7 +4,7 @@ use crate::{
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
         ApiKey, ApiMessageMetadata, CreatedApiKeyWithPassword, MessageStatus, OrgBlockStatus,
-        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse, StreamId,
+        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
     },
     run_api_server, run_mta,
     smtp::SmtpConfig,
@@ -29,68 +29,36 @@ pub fn random_port() -> u16 {
 
 /// Streams used for testing, as configured in the fixtures
 #[allow(dead_code)]
-pub enum TestStreams {
-    Org1Project1Stream1,
-    Org1Project2Stream1,
-    Org1Project2Stream2,
-    Org2Project1Stream1,
+pub enum TestProjects {
+    Org1Project1,
+    Org1Project2,
+    Org2Project1,
 }
 
-impl TestStreams {
-    pub fn stream_id(&self) -> StreamId {
-        match self {
-            TestStreams::Org1Project1Stream1 => {
-                "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap()
-            }
-            TestStreams::Org1Project2Stream1 => {
-                "d01de497-b40a-4795-a92e-5a8b83dea565".parse().unwrap()
-            }
-            TestStreams::Org1Project2Stream2 => {
-                "e1bcdb8e-6a01-4f6f-b4fd-2b71f872bb02".parse().unwrap()
-            }
-            TestStreams::Org2Project1Stream1 => {
-                "6af665cd-698e-47ca-9d6b-966f8e8fa07f".parse().unwrap()
-            }
-        }
-    }
-
+impl TestProjects {
     pub fn project_id(&self) -> ProjectId {
         match self {
-            TestStreams::Org1Project1Stream1 => {
-                "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()
-            }
-            TestStreams::Org1Project2Stream1 | TestStreams::Org1Project2Stream2 => {
-                "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap()
-            }
-            TestStreams::Org2Project1Stream1 => {
-                "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()
-            }
+            TestProjects::Org1Project1 => "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap(),
+            TestProjects::Org1Project2 => "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap(),
+            TestProjects::Org2Project1 => "70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap(),
         }
     }
 
     pub fn org_id(&self) -> OrganizationId {
         match self {
-            TestStreams::Org1Project1Stream1
-            | TestStreams::Org1Project2Stream1
-            | TestStreams::Org1Project2Stream2 => {
+            TestProjects::Org1Project1 | TestProjects::Org1Project2 => {
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap()
             }
-            TestStreams::Org2Project1Stream1 => {
-                "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap()
-            }
+            TestProjects::Org2Project1 => "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
         }
     }
 
-    pub fn get_ids(&self) -> (OrganizationId, ProjectId, StreamId) {
-        (self.org_id(), self.project_id(), self.stream_id())
+    pub fn get_ids(&self) -> (OrganizationId, ProjectId) {
+        (self.org_id(), self.project_id())
     }
 
-    pub fn get_stringified_ids(&self) -> (String, String, String) {
-        (
-            self.org_id().to_string(),
-            self.project_id().to_string(),
-            self.stream_id().to_string(),
-        )
+    pub fn get_stringified_ids(&self) -> (String, String) {
+        (self.org_id().to_string(), self.project_id().to_string())
     }
 }
 
@@ -169,17 +137,16 @@ async fn setup(
     "projects",
     "org_domains",
     "proj_domains",
-    "streams",
     "k8s_nodes"
 ))]
 async fn integration_test(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
     // create John's SMTP credential
-    let (jorg, jproj, jstream) = TestStreams::Org1Project1Stream1.get_stringified_ids();
+    let (jorg, jproj) = TestProjects::Org1Project1.get_stringified_ids();
     let john_cred = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/smtp_credentials"
         ))
         .header("X-Test-Login", &jorg)
         .json(&json!({
@@ -196,7 +163,7 @@ async fn integration_test(pool: PgPool) {
     // check Johns's SMTP credential exists
     let credentials: Vec<SmtpCredential> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/smtp_credentials"
         ))
         .header("X-Test-Login", &jorg)
         .send()
@@ -208,7 +175,7 @@ async fn integration_test(pool: PgPool) {
     assert_eq!(credentials.len(), 1);
 
     // create Eddy's REST API credential
-    let (eorg, eproj, estream) = TestStreams::Org2Project1Stream1.get_stringified_ids();
+    let (eorg, eproj) = TestProjects::Org2Project1.get_stringified_ids();
     let eddy_cred = client
         .post(format!(
             "http://localhost:{http_port}/api/organizations/{eorg}/api_keys"
@@ -277,7 +244,7 @@ async fn integration_test(pool: PgPool) {
     // Eddy sends a message via the Remails REST API
     let message: ApiMessageMetadata = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/streams/{estream}/messages"
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/messages"
         ))
         .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
         .json(&json!({
@@ -309,7 +276,9 @@ async fn integration_test(pool: PgPool) {
 
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
-        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
+        .get(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+        ))
         .header("X-Test-Login", &jorg)
         .send()
         .await
@@ -321,7 +290,9 @@ async fn integration_test(pool: PgPool) {
 
     // cannot check someone else's messages
     let status = client
-        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
+        .get(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+        ))
         .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
         .send()
         .await
@@ -353,7 +324,9 @@ async fn integration_test(pool: PgPool) {
 
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
-        .get(format!("http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/streams/{jstream}/messages"))
+        .get(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+        ))
         .header("X-Test-Login", &jorg)
         .send()
         .await
@@ -409,7 +382,7 @@ async fn integration_test(pool: PgPool) {
     // Eddy can no longer send emails via the REST API
     let res = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/streams/{estream}/messages"
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/messages"
         ))
         .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
         .json(&json!({
@@ -432,7 +405,6 @@ async fn integration_test(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams",
     "k8s_nodes"
 ))]
 async fn quotas_count_atomically(pool: PgPool) {
@@ -444,11 +416,11 @@ async fn quotas_count_atomically(pool: PgPool) {
 
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_stringified_ids();
+    let (org_id, project_id) = TestProjects::Org1Project1.get_stringified_ids();
 
     let john_cred = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .json(&json!({
@@ -523,7 +495,6 @@ async fn quotas_count_atomically(pool: PgPool) {
     "projects",
     "org_domains",
     "proj_domains",
-    "streams",
     "k8s_nodes"
 ))]
 async fn rate_limit_count_atomically(pool: PgPool) {
@@ -536,11 +507,11 @@ async fn rate_limit_count_atomically(pool: PgPool) {
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
     // Organization 2 has a rate limit of 0 that should be reset automatically to 120
-    let (org_id, project_id, stream_id) = TestStreams::Org2Project1Stream1.get_stringified_ids();
+    let (org_id, project_id) = TestProjects::Org2Project1.get_stringified_ids();
 
     let john_cred = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials"
+            "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/smtp_credentials"
         ))
         .header("X-Test-Login", org_id)
         .json(&json!({

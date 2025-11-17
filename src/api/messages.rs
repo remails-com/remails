@@ -11,7 +11,7 @@ use crate::{
     handler::RetryConfig,
     models::{
         ApiKey, ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository,
-        MessageStatus, NewApiMessage, OrganizationId, ProjectId, StreamId,
+        MessageStatus, NewApiMessage, OrganizationId, ProjectId,
     },
 };
 use axum::{
@@ -120,7 +120,7 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
 /// Use this endpoint to send an email message via the HTTP REST API.
 #[utoipa::path(
     post,
-    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+    path = "/organizations/{org_id}/projects/{project_id}/messages",
     tags = ["Messages"],
     request_body = EmailParameters,
     responses(
@@ -132,14 +132,14 @@ pub async fn create_message(
     State(repo): State<MessageRepository>,
     State(retry_config): State<Arc<RetryConfig>>,
     State(bus_client): State<Arc<BusClient>>,
-    Path((org_id, _proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
+    Path((org_id, project_id)): Path<(OrganizationId, ProjectId)>,
     key: ApiKey, // only accessible for API keys
     ValidatedJson(message): ValidatedJson<EmailParameters>,
 ) -> Result<impl IntoResponse, AppError> {
     key.has_org_write_access(&org_id)?;
 
     // check email rate limit
-    if repo.email_creation_rate_limit(stream_id).await? <= 0 {
+    if repo.email_creation_rate_limit(project_id).await? <= 0 {
         debug!("too many email requests for org {org_id}");
         return Err(AppError::TooManyRequests);
     }
@@ -219,7 +219,7 @@ pub async fn create_message(
         message_id,
         message_id_header,
         api_key_id: *key.id(),
-        stream_id,
+        project_id,
         from_email,
         recipients,
         raw_data,
@@ -227,7 +227,6 @@ pub async fn create_message(
 
     debug!(
         organization_id = org_id.to_string(),
-        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         api_key_id = key.id().to_string(),
         "creating message from API"
@@ -257,7 +256,7 @@ pub async fn create_message(
 /// of the previous request.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
+    path = "/organizations/{org_id}/projects/{project_id}/messages",
     params(MessageFilter),
     tags = ["Messages"],
     responses(
@@ -267,21 +266,20 @@ pub async fn create_message(
 )]
 pub async fn list_messages(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
+    Path((org_id, project_id)): Path<(OrganizationId, ProjectId)>,
     ValidatedQuery(filter): ValidatedQuery<MessageFilter>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
     user.has_org_read_access(&org_id)?;
 
     let messages = repo
-        .list_message_metadata(org_id, project_id, stream_id, filter)
+        .list_message_metadata(org_id, project_id, filter)
         .await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
-        stream_id = stream_id.to_string(),
         "listed {} messages",
         messages.len()
     );
@@ -296,7 +294,7 @@ pub async fn list_messages(
 /// was actually truncated or did fit into the 10,000-character limit.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully fetched message", body = ApiMessage),
@@ -305,25 +303,17 @@ pub async fn list_messages(
 )]
 pub async fn get_message(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id, stream_id, message_id)): Path<(
-        OrganizationId,
-        ProjectId,
-        StreamId,
-        MessageId,
-    )>,
+    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<ApiMessage> {
     user.has_org_read_access(&org_id)?;
 
-    let message = repo
-        .find_by_id(org_id, project_id, stream_id, message_id)
-        .await?;
+    let message = repo.find_by_id(org_id, project_id, message_id).await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
-        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         "retrieved message",
     );
@@ -334,7 +324,7 @@ pub async fn get_message(
 /// Delete email message
 #[utoipa::path(
     delete,
-    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
+    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully deleted message", body = MessageId),
@@ -343,25 +333,17 @@ pub async fn get_message(
 )]
 pub async fn remove_message(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id, stream_id, message_id)): Path<(
-        OrganizationId,
-        ProjectId,
-        StreamId,
-        MessageId,
-    )>,
+    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<MessageId> {
     user.has_org_write_access(&org_id)?;
 
-    let id = repo
-        .remove(org_id, project_id, stream_id, message_id)
-        .await?;
+    let id = repo.remove(org_id, project_id, message_id).await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
-        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         "removed message",
     );
@@ -376,7 +358,7 @@ pub async fn remove_message(
 /// who have not previously generated a permanent failure response.
 #[utoipa::path(
     put,
-    path = "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
+    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}/retry",
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully initiated retry"),
@@ -386,19 +368,12 @@ pub async fn remove_message(
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
     State(bus_client): State<Arc<BusClient>>,
-    Path((org_id, project_id, stream_id, message_id)): Path<(
-        OrganizationId,
-        ProjectId,
-        StreamId,
-        MessageId,
-    )>,
+    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> Result<(), AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let status = repo
-        .message_status(org_id, project_id, stream_id, message_id)
-        .await?;
+    let status = repo.message_status(org_id, project_id, message_id).await?;
 
     if status == MessageStatus::Delivered {
         warn!(
@@ -424,7 +399,6 @@ pub async fn retry_now(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
         project_id = project_id.to_string(),
-        stream_id = stream_id.to_string(),
         message_id = message_id.to_string(),
         "requested message retry",
     );
@@ -444,7 +418,7 @@ mod tests {
         },
         bus::client::BusMessage,
         models::{MessageStatus, OrganizationRepository, Role},
-        test::TestStreams,
+        test::TestProjects,
     };
     use axum::body::Body;
     use futures::StreamExt;
@@ -459,7 +433,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages",
             "k8s_nodes"
@@ -467,14 +440,14 @@ mod tests {
     ))]
     async fn test_messages_lifecycle(pool: PgPool) {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
         let mut message_stream = server.message_bus.receive().await.unwrap();
 
         // list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
             ))
             .await
             .unwrap();
@@ -487,7 +460,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -498,9 +471,10 @@ mod tests {
 
         // update message to retry asap
         let response = server
-            .put(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}/retry"
-            ), Body::empty())
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}/retry"),
+                Body::empty(),
+            )
             .await
             .unwrap();
         let status = response.status();
@@ -526,7 +500,7 @@ mod tests {
         // remove message
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -535,7 +509,7 @@ mod tests {
         // check if message is deleted
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
             ))
             .await
             .unwrap();
@@ -550,12 +524,12 @@ mod tests {
         read_status_code: StatusCode,
         write_status_code: StatusCode,
     ) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
 
         // can't list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
             ))
             .await
             .unwrap();
@@ -565,7 +539,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -573,9 +547,10 @@ mod tests {
 
         // can't update message to retry asap
         let response = server
-            .put(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}/retry"
-            ), Body::empty())
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}/retry"),
+                Body::empty(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
@@ -583,7 +558,7 @@ mod tests {
         // can't remove message
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -596,7 +571,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages"
         )
@@ -613,7 +587,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages"
         )
@@ -630,7 +603,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages"
         )
@@ -646,20 +618,19 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages"
         )
     ))]
     async fn test_fetch_message_validation(pool: PgPool) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
         server.use_api_key(org_1, Role::Maintainer).await;
 
         let too_low_limit = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?limit=0"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?limit=0"
             ))
             .await
             .unwrap();
@@ -668,7 +639,7 @@ mod tests {
 
         let too_high_limit = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?limit=101"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?limit=101"
             ))
             .await
             .unwrap();
@@ -677,7 +648,7 @@ mod tests {
 
         let invalid_timestamp = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages?before=invalid_time"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?before=invalid_time"
             ))
             .await
             .unwrap();
@@ -687,23 +658,17 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "streams",
-            "smtp_credentials"
-        )
+        scripts("organizations", "api_users", "projects", "smtp_credentials")
     ))]
     async fn test_create_message_validation(pool: PgPool) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
         server.use_api_key(org_1, Role::Maintainer).await;
 
         let too_many_recipients = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [
@@ -727,7 +692,7 @@ mod tests {
 
         let invalid_email = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient1atexample.com"
@@ -740,7 +705,7 @@ mod tests {
 
         let invalid_email_list = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1atexample.com"]
@@ -753,7 +718,7 @@ mod tests {
 
         let missing_recipient = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [],
@@ -765,7 +730,7 @@ mod tests {
 
         let too_long_subject = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1@example.com"],
@@ -779,16 +744,10 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "streams",
-            "smtp_credentials"
-        )
+        scripts("organizations", "api_users", "projects", "smtp_credentials")
     ))]
     async fn test_create_message(pool: PgPool) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
         let api_key_id = server.use_api_key(org_1, Role::Maintainer).await;
@@ -796,7 +755,7 @@ mod tests {
         // send email with 1 recipient, text and HTML body, `in_reply_to`, `references` and `reply_to`
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient@example.com",
@@ -825,7 +784,7 @@ mod tests {
         // send email with 2 recipients, only text body, and custom from name
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": {"name": "Test", "address": "test@example.com"},
                     "to": ["recipient1@example.com", "recipient2@example.com"],
@@ -852,7 +811,7 @@ mod tests {
         // send email with 3 recipients, only HTML body
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1@example.com", "recipient2@example.com", {"name": "Recipient 3", "address": "recipient3@example.com"}],
@@ -883,16 +842,10 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "streams",
-            "smtp_credentials"
-        )
+        scripts("organizations", "api_users", "projects", "smtp_credentials")
     ))]
     async fn test_create_message_reject(pool: PgPool) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
         server.use_api_key(org_1, Role::Maintainer).await;
@@ -900,7 +853,7 @@ mod tests {
         // reject emails without body
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient@example.com",
@@ -914,7 +867,7 @@ mod tests {
         // reject emails without recipients
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [],
@@ -929,7 +882,7 @@ mod tests {
         // reject emails with invalid from email
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(json!({
                     "from": "remails.net",
                     "to": "recipient@example.com",
@@ -944,16 +897,10 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "streams",
-            "smtp_credentials"
-        )
+        scripts("organizations", "api_users", "projects", "smtp_credentials")
     ))]
     async fn test_create_message_no_access(pool: PgPool) {
-        let (org_1, proj_1, stream_1) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), None).await;
 
@@ -965,7 +912,7 @@ mod tests {
         });
         let try_post = |server: &TestServer| {
             server.post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
                 serialize_body(message_request.clone()),
             )
         };

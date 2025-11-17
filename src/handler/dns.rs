@@ -459,7 +459,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn domain_verification(pool: PgPool) {
         let domains = DomainRepository::new(pool);

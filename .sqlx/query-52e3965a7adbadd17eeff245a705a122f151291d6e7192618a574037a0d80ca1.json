@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE smtp_credentials cred\n            SET description = $1\n            FROM streams s\n                JOIN projects p ON s.project_id = p.id\n            WHERE cred.id = $2\n              AND cred.stream_id = s.id\n              AND cred.stream_id = $3\n              AND s.project_id = $4\n              AND p.organization_id = $5\n            RETURNING\n                cred.id,\n                cred.stream_id,\n                cred.updated_at,\n                cred.created_at,\n                '' AS \"password_hash!\",\n                cred.description,\n                cred.username\n            ",
+  "query": "\n            UPDATE smtp_credentials cred\n            SET description = $1\n            FROM projects p\n            WHERE cred.id = $2\n              AND cred.project_id = p.id\n              AND cred.project_id = $3\n              AND p.organization_id = $4\n            RETURNING\n                cred.id,\n                cred.updated_at,\n                cred.project_id,\n                cred.created_at,\n                '' AS \"password_hash!\",\n                cred.description,\n                cred.username\n            ",
   "describe": {
     "columns": [
       {
@@ -10,13 +10,13 @@
       },
       {
         "ordinal": 1,
-        "name": "stream_id",
-        "type_info": "Uuid"
+        "name": "updated_at",
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 2,
-        "name": "updated_at",
-        "type_info": "Timestamptz"
+        "name": "project_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 3,
@@ -44,7 +44,6 @@
         "Varchar",
         "Uuid",
         "Uuid",
-        "Uuid",
         "Uuid"
       ]
     },
@@ -58,5 +57,5 @@
       false
     ]
   },
-  "hash": "a0491369e4a11bf8d78ffaa5d72293492a1d4b3bc4ea5464cf01c90ad347257e"
+  "hash": "52e3965a7adbadd17eeff245a705a122f151291d6e7192618a574037a0d80ca1"
 }

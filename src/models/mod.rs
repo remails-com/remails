@@ -6,7 +6,6 @@ mod message;
 mod organization;
 mod projects;
 mod smtp_credential;
-mod streams;
 
 pub(crate) use api_keys::*;
 pub(crate) use api_user::*;
@@ -16,7 +15,6 @@ pub(crate) use message::*;
 pub(crate) use organization::*;
 pub(crate) use projects::*;
 pub(crate) use smtp_credential::*;
-pub(crate) use streams::*;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

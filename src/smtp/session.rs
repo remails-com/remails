@@ -234,7 +234,7 @@ impl SmtpSession {
 
                 let Ok(ratelimit) = self
                     .message_repository
-                    .email_creation_rate_limit(credential.stream_id())
+                    .email_creation_rate_limit(credential.project_id())
                     .await
                 else {
                     return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());
