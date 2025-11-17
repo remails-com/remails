@@ -1,4 +1,4 @@
-use super::error::{AppError, ApiResult};
+use super::error::{ApiResult, AppError};
 use crate::{
     api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{

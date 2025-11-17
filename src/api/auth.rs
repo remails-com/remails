@@ -214,7 +214,7 @@ pub(super) struct PasswordLogin {
     #[garde(skip)]
     email: EmailAddress,
     #[garde(dive)]
-    #[schema(min_length = 10, max_length = 256)]
+    #[schema(min_length = 6, max_length = 256)]
     password: Password,
 }
 
@@ -305,7 +305,7 @@ pub(super) struct PasswordRegister {
     #[garde(skip)]
     email: EmailAddress,
     #[garde(dive)]
-    #[schema(min_length = 10, max_length = 256)]
+    #[schema(min_length = 6, max_length = 256)]
     password: Password,
 }
 
@@ -413,9 +413,7 @@ where
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar
-            .get(SESSION_COOKIE_NAME)
-            .ok_or(AppError::Unauthorized)?;
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(AppError::Unauthorized)?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(cookie) => {
@@ -494,9 +492,7 @@ where
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar
-            .get(SESSION_COOKIE_NAME)
-            .ok_or(AppError::Unauthorized)?;
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(AppError::Unauthorized)?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(user) => {
@@ -575,13 +571,11 @@ where
             return Err(AppError::Unauthorized);
         }
 
-        let credentials = base64ct::Base64::decode_vec(base64_credentials)
-            .map_err(|_| AppError::Unauthorized)?;
+        let credentials =
+            base64ct::Base64::decode_vec(base64_credentials).map_err(|_| AppError::Unauthorized)?;
         let credentials = String::from_utf8(credentials).map_err(|_| AppError::Unauthorized)?;
 
-        let (api_key_id, password) = credentials
-            .split_once(':')
-            .ok_or(AppError::Unauthorized)?;
+        let (api_key_id, password) = credentials.split_once(':').ok_or(AppError::Unauthorized)?;
 
         let api_key_id = api_key_id.parse().map_err(|_| AppError::Unauthorized)?;
         let api_key = ApiKeyRepository::from_ref(state)

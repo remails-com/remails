@@ -211,7 +211,7 @@ pub struct MoneybirdWebhookPayload {
     // Strangely, the `test_webhook` does not call this `webhook_token`, but `token`
     #[serde(alias = "token")]
     #[garde(dive)]
-    #[schema(min_length = 10, max_length = 256)]
+    #[schema(min_length = 6, max_length = 256)]
     pub(super) webhook_token: Password,
     #[garde(dive)]
     pub(super) entity_type: EntityType,

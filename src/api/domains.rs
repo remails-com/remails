@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState, RemailsConfig,
         auth::Authenticated,
-        error::{AppError, ApiResult},
+        error::{ApiResult, AppError},
         validation::ValidatedJson,
     },
     handler::dns::{DnsResolver, DomainVerificationStatus},

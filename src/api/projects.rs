@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{AppError, ApiResult},
+        error::{ApiResult, AppError},
     },
     models::{NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
 };

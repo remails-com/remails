@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{AppError, ApiResult},
+        error::{ApiResult, AppError},
         validation::ValidatedJson,
     },
     models::{NewStream, OrganizationId, ProjectId, Stream, StreamId, StreamRepository},

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::error::{AppError, ApiResult};
+use super::error::{ApiResult, AppError};
 use crate::{
     api::{
         ApiState,
@@ -151,24 +151,25 @@ pub async fn create_message(
         .map_err(|_| AppError::BadRequest(format!("Invalid from email: {}", from_email)))?;
 
     // parse recipient's email(s)
-    let recipients = match &message.to {
-        EmailAddresses::Singular(to) => {
-            let address = to.get_mail_address();
-            vec![address.parse().map_err(|_| {
-                AppError::BadRequest(format!("Invalid recipient email: {address}"))
-            })?]
-        }
-        EmailAddresses::Multiple(to) => {
-            let mut recipients = Vec::with_capacity(to.len());
-            for recipient in to {
-                let address = recipient.get_mail_address();
-                recipients.push(address.parse().map_err(|_| {
+    let recipients =
+        match &message.to {
+            EmailAddresses::Singular(to) => {
+                let address = to.get_mail_address();
+                vec![address.parse().map_err(|_| {
                     AppError::BadRequest(format!("Invalid recipient email: {address}"))
-                })?);
+                })?]
             }
-            recipients
-        }
-    };
+            EmailAddresses::Multiple(to) => {
+                let mut recipients = Vec::with_capacity(to.len());
+                for recipient in to {
+                    let address = recipient.get_mail_address();
+                    recipients.push(address.parse().map_err(|_| {
+                        AppError::BadRequest(format!("Invalid recipient email: {address}"))
+                    })?);
+                }
+                recipients
+            }
+        };
     if recipients.is_empty() {
         return Err(AppError::BadRequest(
             "Must have at least one recipient".to_owned(),
