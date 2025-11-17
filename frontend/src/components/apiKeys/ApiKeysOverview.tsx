@@ -19,7 +19,7 @@ export default function ApiKeysOverview() {
   }
 
   let docs_url;
-  if (window.location.host.startsWith("localhost")) {
+  if (window.location.hostname === "localhost") {
     docs_url = `http://${window.location.host}/docs/`;
   } else {
     docs_url = `https://docs.${window.location.host}`;

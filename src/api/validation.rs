@@ -1,4 +1,4 @@
-use crate::api::error::ApiError;
+use crate::api::error::AppError;
 use axum::{
     Json,
     extract::{
@@ -19,7 +19,7 @@ where
     S: Send + Sync,
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let Json(value) = Json::<T>::from_request(req, state).await.map_err(|err| {
@@ -29,7 +29,7 @@ where
                     FailedToBufferBody::LengthLimitError(_)
                 ))
             ) {
-                ApiError::payload_too_large()
+                AppError::PayloadTooLarge
             } else {
                 err.into()
             }
@@ -48,7 +48,7 @@ where
     S: Send + Sync,
     Query<T>: FromRequestParts<S, Rejection = QueryRejection>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     async fn from_request_parts(req: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let Query(value) = Query::<T>::from_request_parts(req, state).await?;

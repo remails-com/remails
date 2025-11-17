@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
     },
     models::{NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
 };
@@ -28,7 +28,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     tags = ["Projects"],
     responses(
         (status = 200, description = "Successfully fetched projects", body = [Project]),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn list_projects(
@@ -58,7 +58,7 @@ pub async fn list_projects(
     request_body = NewProject,
     responses(
         (status = 200, description = "Project successfully updated", body = Project),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_project(
@@ -89,7 +89,7 @@ pub async fn update_project(
     request_body = NewProject,
     responses(
         (status = 201, description = "Project created successfully", body = Project),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn create_project(
@@ -97,7 +97,7 @@ pub async fn create_project(
     user: Box<dyn Authenticated>,
     Path((org_id,)): Path<(OrganizationId,)>,
     Json(new): Json<NewProject>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let project = repo.create(new, org_id).await?;
@@ -118,7 +118,7 @@ pub async fn create_project(
     tags = ["Projects"],
     responses(
         (status = 200, description = "Project successfully deleted", body = ProjectId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_project(

@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
         validation::ValidatedJson,
     },
     models::{ApiUser, OrganizationId},
@@ -28,7 +28,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     tags = ["internal", "Subscription"],
     responses(
         (status = 200, description = "Successfully fetched subscription status", body = SubscriptionStatus),
-        ApiError
+        AppError
 ))]
 pub async fn get_subscription(
     State(moneybird): State<MoneyBird>,
@@ -54,7 +54,7 @@ pub async fn get_subscription(
     tags = ["internal", "Subscription"],
     responses(
         (status = 200, description = "Successfully created sales link", body = SubscriptionStatus),
-        ApiError
+        AppError
 ))]
 pub async fn get_sales_link(
     State(moneybird): State<MoneyBird>,
@@ -78,12 +78,12 @@ pub async fn get_sales_link(
     tags = ["internal", "Subscription"],
     responses(
         (status = 200, description = "Successfully handled webhook"),
-        ApiError
+        AppError
 ))]
 pub async fn moneybird_webhook(
     State(moneybird): State<MoneyBird>,
     ValidatedJson(payload): ValidatedJson<MoneybirdWebhookPayload>,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     debug!("received moneybird webhook");
     moneybird.webhook_handler(payload).await?;
     Ok(())

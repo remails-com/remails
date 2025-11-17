@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState, RemailsConfig,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
         validation::ValidatedJson,
     },
     handler::dns::{DnsResolver, DomainVerificationStatus},
@@ -48,7 +48,7 @@ pub struct SpecificDomainPath {
     request_body = NewDomain,
     responses(
         (status = 201, description = "Domain successfully created", body = ApiDomain),
-        ApiError,
+        AppError,
     )
 )]
 pub(crate) async fn create_domain(
@@ -58,7 +58,7 @@ pub(crate) async fn create_domain(
     user: Box<dyn Authenticated>,
     Path(DomainPath { org_id, project_id }): Path<DomainPath>,
     ValidatedJson(new): ValidatedJson<NewDomain>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let domain = repo.create(new, org_id, project_id).await?;
@@ -86,7 +86,7 @@ pub(crate) async fn create_domain(
     params(OrganizationId),
     responses(
         (status = 200, description = "Successfully fetched domains", body = [ApiDomain]),
-        ApiError,
+        AppError,
     )
 )]
 pub(crate) async fn list_domains(
@@ -128,7 +128,7 @@ pub(crate) async fn list_domains(
     params(OrganizationId, DomainId),
     responses(
         (status = 200, description = "Successfully fetched domain", body = ApiDomain),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn get_domain(
@@ -171,7 +171,7 @@ pub async fn get_domain(
     params(OrganizationId, DomainId),
     responses(
         (status = 200, description = "Successfully deleted domain", body = DomainId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn delete_domain(
@@ -209,7 +209,7 @@ pub async fn delete_domain(
     params(OrganizationId, DomainId),
     responses(
         (status = 200, description = "Successfully verified domain", body = DomainVerificationStatus),
-        ApiError,
+        AppError,
     )
 )]
 pub(super) async fn verify_domain(

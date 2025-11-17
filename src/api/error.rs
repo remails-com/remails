@@ -6,14 +6,34 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
+use utoipa::{
+    IntoResponses,
+    openapi::{RefOr, Response},
+};
 use uuid::Uuid;
 
-pub type ApiResult<T> = Result<Json<T>, ApiError>;
+pub type ApiResult<T> = Result<Json<T>, AppError>;
+
+#[derive(thiserror::Error, Debug, derive_more::Display)]
+pub enum AppError {
+    BadRequest(String),
+    NotFound,
+    Conflict,
+    TooManyRequests,
+    Internal,
+    Forbidden,
+    Unauthorized,
+    PreconditionFailed(String),
+    BadGateway,
+    PayloadTooLarge,
+    RequestTimeout,
+}
 
 #[derive(utoipa::IntoResponses, Serialize)]
-pub enum ApiError {
+enum ApiError {
     /// Bad Request
     #[response(status = BAD_REQUEST)]
     BadRequest(ApiErrorResponse),
@@ -28,7 +48,7 @@ pub enum ApiError {
     TooManyRequests(ApiErrorResponse),
     /// Internal Server Error
     #[response(status = INTERNAL_SERVER_ERROR)]
-    InternalServerError(ApiErrorResponse),
+    Internal(ApiErrorResponse),
     /// Forbidden
     #[response(status = FORBIDDEN)]
     Forbidden(ApiErrorResponse),
@@ -43,7 +63,7 @@ pub enum ApiError {
     BadGateway(ApiErrorResponse),
     /// Payload Too Large
     #[response(status = PAYLOAD_TOO_LARGE)]
-    PayloadToLarge(ApiErrorResponse),
+    PayloadTooLarge(ApiErrorResponse),
     /// Request Timeout
     #[response(status = REQUEST_TIMEOUT)]
     RequestTimeout(ApiErrorResponse),
@@ -57,253 +77,102 @@ pub struct ApiErrorResponse {
     reference: Uuid,
 }
 
-impl ApiError {
-    pub fn unauthorized() -> Self {
+impl From<AppError> for ApiError {
+    fn from(err: AppError) -> Self {
         let reference = Uuid::new_v4();
         info!(
             error_reference = reference.to_string(),
-            "API server error: Unauthorized"
+            "API server error: {err:?}"
         );
 
-        ApiError::Unauthorized(ApiErrorResponse {
-            description: "Unauthorized".to_string(),
+        let content = ApiErrorResponse {
+            description: err.to_string(),
             reference,
-        })
-    }
+        };
 
-    pub fn request_timeout() -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: Request timeout"
-        );
-
-        ApiError::RequestTimeout(ApiErrorResponse {
-            description: "Request timeout".to_string(),
-            reference,
-        })
-    }
-
-    pub fn payload_too_large() -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: Payload too large"
-        );
-
-        ApiError::PayloadToLarge(ApiErrorResponse {
-            description: "Payload too large".to_string(),
-            reference,
-        })
-    }
-
-    pub fn bad_request(message: String) -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: Bad Request: {message}"
-        );
-
-        ApiError::BadRequest(ApiErrorResponse {
-            description: message,
-            reference,
-        })
-    }
-
-    pub fn forbidden() -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: Forbidden"
-        );
-
-        ApiError::Forbidden(ApiErrorResponse {
-            description: "Forbidden".to_string(),
-            reference,
-        })
-    }
-
-    pub fn precondition_failed(message: String) -> Self {
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "API server error: Precondition Failed: {message}"
-        );
-
-        ApiError::PreconditionFailed(ApiErrorResponse {
-            description: message,
-            reference,
-        })
-    }
-
-    pub fn not_found() -> Self {
-        let reference = Uuid::new_v4();
-        info!(
-            error_reference = reference.to_string(),
-            "API server error: Not Found"
-        );
-
-        ApiError::NotFound(ApiErrorResponse {
-            description: "Not found".to_string(),
-            reference,
-        })
-    }
-
-    pub fn too_many_requests() -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: Too many requests"
-        );
-
-        ApiError::TooManyRequests(ApiErrorResponse {
-            description: "Too many requests".to_string(),
-            reference,
-        })
-    }
-
-    pub fn internal() -> Self {
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "API server error: internal server error"
-        );
-
-        ApiError::InternalServerError(ApiErrorResponse {
-            description: "Internal server error".to_string(),
-            reference,
-        })
+        match err {
+            AppError::BadRequest(_) => ApiError::BadRequest(content),
+            AppError::NotFound => ApiError::NotFound(content),
+            AppError::Conflict => ApiError::Conflict(content),
+            AppError::TooManyRequests => ApiError::TooManyRequests(content),
+            AppError::Internal => ApiError::Internal(content),
+            AppError::Forbidden => ApiError::Forbidden(content),
+            AppError::Unauthorized => ApiError::Unauthorized(content),
+            AppError::PreconditionFailed(_) => ApiError::PreconditionFailed(content),
+            AppError::BadGateway => ApiError::BadGateway(content),
+            AppError::PayloadTooLarge => ApiError::PayloadTooLarge(content),
+            AppError::RequestTimeout => ApiError::RequestTimeout(content),
+        }
     }
 }
 
-impl From<JoinError> for ApiError {
-    fn from(err: JoinError) -> Self {
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "tokio task error: {err}"
-        );
-
-        ApiError::InternalServerError(ApiErrorResponse {
-            description: "Internal server error".to_string(),
-            reference,
-        })
-    }
-}
-
-impl From<oauth::Error> for ApiError {
+impl From<oauth::Error> for AppError {
     fn from(err: oauth::Error) -> Self {
         let message = err.user_message();
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "API server error (OAuth): {message} {err:?}"
-        );
+        error!("API server error (OAuth): {message} {err:?}");
 
         match err {
             oauth::Error::MissingEnvironmentVariable(_)
             | oauth::Error::Json(_)
             | oauth::Error::Database(_)
-            | oauth::Error::Other(_) => ApiError::InternalServerError(ApiErrorResponse {
-                description: message,
-                reference,
-            }),
-            oauth::Error::FetchUser(_) | oauth::Error::ParseUser(_) => {
-                ApiError::BadGateway(ApiErrorResponse {
-                    description: message,
-                    reference,
-                })
-            }
+            | oauth::Error::Other(_) => AppError::Internal,
+            oauth::Error::FetchUser(_) | oauth::Error::ParseUser(_) => AppError::BadGateway,
             oauth::Error::OauthToken(_)
             | oauth::Error::MissingCSRFCookie
-            | oauth::Error::CSRFTokenMismatch => ApiError::Unauthorized(ApiErrorResponse {
-                description: message,
-                reference,
-            }),
-            oauth::Error::PreconditionFailed(_) => ApiError::PreconditionFailed(ApiErrorResponse {
-                description: message,
-                reference,
-            }),
+            | oauth::Error::CSRFTokenMismatch => AppError::Unauthorized,
+            oauth::Error::PreconditionFailed(_) => AppError::PreconditionFailed(message),
         }
     }
 }
 
-impl From<crate::moneybird::Error> for ApiError {
+impl From<JoinError> for AppError {
+    fn from(err: JoinError) -> Self {
+        error!("{err:?}");
+        AppError::Internal
+    }
+}
+
+impl From<crate::moneybird::Error> for AppError {
     fn from(err: crate::moneybird::Error) -> Self {
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "API server error: {err} {err:?}"
-        );
+        error!("Moneybird error: {err} {err:?}");
 
-        ApiError::BadGateway(ApiErrorResponse {
-            description: err.to_string(),
-            reference,
-        })
+        AppError::BadGateway
     }
 }
 
-impl From<garde::Report> for ApiError {
+impl From<garde::Report> for AppError {
     fn from(err: garde::Report) -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: {err} {err:?}"
-        );
+        warn!("validation error: {err} {err:?}");
 
-        ApiError::BadRequest(ApiErrorResponse {
-            description: err.to_string(),
-            reference,
-        })
+        AppError::BadRequest(err.to_string())
     }
 }
 
-impl From<JsonRejection> for ApiError {
+impl From<JsonRejection> for AppError {
     fn from(err: JsonRejection) -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: {err} {err:?}"
-        );
+        warn!("Json error: {err} {err:?}");
 
-        ApiError::BadRequest(ApiErrorResponse {
-            description: err.to_string(),
-            reference,
-        })
+        AppError::BadRequest(err.to_string())
     }
 }
 
-impl From<QueryRejection> for ApiError {
+impl From<QueryRejection> for AppError {
     fn from(err: QueryRejection) -> Self {
-        let reference = Uuid::new_v4();
-        warn!(
-            error_reference = reference.to_string(),
-            "API server error: {err} {err:?}"
-        );
+        warn!("API server error: {err} {err:?}");
 
-        ApiError::BadRequest(ApiErrorResponse {
-            description: err.to_string(),
-            reference,
-        })
+        AppError::BadRequest(err.to_string())
     }
 }
 
-impl From<serde_json::Error> for ApiError {
+impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
-        let reference = Uuid::new_v4();
-        error!(
-            error_reference = reference.to_string(),
-            "API server error: {err} {err:?}"
-        );
+        error!("API server error: {err} {err:?}");
 
-        ApiError::InternalServerError(ApiErrorResponse {
-            description: err.to_string(),
-            reference,
-        })
+        AppError::Internal
     }
 }
 
-impl From<models::Error> for ApiError {
+impl From<models::Error> for AppError {
     fn from(err: models::Error) -> Self {
         let reference = Uuid::new_v4();
         error!(
@@ -312,41 +181,27 @@ impl From<models::Error> for ApiError {
         );
 
         match err {
-            Error::Serialization(_) => ApiError::BadRequest(ApiErrorResponse {
-                description: err.to_string(),
-                reference,
-            }),
-            Error::NotFound(_) => ApiError::NotFound(ApiErrorResponse {
-                description: "Not found".to_string(),
-                reference,
-            }),
-            Error::ForeignKeyViolation => ApiError::BadRequest(ApiErrorResponse {
-                description: "Foreign key violation".to_string(),
-                reference,
-            }),
-            Error::Conflict => ApiError::Conflict(ApiErrorResponse {
-                description: "Conflict".to_string(),
-                reference,
-            }),
-            Error::BadRequest(err) => ApiError::BadRequest(ApiErrorResponse {
-                description: err.to_string(),
-                reference,
-            }),
-            Error::TooManyRequests => ApiError::TooManyRequests(ApiErrorResponse {
-                description: "Too many requests".to_string(),
-                reference,
-            }),
-            Error::OrgBlocked => ApiError::Forbidden(ApiErrorResponse {
-                description:
-                    "Your organization is blocked from sending email. Please contact the support"
-                        .to_string(),
-                reference,
-            }),
-            _ => ApiError::InternalServerError(ApiErrorResponse {
-                description: "Database error".to_string(),
-                reference,
-            }),
+            Error::Serialization(_) => AppError::BadRequest(err.to_string()),
+            Error::NotFound(_) => AppError::NotFound,
+            Error::ForeignKeyViolation => AppError::BadRequest("Foreign key violation".to_string()),
+            Error::Conflict => AppError::Conflict,
+            Error::BadRequest(err) => AppError::BadRequest(err.to_string()),
+            Error::TooManyRequests => AppError::TooManyRequests,
+            Error::OrgBlocked => AppError::Forbidden,
+            _ => AppError::Internal,
         }
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        Into::<ApiError>::into(self).into_response()
+    }
+}
+
+impl IntoResponses for AppError {
+    fn responses() -> BTreeMap<String, RefOr<Response>> {
+        ApiError::responses()
     }
 }
 
@@ -357,12 +212,12 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(body) => (StatusCode::NOT_FOUND, Json(body)),
             ApiError::Conflict(body) => (StatusCode::CONFLICT, Json(body)),
             ApiError::TooManyRequests(body) => (StatusCode::TOO_MANY_REQUESTS, Json(body)),
-            ApiError::InternalServerError(body) => (StatusCode::INTERNAL_SERVER_ERROR, Json(body)),
+            ApiError::Internal(body) => (StatusCode::INTERNAL_SERVER_ERROR, Json(body)),
             ApiError::Forbidden(body) => (StatusCode::FORBIDDEN, Json(body)),
             ApiError::Unauthorized(body) => (StatusCode::UNAUTHORIZED, Json(body)),
             ApiError::PreconditionFailed(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
             ApiError::BadGateway(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
-            ApiError::PayloadToLarge(body) => (StatusCode::PAYLOAD_TOO_LARGE, Json(body)),
+            ApiError::PayloadTooLarge(body) => (StatusCode::PAYLOAD_TOO_LARGE, Json(body)),
             ApiError::RequestTimeout(body) => (StatusCode::REQUEST_TIMEOUT, Json(body)),
         }
         .into_response()

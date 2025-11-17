@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
         validation::ValidatedJson,
     },
     models::{
@@ -41,7 +41,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     tags = ["Organizations"],
     responses(
         (status = 200, description = "Successfully fetched organizations", body = [Organization]),
-        ApiError
+        AppError
     ))]
 async fn list_organizations(
     State(repo): State<OrganizationRepository>,
@@ -66,7 +66,7 @@ async fn list_organizations(
     tags = ["Organizations"],
     responses(
         (status = 200, description = "Successfully fetched organization", body = Organization),
-        ApiError,
+        AppError,
     )
 )]
 async fn get_organization(
@@ -76,7 +76,7 @@ async fn get_organization(
 ) -> ApiResult<Organization> {
     user.has_org_read_access(&org_id)?;
 
-    let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::not_found())?;
+    let organization = repo.get_by_id(org_id).await?.ok_or(AppError::NotFound)?;
 
     debug!(
         user_id = user.log_id(),
@@ -95,14 +95,14 @@ async fn get_organization(
     tags = ["internal", "Organizations"],
     responses(
         (status = 201, description = "Organization created successfully", body = Organization),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to create organizations
     ValidatedJson(new): ValidatedJson<NewOrganization>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     let org = repo.create(new).await?;
 
     info!(
@@ -132,7 +132,7 @@ pub async fn create_organization(
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Organization successfully deleted", body = OrganizationId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_organization(
@@ -160,7 +160,7 @@ pub async fn remove_organization(
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Organization successfully updated", body = Organization),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_organization(
@@ -189,7 +189,7 @@ pub async fn update_organization(
     tags = ["Organizations"],
     responses(
         (status = 200, description = "Successfully fetched organization members", body = [OrganizationMember]),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn list_members(
@@ -215,7 +215,7 @@ async fn prevent_last_remaining_admin(
     repo: &OrganizationRepository,
     org_id: &OrganizationId,
     user_id: &ApiUserId,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     let members = repo.list_members(*org_id).await?;
 
     let any_other_admins = members
@@ -224,7 +224,7 @@ async fn prevent_last_remaining_admin(
 
     any_other_admins
         .then_some(())
-        .ok_or(ApiError::precondition_failed(
+        .ok_or(AppError::PreconditionFailed(
             "At least one admin must remain in the organization".to_string(),
         ))
 }
@@ -235,7 +235,7 @@ async fn prevent_last_remaining_admin(
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Successfully deleted organization member"),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_member(
@@ -248,7 +248,7 @@ pub async fn remove_member(
         .or(user.has_org_read_access(&org_id).and(
             (user_id == *user.id())
                 .then_some(())
-                .ok_or(ApiError::forbidden()),
+                .ok_or(AppError::Forbidden),
         ))?;
 
     if user.has_org_admin_access(&org_id).is_ok() && *user.id() == user_id {
@@ -274,7 +274,7 @@ pub async fn remove_member(
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Successfully updated organization member role"),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_member_role(
@@ -310,7 +310,7 @@ pub async fn update_member_role(
     tags = ["internal", "Organizations"],
     responses(
         (status = 200, description = "Successfully updated admin details", body = Organization),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_block_status(
@@ -321,7 +321,7 @@ pub async fn update_block_status(
 ) -> ApiResult<Organization> {
     user.is_super_admin()
         .then_some(())
-        .ok_or(ApiError::forbidden())?;
+        .ok_or(AppError::Forbidden)?;
 
     let organization = repo.update_block_status(org_id, block_status).await?;
 

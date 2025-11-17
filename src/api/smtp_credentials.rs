@@ -1,4 +1,4 @@
-use super::error::{ApiError, ApiResult};
+use super::error::{AppError, ApiResult};
 use crate::{
     api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{
@@ -27,7 +27,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     request_body = SmtpCredentialRequest,
     responses(
         (status = 201, description = "Successfully created SMTP credential", body = SmtpCredentialResponse),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn create_smtp_credential(
@@ -35,7 +35,7 @@ pub async fn create_smtp_credential(
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     ValidatedJson(request): ValidatedJson<SmtpCredentialRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let new_credential = repo.generate(org_id, proj_id, stream_id, &request).await?;
@@ -59,7 +59,7 @@ pub async fn create_smtp_credential(
     request_body = SmtpCredentialUpdateRequest,
     responses(
         (status = 200, description = "Successfully updated SMTP credential", body = SmtpCredential),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_smtp_credential(
@@ -97,7 +97,7 @@ pub async fn update_smtp_credential(
     tags = ["SMTP Credentials"],
     responses(
         (status = 200, description = "Successfully fetched SMTP credentials", body = [SmtpCredential]),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn list_smtp_credential(
@@ -126,7 +126,7 @@ pub async fn list_smtp_credential(
     tags = ["SMTP Credentials"],
     responses(
         (status = 200, description = "Successfully delete SMTP credential", body = SmtpCredentialId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_smtp_credential(

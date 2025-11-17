@@ -2,7 +2,7 @@ use crate::{
     api::{
         ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
         validation::ValidatedJson,
     },
     models::{NewStream, OrganizationId, ProjectId, Stream, StreamId, StreamRepository},
@@ -27,7 +27,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     tags = ["Streams"],
     responses(
         (status = 200, description = "Successfully fetched streams", body = [Stream]),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn list_streams(
@@ -56,7 +56,7 @@ pub async fn list_streams(
     request_body = NewStream,
     responses(
         (status = 201, description = "Successfully created stream", body = Stream),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn create_stream(
@@ -64,7 +64,7 @@ pub async fn create_stream(
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     ValidatedJson(new): ValidatedJson<NewStream>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let stream = repo.create(new, org_id, proj_id).await?;
@@ -87,7 +87,7 @@ pub async fn create_stream(
     request_body = NewStream,
     responses(
         (status = 200, description = "Successfully updated stream", body = Stream),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_stream(
@@ -117,7 +117,7 @@ pub async fn update_stream(
     tags = ["Streams"],
     responses(
         (status = 200, description = "Successfully deleted stream", body = StreamId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_stream(

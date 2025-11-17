@@ -1,7 +1,7 @@
 use crate::{
     api::{
         ApiState,
-        error::{ApiError, ApiResult},
+        error::{AppError, ApiResult},
         validation::ValidatedJson,
         whoami::WhoamiResponse,
     },
@@ -29,15 +29,15 @@ pub fn router() -> OpenApiRouter<ApiState> {
         .routes(routes!(totp_codes, delete_totp_code))
 }
 
-fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
+fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
     has_write_access(user_id, user)
 }
 
-fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> {
+fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
     if *user.id() == user_id {
         return Ok(());
     }
-    Err(ApiError::forbidden())
+    Err(AppError::Forbidden)
 }
 
 /// Update API user details
@@ -46,7 +46,7 @@ fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), ApiError> 
     request_body = ApiUserUpdate,
     responses(
         (status = 200, description = "User successfully updated", body = WhoamiResponse),
-        ApiError,
+        AppError,
 ))]
 pub async fn update_user(
     State(repo): State<ApiUserRepository>,
@@ -78,14 +78,14 @@ pub async fn update_user(
     request_body = PasswordUpdate,
     responses(
         (status = 200, description = "User successfully updated"),
-        ApiError,
+        AppError,
 ))]
 pub async fn update_password(
     State(repo): State<ApiUserRepository>,
     Path((user_id,)): Path<(ApiUserId,)>,
     user: ApiUser,
     ValidatedJson(update): ValidatedJson<PasswordUpdate>,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     has_write_access(user_id, &user)?;
 
     repo.update_password(update, &user_id).await?;
@@ -111,13 +111,13 @@ struct Png(#[schema(inline)] Vec<u8>);
     tags = ["internal", "API users"],
     responses(
         (status = 200, description = "TOTP enrollment successfully started", content_type = "image/png", body = inline(Png)),
-        ApiError,
+        AppError,
 ))]
 pub async fn start_enroll_totp(
     State(repo): State<ApiUserRepository>,
     Path((user_id,)): Path<(ApiUserId,)>,
     user: ApiUser,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     has_write_access(user_id, &user)?;
 
     let png = Png(repo.start_enroll_totp(&user_id).await?);
@@ -150,7 +150,7 @@ pub async fn start_enroll_totp(
     tags = ["internal", "API users"],
     responses(
         (status = 200, description = "TOTP enrollment finished", body = TotpCodeDetails),
-        ApiError,
+        AppError,
 ))]
 pub async fn finish_enroll_totp(
     State(repo): State<ApiUserRepository>,
@@ -177,7 +177,7 @@ pub async fn finish_enroll_totp(
     tags = ["internal", "API users"],
     responses(
         (status = 200, description = "Successfully fetched active TOTP codes", body = [TotpCodeDetails]),
-        ApiError,
+        AppError,
 ))]
 pub async fn totp_codes(
     State(repo): State<ApiUserRepository>,
@@ -202,7 +202,7 @@ pub async fn totp_codes(
     tags = ["internal", "API users"],
     responses(
         (status = 200, description = "Successfully deleted TOTP code", body = TotpId),
-        ApiError,
+        AppError,
 ))]
 pub async fn delete_totp_code(
     State(repo): State<ApiUserRepository>,
@@ -239,18 +239,18 @@ pub struct CurrentPassword {
     tags = ["internal", "API users"],
     responses(
         (status = 200, description = "Successfully deleted user password"),
-        ApiError,
+        AppError,
 ))]
 pub async fn delete_password(
     State(repo): State<ApiUserRepository>,
     Path((user_id,)): Path<(ApiUserId,)>,
     user: ApiUser,
     ValidatedJson(update): ValidatedJson<CurrentPassword>,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     has_write_access(user_id, &user)?;
 
     if user.github_user_id().is_none() {
-        Err(ApiError::precondition_failed(
+        Err(AppError::PreconditionFailed(
             "You must enable an alternative login method before you can delete your password"
                 .to_string(),
         ))?

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::error::{ApiError, ApiResult};
+use super::error::{AppError, ApiResult};
 use crate::{
     api::{
         ApiState,
@@ -125,7 +125,7 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
     request_body = EmailParameters,
     responses(
         (status = 201, description = "Message created successfully", body = ApiMessageMetadata),
-        ApiError
+        AppError
     )
 )]
 pub async fn create_message(
@@ -135,27 +135,27 @@ pub async fn create_message(
     Path((org_id, _proj_id, stream_id)): Path<(OrganizationId, ProjectId, StreamId)>,
     key: ApiKey, // only accessible for API keys
     ValidatedJson(message): ValidatedJson<EmailParameters>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     key.has_org_write_access(&org_id)?;
 
     // check email rate limit
     if repo.email_creation_rate_limit(stream_id).await? <= 0 {
         debug!("too many email requests for org {org_id}");
-        return Err(ApiError::too_many_requests());
+        return Err(AppError::TooManyRequests);
     }
 
     // parse from email
     let from_email = message.from.get_mail_address();
     let from_email = from_email
         .parse()
-        .map_err(|_| ApiError::bad_request(format!("Invalid from email: {}", from_email)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid from email: {}", from_email)))?;
 
     // parse recipient's email(s)
     let recipients = match &message.to {
         EmailAddresses::Singular(to) => {
             let address = to.get_mail_address();
             vec![address.parse().map_err(|_| {
-                ApiError::bad_request(format!("Invalid recipient email: {address}"))
+                AppError::BadRequest(format!("Invalid recipient email: {address}"))
             })?]
         }
         EmailAddresses::Multiple(to) => {
@@ -163,14 +163,14 @@ pub async fn create_message(
             for recipient in to {
                 let address = recipient.get_mail_address();
                 recipients.push(address.parse().map_err(|_| {
-                    ApiError::bad_request(format!("Invalid recipient email: {address}"))
+                    AppError::BadRequest(format!("Invalid recipient email: {address}"))
                 })?);
             }
             recipients
         }
     };
     if recipients.is_empty() {
-        return Err(ApiError::bad_request(
+        return Err(AppError::BadRequest(
             "Must have at least one recipient".to_owned(),
         ));
     }
@@ -188,7 +188,7 @@ pub async fn create_message(
 
     // add body to message
     if message.text_body.is_none() && message.html_body.is_none() {
-        return Err(ApiError::bad_request(
+        return Err(AppError::BadRequest(
             "Must provide a text_body or html_body".to_owned(),
         ));
     }
@@ -212,7 +212,7 @@ pub async fn create_message(
 
     let raw_data = message_builder
         .write_to_vec()
-        .map_err(|e| ApiError::bad_request(format!("Error creating email: {e:?}")))?;
+        .map_err(|e| AppError::BadRequest(format!("Error creating email: {e:?}")))?;
 
     let message = NewApiMessage {
         message_id,
@@ -261,7 +261,7 @@ pub async fn create_message(
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully fetched messages", body = [ApiMessageMetadata]),
-        ApiError
+        AppError
     )
 )]
 pub async fn list_messages(
@@ -299,7 +299,7 @@ pub async fn list_messages(
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully fetched message", body = ApiMessage),
-        ApiError
+        AppError
     )
 )]
 pub async fn get_message(
@@ -337,7 +337,7 @@ pub async fn get_message(
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully deleted message", body = MessageId),
-        ApiError
+        AppError
     )
 )]
 pub async fn remove_message(
@@ -379,7 +379,7 @@ pub async fn remove_message(
     tags = ["Messages"],
     responses(
         (status = 200, description = "Successfully initiated retry"),
-        ApiError
+        AppError
     )
 )]
 pub async fn retry_now(
@@ -392,7 +392,7 @@ pub async fn retry_now(
         MessageId,
     )>,
     user: Box<dyn Authenticated>,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     user.has_org_write_access(&org_id)?;
 
     let status = repo
@@ -405,7 +405,7 @@ pub async fn retry_now(
             user_id = user.log_id(),
             "Requested retry for already delivered message"
         );
-        return Err(ApiError::bad_request(
+        return Err(AppError::BadRequest(
             "Message already delivered".to_string(),
         ));
     }

@@ -1,7 +1,7 @@
 use crate::{
     Environment,
     api::{
-        error::ApiError,
+        error::AppError,
         oauth::GithubOauthService,
         openapi::{docs_router, openapi_router},
     },
@@ -338,7 +338,7 @@ impl ApiServer {
                 //  RequestBodyLimitLayer, but could not find any. Also note the [`ValidatedJson`]
                 let res = next.run(req).await;
                 if res.status() == StatusCode::PAYLOAD_TOO_LARGE {
-                    return ApiError::payload_too_large().into_response();
+                    return AppError::PayloadTooLarge.into_response();
                 }
                 res
             }));
@@ -459,11 +459,11 @@ async fn append_default_headers(
     res
 }
 
-async fn handle_timeout_error(err: BoxError) -> ApiError {
+async fn handle_timeout_error(err: BoxError) -> AppError {
     if err.is::<tower::timeout::error::Elapsed>() {
-        ApiError::request_timeout()
+        AppError::RequestTimeout
     } else {
-        ApiError::internal()
+        AppError::Internal
     }
 }
 

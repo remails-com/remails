@@ -1,4 +1,4 @@
-use super::error::{ApiError, ApiResult};
+use super::error::{AppError, ApiResult};
 use crate::{
     api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{
@@ -27,7 +27,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
     request_body = ApiKeyRequest,
     responses(
         (status = 201, description = "Successfully created API key", body = CreatedApiKeyWithPassword),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn create_api_key(
@@ -35,7 +35,7 @@ pub async fn create_api_key(
     user: ApiUser,
     Path((org_id,)): Path<(OrganizationId,)>,
     ValidatedJson(request): ValidatedJson<ApiKeyRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let new_api_key = repo.create(org_id, &request).await?;
@@ -57,7 +57,7 @@ pub async fn create_api_key(
     request_body = ApiKeyRequest,
     responses(
         (status = 200, description = "Successfully updated API key", body = ApiKey),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn update_api_key(
@@ -86,7 +86,7 @@ pub async fn update_api_key(
     tags = ["internal", "Api Key"],
     responses(
         (status = 200, description = "Successfully fetched API keys", body = Vec<ApiKey>),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn list_api_keys(
@@ -113,7 +113,7 @@ pub async fn list_api_keys(
     tags = ["internal", "Api Key"],
     responses(
         (status = 200, description = "Successfully deleted API key", body = ApiKeyId),
-        ApiError,
+        AppError,
     )
 )]
 pub async fn remove_api_key(
