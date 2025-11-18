@@ -91,6 +91,7 @@ kube = { version = "2.0.1", default-features = false, features = ["client", "rus
 k8s-openapi = { version = "0.26.0", features = ["v1_32"] }
 utoipa = { version = "5", features = ["chrono", "uuid", "axum_extras", "url"] }
 utoipa-axum = "0.2"
+regex = "1.12.2"
 
 [dev-dependencies]
 reqwest = { version = "0.12.24", features = ["json"] }

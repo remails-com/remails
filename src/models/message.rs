@@ -2,7 +2,8 @@ use crate::{
     bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
     models::{
-        ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, projects::ProjectId,
+        ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, labels::Label,
+        projects::ProjectId,
     },
 };
 use chrono::{DateTime, Utc};
@@ -10,7 +11,7 @@ use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
 use mail_parser::MimeHeaders;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
 use utoipa::{IntoParams, ToSchema};
@@ -70,6 +71,7 @@ pub struct Message {
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
     pub message_id_header: Option<String>,
+    pub label: Option<Label>,
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
@@ -86,25 +88,6 @@ pub struct ApiMessage {
     /// Indicates if the `truncated_raw_data` are actually truncated.
     is_truncated: bool,
     message_data: ApiMessageData,
-}
-
-#[cfg(test)]
-impl ApiMessage {
-    pub fn id(&self) -> MessageId {
-        self.metadata.id
-    }
-
-    pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
-        self.metadata.smtp_credential_id
-    }
-
-    pub fn api_key_id(&self) -> Option<ApiKeyId> {
-        self.metadata.api_key_id
-    }
-
-    pub fn status(&self) -> &MessageStatus {
-        &self.metadata.status
-    }
 }
 
 #[cfg_attr(test, derive(Deserialize))]
@@ -126,6 +109,7 @@ pub struct ApiMessageMetadata {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
+    label: Option<Label>,
     #[schema(minimum = 0)]
     attempts: i32,
     #[schema(minimum = 0)]
@@ -228,6 +212,7 @@ pub struct NewMessage {
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
+    pub label: Option<Label>,
     pub message_data: serde_json::Value,
 }
 
@@ -238,6 +223,7 @@ impl NewMessage {
             from_email,
             recipients: vec![],
             raw_data: vec![],
+            label: None,
             message_data: Default::default(),
         }
     }
@@ -250,6 +236,7 @@ pub struct NewApiMessage {
     pub api_key_id: ApiKeyId,
     pub project_id: ProjectId,
     pub from_email: EmailAddress,
+    pub label: Option<Label>,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
 }
@@ -269,8 +256,29 @@ pub struct MessageFilter {
     limit: i64,
     #[garde(skip)]
     status: Option<MessageStatus>,
+    #[garde(length(max = 20), dive)]
+    #[param(max_items = 20)]
+    #[serde(deserialize_with = "deserialize_labels_query")]
+    labels: Option<Vec<Label>>,
     #[garde(skip)]
     before: Option<DateTime<Utc>>,
+}
+
+fn deserialize_labels_query<'de, D>(deserializer: D) -> Result<Option<Vec<Label>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer)?;
+    Ok(match s {
+        None => None,
+        Some(labels) => Some(
+            labels
+                .split(',')
+                .map(FromStr::from_str)
+                .collect::<Result<Vec<Label>, _>>()
+                .map_err(|g| serde::de::Error::custom(g.to_string()))?,
+        ),
+    })
 }
 
 impl Default for MessageFilter {
@@ -278,6 +286,7 @@ impl Default for MessageFilter {
         Self {
             limit: 10, // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
             status: None,
+            labels: None,
             before: None,
         }
     }
@@ -301,6 +310,7 @@ struct PgMessage {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
+    label: Option<Label>,
     attempts: i32,
     max_attempts: i32,
 }
@@ -327,6 +337,7 @@ impl TryFrom<PgMessage> for Message {
             raw_data: m.raw_data,
             message_data: m.message_data,
             message_id_header: m.message_id_header,
+            label: m.label,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
@@ -409,6 +420,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
+            label: m.label,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
         })
@@ -481,9 +493,9 @@ impl MessageRepository {
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, smtp_credential_id,
-                from_email, recipients, raw_data, message_data, max_attempts
+                from_email, recipients, raw_data, message_data, max_attempts, label
             )
-            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6
+            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6, $7
             FROM smtp_credentials s
                 JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
@@ -501,6 +513,7 @@ impl MessageRepository {
             message.raw_data,
             message.message_data,
             max_attempts,
+            message.label.as_deref()
         )
         .fetch_one(&self.pool)
         .await?
@@ -517,9 +530,9 @@ impl MessageRepository {
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, api_key_id,
-                from_email, recipients, raw_data, max_attempts, message_id_header
+                from_email, recipients, raw_data, max_attempts, message_id_header, label
             )
-            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9
             FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
             WHERE p.id = $2
@@ -542,7 +555,8 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             "#,
             *message.message_id,
             *message.project_id,
@@ -555,7 +569,8 @@ impl MessageRepository {
                 .collect::<Vec<_>>(),
             message.raw_data,
             max_attempts,
-            message.message_id_header
+            message.message_id_header,
+            message.label.as_deref()
         )
         .fetch_one(&self.pool)
         .await?
@@ -647,12 +662,14 @@ impl MessageRepository {
                 updated_at,
                 retry_after,
                 attempts,
-                max_attempts
+                max_attempts,
+                label AS "label:Label"
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
                 AND ($4::message_status IS NULL OR status = $4)
                 AND ($5::timestamptz IS NULL OR created_at <= $5)
+                AND ($6::text[] IS NULL OR label = ANY($6))
             ORDER BY created_at DESC
             LIMIT $3
             "#,
@@ -661,6 +678,7 @@ impl MessageRepository {
             std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
             filter.status as _,
             filter.before,
+            filter.labels as _,
         )
         .fetch_all(&self.pool)
         .await?
@@ -695,7 +713,8 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             FROM messages m
             JOIN organizations o ON o.id = m.organization_id
             WHERE m.id = $1 AND o.block_status = 'not_blocked'
@@ -736,7 +755,8 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -862,6 +882,28 @@ impl MessageRepository {
 
         Ok(result.remaining_rate_limit)
     }
+
+    /// Lists all labels within the project. It only shows labels for which at least one message exists
+    pub async fn list_labels(
+        &self,
+        organization_id: OrganizationId,
+        project_id: ProjectId,
+    ) -> Result<Vec<Label>, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT DISTINCT label AS "label!:Label"
+            FROM messages
+            WHERE organization_id = $1
+              AND project_id = $2
+              AND label IS NOT NULL
+            ORDER BY label
+            "#,
+            *organization_id,
+            *project_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
 }
 
 #[cfg(test)]
@@ -878,6 +920,24 @@ mod test {
         },
         test::TestProjects,
     };
+
+    impl ApiMessage {
+        pub fn id(&self) -> MessageId {
+            self.metadata.id
+        }
+
+        pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
+            self.metadata.smtp_credential_id
+        }
+
+        pub fn api_key_id(&self) -> Option<ApiKeyId> {
+            self.metadata.api_key_id
+        }
+
+        pub fn status(&self) -> &MessageStatus {
+            &self.metadata.status
+        }
+    }
 
     impl NewMessage {
         pub fn from_builder_message(
@@ -906,6 +966,15 @@ mod test {
 
             message
         }
+    }
+
+    #[sqlx::test]
+    async fn no_labels_does_not_err(pool: PgPool) {
+        let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+
+        let labels = repository.list_labels(org_id, project_id).await.unwrap();
+        assert_eq!(labels.len(), 0);
     }
 
     #[sqlx::test(fixtures(
@@ -981,6 +1050,7 @@ mod test {
                 MessageFilter {
                     limit: 5,
                     status: None,
+                    labels: None,
                     before: None,
                 },
             )
@@ -1003,6 +1073,7 @@ mod test {
                 MessageFilter {
                     limit: 5,
                     status: None,
+                    labels: None,
                     before: None,
                 },
             )
@@ -1055,6 +1126,7 @@ mod test {
             message_id_header,
             api_key_id: *api_key.id(),
             project_id,
+            label: Some("label-1".parse().unwrap()),
             from_email: "john@test-org-1-project-1.com".parse().unwrap(),
             recipients: vec![
                 "james@test.com".parse().unwrap(),

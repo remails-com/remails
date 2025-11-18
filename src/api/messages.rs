@@ -10,7 +10,7 @@ use crate::{
     bus::client::BusClient,
     handler::RetryConfig,
     models::{
-        ApiKey, ApiMessage, ApiMessageMetadata, MessageFilter, MessageId, MessageRepository,
+        ApiKey, ApiMessage, ApiMessageMetadata, Label, MessageFilter, MessageId, MessageRepository,
         MessageStatus, NewApiMessage, OrganizationId, ProjectId,
     },
 };
@@ -32,6 +32,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
         .routes(routes!(create_message, list_messages))
         .routes(routes!(get_message, remove_message))
         .routes(routes!(retry_now))
+        .routes(routes!(list_labels))
 }
 
 /// Contains either a simple email address or a name and email address
@@ -104,6 +105,8 @@ pub struct EmailParameters {
     references: Option<Vec<String>>,
     #[garde(dive)]
     reply_to: Option<JsonEmailAddress>,
+    #[garde(dive)]
+    label: Option<Label>,
 }
 
 impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
@@ -221,6 +224,7 @@ pub async fn create_message(
         api_key_id: *key.id(),
         project_id,
         from_email,
+        label: message.label,
         recipients,
         raw_data,
     };
@@ -406,6 +410,29 @@ pub async fn retry_now(
     Ok(())
 }
 
+/// List message labels
+///
+/// Lists all labels that exist on at least one message within that project.
+#[utoipa::path(
+    get,
+    path = "/organizations/{org_id}/projects/{project_id}/labels",
+    tags = ["Messages"],
+    responses(
+        (status = 200, description = "Successfully fetched labels", body = [Label]),
+        AppError
+    )
+)]
+pub async fn list_labels(
+    State(repo): State<MessageRepository>,
+    Path((org_id, project_id)): Path<(OrganizationId, ProjectId)>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<Vec<Label>> {
+    user.has_org_read_access(&org_id)?;
+    let labels = repo.list_labels(org_id, project_id).await?;
+
+    Ok(Json(labels))
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -455,6 +482,42 @@ mod tests {
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
         let messages_in_fixture = 5;
         assert_eq!(messages.len(), messages_in_fixture);
+
+        // filter by single label
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?label=label-1"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        assert_eq!(messages.len(), 3);
+
+        // filter by multiple labels
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?label=label-1&label=label-2"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        assert_eq!(messages.len(), 4);
+
+        // list labels
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/labels"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<Label> = deserialize_body(response.into_body()).await;
+        assert_eq!(
+            messages.as_slice(),
+            &["label-1".parse().unwrap(), "label-2".parse().unwrap()]
+        );
 
         // get specific message
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";

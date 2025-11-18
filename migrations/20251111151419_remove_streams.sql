@@ -13,6 +13,12 @@ ALTER TABLE smtp_credentials
     ALTER COLUMN project_id SET NOT NULL,
     DROP COLUMN stream_id;
 
-ALTER TABLE messages DROP COLUMN stream_id;
+ALTER TABLE messages
+    DROP COLUMN stream_id;
 
 DROP TABLE streams;
+
+ALTER TABLE messages
+    ADD COLUMN label text;
+
+CREATE INDEX message_label ON messages (label);

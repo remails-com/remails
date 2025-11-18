@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts\n            FROM messages m\n            WHERE organization_id = $1\n                AND project_id = $2\n                AND ($4::message_status IS NULL OR status = $4)\n                AND ($5::timestamptz IS NULL OR created_at <= $5)\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts,\n                label AS \"label:Label\"\n            FROM messages m\n            WHERE organization_id = $1\n                AND project_id = $2\n                AND ($4::message_status IS NULL OR status = $4)\n                AND ($5::timestamptz IS NULL OR created_at <= $5)\n                AND ($6::text[] IS NULL OR label = ANY($6))\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,11 @@
         "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "label:Label",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -135,7 +140,8 @@
             }
           }
         },
-        "Timestamptz"
+        "Timestamptz",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -157,8 +163,9 @@
       false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "75a4339b0c336e4f53e85492a7f0ac8a3856d7b2d737cf52d531bd7d12460ade"
+  "hash": "a74f06f3284d9b115edd1ed2b2ecd7dae1f077273bd3ba07c0a8bd9fb4a8fde7"
 }
