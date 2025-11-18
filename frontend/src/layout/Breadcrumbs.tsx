@@ -63,7 +63,7 @@ export function Breadcrumbs() {
       if (currentMessage && "message_data" in currentMessage) {
         subject = currentMessage?.message_data?.subject;
       }
-      title = subject ?? "no subject";
+      title = subject ?? "No subject";
     } else if (route == "projects.project.credentials.credential") {
       title = currentCredential?.username;
     } else if (route == "domains.domain" || route == "projects.project.domains.domain") {

@@ -4,10 +4,12 @@ import { useOrganizations } from "./useOrganizations.ts";
 import { useProjects } from "./useProjects.ts";
 import { Message, MessageMetadata } from "../types.ts";
 import { RemailsError } from "../error/error.ts";
+import { useSelector } from "./useSelector.ts";
 
 export function useMessages() {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
+  const labels = useSelector((s) => s.labels || []);
   const [currentMessage, setCurrentMessage] = useState<Message | MessageMetadata | null>(null);
   const {
     state: { messages, routerState },
@@ -53,5 +55,5 @@ export function useMessages() {
     dispatch({ type: "update_message", messageId: message_id, update: update });
   }
 
-  return { messages, currentMessage, updateMessage };
+  return { messages, currentMessage, updateMessage, labels };
 }

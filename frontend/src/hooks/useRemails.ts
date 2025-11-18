@@ -33,6 +33,7 @@ export const RemailsContext = createContext<{
     },
     nextRouterState: null,
     error: null,
+    labels: null,
   },
   dispatch: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
@@ -56,6 +57,7 @@ const router = new Router(routes);
 
 export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
+    labels: null,
     user: null,
     userFetched: false,
     totpCodes: null,

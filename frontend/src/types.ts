@@ -60,6 +60,7 @@ export interface MessageMetadata {
   retry_after: string | undefined;
   attempts: number;
   max_attempts: number;
+  label: string | undefined;
 }
 
 export interface Message extends MessageMetadata {
@@ -94,6 +95,7 @@ export interface State {
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
+  labels: string[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
   organizationDomains: Domain[] | null;
@@ -145,6 +147,10 @@ export type Action =
   | {
       type: "remove_project";
       projectId: string;
+    }
+  | {
+      type: "set_labels";
+      labels: string[] | null;
     }
   | {
       type: "set_messages";

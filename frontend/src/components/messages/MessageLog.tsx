@@ -1,4 +1,4 @@
-import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, NativeSelect, Text } from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, MultiSelect, NativeSelect, Text } from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
@@ -12,6 +12,7 @@ import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import InfoAlert from "../InfoAlert.tsx";
+import Label from "./Label.tsx";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -29,7 +30,7 @@ function statusIcons(status: string) {
 const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/models/messages.rs
 
 export function MessageLog() {
-  const { messages, updateMessage } = useMessages();
+  const { messages, updateMessage, labels } = useMessages();
   const [pages, setPages] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const {
@@ -43,7 +44,7 @@ export function MessageLog() {
     return <Loader />;
   }
 
-  const setFilter = (filter: "limit" | "status" | "before", value: string | null) => {
+  const setFilter = (filter: "limit" | "status" | "before" | "labels", value: string | null) => {
     navigate(routerState.name, { ...routerState.params, [filter]: value ?? "" });
   };
 
@@ -94,9 +95,12 @@ export function MessageLog() {
             to
             <Recipients message={message} ml="sm" />
           </Box>
-          <Text fz="xs" c="dimmed" mr="md">
-            {formatDateTime(message.created_at)}
-          </Text>
+          <Group>
+            {message.label && <Label label={message.label} />}
+            <Text fz="xs" c="dimmed" mr="md">
+              {formatDateTime(message.created_at)}
+            </Text>
+          </Group>
         </Group>
       </Accordion.Control>
       <Accordion.Panel>
@@ -160,6 +164,15 @@ export function MessageLog() {
       </InfoAlert>
       <Group justify="space-between" align="flex-end">
         <Group>
+          <MultiSelect
+            label="Label"
+            placeholder={routerState.params.labels ? "" : "Pick labels"}
+            data={labels}
+            value={currentParams.labels?.split(",").filter((l) => l.trim().length > 0) || []}
+            searchable
+            nothingFoundMessage="Label not found..."
+            onChange={(labels) => setFilter("labels", labels.join(","))}
+          />
           <NativeSelect
             label="Message status"
             value={currentParams.status}

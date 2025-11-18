@@ -21,6 +21,9 @@ const actionHandler: {
   remove_project: function (state, action) {
     return { ...state, projects: state.projects?.filter((p) => p.id !== action.projectId) || [] };
   },
+  set_labels: function (state, action) {
+    return { ...state, labels: action.labels };
+  },
   set_messages: function (state, action) {
     return { ...state, messages: action.messages };
   },

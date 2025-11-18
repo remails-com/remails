@@ -112,11 +112,15 @@ export default async function apiMiddleware(
       type: "set_credentials",
       credentials: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/smtp_credentials`),
     });
+    dispatch({
+      type: "set_labels",
+      labels: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/labels`),
+    });
   }
 
   let messageFilterChanged = false;
   const messageFilter = new URLSearchParams();
-  for (const param of ["limit", "status", "before"]) {
+  for (const param of ["limit", "status", "before", "labels"]) {
     const value = navState.to.params[param];
     if (value != navState.from.params[param]) messageFilterChanged = true;
     if (value) messageFilter.append(param, value);
