@@ -53,7 +53,7 @@ export default function ApiKeysOverview() {
     <>
       <InfoAlert stateName={"api-keys"}>
         Create API keys for this organization. API keys can be used to automate actions within this organization, such
-        as viewing email statuses, managing streams, and tracking your quota.
+        as sending email and seeing their delivery statuses, managing projects, and tracking your quota.
       </InfoAlert>
 
       <NewApiKey opened={opened} close={close} />

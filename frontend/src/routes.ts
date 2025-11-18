@@ -10,40 +10,28 @@ export const routes = [
         path: "/{proj_id}",
         children: [
           {
-            name: "streams",
-            path: "/streams",
+            name: "messages",
+            path: "/messages",
             children: [
               {
-                name: "stream",
-                path: "/{stream_id}",
-                children: [
-                  {
-                    name: "messages",
-                    path: "/messages",
-                    children: [
-                      {
-                        name: "message",
-                        path: "/{message_id}",
-                      },
-                    ],
-                  },
-                  {
-                    name: "credentials",
-                    path: "/credentials",
-                    children: [
-                      {
-                        name: "credential",
-                        path: "/{credential_id}",
-                      },
-                    ],
-                  },
-                  {
-                    name: "settings",
-                    path: "/settings",
-                  },
-                ],
+                name: "message",
+                path: "/{message_id}",
               },
             ],
+          },
+          {
+            name: "credentials",
+            path: "/credentials",
+            children: [
+              {
+                name: "credential",
+                path: "/{credential_id}",
+              },
+            ],
+          },
+          {
+            name: "settings",
+            path: "/settings",
           },
           {
             name: "domains",
@@ -54,10 +42,6 @@ export const routes = [
                 path: "/{domain_id}",
               },
             ],
-          },
-          {
-            name: "settings",
-            path: "/settings",
           },
         ],
       },

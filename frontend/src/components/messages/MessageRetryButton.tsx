@@ -3,7 +3,6 @@ import { Message, MessageMetadata } from "../../types";
 import { IconReload } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
-import { useStreams } from "../../hooks/useStreams";
 import { is_in_the_future } from "../../util";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
@@ -20,14 +19,13 @@ export default function MessageRetryButton({
 }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentStream } = useStreams();
   const [loading, setLoading] = useState(false);
 
-  if (!currentOrganization || !currentProject || !currentStream) {
+  if (!currentOrganization || !currentProject) {
     return null;
   }
 
-  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${message.id}`;
+  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/messages/${message.id}`;
 
   async function retry() {
     const res = await fetch(`${message_endpoint}/retry`, {

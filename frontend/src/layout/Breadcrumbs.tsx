@@ -5,7 +5,6 @@ import { useMessages } from "../hooks/useMessages.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
-import { useStreams } from "../hooks/useStreams.ts";
 import { RouteName } from "../routes.ts";
 import { JSX } from "react";
 
@@ -32,7 +31,6 @@ function Segment({ children, last, route }: SegmentProps) {
 
 export function Breadcrumbs() {
   const { currentProject } = useProjects();
-  const { currentStream } = useStreams();
   const { currentCredential } = useCredentials();
   const { currentDomain } = useDomains();
   const { currentMessage } = useMessages();
@@ -60,15 +58,13 @@ export function Breadcrumbs() {
     // set user-defined name as breadcrumb title
     if (route == "projects.project") {
       title = currentProject?.name;
-    } else if (route == "projects.project.streams.stream") {
-      title = currentStream?.name;
-    } else if (route == "projects.project.streams.stream.messages.message") {
+    } else if (route == "projects.project.messages.message") {
       let subject: string | null = null;
       if (currentMessage && "message_data" in currentMessage) {
         subject = currentMessage?.message_data?.subject;
       }
       title = subject ?? "no subject";
-    } else if (route == "projects.project.streams.stream.credentials.credential") {
+    } else if (route == "projects.project.credentials.credential") {
       title = currentCredential?.username;
     } else if (route == "domains.domain" || route == "projects.project.domains.domain") {
       title = currentDomain?.domain;

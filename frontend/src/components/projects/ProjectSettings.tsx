@@ -5,27 +5,27 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconTrash } from "@tabler/icons-react";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { useStreams } from "../../hooks/useStreams.ts";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { Loader } from "../../Loader.tsx";
 import { useDomains } from "../../hooks/useDomains.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
+import { useMessages } from "../../hooks/useMessages.ts";
 
 interface FormValues {
   name: string;
 }
 
 export default function ProjectSettings() {
-  const { streams } = useStreams();
+  const { messages } = useMessages();
   const { dispatch, navigate } = useRemails();
 
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { domains } = useDomains();
 
-  const canDelete = streams && streams.length === 0;
+  const canDelete = messages && messages.length === 0;
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -138,7 +138,7 @@ export default function ProjectSettings() {
               leftSection={<IconTrash />}
               variant="outline"
               disabled={!canDelete}
-              tooltip={canDelete ? "Delete project" : "Cannot delete project, there are streams in it"}
+              tooltip={canDelete ? "Delete project" : "Cannot delete project, there are messages in it"}
               onClick={() => confirmDeleteProject(currentProject)}
             >
               Delete

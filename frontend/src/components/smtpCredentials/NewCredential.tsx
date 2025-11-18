@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
-import { useStreams } from "../../hooks/useStreams.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { SmtpCredentialResponse } from "../../types.ts";
 import { useForm } from "@mantine/form";
@@ -25,7 +24,6 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
   const [activeStep, setActiveStep] = useState(0);
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentStream } = useStreams();
   const [newCredential, setNewCredential] = useState<SmtpCredentialResponse | null>(null);
   const { dispatch } = useRemails();
 
@@ -43,14 +41,14 @@ export function NewCredential({ opened, close }: NewCredentialProps) {
     },
   });
 
-  if (!currentOrganization || !currentProject || !currentStream) {
-    console.error("Cannot create SMTP credential without a selected organization. project, and stream");
+  if (!currentOrganization || !currentProject) {
+    console.error("Cannot create SMTP credential without a selected organization and project");
     return <></>;
   }
 
   const create = async (values: FormValues) => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/smtp_credentials`,
       {
         method: "POST",
         headers: {

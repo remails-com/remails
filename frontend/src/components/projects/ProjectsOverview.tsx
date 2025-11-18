@@ -23,7 +23,7 @@ export default function ProjectsOverview() {
   const rows = projects.map((project) => (
     <Table.Tr key={project.id}>
       <Table.Td>
-        <Link to="projects.project.streams" params={{ proj_id: project.id }}>
+        <Link to="projects.project.messages" params={{ proj_id: project.id }}>
           {project.name}
         </Link>
       </Table.Td>
@@ -43,8 +43,7 @@ export default function ProjectsOverview() {
     <>
       <OrganizationHeader />
       <InfoAlert stateName="projects">
-        Projects are used to group related work, such as different applications or environments. Each project can have
-        its own Streams and Domains to keep things organized.
+        Projects are used to group related work, such as different applications or environments.
       </InfoAlert>
       <NewProject opened={opened} close={close} />
 

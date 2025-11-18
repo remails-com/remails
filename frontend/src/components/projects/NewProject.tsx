@@ -43,7 +43,7 @@ export function NewProject({ opened, close }: NewProjectProps) {
         close();
         res.json().then((newProject) => {
           dispatch({ type: "add_project", project: newProject });
-          navigate("projects.project", { proj_id: newProject.id });
+          navigate("projects.project.credentials", { proj_id: newProject.id });
           notifications.show({
             title: "Project created",
             message: `Project ${newProject.name} created`,

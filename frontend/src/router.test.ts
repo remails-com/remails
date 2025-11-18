@@ -12,40 +12,28 @@ const routes = [
         path: "/{proj_id}",
         children: [
           {
-            name: "streams",
-            path: "/streams",
+            name: "messages",
+            path: "/messages",
             children: [
               {
-                name: "stream",
-                path: "/{stream_id}",
-                children: [
-                  {
-                    name: "messages",
-                    path: "/messages",
-                    children: [
-                      {
-                        name: "message",
-                        path: "/{message_id}",
-                      },
-                    ],
-                  },
-                  {
-                    name: "credentials",
-                    path: "/credentials",
-                    children: [
-                      {
-                        name: "credential",
-                        path: "/{credential_id}",
-                      },
-                    ],
-                  },
-                  {
-                    name: "settings",
-                    path: "/settings",
-                  },
-                ],
+                name: "message",
+                path: "/{message_id}",
               },
             ],
+          },
+          {
+            name: "credentials",
+            path: "/credentials",
+            children: [
+              {
+                name: "credential",
+                path: "/{credential_id}",
+              },
+            ],
+          },
+          {
+            name: "settings",
+            path: "/settings",
           },
           {
             name: "domains",
@@ -56,10 +44,6 @@ const routes = [
                 path: "/{domain_id}",
               },
             ],
-          },
-          {
-            name: "settings",
-            path: "/settings",
           },
         ],
       },
@@ -126,15 +110,12 @@ test("Match a path", () => {
     },
   });
   expect(
-    router.match(
-      "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/streams/2969c252-9a47-4d81-ac4f-aef87ee42d28?tab=messages"
-    )
+    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=messages")
   ).toStrictEqual({
-    name: "projects.project.streams.stream",
+    name: "projects.project",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      stream_id: "2969c252-9a47-4d81-ac4f-aef87ee42d28",
       tab: "messages",
     },
   });
@@ -146,15 +127,12 @@ test("Match a path", () => {
     },
   });
   expect(
-    router.match(
-      "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/streams/2969c252-9a47-4d81-ac4f-aef87ee42d28/?tab=messages"
-    )
+    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/?tab=messages")
   ).toStrictEqual({
-    name: "projects.project.streams.stream",
+    name: "projects.project",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      stream_id: "2969c252-9a47-4d81-ac4f-aef87ee42d28",
       tab: "messages",
     },
   });
@@ -188,20 +166,17 @@ test("createRouteState", () => {
     },
   });
   expect(
-    router.navigate("projects.project.streams.stream", {
+    router.navigate("projects.project", {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      stream_id: "2969c252-9a47-4d81-ac4f-aef87ee42d28",
       tab: "messages",
     })
   ).toStrictEqual({
-    name: "projects.project.streams.stream",
-    fullPath:
-      "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/streams/2969c252-9a47-4d81-ac4f-aef87ee42d28?tab=messages",
+    name: "projects.project",
+    fullPath: "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=messages",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      stream_id: "2969c252-9a47-4d81-ac4f-aef87ee42d28",
       tab: "messages",
     },
   });
@@ -218,32 +193,24 @@ test("flattenRoutes", () => {
       path: "/{org_id}/projects/{proj_id}",
     },
     {
-      name: "projects.project.streams",
-      path: "/{org_id}/projects/{proj_id}/streams",
+      name: "projects.project.messages",
+      path: "/{org_id}/projects/{proj_id}/messages",
     },
     {
-      name: "projects.project.streams.stream",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}",
+      name: "projects.project.messages.message",
+      path: "/{org_id}/projects/{proj_id}/messages/{message_id}",
     },
     {
-      name: "projects.project.streams.stream.messages",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/messages",
+      name: "projects.project.credentials",
+      path: "/{org_id}/projects/{proj_id}/credentials",
     },
     {
-      name: "projects.project.streams.stream.messages.message",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/messages/{message_id}",
+      name: "projects.project.credentials.credential",
+      path: "/{org_id}/projects/{proj_id}/credentials/{credential_id}",
     },
     {
-      name: "projects.project.streams.stream.credentials",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials",
-    },
-    {
-      name: "projects.project.streams.stream.credentials.credential",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/credentials/{credential_id}",
-    },
-    {
-      name: "projects.project.streams.stream.settings",
-      path: "/{org_id}/projects/{proj_id}/streams/{stream_id}/settings",
+      name: "projects.project.settings",
+      path: "/{org_id}/projects/{proj_id}/settings",
     },
     {
       name: "projects.project.domains",
@@ -252,10 +219,6 @@ test("flattenRoutes", () => {
     {
       name: "projects.project.domains.domain",
       path: "/{org_id}/projects/{proj_id}/domains/{domain_id}",
-    },
-    {
-      name: "projects.project.settings",
-      path: "/{org_id}/projects/{proj_id}/settings",
     },
     {
       name: "domains",

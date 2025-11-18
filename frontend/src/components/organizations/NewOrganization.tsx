@@ -19,6 +19,7 @@ export function NewOrganization({ opened, close, done }: NewOrganizationProps) {
             }
             close();
           }}
+          close={close}
         />
       </Modal>
     </>

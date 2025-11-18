@@ -11,6 +11,7 @@ interface FormValues {
 
 interface NewOrganizationFormProps {
   done: (newOrg: Organization) => void;
+  close: () => void;
 }
 
 export async function saveNewOrganization(name: string): Promise<{ status: number; newOrg: Organization | null }> {
@@ -40,7 +41,7 @@ export async function saveNewOrganization(name: string): Promise<{ status: numbe
   return { status: res.status, newOrg: null };
 }
 
-export function NewOrganizationForm({ done }: NewOrganizationFormProps) {
+export function NewOrganizationForm({ done, close }: NewOrganizationFormProps) {
   const { dispatch, state } = useRemails();
   const user = state.user!;
 

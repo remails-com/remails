@@ -1,5 +1,4 @@
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
-import { useStreams } from "../../hooks/useStreams.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { useCredentials } from "../../hooks/useCredentials.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -20,7 +19,6 @@ interface FormValues {
 
 export default function CredentialDetails() {
   const { currentOrganization } = useOrganizations();
-  const { currentStream } = useStreams();
   const { currentProject } = useProjects();
   const { currentCredential } = useCredentials();
   const { dispatch, navigate } = useRemails();
@@ -31,7 +29,7 @@ export default function CredentialDetails() {
     },
   });
 
-  if (!currentStream || !currentOrganization || !currentProject || !currentCredential) {
+  if (!currentOrganization || !currentProject || !currentCredential) {
     return <Loader />;
   }
 
@@ -52,7 +50,7 @@ export default function CredentialDetails() {
 
   const deleteCredential = async (credential: SmtpCredential) => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${credential.id}`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/smtp_credentials/${credential.id}`,
       {
         method: "DELETE",
       }
@@ -63,7 +61,7 @@ export default function CredentialDetails() {
         message: `Credential with username ${credential.username} deleted`,
         color: "green",
       });
-      navigate("projects.project.streams.stream.credentials", {});
+      navigate("projects.project.credentials", {});
       dispatch({ type: "remove_credential", credentialId: credential.id });
     } else {
       errorNotification(`Credential with username ${credential.username} could not be deleted`);
@@ -73,7 +71,7 @@ export default function CredentialDetails() {
 
   const save = async (values: FormValues) => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/smtp_credentials/${currentCredential.id}`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/smtp_credentials/${currentCredential.id}`,
       {
         method: "PUT",
         headers: {

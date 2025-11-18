@@ -4,7 +4,6 @@ import { MessageMetadata } from "../../types";
 import { modals } from "@mantine/modals";
 import { useOrganizations } from "../../hooks/useOrganizations";
 import { useProjects } from "../../hooks/useProjects";
-import { useStreams } from "../../hooks/useStreams";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
 import { errorNotification } from "../../notify.tsx";
@@ -13,16 +12,15 @@ import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 export default function MessageDeleteButton({ message, small }: { message: MessageMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
-  const { currentStream } = useStreams();
   const { navigate, dispatch } = useRemails();
 
-  if (!currentOrganization || !currentProject || !currentStream) {
+  if (!currentOrganization || !currentProject) {
     return null;
   }
 
   const deleteMessage = async () => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/streams/${currentStream.id}/messages/${message.id}`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/messages/${message.id}`,
       {
         method: "DELETE",
       }
@@ -33,7 +31,7 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
         message: "Message was deleted",
         color: "green",
       });
-      navigate("projects.project.streams.stream.messages");
+      navigate("projects.project.messages");
       dispatch({ type: "remove_message", messageId: message.id });
     } else {
       errorNotification("Message could not be deleted");

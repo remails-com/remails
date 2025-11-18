@@ -94,7 +94,6 @@ export interface State {
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
-  streams: Stream[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
   organizationDomains: Domain[] | null;
@@ -146,18 +145,6 @@ export type Action =
   | {
       type: "remove_project";
       projectId: string;
-    }
-  | {
-      type: "set_streams";
-      streams: Stream[] | null;
-    }
-  | {
-      type: "add_stream";
-      stream: Stream;
-    }
-  | {
-      type: "remove_stream";
-      streamId: string;
     }
   | {
       type: "set_messages";
@@ -255,13 +242,6 @@ export interface Project {
   updated_at: string;
 }
 
-export interface Stream {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface VerifyResult {
   status: "Success" | "Info" | "Warning" | "Error";
   reason: string;
@@ -291,7 +271,7 @@ export interface Domain {
 
 export interface SmtpCredential {
   id: string;
-  stream_id: string;
+  project_id: string;
   description: string;
   username: string;
   created_at: string;

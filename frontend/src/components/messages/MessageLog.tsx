@@ -121,7 +121,7 @@ export function MessageLog() {
               leftSection={<IconEye />}
               variant="light"
               size="xs"
-              onClick={() => navigate("projects.project.streams.stream.messages.message", { message_id: message.id })}
+              onClick={() => navigate("projects.project.messages.message", { message_id: message.id })}
             >
               View Message
             </Button>
@@ -155,9 +155,8 @@ export function MessageLog() {
   return (
     <>
       <InfoAlert stateName="messages">
-        This page shows a list of all messages sent through this Stream. Use it to check delivery status, inspect
-        metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
-        message.
+        This page shows a list of all messages sent in this Project. Use it to check delivery status, inspect metadata,
+        and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
       </InfoAlert>
       <Group justify="space-between" align="flex-end">
         <Group>
