@@ -6,21 +6,36 @@ use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use std::fmt::{Debug, Formatter};
 use tracing::error;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    ToSchema,
+    IntoParams,
 )]
 #[sqlx(transparent)]
+#[into_params(names("domain_id"))]
 pub struct DomainId(Uuid);
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Copy)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Copy, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DomainParent {
     Organization(OrganizationId),
@@ -40,7 +55,7 @@ impl Debug for DomainParent {
     }
 }
 
-#[derive(sqlx::Type, Serialize, Deserialize, Debug)]
+#[derive(sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum DkimKeyType {
@@ -113,7 +128,7 @@ impl Debug for DkimKey {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct ApiDomain {
     id: DomainId,
@@ -215,10 +230,13 @@ impl ApiDomain {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct NewDomain {
+    #[garde(length(min = 3, max = 253))]
+    #[schema(min_length = 3, max_length = 253)]
     pub domain: String,
+    #[garde(skip)]
     pub dkim_key_type: DkimKeyType,
 }
 

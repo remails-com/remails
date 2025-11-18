@@ -23,3 +23,8 @@ allow = [
 confidence-threshold = 0.8
 
 private = { ignore = true }
+
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "utoipa-axum did not provide an updated version yet. Please take a look at https://github.com/juhaku/utoipa/pull/1483" },
+]

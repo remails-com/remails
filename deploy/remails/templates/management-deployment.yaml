@@ -64,6 +64,8 @@ spec:
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
+            - name: API_SERVER_NAME
+              value: {{ .Values.management.server_name }}
             - name: SMTP_SERVER_NAME
               value: {{ .Values.smtp.server_name }}
             - name: SMTP_PORTS
@@ -114,3 +116,5 @@ spec:
           ports:
             - containerPort: 3000
               name: http
+            - containerPort: 3001
+              name: docs

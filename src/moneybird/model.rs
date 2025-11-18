@@ -1,32 +1,70 @@
 use crate::models::Password;
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use std::str::FromStr;
 use tracing::warn;
 use url::Url;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct MoneybirdContactId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct SubscriptionTemplateId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct SubscriptionId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub struct ProductId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type, ToSchema,
+)]
 pub(super) struct RecurringSalesInvoiceId(pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub(super) struct AdministrationId(pub(super) String);
+#[derive(
+    Debug,
+    Clone,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    Type,
+    ToSchema,
+    Validate,
+)]
+pub(super) struct AdministrationId(#[garde(length(min = 1, max = 100))] pub(super) String);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, Type)]
-pub(super) struct WebhookId(pub(super) String);
+#[derive(
+    Debug,
+    Clone,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    Type,
+    ToSchema,
+    Validate,
+)]
+pub(super) struct WebhookId(#[garde(length(min = 1, max = 100))] pub(super) String);
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Contact {
@@ -82,7 +120,7 @@ pub(super) struct RecurringSalesInvoice {
     pub(super) active: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Display, ToSchema)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum ProductIdentifier {
     NotSubscribed,
@@ -95,8 +133,6 @@ pub enum ProductIdentifier {
     RmlsSmallYearly,
     RmlsMediumYearly,
     RmlsLargeYearly,
-    #[serde(untagged)]
-    Unknown(String),
 }
 
 impl FromStr for ProductIdentifier {
@@ -115,7 +151,7 @@ impl FromStr for ProductIdentifier {
             "RmlsLargeYearly" => Self::RmlsLargeYearly,
             unknown => {
                 warn!("Unknown product identifier: {}", unknown);
-                Self::Unknown(unknown.to_string())
+                Self::NotSubscribed
             }
         })
     }
@@ -134,20 +170,22 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 300_000,
             ProductIdentifier::RmlsMediumYearly => 700_000,
             ProductIdentifier::RmlsLargeYearly => 1_500_000,
-            ProductIdentifier::Unknown(_) => 0,
         }
     }
 }
 
-#[derive(Serialize, PartialEq, Debug, Deserialize, Clone)]
+#[derive(Serialize, PartialEq, Debug, Deserialize, Clone, ToSchema)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SubscriptionStatus {
-    Active(Subscription),
+    #[schema(title = "Active")]
+    Active(Subscription<Option<NaiveDate>>),
+    #[schema(title = "Expired")]
     Expired(Subscription<NaiveDate>),
+    #[schema(title = "None")]
     None,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, ToSchema)]
 pub struct Subscription<EndDate = Option<NaiveDate>> {
     pub(super) subscription_id: SubscriptionId,
     pub(super) product: ProductIdentifier,
@@ -160,17 +198,24 @@ pub struct Subscription<EndDate = Option<NaiveDate>> {
 }
 
 /// This models the content of a webhook we received from Moneybird
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct MoneybirdWebhookPayload {
-    // The webhook_id is not present in the `test_webhook`, otherwise it is present
+    /// The webhook_id is not present in the `test_webhook`, otherwise it is present
     #[serde(default)]
+    #[garde(dive)]
     pub(super) webhook_id: Option<WebhookId>,
+    #[garde(dive)]
     pub(super) administration_id: AdministrationId,
+    #[garde(dive)]
     pub(super) action: Action,
     // Strangely, the `test_webhook` does not call this `webhook_token`, but `token`
     #[serde(alias = "token")]
+    #[garde(dive)]
+    #[schema(min_length = 6, max_length = 256)]
     pub(super) webhook_token: Password,
+    #[garde(dive)]
     pub(super) entity_type: EntityType,
+    #[garde(skip)]
     pub(super) entity: serde_json::Value,
 }
 
@@ -183,16 +228,16 @@ pub(super) struct Webhook {
     pub(super) token: Password,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, ToSchema, Validate)]
 pub(super) enum EntityType {
     Contact,
     Subscription,
     RecurringSalesInvoice,
     #[serde(untagged)]
-    Unknown(String),
+    Unknown(#[garde(length(min = 1, max = 100))] String),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Action {
     SubscriptionCancelled,
@@ -202,7 +247,7 @@ pub(super) enum Action {
     SubscriptionUpdated,
     TestWebhook,
     #[serde(untagged)]
-    Unknown(String),
+    Unknown(#[garde(length(min = 1, max = 100))] String),
 }
 
 #[derive(Debug, thiserror::Error)]

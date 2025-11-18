@@ -1,3 +1,15 @@
+use crate::{
+    api::{
+        ApiState,
+        auth::Authenticated,
+        error::{ApiResult, AppError},
+        validation::ValidatedJson,
+    },
+    models::{
+        ApiInvite, ApiUser, CreatedInviteWithPassword, InviteId, InviteRepository, Organization,
+        OrganizationId, OrganizationRepository, Password, Role,
+    },
+};
 use axum::{
     Json,
     extract::{Path, State},
@@ -5,31 +17,30 @@ use axum::{
 };
 use chrono::{TimeDelta, Utc};
 use http::StatusCode;
-use serde::Deserialize;
 use tracing::debug;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{
-    api::{
-        auth::Authenticated,
-        error::{ApiError, ApiResult},
-    },
-    models::{
-        ApiInvite, ApiUser, InviteId, InviteRepository, OrganizationId, OrganizationRepository,
-        Password, Role,
-    },
-};
-
-#[derive(Debug, Deserialize)]
-pub struct InvitePath {
-    org_id: OrganizationId,
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(create_invite, get_org_invites))
+        .routes(routes!(get_invite, remove_invite, accept_invite))
 }
 
+/// Create an invite
+#[utoipa::path(post, path = "/invite/{org_id}",
+    tags = ["internal", "Organizations"],
+    request_body = Role,
+    responses(
+        (status = 201, description = "Invite created", body = CreatedInviteWithPassword),
+        AppError
+    )
+)]
 pub async fn create_invite(
     State(repo): State<InviteRepository>,
-    Path(InvitePath { org_id }): Path<InvitePath>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     user: ApiUser,
-    Json(role): Json<Role>,
-) -> Result<impl IntoResponse, ApiError> {
+    ValidatedJson(role): ValidatedJson<Role>,
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_admin_access(&org_id)?;
 
     let expires = Utc::now() + TimeDelta::days(7);
@@ -45,9 +56,17 @@ pub async fn create_invite(
     Ok((StatusCode::CREATED, Json(invite)))
 }
 
+/// Get all invites for an organization
+#[utoipa::path(get, path = "/invite/{org_id}",
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched active invites", body = Vec<ApiInvite>),
+        AppError
+    )
+)]
 pub async fn get_org_invites(
     State(repo): State<InviteRepository>,
-    Path(InvitePath { org_id }): Path<InvitePath>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     user: ApiUser,
 ) -> ApiResult<Vec<ApiInvite>> {
     user.has_org_read_access(&org_id)?;
@@ -62,6 +81,14 @@ pub async fn get_org_invites(
     Ok(Json(invites))
 }
 
+/// Get invite by ID
+#[utoipa::path(get, path = "/invite/{org_id}/{invite_id}/{password}",
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched invite", body = ApiInvite),
+        AppError
+    )
+)]
 pub async fn get_invite(
     State(repo): State<InviteRepository>,
     Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
@@ -75,12 +102,20 @@ pub async fn get_invite(
 
     let invite = repo.get_by_id(invite_id, org_id).await?;
     if !invite.verify_password(&password) {
-        return Err(ApiError::NotFound);
+        return Err(AppError::NotFound);
     }
 
     Ok(Json(invite))
 }
 
+/// Withdraw an invitation
+#[utoipa::path(delete, path = "/invite/{org_id}/{invite_id}",
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully removed the invitation", body = InviteId),
+        AppError
+    )
+)]
 pub async fn remove_invite(
     State(repo): State<InviteRepository>,
     Path((org_id, invite_id)): Path<(OrganizationId, InviteId)>,
@@ -99,12 +134,20 @@ pub async fn remove_invite(
     Ok(Json(id))
 }
 
+/// Accept an invitation
+#[utoipa::path(post, path = "/invite/{org_id}/{invite_id}/{password}",
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 201, description = "Successfully accepted invite to organization", body = Organization),
+        AppError
+    )
+)]
 pub async fn accept_invite(
     State(invites): State<InviteRepository>,
     State(organizations): State<OrganizationRepository>,
     Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     debug!(
         user_id = user.id().to_string(),
         organization_id = org_id.to_string(),
@@ -115,11 +158,11 @@ pub async fn accept_invite(
     let invite = invites.get_by_id(invite_id, org_id).await?;
 
     if !invite.verify_password(&password) {
-        return Err(ApiError::NotFound);
+        return Err(AppError::NotFound);
     }
 
     if invite.is_expired() {
-        return Err(ApiError::NotFound);
+        return Err(AppError::NotFound);
     }
 
     organizations
@@ -130,7 +173,7 @@ pub async fn accept_invite(
 
     let Some(organization) = organizations.get_by_id(org_id).await? else {
         tracing::error!("organization not found after accepting invite: {}", org_id);
-        return Err(ApiError::NotFound); // this shouldn't happen
+        return Err(AppError::NotFound); // this shouldn't happen
     };
 
     Ok((StatusCode::CREATED, Json(organization)))

@@ -1,16 +1,20 @@
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{Error, OrganizationId, Password, Role};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
+)]
 pub struct ApiKeyId(Uuid);
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize, Debug))]
 pub struct ApiKey {
     id: ApiKeyId,
@@ -45,7 +49,7 @@ impl ApiKey {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize, Debug))]
 pub struct CreatedApiKeyWithPassword {
     id: ApiKeyId,
@@ -82,10 +86,13 @@ impl CreatedApiKeyWithPassword {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct ApiKeyRequest {
+    #[serde(default)]
+    #[garde(length(max = 500))]
     pub description: String,
+    #[garde(skip)]
     pub role: Role,
 }
 

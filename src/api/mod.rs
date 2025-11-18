@@ -1,27 +1,9 @@
 use crate::{
     Environment,
     api::{
-        api_keys::{create_api_key, list_api_keys, remove_api_key, update_api_key},
-        api_users::{
-            delete_password, delete_totp_code, finish_enroll_totp, start_enroll_totp, totp_codes,
-            update_password, update_user,
-        },
-        auth::{logout, password_login, password_register, totp_login},
-        domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-        invites::{accept_invite, create_invite, get_invite, get_org_invites, remove_invite},
-        messages::{create_message, get_message, list_messages, remove_message, retry_now},
+        error::AppError,
         oauth::GithubOauthService,
-        organizations::{
-            create_organization, get_organization, list_members, list_organizations, remove_member,
-            remove_organization, update_block_status, update_member_role, update_organization,
-        },
-        projects::{create_project, list_projects, remove_project, update_project},
-        smtp_credentials::{
-            create_smtp_credential, list_smtp_credential, remove_smtp_credential,
-            update_smtp_credential,
-        },
-        streams::{create_stream, list_streams, remove_stream, update_stream},
-        subscriptions::{get_sales_link, get_subscription, moneybird_webhook},
+        openapi::{docs_router, openapi_router},
     },
     bus::client::BusClient,
     handler::{RetryConfig, dns::DnsResolver},
@@ -32,27 +14,33 @@ use crate::{
     moneybird::MoneyBird,
 };
 use axum::{
-    Json, RequestExt, Router,
+    BoxError, Json, RequestExt, Router,
+    error_handling::HandleErrorLayer,
     extract::{ConnectInfo, FromRef, Request, State},
     middleware,
     middleware::Next,
-    response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    response::{IntoResponse, Redirect, Response},
+    routing::get,
 };
 use base64ct::Encoding;
-use http::{HeaderName, HeaderValue, StatusCode};
+use http::{
+    HeaderName, HeaderValue, Method, StatusCode,
+    header::{ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, USER_AGENT},
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower::ServiceBuilder;
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
     span,
 };
+use utoipa::ToSchema;
 
 mod api_keys;
 mod api_users;
@@ -62,6 +50,7 @@ mod error;
 mod invites;
 mod messages;
 mod oauth;
+pub mod openapi;
 mod organizations;
 mod projects;
 mod smtp_credentials;
@@ -80,10 +69,11 @@ pub enum ApiServerError {
     Serve(std::io::Error),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RemailsConfig {
     pub version: String,
+    pub api_server_name: String,
     pub environment: Environment,
     pub smtp_domain_name: String,
     pub smtp_ports: Vec<u16>,
@@ -95,6 +85,7 @@ pub struct RemailsConfig {
 impl Default for RemailsConfig {
     fn default() -> Self {
         let version = env::var("VERSION").unwrap_or("dev".to_string());
+        let api_server_name = env::var("API_SERVER_NAME").expect("API_SERVER_NAME not set");
         let environment: Environment = env::var("ENVIRONMENT")
             .map(|s| s.parse())
             .inspect_err(|_| {
@@ -121,6 +112,7 @@ impl Default for RemailsConfig {
 
         Self {
             version,
+            api_server_name,
             environment,
             smtp_domain_name,
             smtp_ports,
@@ -249,6 +241,7 @@ impl ApiServer {
         pool: PgPool,
         shutdown: CancellationToken,
         with_frontend: bool,
+        with_docs: bool,
         message_bus: BusClient,
     ) -> ApiServer {
         let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
@@ -288,129 +281,29 @@ impl ApiServer {
             retry_config: Arc::new(RetryConfig::default()),
         };
 
-        let mut router = Router::new()
-            .route("/config", get(config))
-            .route("/whoami", get(whoami::whoami))
-            .route("/healthy", get(healthy))
-            .route("/webhook/moneybird", post(moneybird_webhook))
-            .route("/api_user/{user_id}", put(update_user))
-            .route("/api_user/{user_id}/password", put(update_password).delete(delete_password))
-            .route("/api_user/{user_id}/totp/enroll", get(start_enroll_totp).post(finish_enroll_totp))
-            .route("/api_user/{user_id}/totp", get(totp_codes))
-            .route("/api_user/{user_id}/totp/{totp_id}", delete(delete_totp_code))
-            .route(
-                "/organizations",
-                get(list_organizations).post(create_organization),
-            )
-            .route(
-                "/organizations/{id}",
-                get(get_organization).put(update_organization).delete(remove_organization),
-            )
-            .route(
-                "/organizations/{id}/subscription",
-                get(get_subscription),
-            )
-            .route(
-                "/organizations/{id}/subscription/new",
-                get(get_sales_link),
-            )
-            .route(
-                "/organizations/{org_id}/projects",
-                get(list_projects).post(create_project),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}",
-                delete(remove_project).put(update_project),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams",
-                get(list_streams).post(create_stream),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}",
-                delete(remove_stream).put(update_stream),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials",
-                get(list_smtp_credential).post(create_smtp_credential),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/smtp_credentials/{credential_id}",
-                delete(remove_smtp_credential).put(update_smtp_credential),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages",
-                get(list_messages).post(create_message),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}",
-                get(get_message).delete(remove_message),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/streams/{stream_id}/messages/{message_id}/retry",
-                put(retry_now),
-            )
-            .route(
-                "/organizations/{org_id}/domains",
-                get(list_domains).post(create_domain),
-            )
-            .route(
-                "/organizations/{org_id}/domains/{domain_id}",
-                get(get_domain).delete(delete_domain),
-            )
-            .route(
-                "/organizations/{org_id}/domains/{domain_id}/verify",
-                post(verify_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains",
-                get(list_domains).post(create_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
-                get(get_domain).delete(delete_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
-                post(verify_domain),
-            )
-            .route(
-                "/organizations/{org_id}/members",
-                get(list_members),
-            )
-            .route(
-                "/organizations/{org_id}/members/{user_id}",
-                delete(remove_member).put(update_member_role),
-            )
-            .route(
-                "/organizations/{org_id}/api_keys",
-                get(list_api_keys).post(create_api_key),
-            )
-            .route(
-                "/organizations/{org_id}/api_keys/{api_key_id}",
-                delete(remove_api_key).put(update_api_key),
-            )
-            .route(
-                "/organizations/{org_id}/admin",
-                put(update_block_status),
-            )
-            .route("/logout", get(logout))
-            .route("/login/password", post(password_login))
-            .route("/login/totp", post(totp_login))
-            .route("/register/password", post(password_register))
-            .route("/invite/{org_id}", get(get_org_invites).post(create_invite))
-            .route("/invite/{org_id}/{invite_id}", delete(remove_invite))
-            .route("/invite/{org_id}/{invite_id}/{password}", get(get_invite).post(accept_invite))
-            .fallback(api_fallback)
+        let (router, _) = openapi_router().split_for_parts();
+
+        let mut router = router
             .merge(oauth_router)
             .layer((
                 TraceLayer::new_for_http(),
                 middleware::from_fn(ip_middleware),
-                TimeoutLayer::new(Duration::from_secs(10)),
             ))
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(
+                        format!(
+                            "https://docs.{}",
+                            state.config.remails_config.api_server_name
+                        )
+                        .parse::<HeaderValue>()
+                        .expect("Could not parse CORS allow origin"),
+                    )
+                    .allow_credentials(true)
+                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+                    .allow_headers([AUTHORIZATION, ACCEPT, ACCEPT_ENCODING, USER_AGENT]),
+            )
             .with_state(state.clone());
-
-        router = Router::new().nest("/api", router);
 
         if with_frontend {
             let memory_router = memory_serve::from_local_build!()
@@ -422,10 +315,39 @@ impl ApiServer {
             router = router.merge(memory_router);
         }
 
+        if with_docs {
+            router = router
+                .nest("/docs/", docs_router())
+                .route("/docs", get(async || Redirect::permanent("/docs/")))
+        }
+
         router = router.layer(middleware::from_fn_with_state(
             state.config.clone(),
             append_default_headers,
         ));
+
+        // Set a hard limit to the size of all requests. Currently, we allow at most 50,000 bytes
+        // for the text and HTML body of an email message created via the API. Rounding this up
+        // a bit, results in the limit of 120,000 bytes chosen here. If we increase the size limit
+        // for messages, we should consider setting a higher limit specifically to the API endpoints
+        // that require it and a smaller to the rest.
+        router = router
+            .layer(RequestBodyLimitLayer::new(120_000))
+            .layer(middleware::from_fn(|req, next: Next| async move {
+                // TODO I'd prefer a more clean solution for catching errors produced by the
+                //  RequestBodyLimitLayer, but could not find any. Also note the [`ValidatedJson`]
+                let res = next.run(req).await;
+                if res.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    return AppError::PayloadTooLarge.into_response();
+                }
+                res
+            }));
+
+        router = router.layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_timeout_error))
+                .timeout(Duration::from_secs(10)),
+        );
 
         ApiServer {
             socket,
@@ -467,12 +389,19 @@ async fn wait_for_shutdown(token: CancellationToken) {
     token.cancelled().await;
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct HealthyResponse {
     healthy: bool,
     status: &'static str,
 }
 
+/// Remails health check
+#[utoipa::path(get, path = "/healthy",
+    tags = ["internal", "Misc"],
+    responses(
+        (status = 200, description = "Remails health status", body = HealthyResponse),
+    )
+)]
 async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
     match sqlx::query("SELECT 1").execute(&pool).await {
         Ok(_) => Json(HealthyResponse {
@@ -490,6 +419,16 @@ async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
     }
 }
 
+/// Remails configuration
+///
+/// Get the configuration and environment details of the Remails server
+#[utoipa::path(get, path = "/config",
+    security(()),
+    tags = ["Misc"],
+    responses(
+        (status = 200, description = "Remails configuration", body = RemailsConfig),
+    )
+)]
 pub async fn config(State(config): State<RemailsConfig>) -> Response {
     Json(config).into_response()
 }
@@ -520,18 +459,26 @@ async fn append_default_headers(
     res
 }
 
+async fn handle_timeout_error(err: BoxError) -> AppError {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        AppError::RequestTimeout
+    } else {
+        AppError::Internal
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{bus::server::Bus, models::ApiUserId};
     use axum::body::Body;
-    use http::Method;
+    use http::{Method, header::CONTENT_LENGTH};
     use std::{
         collections::HashMap,
         net::{Ipv4Addr, SocketAddrV4},
     };
     use tower::{ServiceExt, util::Oneshot};
-
-    use super::*;
+    use tower_http::body::Full;
 
     pub struct TestServer {
         server: ApiServer,
@@ -550,6 +497,7 @@ mod tests {
                 http_socket.into(),
                 pool.clone(),
                 shutdown,
+                false,
                 false,
                 message_bus_client.clone(),
             )
@@ -648,5 +596,47 @@ mod tests {
         let response = server.get("/api/config").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let _: RemailsConfig = deserialize_body(response.into_body()).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_request_size_limit(pool: PgPool) {
+        let mut server = TestServer::new(pool.clone(), None).await;
+
+        let mut request = Request::builder().method(Method::GET).uri("/api/healthy");
+
+        for (&name, value) in server.headers.iter() {
+            request = request.header(name, value);
+        }
+        request = request.header(CONTENT_LENGTH, HeaderValue::from_static("120001"));
+
+        let request = request.body(Full::default()).unwrap();
+
+        let response = server.server.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let msg = String::from_utf8(bytes.to_vec()).unwrap();
+        println!("{msg}");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+
+        server.set_user(Some(
+            "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(),
+        ));
+        let response = server
+            .post(
+                "/api/organizations",
+                Body::from(format!(r#""name":"{}""#, "a".repeat(120_000))),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let msg = String::from_utf8(bytes.to_vec()).unwrap();
+        println!("{msg}");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

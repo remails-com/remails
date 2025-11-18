@@ -1,17 +1,30 @@
 use crate::models::{Error, OrganizationId, ProjectId, streams::StreamId};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    ToSchema,
 )]
 #[sqlx(transparent)]
 pub struct SmtpCredentialId(Uuid);
 
-#[derive(Serialize, derive_more::Debug)]
+#[derive(Serialize, derive_more::Debug, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredential {
     id: SmtpCredentialId,
@@ -25,24 +38,34 @@ pub struct SmtpCredential {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct SmtpCredentialRequest {
+    #[serde(default)]
+    #[garde(length(max = 500))]
+    #[schema(max_length = 500)]
     pub(crate) description: String,
+    #[garde(pattern("^[a-zA-Z0-9_-]{3,256}$"))]
+    #[schema(pattern = "^[a-zA-Z0-9_-]{3,256}$")]
     pub(crate) username: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct SmtpCredentialUpdateRequest {
+    #[serde(default)]
+    #[garde(length(max = 500))]
+    #[schema(max_length = 500)]
     pub(crate) description: String,
 }
 
-#[derive(Serialize, derive_more::Debug)]
+#[derive(Serialize, derive_more::Debug, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SmtpCredentialResponse {
     id: SmtpCredentialId,
     description: String,
+    /// This username corresponds to the requested username, prepended with the organization id
+    /// to avoid clashing usernames
     username: String,
     #[debug("****")]
     cleartext_password: String,

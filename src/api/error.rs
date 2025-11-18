@@ -1,94 +1,225 @@
 use crate::{api::oauth, models, models::Error};
-use axum::{Json, extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse};
-use serde_json::json;
-use thiserror::Error;
-use tracing::{debug, error};
+use axum::{
+    Json,
+    extract::rejection::{JsonRejection, QueryRejection},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use serde::Serialize;
+use std::collections::BTreeMap;
+use tokio::task::JoinError;
+use tracing::{error, info, warn};
+use utoipa::{
+    IntoResponses,
+    openapi::{RefOr, Response},
+};
+use uuid::Uuid;
 
-pub type ApiResult<T> = Result<Json<T>, ApiError>;
+pub type ApiResult<T> = Result<Json<T>, AppError>;
 
-#[derive(Debug, Error)]
-pub enum ApiError {
-    #[error("database error: {0}")]
-    Database(#[from] models::Error),
-    #[error("not found")]
-    NotFound,
-    #[error("forbidden")]
-    Forbidden,
-    #[error("unauthorized")]
-    Unauthorized,
-    #[error("too many requests, try again later")]
-    TooManyRequests,
-    #[error("OAuth error: {0}")]
-    OAuth(#[from] oauth::Error),
-    #[error("{0}")]
-    Serialization(#[from] serde_json::Error),
-    #[error("{0}")]
+#[derive(thiserror::Error, Debug, derive_more::Display)]
+pub enum AppError {
     BadRequest(String),
-    #[error("{0}")]
-    PreconditionFailed(&'static str),
-    #[error("Moneybird: {0}")]
-    Moneybird(#[from] crate::moneybird::Error),
-    #[error("MessageBus: {0}")]
-    MessageBus(reqwest::Error),
+    NotFound,
+    Conflict,
+    TooManyRequests,
+    Internal,
+    Forbidden,
+    Unauthorized,
+    PreconditionFailed(String),
+    BadGateway,
+    PayloadTooLarge,
+    RequestTimeout,
 }
 
-impl From<garde::Report> for ApiError {
-    fn from(err: garde::Report) -> Self {
-        Self::BadRequest(err.to_string())
+#[derive(utoipa::IntoResponses, Serialize)]
+enum ApiError {
+    /// Bad Request
+    #[response(status = BAD_REQUEST)]
+    BadRequest(ApiErrorResponse),
+    /// Not Found
+    #[response(status = NOT_FOUND)]
+    NotFound(ApiErrorResponse),
+    /// Conflict
+    #[response(status = CONFLICT)]
+    Conflict(ApiErrorResponse),
+    /// Too Many Requests
+    #[response(status = TOO_MANY_REQUESTS)]
+    TooManyRequests(ApiErrorResponse),
+    /// Internal Server Error
+    #[response(status = INTERNAL_SERVER_ERROR)]
+    Internal(ApiErrorResponse),
+    /// Forbidden
+    #[response(status = FORBIDDEN)]
+    Forbidden(ApiErrorResponse),
+    /// Unauthorized
+    #[response(status = UNAUTHORIZED)]
+    Unauthorized(ApiErrorResponse),
+    /// Precondition Failed
+    #[response(status = PRECONDITION_FAILED)]
+    PreconditionFailed(ApiErrorResponse),
+    /// Bad Gateway
+    #[response(status = BAD_GATEWAY)]
+    BadGateway(ApiErrorResponse),
+    /// Payload Too Large
+    #[response(status = PAYLOAD_TOO_LARGE)]
+    PayloadTooLarge(ApiErrorResponse),
+    /// Request Timeout
+    #[response(status = REQUEST_TIMEOUT)]
+    RequestTimeout(ApiErrorResponse),
+}
+
+#[derive(Serialize, utoipa::ToResponse, utoipa::ToSchema)]
+#[response(description = "API error details")]
+#[cfg_attr(test, derive(serde::Deserialize))]
+pub struct ApiErrorResponse {
+    description: String,
+    reference: Uuid,
+}
+
+impl From<AppError> for ApiError {
+    fn from(err: AppError) -> Self {
+        let reference = Uuid::new_v4();
+        info!(
+            error_reference = reference.to_string(),
+            "API server error: {err:?}"
+        );
+
+        let content = ApiErrorResponse {
+            description: err.to_string(),
+            reference,
+        };
+
+        match err {
+            AppError::BadRequest(_) => ApiError::BadRequest(content),
+            AppError::NotFound => ApiError::NotFound(content),
+            AppError::Conflict => ApiError::Conflict(content),
+            AppError::TooManyRequests => ApiError::TooManyRequests(content),
+            AppError::Internal => ApiError::Internal(content),
+            AppError::Forbidden => ApiError::Forbidden(content),
+            AppError::Unauthorized => ApiError::Unauthorized(content),
+            AppError::PreconditionFailed(_) => ApiError::PreconditionFailed(content),
+            AppError::BadGateway => ApiError::BadGateway(content),
+            AppError::PayloadTooLarge => ApiError::PayloadTooLarge(content),
+            AppError::RequestTimeout => ApiError::RequestTimeout(content),
+        }
     }
 }
 
-impl From<JsonRejection> for ApiError {
-    fn from(rejection: JsonRejection) -> Self {
-        Self::BadRequest(rejection.to_string())
+impl From<oauth::Error> for AppError {
+    fn from(err: oauth::Error) -> Self {
+        let message = err.user_message();
+        error!("API server error (OAuth): {message} {err:?}");
+
+        match err {
+            oauth::Error::MissingEnvironmentVariable(_)
+            | oauth::Error::Json(_)
+            | oauth::Error::Database(_)
+            | oauth::Error::Other(_) => AppError::Internal,
+            oauth::Error::FetchUser(_) | oauth::Error::ParseUser(_) => AppError::BadGateway,
+            oauth::Error::OauthToken(_)
+            | oauth::Error::MissingCSRFCookie
+            | oauth::Error::CSRFTokenMismatch => AppError::Unauthorized,
+            oauth::Error::PreconditionFailed(_) => AppError::PreconditionFailed(message),
+        }
+    }
+}
+
+impl From<JoinError> for AppError {
+    fn from(err: JoinError) -> Self {
+        error!("{err:?}");
+        AppError::Internal
+    }
+}
+
+impl From<crate::moneybird::Error> for AppError {
+    fn from(err: crate::moneybird::Error) -> Self {
+        error!("Moneybird error: {err} {err:?}");
+
+        AppError::BadGateway
+    }
+}
+
+impl From<garde::Report> for AppError {
+    fn from(err: garde::Report) -> Self {
+        warn!("validation error: {err} {err:?}");
+
+        AppError::BadRequest(err.to_string())
+    }
+}
+
+impl From<JsonRejection> for AppError {
+    fn from(err: JsonRejection) -> Self {
+        warn!("Json error: {err} {err:?}");
+
+        AppError::BadRequest(err.to_string())
+    }
+}
+
+impl From<QueryRejection> for AppError {
+    fn from(err: QueryRejection) -> Self {
+        warn!("API server error: {err} {err:?}");
+
+        AppError::BadRequest(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        error!("API server error: {err} {err:?}");
+
+        AppError::Internal
+    }
+}
+
+impl From<models::Error> for AppError {
+    fn from(err: models::Error) -> Self {
+        let reference = Uuid::new_v4();
+        error!(
+            error_reference = reference.to_string(),
+            "API server error: {err} {err:?}"
+        );
+
+        match err {
+            Error::Serialization(_) => AppError::BadRequest(err.to_string()),
+            Error::NotFound(_) => AppError::NotFound,
+            Error::ForeignKeyViolation => AppError::BadRequest("Foreign key violation".to_string()),
+            Error::Conflict => AppError::Conflict,
+            Error::BadRequest(err) => AppError::BadRequest(err.to_string()),
+            Error::TooManyRequests => AppError::TooManyRequests,
+            Error::OrgBlocked => AppError::Forbidden,
+            _ => AppError::Internal,
+        }
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        Into::<ApiError>::into(self).into_response()
+    }
+}
+
+impl IntoResponses for AppError {
+    fn responses() -> BTreeMap<String, RefOr<Response>> {
+        ApiError::responses()
     }
 }
 
 impl IntoResponse for ApiError {
-    fn into_response(self) -> axum::response::Response<axum::body::Body> {
-        error!("API server error: {self} {self:?}");
-
-        let (status, message): (StatusCode, &str) = match self {
-            ApiError::Database(db) => match db {
-                Error::Serialization(err) => {
-                    error!("{err}");
-                    (StatusCode::BAD_REQUEST, &err.to_string())
-                }
-                Error::NotFound(err) => {
-                    debug!("{err}");
-                    (StatusCode::NOT_FOUND, "Not found")
-                }
-                Error::ForeignKeyViolation => {
-                    debug!("ForeignKeyViolation");
-                    (StatusCode::BAD_REQUEST, "Foreign key violation")
-                }
-                Error::Conflict => (StatusCode::CONFLICT, "Conflict"),
-                Error::BadRequest(err) => (StatusCode::BAD_REQUEST, &err.to_string()),
-                Error::TooManyRequests => {
-                    debug!("Too many requests");
-                    (StatusCode::TOO_MANY_REQUESTS, "Too many requests")
-                }
-                Error::OrgBlocked => (StatusCode::FORBIDDEN, "Organization has been blocked"),
-                _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
-            },
-            ApiError::NotFound => (StatusCode::NOT_FOUND, "Not found"),
-            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
-            ApiError::OAuth(err) => (err.status_code(), &err.user_message()),
-            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-            ApiError::TooManyRequests => {
-                debug!("Too many requests");
-                (StatusCode::TOO_MANY_REQUESTS, "Too many requests")
-            }
-            ApiError::Serialization(err) => (StatusCode::BAD_REQUEST, &err.to_string()),
-            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, &err.clone()),
-            ApiError::PreconditionFailed(err) => (StatusCode::PRECONDITION_FAILED, err),
-            ApiError::Moneybird(err) => match err {
-                crate::moneybird::Error::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-                _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-            },
-            ApiError::MessageBus(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error"),
-        };
-
-        (status, Json(json!({ "error": message }))).into_response()
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ApiError::BadRequest(body) => (StatusCode::BAD_REQUEST, Json(body)),
+            ApiError::NotFound(body) => (StatusCode::NOT_FOUND, Json(body)),
+            ApiError::Conflict(body) => (StatusCode::CONFLICT, Json(body)),
+            ApiError::TooManyRequests(body) => (StatusCode::TOO_MANY_REQUESTS, Json(body)),
+            ApiError::Internal(body) => (StatusCode::INTERNAL_SERVER_ERROR, Json(body)),
+            ApiError::Forbidden(body) => (StatusCode::FORBIDDEN, Json(body)),
+            ApiError::Unauthorized(body) => (StatusCode::UNAUTHORIZED, Json(body)),
+            ApiError::PreconditionFailed(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+            ApiError::BadGateway(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+            ApiError::PayloadTooLarge(body) => (StatusCode::PAYLOAD_TOO_LARGE, Json(body)),
+            ApiError::RequestTimeout(body) => (StatusCode::REQUEST_TIMEOUT, Json(body)),
+        }
+        .into_response()
     }
 }

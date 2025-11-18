@@ -1,4 +1,4 @@
-use crate::{api::error::ApiError, models};
+use crate::{api::error::AppError, models};
 use axum::response::{IntoResponse, Response};
 use http::StatusCode;
 
@@ -63,6 +63,6 @@ impl Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        ApiError::from(self).into_response()
+        AppError::from(self).into_response()
     }
 }

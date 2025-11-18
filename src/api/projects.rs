@@ -1,7 +1,8 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{ApiResult, AppError},
     },
     models::{NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
 };
@@ -12,10 +13,27 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(list_projects, create_project,))
+        .routes(routes!(update_project, remove_project))
+}
+
+/// List projects
+///
+/// List all projects under the requested organization the authenticated user has access to
+#[utoipa::path(get, path = "/organizations/{org_id}/projects",
+    tags = ["Projects"],
+    responses(
+        (status = 200, description = "Successfully fetched projects", body = [Project]),
+        AppError,
+    )
+)]
 pub async fn list_projects(
     State(repo): State<ProjectRepository>,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Project>> {
     user.has_org_read_access(&org_id)?;
@@ -32,6 +50,17 @@ pub async fn list_projects(
     Ok(Json(projects))
 }
 
+/// Update a project
+///
+/// Update details about that project
+#[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}",
+    tags = ["Projects"],
+    request_body = NewProject,
+    responses(
+        (status = 200, description = "Project successfully updated", body = Project),
+        AppError,
+    )
+)]
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
@@ -52,12 +81,23 @@ pub async fn update_project(
     Ok(Json(project))
 }
 
+/// Create a new project
+///
+/// Create a new project under the specified organization
+#[utoipa::path(post, path = "/organizations/{org_id}/projects",
+    tags = ["Projects"],
+    request_body = NewProject,
+    responses(
+        (status = 201, description = "Project created successfully", body = Project),
+        AppError,
+    )
+)]
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     user: Box<dyn Authenticated>,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     Json(new): Json<NewProject>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let project = repo.create(new, org_id).await?;
@@ -73,6 +113,14 @@ pub async fn create_project(
     Ok((StatusCode::CREATED, Json(project)))
 }
 
+/// Delete a project
+#[utoipa::path(delete, path = "/organizations/{org_id}/projects/{proj_id}",
+    tags = ["Projects"],
+    responses(
+        (status = 200, description = "Project successfully deleted", body = ProjectId),
+        AppError,
+    )
+)]
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
     user: Box<dyn Authenticated>,

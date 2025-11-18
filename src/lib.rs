@@ -8,6 +8,7 @@ use tokio::{signal, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa::ToSchema;
 
 pub mod api;
 mod dkim;
@@ -35,7 +36,7 @@ mod moneybird;
 pub use kubernetes::Kubernetes;
 pub use moneybird::*;
 
-#[derive(Debug, Default, Clone, Copy, FromStr, Serialize)]
+#[derive(Debug, Default, Clone, Copy, FromStr, Serialize, ToSchema)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 pub enum Environment {
     Staging,
@@ -100,12 +101,14 @@ pub async fn run_api_server(
     http_socket: SocketAddrV4,
     shutdown: CancellationToken,
     with_frontend: bool,
+    with_docs: bool,
 ) -> JoinHandle<()> {
     let api_server = ApiServer::new(
         http_socket.into(),
         pool.clone(),
         shutdown,
         with_frontend,
+        with_docs,
         bus_client,
     )
     .await;

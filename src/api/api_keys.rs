@@ -1,7 +1,10 @@
-use super::error::{ApiError, ApiResult};
+use super::error::{ApiResult, AppError};
 use crate::{
-    api::auth::Authenticated,
-    models::{ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, OrganizationId},
+    api::{ApiState, auth::Authenticated, validation::ValidatedJson},
+    models::{
+        ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, CreatedApiKeyWithPassword,
+        OrganizationId,
+    },
 };
 use axum::{
     Json,
@@ -10,13 +13,29 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(create_api_key, list_api_keys))
+        .routes(routes!(update_api_key, remove_api_key))
+}
+
+/// Create new API key
+#[utoipa::path(post, path = "/organizations/{org_id}/api_keys",
+    tags = ["internal", "Api Key"],
+    request_body = ApiKeyRequest,
+    responses(
+        (status = 201, description = "Successfully created API key", body = CreatedApiKeyWithPassword),
+        AppError,
+    )
+)]
 pub async fn create_api_key(
     State(repo): State<ApiKeyRepository>,
     user: ApiUser,
-    Path(org_id): Path<OrganizationId>,
-    Json(request): Json<ApiKeyRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+    Path((org_id,)): Path<(OrganizationId,)>,
+    ValidatedJson(request): ValidatedJson<ApiKeyRequest>,
+) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
     let new_api_key = repo.create(org_id, &request).await?;
@@ -32,11 +51,20 @@ pub async fn create_api_key(
     Ok((StatusCode::CREATED, Json(new_api_key)))
 }
 
+/// Update API key
+#[utoipa::path(put, path = "/organizations/{org_id}/api_keys/{api_key_id}",
+    tags = ["internal", "Api Key"],
+    request_body = ApiKeyRequest,
+    responses(
+        (status = 200, description = "Successfully updated API key", body = ApiKey),
+        AppError,
+    )
+)]
 pub async fn update_api_key(
     State(repo): State<ApiKeyRepository>,
     user: ApiUser,
     Path((org_id, api_key_id)): Path<(OrganizationId, ApiKeyId)>,
-    Json(request): Json<ApiKeyRequest>,
+    ValidatedJson(request): ValidatedJson<ApiKeyRequest>,
 ) -> ApiResult<ApiKey> {
     user.has_org_write_access(&org_id)?;
 
@@ -53,9 +81,17 @@ pub async fn update_api_key(
     Ok(Json(update))
 }
 
+/// List existing API keys
+#[utoipa::path(get, path = "/organizations/{org_id}/api_keys",
+    tags = ["internal", "Api Key"],
+    responses(
+        (status = 200, description = "Successfully fetched API keys", body = Vec<ApiKey>),
+        AppError,
+    )
+)]
 pub async fn list_api_keys(
     State(repo): State<ApiKeyRepository>,
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     user: ApiUser,
 ) -> ApiResult<Vec<ApiKey>> {
     user.has_org_read_access(&org_id)?;
@@ -72,6 +108,14 @@ pub async fn list_api_keys(
     Ok(Json(api_keys))
 }
 
+/// Delete an API key
+#[utoipa::path(delete, path = "/organizations/{org_id}/api_keys/{api_key_id}",
+    tags = ["internal", "Api Key"],
+    responses(
+        (status = 200, description = "Successfully deleted API key", body = ApiKeyId),
+        AppError,
+    )
+)]
 pub async fn remove_api_key(
     State(repo): State<ApiKeyRepository>,
     user: ApiUser,

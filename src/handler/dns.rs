@@ -1,3 +1,6 @@
+#[cfg(test)]
+use crate::handler::mock;
+use crate::models::{Domain, Error};
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
 #[cfg(not(test))]
@@ -10,10 +13,7 @@ use hickory_resolver::{
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 use tracing::{debug, trace};
-
-#[cfg(test)]
-use crate::handler::mock;
-use crate::models::{Domain, Error};
+use utoipa::ToSchema;
 
 //TODO: do we want to do anything with DNS errors?
 pub enum ResolveError {
@@ -31,7 +31,7 @@ pub struct DnsResolver {
     pub dkim_selector: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub(crate) enum VerifyResultStatus {
     Success,
     Info,
@@ -39,7 +39,7 @@ pub(crate) enum VerifyResultStatus {
     Error,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct VerifyResult {
     pub(crate) status: VerifyResultStatus,
     pub(crate) reason: String,
@@ -89,7 +89,7 @@ impl From<Result<&'static str, &'static str>> for VerifyResult {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct DomainVerificationStatus {
     timestamp: DateTime<Utc>,
     dkim: VerifyResult,

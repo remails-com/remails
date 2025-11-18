@@ -3,27 +3,34 @@ use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::models::{ApiUserId, Error, OrganizationId, Password, Role};
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    ToSchema,
+    IntoParams,
 )]
 #[sqlx(transparent)]
+#[into_params(names("invite_id"))]
 pub struct InviteId(Uuid);
 
-#[derive(Serialize)]
-pub struct CreatedInvite {
-    id: InviteId,
-    organization_id: OrganizationId,
-    role: Role,
-    created_by: ApiUserId,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
+/// Newly created invitation
+///
+/// Contains the password in plain text, which is only available at creation time
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct CreatedInviteWithPassword {
     id: InviteId,
@@ -54,7 +61,7 @@ impl CreatedInviteWithPassword {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct ApiInvite {
     id: InviteId,
@@ -118,8 +125,7 @@ impl InviteRepository {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
-        let invite = sqlx::query_as!(
-            CreatedInvite,
+        let invite = sqlx::query!(
             r#"
             INSERT INTO organization_invites (id, password_hash, organization_id, role, created_by, expires_at)
             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
@@ -135,11 +141,11 @@ impl InviteRepository {
         .await?;
 
         Ok(CreatedInviteWithPassword {
-            id: invite.id,
+            id: invite.id.into(),
             password,
-            organization_id: invite.organization_id,
+            organization_id: invite.organization_id.into(),
             role: invite.role,
-            created_by: invite.created_by,
+            created_by: invite.created_by.into(),
             created_at: invite.created_at,
             expires_at: invite.expires_at,
         })

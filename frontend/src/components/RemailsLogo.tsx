@@ -1,7 +1,7 @@
 import { useComputedColorScheme } from "@mantine/core";
 
-import logoBlack from "../img/remails-logo-black.svg";
-import logoWhite from "../img/remails-logo-white.svg";
+import logoBlack from "/remails-logo-black.svg";
+import logoWhite from "/remails-logo-white.svg";
 import React from "react";
 
 export function RemailsLogo({ style }: { style?: React.CSSProperties }) {

@@ -4,7 +4,9 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(
@@ -22,8 +24,11 @@ use uuid::Uuid;
     PartialOrd,
     Ord,
     Eq,
+    ToSchema,
+    IntoParams,
 )]
 #[sqlx(transparent)]
+#[into_params(names("org_id"))]
 pub struct OrganizationId(Uuid);
 
 impl OrganizationId {
@@ -33,7 +38,17 @@ impl OrganizationId {
 }
 
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq, PartialOrd, sqlx::Type,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Display,
+    PartialEq,
+    PartialOrd,
+    sqlx::Type,
+    ToSchema,
+    Validate,
 )]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "org_block_status", rename_all = "snake_case")]
@@ -43,7 +58,8 @@ pub enum OrgBlockStatus {
     NoSendingOrReceiving = 2,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, ToSchema)]
+#[schema(title = "Organization")]
 #[cfg_attr(test, derive(Clone, Deserialize))]
 pub struct Organization {
     id: OrganizationId,
@@ -66,12 +82,14 @@ impl Organization {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
 pub struct NewOrganization {
+    #[garde(length(min = 1, max = 256))]
+    #[schema(min_length = 1, max_length = 256)]
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct OrganizationMember {
     user_id: ApiUserId,

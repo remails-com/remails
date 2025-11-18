@@ -25,7 +25,7 @@ export function PasswordSettings() {
     validate: {
       old_password: (value) =>
         user.password_enabled && value.length <= 6 ? "Password should include at least 6 characters" : null,
-      new_password1: (value) => (value.length <= 6 ? "Password should include at least 6 characters" : null),
+      new_password1: (value) => (value.length <= 10 ? "Password should include at least 10 characters" : null),
       new_password2: (value, values) => (values.new_password1 !== value ? "Passwords do not match" : null),
     },
   });

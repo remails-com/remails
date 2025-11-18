@@ -311,7 +311,7 @@ impl Handler {
     }
 
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
-        fn parse_message<'a>(raw_data: &'a Vec<u8>) -> mail_parser::Message<'a> {
+        fn parse_message(raw_data: &Vec<u8>) -> mail_parser::Message<'_> {
             MessageParser::default()
                 .parse(raw_data)
                 .unwrap_or_else(|| mail_parser::Message {
@@ -621,7 +621,7 @@ impl Handler {
                     connection_log.log(
                         LogLevel::Info,
                         format!(
-                            "skipping recipient {} as message was already successfully (attempt {})",
+                            "skipping recipient {} as message was already successfully delivered (attempt {})",
                             recipient.email(), message.attempts
                         ),
                     );

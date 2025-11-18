@@ -1,8 +1,8 @@
 use crate::{
-    api::{ApiState, error::ApiError, whoami::WhoamiResponse},
+    api::{ApiState, error::AppError, validation::ValidatedJson, whoami::WhoamiResponse},
     models::{
         ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
-        OrganizationId, Password, Role,
+        OrganizationId, Password, Role, TotpCode,
     },
 };
 use axum::{
@@ -18,6 +18,7 @@ use base64ct::Encoding;
 use chrono::{DateTime, Duration, Utc};
 use cookie::{Cookie, SameSite};
 use email_address::EmailAddress;
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 #[cfg(not(test))]
@@ -25,8 +26,19 @@ use std::net::SocketAddr;
 #[cfg(not(test))]
 use tracing::error;
 use tracing::{debug, trace, warn};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-static SESSION_COOKIE_NAME: &str = "SESSION";
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
+pub static SESSION_COOKIE_NAME: &str = "__Host-SESSION";
+
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(password_login))
+        .routes(routes!(totp_login))
+        .routes(routes!(password_register))
+        .routes(routes!(logout))
+}
 
 /// Objects implementing `Authenticated` may be allowed to use the Remails API if they have the
 /// right level of permissions for the organization.
@@ -39,22 +51,22 @@ pub trait Authenticated: Send + Sync {
     /// Check if user has a certain access level within an organization
     fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool;
 
-    fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+    fn has_org_read_access(&self, org_id: &OrganizationId) -> Result<(), AppError> {
         self.is_at_least(org_id, Role::ReadOnly)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(AppError::Forbidden)
     }
 
-    fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+    fn has_org_write_access(&self, org_id: &OrganizationId) -> Result<(), AppError> {
         self.is_at_least(org_id, Role::Maintainer)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(AppError::Forbidden)
     }
 
-    fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), ApiError> {
+    fn has_org_admin_access(&self, org_id: &OrganizationId) -> Result<(), AppError> {
         self.is_at_least(org_id, Role::Admin)
             .then_some(())
-            .ok_or(ApiError::Forbidden)
+            .ok_or(AppError::Forbidden)
     }
 
     /// Get a list of the UUIDs of all organizations that are viewable by this user,
@@ -197,23 +209,42 @@ impl UserCookie {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema, Validate)]
 pub(super) struct PasswordLogin {
+    #[garde(skip)]
     email: EmailAddress,
+    #[garde(dive)]
+    #[schema(min_length = 6, max_length = 256)]
     password: Password,
 }
 
+/// Password login
+///
+/// Returns an authentication cookie.
+/// If the user configured 2FA, you have to call the corresponding path hereafter,
+/// currently only TOTP (`/login/totp`) is supported
+#[utoipa::path(post, path = "/login/password",
+    tags = ["internal", "Auth"],
+    security(()),
+    request_body = PasswordLogin,
+    responses(
+        (status = 200, description = "Successfully logged in", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        AppError,
+))]
 pub(super) async fn password_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
-    Json(login_attempt): Json<PasswordLogin>,
-) -> Result<Response, ApiError> {
+    ValidatedJson(login_attempt): ValidatedJson<PasswordLogin>,
+) -> Result<Response, AppError> {
     repo.check_password(&login_attempt.email, login_attempt.password)
         .await?;
     let user = repo
         .find_by_email(&login_attempt.email)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(AppError::NotFound)?;
 
     let whoami;
     if repo.mfa_enabled(user.id()).await? {
@@ -227,20 +258,35 @@ pub(super) async fn password_login(
     Ok((StatusCode::OK, cookie_storage, Json(whoami)).into_response())
 }
 
+/// TOTP login
+///
+/// Second factor authentication with Time-Based One-time Password (TOTP).
+/// Returns an updated authentication cookie
+#[utoipa::path(post, path = "/login/totp",
+    tags = ["internal", "Auth"],
+    request_body = TotpCode,
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "Successfully logged in", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        AppError,
+))]
 pub(super) async fn totp_login(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
     user: MfaPending,
-    Json(totp_code): Json<String>,
-) -> Result<Response, ApiError> {
-    if !repo.check_totp_code(&user.id(), totp_code.as_str()).await? {
+    ValidatedJson(totp_code): ValidatedJson<TotpCode>,
+) -> Result<Response, AppError> {
+    if !repo.check_totp_code(&user.id(), totp_code.as_ref()).await? {
         return Ok((StatusCode::UNAUTHORIZED, Json(WhoamiResponse::MfaPending)).into_response());
     }
 
     let user = repo
         .find_by_id(&user.id())
         .await?
-        .ok_or(ApiError::Unauthorized)?;
+        .ok_or(AppError::Unauthorized)?;
     cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
 
     Ok((
@@ -251,18 +297,37 @@ pub(super) async fn totp_login(
         .into_response())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate, ToSchema)]
 pub(super) struct PasswordRegister {
+    #[garde(length(min = 1, max = 256))]
+    #[schema(min_length = 1, max_length = 256)]
     name: String,
+    #[garde(skip)]
     email: EmailAddress,
+    #[garde(dive)]
+    #[schema(min_length = 6, max_length = 256)]
     password: Password,
 }
 
+/// Register with password
+///
+/// Creates a new ApiUser and returns the corresponding authentication cookie.
+#[utoipa::path(post, path = "/register/password",
+    tags = ["internal", "Auth"],
+    security(()),
+    request_body = PasswordRegister,
+    responses(
+        (status = 201, description = "Successfully created API user", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        AppError,
+))]
 pub(super) async fn password_register(
     State(repo): State<ApiUserRepository>,
     mut cookie_storage: SecureCookieStorage,
-    Json(register_attempt): Json<PasswordRegister>,
-) -> Result<Response, ApiError> {
+    ValidatedJson(register_attempt): ValidatedJson<PasswordRegister>,
+) -> Result<Response, AppError> {
     let new = NewApiUser {
         email: register_attempt.email,
         name: register_attempt.name.trim().to_string(),
@@ -299,6 +364,17 @@ pub(super) fn login(
     Ok(cookie_storage.add(session_cookie))
 }
 
+/// Logout
+#[utoipa::path(get, path = "/logout",
+    tags = ["internal", "Auth"],
+    security(()),
+    responses(
+        (status = 303, description = "Successfully logged out",
+            headers(
+                ("set-cookie", description = "removes the authentication cookie")
+        )),
+        AppError,
+))]
 pub(super) async fn logout(storage: SecureCookieStorage) -> impl IntoResponse {
     let mut jar = storage.jar;
 
@@ -330,14 +406,14 @@ where
     ApiState: FromRef<S>,
     ApiUserRepository: FromRef<S>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let api_state: ApiState = FromRef::from_ref(state);
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(AppError::Unauthorized)?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(cookie) => {
@@ -346,10 +422,10 @@ where
                         user_id = cookie.id().to_string(),
                         "Received expired user cookie"
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(AppError::Unauthorized)?
                 }
                 if !matches!(cookie.state, LoginState::MfaPending) {
-                    Err(ApiError::Unauthorized)?
+                    Err(AppError::Unauthorized)?
                 }
                 trace!(
                     user_id = cookie.id().to_string(),
@@ -359,7 +435,7 @@ where
             }
             Err(err) => {
                 debug!("Invalid session cookie: {err:?}");
-                Err(ApiError::Unauthorized)
+                Err(AppError::Unauthorized)
             }
         }
     }
@@ -371,7 +447,7 @@ where
     ApiState: FromRef<S>,
     ApiUserRepository: FromRef<S>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     #[cfg_attr(test, allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
@@ -380,7 +456,7 @@ where
             let Ok(connection) = parts.extract::<ConnectInfo<SocketAddr>>().await else {
                 error!("could not determine client IP address");
 
-                return Err(ApiError::BadRequest(
+                return Err(AppError::BadRequest(
                     "could not determine client IP address".to_string(),
                 ));
             };
@@ -407,7 +483,7 @@ where
                 let user = ApiUserRepository::from_ref(state)
                     .find_by_id(&user_id)
                     .await?
-                    .ok_or(ApiError::Unauthorized)?;
+                    .ok_or(AppError::Unauthorized)?;
                 return Ok(user);
             }
         }
@@ -416,7 +492,7 @@ where
         let jar =
             PrivateCookieJar::from_headers(&parts.headers, api_state.config.session_key.clone());
 
-        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(ApiError::Unauthorized)?;
+        let session_cookie = jar.get(SESSION_COOKIE_NAME).ok_or(AppError::Unauthorized)?;
 
         match serde_json::from_str::<UserCookie>(session_cookie.value()) {
             Ok(user) => {
@@ -425,14 +501,14 @@ where
                         user_id = user.id().to_string(),
                         "Received expired user cookie"
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(AppError::Unauthorized)?
                 }
                 if !matches!(user.state, LoginState::LoggedIn) {
                     warn!(
                         user_id = user.id().to_string(),
                         "Received user cookie that is not in `LoggedIn` state but {:?}", user.state
                     );
-                    Err(ApiError::Unauthorized)?
+                    Err(AppError::Unauthorized)?
                 }
                 trace!(
                     user_id = user.id().to_string(),
@@ -441,11 +517,11 @@ where
                 Ok(ApiUserRepository::from_ref(state)
                     .find_by_id(user.id())
                     .await?
-                    .ok_or(ApiError::Unauthorized)?)
+                    .ok_or(AppError::Unauthorized)?)
             }
             Err(err) => {
                 debug!("Invalid session cookie: {err:?}");
-                Err(ApiError::Unauthorized)
+                Err(AppError::Unauthorized)
             }
         }
     }
@@ -477,40 +553,40 @@ where
     ApiState: FromRef<S>,
     ApiKeyRepository: FromRef<S>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // check HTTP Basic Auth header for API keys
         let Some(header) = parts.headers.get("Authorization") else {
-            return Err(ApiError::Unauthorized);
+            return Err(AppError::Unauthorized);
         };
 
         trace!("Logging in based on `Authorization` header");
-        let header = header.to_str().map_err(|_| ApiError::Unauthorized)?;
+        let header = header.to_str().map_err(|_| AppError::Unauthorized)?;
 
         let (auth_type, base64_credentials) =
-            header.split_once(' ').ok_or(ApiError::Unauthorized)?;
+            header.split_once(' ').ok_or(AppError::Unauthorized)?;
 
         if auth_type.to_lowercase() != "basic" {
-            return Err(ApiError::Unauthorized);
+            return Err(AppError::Unauthorized);
         }
 
         let credentials =
-            base64ct::Base64::decode_vec(base64_credentials).map_err(|_| ApiError::Unauthorized)?;
-        let credentials = String::from_utf8(credentials).map_err(|_| ApiError::Unauthorized)?;
+            base64ct::Base64::decode_vec(base64_credentials).map_err(|_| AppError::Unauthorized)?;
+        let credentials = String::from_utf8(credentials).map_err(|_| AppError::Unauthorized)?;
 
-        let (api_key_id, password) = credentials.split_once(':').ok_or(ApiError::Unauthorized)?;
+        let (api_key_id, password) = credentials.split_once(':').ok_or(AppError::Unauthorized)?;
 
-        let api_key_id = api_key_id.parse().map_err(|_| ApiError::Unauthorized)?;
+        let api_key_id = api_key_id.parse().map_err(|_| AppError::Unauthorized)?;
         let api_key = ApiKeyRepository::from_ref(state)
             .get(api_key_id)
             .await
-            .map_err(|_| ApiError::Unauthorized)?;
+            .map_err(|_| AppError::Unauthorized)?;
 
         if api_key.verify_password(&Password::new(password.to_owned())) {
             Ok(api_key)
         } else {
-            Err(ApiError::Unauthorized)
+            Err(AppError::Unauthorized)
         }
     }
 }
@@ -522,7 +598,7 @@ where
     ApiUserRepository: FromRef<S>,
     ApiKeyRepository: FromRef<S>,
 {
-    type Rejection = ApiError;
+    type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // first check if they are using a valid API key
@@ -562,7 +638,7 @@ mod tests {
     use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
-        models::TotpCode,
+        models::TotpCodeDetails,
     };
     use axum::body::Body;
     use serde_json::json;
@@ -595,7 +671,7 @@ mod tests {
                 serialize_body(json!({
                     "name": "New User",
                     "email": "test-api@new-user",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -625,7 +701,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-api@new-user",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -656,7 +732,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -702,7 +778,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 0);
 
         // finish 2FA sign up
@@ -729,7 +805,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes[0].description, "test code");
         assert!(codes[0].last_used.is_none());
 
@@ -746,7 +822,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -778,7 +854,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // Still can't access API routes
         let response = server.get("/api/organizations").await.unwrap();
@@ -806,7 +882,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 1);
         assert_eq!(codes[0].description, "test code");
         assert!(codes[0].last_used.is_some());
@@ -827,7 +903,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let codes: Vec<TotpCode> = deserialize_body(response.into_body()).await;
+        let codes: Vec<TotpCodeDetails> = deserialize_body(response.into_body()).await;
         assert_eq!(codes.len(), 0);
 
         // logout
@@ -843,7 +919,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -876,7 +952,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -940,7 +1016,7 @@ mod tests {
                     "/api/login/password",
                     serialize_body(json!({
                         "email": "test-totp-rate-limit@user-4",
-                        "password": "wrong"
+                        "password": "wrongwrong"
                     })),
                 )
                 .await
@@ -954,7 +1030,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await
@@ -968,7 +1044,7 @@ mod tests {
                 "/api/login/password",
                 serialize_body(json!({
                     "email": "test-totp-rate-limit@user-4",
-                    "password": "unsecure"
+                    "password": "unsecure123"
                 })),
             )
             .await

@@ -1,7 +1,9 @@
 use crate::{
     api::{
+        ApiState,
         auth::Authenticated,
-        error::{ApiError, ApiResult},
+        error::{ApiResult, AppError},
+        validation::ValidatedJson,
     },
     models::{
         ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
@@ -15,8 +17,33 @@ use axum::{
 };
 use http::StatusCode;
 use tracing::{debug, info};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-pub async fn list_organizations(
+pub fn router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(list_organizations, create_organization))
+        .routes(routes!(
+            get_organization,
+            remove_organization,
+            update_organization
+        ))
+        .routes(routes!(list_members))
+        .routes(routes!(remove_member, update_member_role))
+        .routes(routes!(update_block_status))
+}
+
+/// List organizations
+///
+/// List all organizations the authenticated user has access to.
+/// Note that API keys are always valid for a single organization, thus a request to this API
+/// endpoint that is authenticated via an API key will always return exactly one organization.
+#[utoipa::path(get, path = "/organizations",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched organizations", body = [Organization]),
+        AppError
+    ))]
+async fn list_organizations(
     State(repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Organization>> {
@@ -32,14 +59,24 @@ pub async fn list_organizations(
     Ok(Json(organizations))
 }
 
-pub async fn get_organization(
-    Path(org_id): Path<OrganizationId>,
+/// Get organization by ID
+///
+/// Returns all details about a specific organization if the authenticated user has access to it
+#[utoipa::path(get, path = "/organizations/{org_id}",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched organization", body = Organization),
+        AppError,
+    )
+)]
+async fn get_organization(
+    Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Organization> {
     user.has_org_read_access(&org_id)?;
 
-    let organization = repo.get_by_id(org_id).await?.ok_or(ApiError::NotFound)?;
+    let organization = repo.get_by_id(org_id).await?.ok_or(AppError::NotFound)?;
 
     debug!(
         user_id = user.log_id(),
@@ -51,11 +88,21 @@ pub async fn get_organization(
     Ok(Json(organization))
 }
 
+/// Create a new organization
+#[utoipa::path(post, path = "/organizations",
+    security(("cookieAuth" = [])),
+    request_body = NewOrganization,
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 201, description = "Organization created successfully", body = Organization),
+        AppError,
+    )
+)]
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to create organizations
-    Json(new): Json<NewOrganization>,
-) -> Result<impl IntoResponse, ApiError> {
+    ValidatedJson(new): ValidatedJson<NewOrganization>,
+) -> Result<impl IntoResponse, AppError> {
     let org = repo.create(new).await?;
 
     info!(
@@ -79,8 +126,17 @@ pub async fn create_organization(
     Ok((StatusCode::CREATED, Json(org)))
 }
 
+/// Delete an organization
+#[utoipa::path(delete, path = "/organizations/{org_id}",
+    security(("cookieAuth" = [])),
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Organization successfully deleted", body = OrganizationId),
+        AppError,
+    )
+)]
 pub async fn remove_organization(
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to remove organizations
 ) -> ApiResult<OrganizationId> {
@@ -97,11 +153,21 @@ pub async fn remove_organization(
     Ok(Json(organization_id))
 }
 
+/// Update an organization
+#[utoipa::path(put, path = "/organizations/{org_id}",
+    security(("cookieAuth" = [])),
+    request_body = NewOrganization,
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Organization successfully updated", body = Organization),
+        AppError,
+    )
+)]
 pub async fn update_organization(
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to update organizations
-    Json(update): Json<NewOrganization>,
+    ValidatedJson(update): ValidatedJson<NewOrganization>,
 ) -> ApiResult<Organization> {
     user.has_org_admin_access(&org_id)?;
 
@@ -116,8 +182,18 @@ pub async fn update_organization(
     Ok(Json(organization))
 }
 
+/// List organization members
+///
+/// Returns all members of the organization. This does not include the API keys, but only the users.
+#[utoipa::path(get, path = "/organizations/{org_id}/members",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched organization members", body = [OrganizationMember]),
+        AppError,
+    )
+)]
 pub async fn list_members(
-    Path(org_id): Path<OrganizationId>,
+    Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<OrganizationMember>> {
@@ -139,7 +215,7 @@ async fn prevent_last_remaining_admin(
     repo: &OrganizationRepository,
     org_id: &OrganizationId,
     user_id: &ApiUserId,
-) -> Result<(), ApiError> {
+) -> Result<(), AppError> {
     let members = repo.list_members(*org_id).await?;
 
     let any_other_admins = members
@@ -148,11 +224,20 @@ async fn prevent_last_remaining_admin(
 
     any_other_admins
         .then_some(())
-        .ok_or(ApiError::PreconditionFailed(
-            "At least one admin must remain in the organization",
+        .ok_or(AppError::PreconditionFailed(
+            "At least one admin must remain in the organization".to_string(),
         ))
 }
 
+/// Delete organization member
+#[utoipa::path(delete, path = "/organizations/{org_id}/members/{user_id}",
+    security(("cookieAuth" = [])),
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully deleted organization member"),
+        AppError,
+    )
+)]
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
@@ -163,7 +248,7 @@ pub async fn remove_member(
         .or(user.has_org_read_access(&org_id).and(
             (user_id == *user.id())
                 .then_some(())
-                .ok_or(ApiError::Forbidden),
+                .ok_or(AppError::Forbidden),
         ))?;
 
     if user.has_org_admin_access(&org_id).is_ok() && *user.id() == user_id {
@@ -182,11 +267,21 @@ pub async fn remove_member(
     Ok(Json(()))
 }
 
+/// Update organization member role
+#[utoipa::path(put, path = "/organizations/{org_id}/members/{user_id}",
+    request_body = Role,
+    security(("cookieAuth" = [])),
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully updated organization member role"),
+        AppError,
+    )
+)]
 pub async fn update_member_role(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users are allowed to update member roles
-    Json(role): Json<Role>,
+    ValidatedJson(role): ValidatedJson<Role>,
 ) -> ApiResult<()> {
     user.has_org_admin_access(&org_id)?;
 
@@ -206,15 +301,27 @@ pub async fn update_member_role(
     Ok(Json(()))
 }
 
+/// Update organization admin details
+///
+/// For example, this includes the block status of an organization
+#[utoipa::path(put, path = "/organizations/{org_id}/admin",
+    request_body = OrgBlockStatus,
+    security(("cookieAuth" = [])),
+    tags = ["internal", "Organizations"],
+    responses(
+        (status = 200, description = "Successfully updated admin details", body = Organization),
+        AppError,
+    )
+)]
 pub async fn update_block_status(
     Path(org_id): Path<OrganizationId>,
     State(repo): State<OrganizationRepository>,
     user: ApiUser, // only users (super admins) are allowed to update block status
-    Json(block_status): Json<OrgBlockStatus>,
+    ValidatedJson(block_status): ValidatedJson<OrgBlockStatus>,
 ) -> ApiResult<Organization> {
     user.is_super_admin()
         .then_some(())
-        .ok_or(ApiError::Forbidden)?;
+        .ok_or(AppError::Forbidden)?;
 
     let organization = repo.update_block_status(org_id, block_status).await?;
 

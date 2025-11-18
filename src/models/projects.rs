@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Postgres};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(
@@ -18,8 +19,11 @@ use uuid::Uuid;
     sqlx::Type,
     FromStr,
     Eq,
+    IntoParams,
+    ToSchema,
 )]
 #[sqlx(transparent)]
+#[into_params(names("proj_id"))]
 pub struct ProjectId(Uuid);
 
 impl ProjectId {
@@ -28,7 +32,7 @@ impl ProjectId {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct Project {
     id: ProjectId,
@@ -44,7 +48,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct NewProject {
     pub name: String,
