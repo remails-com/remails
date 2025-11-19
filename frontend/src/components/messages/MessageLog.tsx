@@ -1,9 +1,31 @@
-import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, MultiSelect, NativeSelect, Text } from "@mantine/core";
+import {
+  Accordion,
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Code,
+  Group,
+  MultiSelect,
+  NativeSelect,
+  Text,
+  ThemeIcon,
+  Tooltip,
+} from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconClock,
+  IconEye,
+  IconInfoCircle,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-react";
 import { getFullStatusDescription } from "./MessageDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
@@ -96,7 +118,7 @@ export function MessageLog() {
             <Recipients message={message} ml="sm" />
           </Box>
           <Group>
-            {message.label && <Label label={message.label} />}
+            {message.label && <Label label={message.label} clickable />}
             <Text fz="xs" c="dimmed" mr="md">
               {formatDateTime(message.created_at)}
             </Text>
@@ -165,13 +187,24 @@ export function MessageLog() {
       <Group justify="space-between" align="flex-end">
         <Group>
           <MultiSelect
-            label="Label"
+            label={
+              <Group gap={4} align="center">
+                Label
+                <Tooltip label="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API.">
+                  <ThemeIcon variant="transparent" c="dimmed" size="xs">
+                    <IconInfoCircle />
+                  </ThemeIcon>
+                </Tooltip>
+              </Group>
+            }
             placeholder={routerState.params.labels ? "" : "Pick labels"}
             data={labels}
             value={currentParams.labels?.split(",").filter((l) => l.trim().length > 0) || []}
             searchable
-            nothingFoundMessage="Label not found..."
+            hidePickedOptions
+            nothingFoundMessage="No labels found..."
             onChange={(labels) => setFilter("labels", labels.join(","))}
+            renderOption={({ option }) => <Label label={option.value} />}
           />
           <NativeSelect
             label="Message status"

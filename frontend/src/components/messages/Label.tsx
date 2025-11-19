@@ -1,4 +1,4 @@
-import { Badge } from "@mantine/core";
+import { Badge, Tooltip } from "@mantine/core";
 import { useRemails } from "../../hooks/useRemails.ts";
 
 function randomNumberFromStr(str: string): number {
@@ -9,23 +9,33 @@ function randomNumberFromStr(str: string): number {
   return hash >>> 0; // unsigned
 }
 
-export default function Label({ label }: { label: string }) {
+export default function Label({ label, clickable }: { label: string; clickable?: boolean }) {
   const { navigate } = useRemails();
 
+  const r = randomNumberFromStr(label);
+  const h = r % 360;
+  const s = (Math.floor(r / 360) % 60) + 20;
+  const l = (Math.floor(r / 360 / 60) % 60) + 20;
+
   return (
-    <Badge
-      style={{
-        cursor: "pointer",
-      }}
-      color={`hsl(${randomNumberFromStr(label) % 360}, 68%, 34%)`}
-      onClick={(e) => {
-        e.stopPropagation();
-        navigate("projects.project.messages", {
-          labels: label,
-        });
-      }}
-    >
-      {label}
-    </Badge>
+    <Tooltip label="Click to filter by this label" disabled={!clickable}>
+      <Badge
+        style={{
+          cursor: "pointer",
+        }}
+        color={`hsl(${h}, ${s}%, ${l}%)`}
+        onClick={(e) => {
+          if (clickable) {
+            e.stopPropagation();
+            navigate("projects.project.messages", {
+              labels: label,
+            });
+          }
+        }}
+        autoContrast
+      >
+        {label}
+      </Badge>
+    </Tooltip>
   );
 }
