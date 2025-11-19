@@ -486,7 +486,7 @@ mod tests {
         // filter by single label
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?label=label-1"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?labels=label-1"
             ))
             .await
             .unwrap();
@@ -497,7 +497,7 @@ mod tests {
         // filter by multiple labels
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?label=label-1&label=label-2"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages?labels=label-1,label-2"
             ))
             .await
             .unwrap();
