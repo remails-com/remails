@@ -4,10 +4,7 @@ use crate::api::{
     error, invites, messages, organizations, projects, smtp_credentials, subscriptions,
     wait_for_shutdown, whoami,
 };
-use axum::{
-    Json, Router,
-    routing::{get, post},
-};
+use axum::{Json, Router, routing::get};
 use memory_serve::{MemoryServe, load_assets};
 use std::{env, net::SocketAddr, time::Duration};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -98,7 +95,7 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
-                post(verify_domain),
+                get(verify_domain),
             )
             .fallback(api_fallback),
     );
