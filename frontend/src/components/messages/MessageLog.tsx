@@ -197,7 +197,7 @@ export function MessageLog() {
                 </Tooltip>
               </Group>
             }
-            placeholder={routerState.params.labels ? "" : "Pick labels"}
+            placeholder="Pick labels"
             data={labels}
             value={currentParams.labels?.split(",").filter((l) => l.trim().length > 0) || []}
             searchable
@@ -206,17 +206,18 @@ export function MessageLog() {
             onChange={(labels) => setFilter("labels", labels.join(","))}
             renderOption={({ option }) => <Label label={option.value} />}
           />
-          <NativeSelect
+          <MultiSelect
             label="Message status"
-            value={currentParams.status}
+            placeholder="Pick status"
+            value={currentParams.status?.split(",").filter((l) => l.trim().length > 0) || []}
             data={[
-              { label: "Show all", value: "" },
+              "Delivered",
               { group: "In progress", items: ["Processing", "Accepted"] },
               { group: "Waiting for retry", items: ["Held", "Reattempt"] },
               { group: "Not delivered", items: ["Rejected", "Failed"] },
-              "Delivered",
             ]}
-            onChange={(event) => setFilter("status", event.currentTarget.value)}
+            onChange={(status) => setFilter("status", status.join(","))}
+            maxDropdownHeight={400}
           />
           <DateTimePicker
             label="Created before"

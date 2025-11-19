@@ -30,7 +30,9 @@ impl MessageId {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display, ToSchema)]
+#[derive(
+    PartialEq, Eq, Debug, Clone, Deserialize, Serialize, FromStr, sqlx::Type, Display, ToSchema,
+)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,
@@ -248,35 +250,42 @@ pub struct MessageRepository {
     rate_limit_max_messages: i64,
 }
 
+const fn default_limit() -> i64 {
+    10 // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
+}
+
 #[derive(Debug, Deserialize, IntoParams, Validate)]
 #[serde(default)]
 pub struct MessageFilter {
-    #[param(minimum = 1, maximum = 100, default = 10)]
+    #[param(minimum = 1, maximum = 100, default = default_limit)]
     #[garde(range(min = 1, max = 100))]
     limit: i64,
     #[garde(skip)]
-    status: Option<MessageStatus>,
+    #[serde(deserialize_with = "deserialize_comma_separated_list")]
+    status: Option<Vec<MessageStatus>>,
     #[garde(length(max = 20), dive)]
     #[param(max_items = 20)]
-    #[serde(deserialize_with = "deserialize_labels_query")]
+    #[serde(deserialize_with = "deserialize_comma_separated_list")]
     labels: Option<Vec<Label>>,
     #[garde(skip)]
     before: Option<DateTime<Utc>>,
 }
 
-fn deserialize_labels_query<'de, D>(deserializer: D) -> Result<Option<Vec<Label>>, D::Error>
+fn deserialize_comma_separated_list<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
 where
     D: Deserializer<'de>,
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Debug,
 {
     let s = Option::<String>::deserialize(deserializer)?;
     Ok(match s {
         None => None,
-        Some(labels) => Some(
-            labels
+        Some(values) => Some(
+            values
                 .split(',')
                 .map(FromStr::from_str)
-                .collect::<Result<Vec<Label>, _>>()
-                .map_err(|g| serde::de::Error::custom(g.to_string()))?,
+                .collect::<Result<Vec<T>, _>>()
+                .map_err(|g| serde::de::Error::custom(format!("{:?}", g)))?,
         ),
     })
 }
@@ -284,7 +293,7 @@ where
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            limit: 10, // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
+            limit: default_limit(),
             status: None,
             labels: None,
             before: None,
@@ -667,7 +676,7 @@ impl MessageRepository {
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
-                AND ($4::message_status IS NULL OR status = $4)
+                AND ($4::message_status[] IS NULL OR status = ANY($4))
                 AND ($5::timestamptz IS NULL OR created_at <= $5)
                 AND ($6::text[] IS NULL OR label = ANY($6))
             ORDER BY created_at DESC
@@ -676,9 +685,9 @@ impl MessageRepository {
             *org_id,
             *project_id,
             std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
-            filter.status as _,
+            filter.status as Option<Vec<MessageStatus>>,
             filter.before,
-            filter.labels as _,
+            filter.labels as Option<Vec<Label>>,
         )
         .fetch_all(&self.pool)
         .await?
