@@ -504,6 +504,17 @@ mod tests {
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
         assert_eq!(messages.len(), 4);
 
+        // filter without labels
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        assert_eq!(messages.len(), 5);
+
         // list labels
         let response = server
             .get(format!(
@@ -758,7 +769,6 @@ mod tests {
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient1atexample.com"
-
                 })),
             )
             .await
@@ -842,6 +852,7 @@ mod tests {
             message.message_id_header,
             Some(format!("REMAILS-{}@example.com", message.id))
         );
+        assert_eq!(message.label, None);
 
         // send email with 2 recipients, only text body, and custom from name
         let response = server
@@ -852,6 +863,7 @@ mod tests {
                     "to": ["recipient1@example.com", "recipient2@example.com"],
                     "subject": "subject",
                     "text_body": "text body",
+                    "label": "Weekly UpDate",
                 })),
             )
             .await
@@ -869,6 +881,7 @@ mod tests {
             recipients,
             vec!["recipient1@example.com", "recipient2@example.com"]
         );
+        assert_eq!(message.label, Some(Label::new("weekly-update")));
 
         // send email with 3 recipients, only HTML body
         let response = server

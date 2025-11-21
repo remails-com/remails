@@ -64,4 +64,17 @@ VALUES ('e165562a-fb6d-423b-b318-fd26f4610634',
         CURRENT_TIMESTAMP + INTERVAL '1d',
         1, 3,
         now() + '40 microseconds',
-        NULL);
+        NULL),
+       ('40609d92-fcdc-458e-addd-71f3937af149',
+        '9442cbbf-9897-4af7-9766-4ac9c1bf49cf',
+        '44729d9f-a7dc-4226-b412-36a7537f5176',
+        'da12d059-d86e-4ac6-803d-d013045f68ff', -- project 2 org 1
+        'rejected',
+        'email-rejected@test-org-1-project-2.com',
+        '{"info@recipient1.com", "info@recipient2.com"}',
+        E'From: "John Doe" <email-rejected@test-org-1-project-2.com>\r\nTo: "James Smith" <info@recipient1.com>, \r\n\t"Jane Doe" <info@recipient2.com>\r\n\r\nSubject: Hi!\r\nMessage-ID: <1879bda126f711bd.c159afd022971e62.dd16fde439b6435a@helium>\r\nDate: Thu, 20 Nov 2025 14:33:48 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; \r\n\tboundary="1879bda126f749c8_6516e59cef84032b_ca675b09c11e123e"\r\n\r\n\r\n--1879bda126f749c8_6516e59cef84032b_ca675b09c11e123e\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: 7bit\r\n\r\nHello world!\r\n--1879bda126f749c8_6516e59cef84032b_ca675b09c11e123e\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: 7bit\r\n\r\n<h1>Hello, world!</h1>\r\n--1879bda126f749c8_6516e59cef84032b_ca675b09c11e123e--\r\n'::bytea,
+        'null'::jsonb,
+        CURRENT_TIMESTAMP - INTERVAL '1d',
+        1, 3,
+        now() + '50 microseconds',
+        'label-1');

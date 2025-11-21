@@ -112,7 +112,7 @@ pub struct ApiMessageMetadata {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
-    label: Option<Label>,
+    pub label: Option<Label>,
     #[schema(minimum = 0)]
     attempts: i32,
     #[schema(minimum = 0)]
@@ -512,7 +512,6 @@ impl MessageRepository {
             trace!("adding Message-ID header: {message_id_header}");
 
             new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
-            // message.message_id_header = Some(message_id_header);
         }
 
         if parsed_msg.header(HeaderName::Date).is_none() {
@@ -1185,7 +1184,7 @@ mod test {
             message_id,
             api_key_id: *api_key.id(),
             project_id,
-            label: Some("label-1".parse().unwrap()),
+            label: Some("up,date".parse().unwrap()),
             from_email: "john@test-org-1-project-1.com".parse().unwrap(),
             recipients: vec![
                 "james@test.com".parse().unwrap(),
@@ -1194,7 +1193,8 @@ mod test {
             raw_data: message.into_message().unwrap().body.to_vec(),
         };
         let message = repository.create_from_api(new_message, 5).await.unwrap();
-        assert_eq!(message.message_id_header, Some(message_id_header));
+        assert_eq!(message.message_id_header, Some(message_id_header.clone()));
+        assert_eq!(message.label, Some(Label::new("up-date")));
 
         // get message
         let mut fetched_message = repository
@@ -1216,6 +1216,11 @@ mod test {
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
         assert_eq!(fetched_message.metadata.recipients, expected);
+        assert_eq!(
+            fetched_message.metadata.message_id_header,
+            Some(message_id_header)
+        );
+        assert_eq!(fetched_message.metadata.label, Some(Label::new("up-date")));
     }
 
     #[sqlx::test(fixtures(
