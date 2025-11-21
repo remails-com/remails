@@ -10,10 +10,11 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
-use mail_parser::MimeHeaders;
+use mail_parser::{HeaderName, MessageParser, MimeHeaders};
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
+use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -210,23 +211,21 @@ impl Message {
 /// A new email coming from the in-bound SMTP server
 #[derive(Debug)]
 pub struct NewMessage {
+    pub message_id: MessageId,
     pub smtp_credential_id: SmtpCredentialId,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
-    pub label: Option<Label>,
-    pub message_data: serde_json::Value,
 }
 
 impl NewMessage {
     pub fn new(smtp_credential_id: SmtpCredentialId, from_email: EmailAddress) -> Self {
         NewMessage {
+            message_id: MessageId::new_v4(),
             smtp_credential_id,
             from_email,
             recipients: vec![],
             raw_data: vec![],
-            label: None,
-            message_data: Default::default(),
         }
     }
 }
@@ -234,7 +233,6 @@ impl NewMessage {
 /// A new email coming from the Remails API
 pub struct NewApiMessage {
     pub message_id: MessageId,
-    pub message_id_header: String,
     pub api_key_id: ApiKeyId,
     pub project_id: ProjectId,
     pub from_email: EmailAddress,
@@ -248,6 +246,7 @@ pub struct MessageRepository {
     pool: sqlx::PgPool,
     rate_limit_timespan: PgInterval,
     rate_limit_max_messages: i64,
+    message_parser: MessageParser,
 }
 
 const fn default_limit() -> i64 {
@@ -452,6 +451,7 @@ impl MessageRepository {
             ))
             .expect("Could not set rate limit timespan"),
             rate_limit_max_messages,
+            message_parser: MessageParser::default(),
         }
     }
 
@@ -493,25 +493,94 @@ impl MessageRepository {
         format!("REMAILS-{id}@{sender_domain}")
     }
 
+    /// Parse message, add new headers if needed, and return message contents to be stored in the database
+    fn parse_message(
+        &self,
+        raw_data: &mut Vec<u8>,
+        id: &MessageId,
+        from_email: &EmailAddress,
+    ) -> Result<(serde_json::Value, String, Option<Label>), Error> {
+        let mut parsed_msg = self
+            .message_parser
+            .parse(raw_data)
+            .ok_or(Error::EmailFailedToParse)?;
+
+        let mut new_headers = Vec::new();
+
+        if parsed_msg.header(HeaderName::MessageId).is_none() {
+            let message_id_header = MessageRepository::generate_message_id_header(id, from_email);
+            trace!("adding Message-ID header: {message_id_header}");
+
+            new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
+            // message.message_id_header = Some(message_id_header);
+        }
+
+        if parsed_msg.header(HeaderName::Date).is_none() {
+            trace!("adding Date header");
+            let date = chrono::Utc::now().to_rfc2822();
+            new_headers.push(format!("Date: {date}\r\n"));
+        }
+
+        if !new_headers.is_empty() {
+            trace!("updating message {}", id);
+            let headers = new_headers.join("");
+            let hdr_size = headers.len();
+            let msg_len = raw_data.len();
+
+            raw_data.resize(msg_len + hdr_size, Default::default());
+            raw_data.copy_within(..msg_len, hdr_size);
+            raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
+
+            // we need to re-parse the message because the data has shifted
+            parsed_msg = self
+                .message_parser
+                .parse(raw_data)
+                .ok_or(Error::EmailFailedToParse)?;
+        }
+
+        let label = parsed_msg
+            .remove_header("X-REMAILS-LABEL")
+            .and_then(|l| l.as_text().map(Label::new));
+
+        let message_data = serde_json::to_value(&parsed_msg).map_err(Error::Serialization)?;
+        let message_id_header =
+            parsed_msg
+                .message_id()
+                .map(|s| s.to_owned())
+                .ok_or(Error::Internal(
+                    "failed to get Message ID header".to_owned(), // should not happen
+                ))?;
+
+        Ok((message_data, message_id_header, label))
+    }
+
     pub async fn create(
         &self,
-        message: &NewMessage,
+        mut message: NewMessage,
         max_attempts: i32,
     ) -> Result<MessageId, Error> {
+        let (message_data, message_id_header, label) = self.parse_message(
+            &mut message.raw_data,
+            &message.message_id,
+            &message.from_email,
+        )?;
+
         Ok(sqlx::query_scalar!(
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, smtp_credential_id,
-                from_email, recipients, raw_data, message_data, max_attempts, label
+                from_email, recipients, raw_data, max_attempts,
+                message_data, message_id_header, label
             )
-            SELECT gen_random_uuid(), o.id, p.id, $1, $2, $3, $4, $5, $6, $7
+            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8, $9
             FROM smtp_credentials s
                 JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
-            WHERE s.id = $1
+            WHERE s.id = $2
             RETURNING
                 m.id
             "#,
+            *message.message_id,
             *message.smtp_credential_id,
             message.from_email.as_str(),
             &message
@@ -520,9 +589,10 @@ impl MessageRepository {
                 .map(|r| r.email())
                 .collect::<Vec<_>>(),
             message.raw_data,
-            message.message_data,
             max_attempts,
-            message.label.as_deref()
+            message_data,
+            message_id_header,
+            label.as_deref(),
         )
         .fetch_one(&self.pool)
         .await?
@@ -531,17 +601,25 @@ impl MessageRepository {
 
     pub async fn create_from_api(
         &self,
-        message: &NewApiMessage,
+        mut message: NewApiMessage,
         max_attempts: i32,
     ) -> Result<ApiMessageMetadata, Error> {
+        // the REST API provides its own message label and does not use the X-REMAILS-LABEL header
+        let (message_data, message_id_header, _) = self.parse_message(
+            &mut message.raw_data,
+            &message.message_id,
+            &message.from_email,
+        )?;
+
         sqlx::query_as!(
             PgMessage,
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, api_key_id,
-                from_email, recipients, raw_data, max_attempts, message_id_header, label
+                from_email, recipients, raw_data, max_attempts,
+                message_data, message_id_header, label
             )
-            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
             FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
             WHERE p.id = $2
@@ -578,7 +656,8 @@ impl MessageRepository {
                 .collect::<Vec<_>>(),
             message.raw_data,
             max_attempts,
-            message.message_id_header,
+            message_data,
+            message_id_header,
             message.label.as_deref()
         )
         .fetch_one(&self.pool)
@@ -608,34 +687,6 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
             message.max_attempts,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn update_message_data_and_status(&self, message: &Message) -> Result<(), Error> {
-        sqlx::query!(
-            r#"
-            UPDATE messages
-            SET message_data = $2,
-                status = $3,
-                reason = $4,
-                retry_after = $5,
-                attempts = $6,
-                max_attempts = $7,
-                message_id_header = $8
-            WHERE id = $1
-            "#,
-            *message.id,
-            message.message_data,
-            message.status as _,
-            message.reason,
-            message.retry_after,
-            message.attempts,
-            message.max_attempts,
-            message.message_id_header,
         )
         .execute(&self.pool)
         .await?;
@@ -1028,7 +1079,7 @@ mod test {
 
         // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
-        let message_id = repository.create(&new_message, 5).await.unwrap();
+        let message_id = repository.create(new_message, 5).await.unwrap();
 
         // get message
         let mut fetched_message = repository
@@ -1132,7 +1183,6 @@ mod test {
         // create message
         let new_message = NewApiMessage {
             message_id,
-            message_id_header,
             api_key_id: *api_key.id(),
             project_id,
             label: Some("label-1".parse().unwrap()),
@@ -1143,7 +1193,8 @@ mod test {
             ],
             raw_data: message.into_message().unwrap().body.to_vec(),
         };
-        let message = repository.create_from_api(&new_message, 5).await.unwrap();
+        let message = repository.create_from_api(new_message, 5).await.unwrap();
+        assert_eq!(message.message_id_header, Some(message_id_header));
 
         // get message
         let mut fetched_message = repository

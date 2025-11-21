@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, api_key_id,\n                from_email, recipients, raw_data, max_attempts, message_id_header, label\n            )\n            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9\n            FROM projects p\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE p.id = $2\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            ",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, api_key_id,\n                from_email, recipients, raw_data, max_attempts,\n                message_data, message_id_header, label\n            )\n            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10\n            FROM projects p\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE p.id = $2\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            ",
   "describe": {
     "columns": [
       {
@@ -128,6 +128,7 @@
         "VarcharArray",
         "Bytea",
         "Int4",
+        "Jsonb",
         "Varchar",
         "Text"
       ]
@@ -155,5 +156,5 @@
       true
     ]
   },
-  "hash": "cd510b007c901a16e3ecfdcec68eda499a03a38a57e5f90fe2ebbe258c5885a5"
+  "hash": "3da4786b30f94a16ce5b64f3086b5e9e38c90c07ef04a6fdb5c0c0e31cc3b779"
 }

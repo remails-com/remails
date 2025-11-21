@@ -27,6 +27,8 @@ pub enum Error {
     ForeignKeyViolation,
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
+    #[error("Email failed to parse")]
+    EmailFailedToParse,
     #[error(transparent)]
     Email(#[from] email_address::Error),
     #[error("{0}")]

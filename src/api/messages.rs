@@ -220,7 +220,6 @@ pub async fn create_message(
 
     let message = NewApiMessage {
         message_id,
-        message_id_header,
         api_key_id: *key.id(),
         project_id,
         from_email,
@@ -237,7 +236,7 @@ pub async fn create_message(
     );
 
     let message = repo
-        .create_from_api(&message, retry_config.max_automatic_retries)
+        .create_from_api(message, retry_config.max_automatic_retries)
         .await?;
 
     match repo.get_ready_to_send(message.id).await {

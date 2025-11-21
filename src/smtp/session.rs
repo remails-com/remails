@@ -392,7 +392,7 @@ impl SmtpSession {
             // Store message in database
             let message_id = match self
                 .message_repository
-                .create(&message, self.max_automatic_retries)
+                .create(message, self.max_automatic_retries)
                 .await
             {
                 Ok(m) => m,
