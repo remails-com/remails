@@ -131,7 +131,7 @@ export default function MessageDetails() {
         entityType="Message"
         Icon={IconMessage}
         divider
-        addendum={currentMessage.label ? <Label label={currentMessage.label} /> : null}
+        addendum={currentMessage.label ? <Label label={currentMessage.label} clickable /> : null}
       />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">

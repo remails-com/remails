@@ -18,10 +18,10 @@ export default function Label({ label, clickable }: { label: string; clickable?:
   const l = (Math.floor(r / 360 / 60) % 60) + 20;
 
   return (
-    <Tooltip label="Click to filter by this label" disabled={!clickable}>
+    <Tooltip label="Click to view messages with this label" disabled={!clickable}>
       <Badge
         style={{
-          cursor: "pointer",
+          cursor: clickable ? "pointer" : "default",
         }}
         color={`hsl(${h}, ${s}%, ${l}%)`}
         onClick={(e) => {
