@@ -11,21 +11,17 @@ import { Loader } from "../../Loader.tsx";
 import { useDomains } from "../../hooks/useDomains.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
-import { useMessages } from "../../hooks/useMessages.ts";
 
 interface FormValues {
   name: string;
 }
 
 export default function ProjectSettings() {
-  const { messages } = useMessages();
   const { dispatch, navigate } = useRemails();
 
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { domains } = useDomains();
-
-  const canDelete = messages && messages.length === 0;
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -137,8 +133,7 @@ export default function ProjectSettings() {
             <MaintainerButton
               leftSection={<IconTrash />}
               variant="outline"
-              disabled={!canDelete}
-              tooltip={canDelete ? "Delete project" : "Cannot delete project, there are messages in it"}
+              tooltip="Delete project"
               onClick={() => confirmDeleteProject(currentProject)}
             >
               Delete
