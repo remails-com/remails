@@ -20,9 +20,7 @@ export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
       setDomainVerified("loading");
       setTimeout(
         () =>
-          fetch(`${domainsApi}/${domain.id}/verify`, {
-            method: "POST",
-          }).then((res) => {
+          fetch(`${domainsApi}/${domain.id}/verify`).then((res) => {
             if (res.status !== 200) {
               errorNotification(`Domain ${domain.domain} could not be verified`);
               console.error(res);

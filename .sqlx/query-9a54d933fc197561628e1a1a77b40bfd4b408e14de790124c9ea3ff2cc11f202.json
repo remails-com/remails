@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                stream_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts\n            FROM messages m\n            WHERE organization_id = $1\n                AND project_id = $2\n                AND stream_id = $3\n                AND ($5::message_status IS NULL OR status = $5)\n                AND ($6::timestamptz IS NULL OR created_at <= $6)\n            ORDER BY created_at DESC\n            LIMIT $4\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts,\n                label AS \"label:Label\"\n            FROM messages m\n            WHERE organization_id = $1\n                AND project_id = $2\n                AND ($4::message_status[] IS NULL OR status = ANY($4))\n                AND ($5::timestamptz IS NULL OR created_at <= $5)\n                AND ($6::text[] IS NULL OR label = ANY($6))\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
   "describe": {
     "columns": [
       {
@@ -20,21 +20,16 @@
       },
       {
         "ordinal": 3,
-        "name": "stream_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 4,
         "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "api_key_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -54,101 +49,112 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "reason",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "raw_size!",
         "type_info": "Int4"
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "message_id_header",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 16,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 18,
+        "ordinal": 17,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 19,
+        "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "label:Label",
+        "type_info": "Text"
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
         "Uuid",
-        "Uuid",
         "Int8",
         {
           "Custom": {
-            "name": "message_status",
+            "name": "message_status[]",
             "kind": {
-              "Enum": [
-                "processing",
-                "held",
-                "accepted",
-                "rejected",
-                "delivered",
-                "reattempt",
-                "failed"
-              ]
+              "Array": {
+                "Custom": {
+                  "name": "message_status",
+                  "kind": {
+                    "Enum": [
+                      "processing",
+                      "held",
+                      "accepted",
+                      "rejected",
+                      "delivered",
+                      "reattempt",
+                      "failed"
+                    ]
+                  }
+                }
+              }
             }
           }
         },
-        "Timestamptz"
+        "Timestamptz",
+        "TextArray"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
       true,
       true,
       false,
@@ -164,8 +170,9 @@
       false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "cf5a7adae5c4f9c4d278653ad81e98156fdfaa9c3182d0120ff8cb8c8e5f5cfb"
+  "hash": "9a54d933fc197561628e1a1a77b40bfd4b408e14de790124c9ea3ff2cc11f202"
 }

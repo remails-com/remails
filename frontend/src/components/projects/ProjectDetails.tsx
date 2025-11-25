@@ -1,10 +1,11 @@
-import { StreamsOverview } from "../streams/StreamsOverview.tsx";
 import DomainsOverview from "../domains/DomainsOverview.tsx";
 import ProjectSettings from "./ProjectSettings.tsx";
-import { IconAccessPoint, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { IconKey, IconMessage, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import Tabs from "../../layout/Tabs.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 import Header from "../Header.tsx";
+import { MessageLog } from "../messages/MessageLog.tsx";
+import { CredentialsOverview } from "../smtpCredentials/CredentialsOverview.tsx";
 
 export default function ProjectDetails() {
   const { currentProject } = useProjects();
@@ -16,16 +17,22 @@ export default function ProjectDetails() {
       <Tabs
         tabs={[
           {
-            route: "projects.project.streams",
-            name: "Streams",
-            icon: <IconAccessPoint size={14} />,
-            content: <StreamsOverview />,
+            route: "projects.project.messages",
+            name: "Messages",
+            icon: <IconMessage size={14} />,
+            content: <MessageLog />,
           },
           {
             route: "projects.project.domains",
             name: "Domains",
             icon: <IconWorldWww size={14} />,
             content: <DomainsOverview />,
+          },
+          {
+            route: "projects.project.credentials",
+            name: "Credentials",
+            icon: <IconKey size={14} />,
+            content: <CredentialsOverview />,
           },
           {
             route: "projects.project.settings",

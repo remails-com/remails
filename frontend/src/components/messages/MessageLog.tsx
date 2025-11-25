@@ -1,9 +1,31 @@
-import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, NativeSelect, Text } from "@mantine/core";
+import {
+  Accordion,
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Code,
+  Group,
+  MultiSelect,
+  NativeSelect,
+  Text,
+  ThemeIcon,
+  Tooltip,
+} from "@mantine/core";
 import { useMessages } from "../../hooks/useMessages.ts";
 import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconClock,
+  IconEye,
+  IconInfoCircle,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-react";
 import { getFullStatusDescription } from "./MessageDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
@@ -12,6 +34,7 @@ import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import MessageRetryButton from "./MessageRetryButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import InfoAlert from "../InfoAlert.tsx";
+import Label from "./Label.tsx";
 
 function statusIcons(status: string) {
   if (status == "Processing" || status == "Accepted") {
@@ -29,7 +52,7 @@ function statusIcons(status: string) {
 const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/models/messages.rs
 
 export function MessageLog() {
-  const { messages, updateMessage } = useMessages();
+  const { messages, updateMessage, labels } = useMessages();
   const [pages, setPages] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const {
@@ -43,7 +66,7 @@ export function MessageLog() {
     return <Loader />;
   }
 
-  const setFilter = (filter: "limit" | "status" | "before", value: string | null) => {
+  const setFilter = (filter: "limit" | "status" | "before" | "labels", value: string | null) => {
     navigate(routerState.name, { ...routerState.params, [filter]: value ?? "" });
   };
 
@@ -94,9 +117,12 @@ export function MessageLog() {
             to
             <Recipients message={message} ml="sm" />
           </Box>
-          <Text fz="xs" c="dimmed" mr="md">
-            {formatDateTime(message.created_at)}
-          </Text>
+          <Group>
+            {message.label && <Label label={message.label} clickable />}
+            <Text fz="xs" c="dimmed" mr="md">
+              {formatDateTime(message.created_at)}
+            </Text>
+          </Group>
         </Group>
       </Accordion.Control>
       <Accordion.Panel>
@@ -121,7 +147,7 @@ export function MessageLog() {
               leftSection={<IconEye />}
               variant="light"
               size="xs"
-              onClick={() => navigate("projects.project.streams.stream.messages.message", { message_id: message.id })}
+              onClick={() => navigate("projects.project.messages.message", { message_id: message.id })}
             >
               View Message
             </Button>
@@ -155,23 +181,43 @@ export function MessageLog() {
   return (
     <>
       <InfoAlert stateName="messages">
-        This page shows a list of all messages sent through this Stream. Use it to check delivery status, inspect
-        metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
-        message.
+        This page shows a list of all messages sent in this Project. Use it to check delivery status, inspect metadata,
+        and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
       </InfoAlert>
       <Group justify="space-between" align="flex-end">
         <Group>
-          <NativeSelect
+          <MultiSelect
+            label={
+              <Group gap={4} align="center">
+                Label
+                <Tooltip label="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API.">
+                  <ThemeIcon variant="transparent" c="dimmed" size="xs">
+                    <IconInfoCircle />
+                  </ThemeIcon>
+                </Tooltip>
+              </Group>
+            }
+            placeholder="Pick labels"
+            data={labels}
+            value={currentParams.labels?.split(",").filter((l) => l.trim().length > 0) || []}
+            searchable
+            hidePickedOptions
+            nothingFoundMessage="No labels found..."
+            onChange={(labels) => setFilter("labels", labels.join(","))}
+            renderOption={({ option }) => <Label label={option.value} />}
+          />
+          <MultiSelect
             label="Message status"
-            value={currentParams.status}
+            placeholder="Pick status"
+            value={currentParams.status?.split(",").filter((l) => l.trim().length > 0) || []}
             data={[
-              { label: "Show all", value: "" },
+              "Delivered",
               { group: "In progress", items: ["Processing", "Accepted"] },
               { group: "Waiting for retry", items: ["Held", "Reattempt"] },
               { group: "Not delivered", items: ["Rejected", "Failed"] },
-              "Delivered",
             ]}
-            onChange={(event) => setFilter("status", event.currentTarget.value)}
+            onChange={(status) => setFilter("status", status.join(","))}
+            maxDropdownHeight={400}
           />
           <DateTimePicker
             label="Created before"

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, stream_id, api_key_id, \n                from_email, recipients, raw_data, max_attempts, message_id_header\n            )\n            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8\n            FROM streams s\n                JOIN projects p ON p.id = s.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $2\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.stream_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts\n            ",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, api_key_id,\n                from_email, recipients, raw_data, max_attempts,\n                message_data, message_id_header, label\n            )\n            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10\n            FROM projects p\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE p.id = $2\n            RETURNING\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            ",
   "describe": {
     "columns": [
       {
@@ -20,21 +20,16 @@
       },
       {
         "ordinal": 3,
-        "name": "stream_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 4,
         "name": "smtp_credential_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "api_key_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -54,69 +49,74 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "reason",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "delivery_details",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "from_email",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "recipients",
         "type_info": "VarcharArray"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "raw_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "raw_size!",
         "type_info": "Int4"
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "message_data",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "message_id_header",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 16,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 17,
+        "ordinal": 16,
         "name": "retry_after",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 18,
+        "ordinal": 17,
         "name": "attempts",
         "type_info": "Int4"
       },
       {
-        "ordinal": 19,
+        "ordinal": 18,
         "name": "max_attempts",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "label:Label",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -128,11 +128,12 @@
         "VarcharArray",
         "Bytea",
         "Int4",
-        "Varchar"
+        "Jsonb",
+        "Varchar",
+        "Text"
       ]
     },
     "nullable": [
-      false,
       false,
       false,
       false,
@@ -151,8 +152,9 @@
       false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "3334177b2448412aa53d5fa64cf1617f3f01763acbc04788e5fd691c0b0b97af"
+  "hash": "3da4786b30f94a16ce5b64f3086b5e9e38c90c07ef04a6fdb5c0c0e31cc3b779"
 }

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id, smtp_credential_id,\n                from_email, recipients, raw_data, max_attempts,\n                message_data, message_id_header, label\n            )\n            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8, $9\n            FROM smtp_credentials s\n                JOIN projects p ON p.id = s.project_id\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE s.id = $2\n            RETURNING\n                m.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Int4",
+        "Jsonb",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d1acac5e40a8409274a6e746faf4d8a5c372bd65cf59d8c2de71f666bde8f609"
+}

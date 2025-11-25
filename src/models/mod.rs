@@ -2,21 +2,21 @@ mod api_keys;
 mod api_user;
 mod domains;
 mod invites;
+mod labels;
 mod message;
 mod organization;
 mod projects;
 mod smtp_credential;
-mod streams;
 
 pub(crate) use api_keys::*;
 pub(crate) use api_user::*;
 pub(crate) use domains::*;
 pub(crate) use invites::*;
+pub(crate) use labels::*;
 pub(crate) use message::*;
 pub(crate) use organization::*;
 pub(crate) use projects::*;
 pub(crate) use smtp_credential::*;
-pub(crate) use streams::*;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -27,6 +27,8 @@ pub enum Error {
     ForeignKeyViolation,
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
+    #[error("Email failed to parse")]
+    EmailFailedToParse,
     #[error(transparent)]
     Email(#[from] email_address::Error),
     #[error("{0}")]

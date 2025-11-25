@@ -93,7 +93,7 @@ mod test {
         bus::{client::BusMessage, server::Bus},
         handler::{Handler, RetryConfig, dns::DnsResolver},
         models::{MessageId, MessageStatus},
-        test::{TestStreams, random_port},
+        test::{TestProjects, random_port},
     };
     use chrono::Duration;
     use mailcrab::TestMailServerHandle;
@@ -106,7 +106,6 @@ mod test {
         scripts(
             "organizations",
             "projects",
-            "streams",
             "org_domains",
             "proj_domains",
             "smtp_credentials",
@@ -156,11 +155,11 @@ mod test {
         let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
         let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
 
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let get_message_status = async |id: MessageId| {
             message_repo
-                .find_by_id(org_id, project_id, stream_id, id)
+                .find_by_id(org_id, project_id, id)
                 .await
                 .unwrap()
                 .status()
@@ -245,7 +244,6 @@ mod test {
         scripts(
             "organizations",
             "projects",
-            "streams",
             "org_domains",
             "proj_domains",
             "smtp_credentials",
@@ -261,7 +259,7 @@ mod test {
         } = mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
-        let org_id = TestStreams::Org1Project1Stream1.org_id();
+        let org_id = TestProjects::Org1Project1.org_id();
 
         let bus_port = Bus::spawn_random_port().await;
         let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();

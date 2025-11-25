@@ -1,13 +1,10 @@
 use crate::api::{
     ApiServerError, ApiState, api_fallback, api_keys, api_users, auth, domains,
     domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-    error, invites, messages, organizations, projects, smtp_credentials, streams, subscriptions,
+    error, invites, messages, organizations, projects, smtp_credentials, subscriptions,
     wait_for_shutdown, whoami,
 };
-use axum::{
-    Json, Router,
-    routing::{get, post},
-};
+use axum::{Json, Router, routing::get};
 use memory_serve::{MemoryServe, load_assets};
 use std::{env, net::SocketAddr, time::Duration};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -31,7 +28,6 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
     #[derive(utoipa::OpenApi)]
     #[openapi(components(schemas(
         error::ApiErrorResponse,
-        crate::models::StreamId,
         crate::models::OrganizationId,
         crate::models::Password,
     )))]
@@ -85,7 +81,6 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             .merge(whoami::router())
             .merge(subscriptions::router())
             .merge(api_keys::router())
-            .merge(streams::router())
             .merge(smtp_credentials::router())
             .merge(auth::router())
             .routes(routes!(crate::api::config))
@@ -100,7 +95,7 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             )
             .route(
                 "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
-                post(verify_domain),
+                get(verify_domain),
             )
             .fallback(api_fallback),
     );

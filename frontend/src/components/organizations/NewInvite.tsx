@@ -31,14 +31,13 @@ export const ROLE_INFO = (
       <Text fw="bold" span>
         Read-only:{" "}
       </Text>
-      can view the organization, including its projects, streams, messages, domains, etc.
+      can view the organization, including its projects, messages, domains, etc.
     </Text>
     <Text>
       <Text fw="bold" span>
         Maintainer:{" "}
       </Text>
-      in addition to read-only access, can also create and edit projects, streams, messages and domains within the
-      organization.
+      in addition to read-only access, can also create and edit projects, messages, and domains within the organization.
     </Text>
     <Text>
       <Text fw="bold" span>

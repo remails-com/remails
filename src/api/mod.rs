@@ -9,7 +9,7 @@ use crate::{
     handler::{RetryConfig, dns::DnsResolver},
     models::{
         ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        OrganizationRepository, ProjectRepository, SmtpCredentialRepository, StreamRepository,
+        OrganizationRepository, ProjectRepository, SmtpCredentialRepository,
     },
     moneybird::MoneyBird,
 };
@@ -54,7 +54,6 @@ pub mod openapi;
 mod organizations;
 mod projects;
 mod smtp_credentials;
-mod streams;
 mod subscriptions;
 mod validation;
 mod whoami;
@@ -168,12 +167,6 @@ impl FromRef<ApiState> for OrganizationRepository {
 impl FromRef<ApiState> for ProjectRepository {
     fn from_ref(state: &ApiState) -> Self {
         ProjectRepository::new(state.pool.clone())
-    }
-}
-
-impl FromRef<ApiState> for StreamRepository {
-    fn from_ref(state: &ApiState) -> Self {
-        StreamRepository::new(state.pool.clone())
     }
 }
 

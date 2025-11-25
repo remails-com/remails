@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE organizations o\n            SET\n            remaining_rate_limit = CASE\n                WHEN rate_limit_reset < now()\n                THEN $2\n                ELSE GREATEST(remaining_rate_limit - 1, 0)\n            END,\n            rate_limit_reset = CASE\n                WHEN rate_limit_reset < now()\n                THEN now() + $3\n                ELSE rate_limit_reset\n            END\n            FROM projects p\n            WHERE p.organization_id = o.id\n              AND p.id = $1\n            RETURNING remaining_rate_limit, o.block_status as \"block_status: OrgBlockStatus\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "remaining_rate_limit",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Interval"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "094187465c1f83d5a031a60b2b123fef6bd95bdcb38ce12558e7b99b1ca801f1"
+}

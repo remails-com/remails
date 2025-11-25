@@ -54,8 +54,8 @@ export default function DomainsOverview() {
       {!currentProject && <OrganizationHeader />}
       {currentProject ? (
         <InfoAlert stateName="project-domains">
-          Domains added here can be used by any Stream in this project. Each domain must be verified via DNS (SPF, DKIM,
-          and DMARC) before emails can be sent from it.
+          Domains added here can be used only in this project. Each domain must be verified via DNS (SPF, DKIM, and
+          DMARC) before emails can be sent from it.
         </InfoAlert>
       ) : (
         <InfoAlert stateName="global-domains">

@@ -8,7 +8,6 @@ import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
 import OrganizationSettings from "./components/organizations/OrganizationSettings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import CredentialDetails from "./components/smtpCredentials/CredentialDetails.tsx";
-import StreamDetails from "./components/streams/StreamDetails.tsx";
 import { useRemails } from "./hooks/useRemails.ts";
 import { Dashboard } from "./layout/Dashboard";
 import Login from "./Login.tsx";
@@ -26,13 +25,10 @@ import Admin from "./components/admin/Admin.tsx";
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
   "projects.project": <ProjectDetails />,
-  "projects.project.streams": <ProjectDetails />,
-  "projects.project.streams.stream": <StreamDetails />,
-  "projects.project.streams.stream.messages": <StreamDetails />,
-  "projects.project.streams.stream.messages.message": <MessageDetails />,
-  "projects.project.streams.stream.credentials": <StreamDetails />,
-  "projects.project.streams.stream.credentials.credential": <CredentialDetails />,
-  "projects.project.streams.stream.settings": <StreamDetails />,
+  "projects.project.messages": <ProjectDetails />,
+  "projects.project.messages.message": <MessageDetails />,
+  "projects.project.credentials": <ProjectDetails />,
+  "projects.project.credentials.credential": <CredentialDetails />,
   "projects.project.domains": <ProjectDetails />,
   "projects.project.domains.domain": <DomainDetails />,
   "projects.project.settings": <ProjectDetails />,

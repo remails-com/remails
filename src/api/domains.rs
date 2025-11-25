@@ -204,7 +204,7 @@ pub async fn delete_domain(
 ///
 /// TODO: utoipa does not support registering the same handler with to different paths yet.
 ///  Looking at #344, I did not spend effort making this possible.
-#[utoipa::path(post, path = "/organizations/{org_id}/domains/{domain_id}/verify",
+#[utoipa::path(get, path = "/organizations/{org_id}/domains/{domain_id}/verify",
     tags = ["Domains"],
     params(OrganizationId, DomainId),
     responses(
@@ -234,7 +234,6 @@ pub(super) async fn verify_domain(
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
     use sqlx::PgPool;
 
     use crate::{
@@ -289,10 +288,7 @@ mod tests {
 
         // verify domain
         let response = server
-            .post(
-                format!("{endpoint}/domains/{}/verify", created_domain.id()),
-                Body::empty(),
-            )
+            .get(format!("{endpoint}/domains/{}/verify", created_domain.id()))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -367,10 +363,7 @@ mod tests {
 
         // can't verify domain for other organizations
         let response = server
-            .post(
-                format!("{endpoint}/domains/{domain_id}/verify"),
-                Body::empty(),
-            )
+            .get(format!("{endpoint}/domains/{domain_id}/verify"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);

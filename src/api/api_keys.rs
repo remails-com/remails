@@ -145,7 +145,7 @@ mod tests {
         api::tests::{TestServer, deserialize_body, serialize_body},
         models::{
             ApiDomain, ApiMessage, ApiMessageMetadata, CreatedApiKeyWithPassword, NewOrganization,
-            Organization, Project, Role, Stream,
+            Organization, Project, Role,
         },
     };
 
@@ -153,7 +153,7 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "api_users", "projects", "streams",)
+        scripts("organizations", "api_users", "projects",)
     ))]
     async fn test_api_key_lifecycle(pool: PgPool) {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1
@@ -302,7 +302,7 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "api_users", "projects", "streams", "api_keys")
+        scripts("organizations", "api_users", "projects", "api_keys")
     ))]
     async fn test_api_key_no_access_wrong_user(pool: PgPool) {
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
@@ -312,7 +312,7 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "api_users", "projects", "streams", "api_keys")
+        scripts("organizations", "api_users", "projects", "api_keys")
     ))]
     async fn test_api_key_no_access_read_only(pool: PgPool) {
         let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e".parse().unwrap(); // is read only in org 1
@@ -322,7 +322,7 @@ mod tests {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "api_users", "projects", "streams", "api_keys")
+        scripts("organizations", "api_users", "projects", "api_keys")
     ))]
     async fn test_api_key_no_access_not_logged_in(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
@@ -364,7 +364,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages",
             "org_domains",
@@ -417,23 +416,10 @@ mod tests {
         assert!(projects.iter().any(|p| p.id() == proj_1));
         assert!(projects.iter().any(|p| p.id() == proj_2));
 
-        // list streams
-        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
-        let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams"
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let streams: Vec<Stream> = deserialize_body(response.into_body()).await;
-        assert_eq!(streams.len(), 1);
-        assert_eq!(streams[0].id(), stream_1);
-
         // list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
             ))
             .await
             .unwrap();
@@ -445,7 +431,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -454,8 +440,9 @@ mod tests {
         assert_eq!(message.id(), message_1);
 
         // delete a message
-        let response = server.delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -464,7 +451,7 @@ mod tests {
         // check that is was removed
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -478,7 +465,6 @@ mod tests {
             "api_users",
             "api_keys",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages",
             "invites"
@@ -595,7 +581,6 @@ mod tests {
             "organizations",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages",
             "org_domains",
@@ -617,19 +602,17 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // Read-only API keys should not be able to delete streams
-        let stream_1 = "85785f4c-9167-4393-bbf2-3c3e21067e4a";
         let response = server
-            .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}"
-            ))
+            .delete(format!("/api/organizations/{org_1}/projects/{proj_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // Read-only API keys should not be able to delete messages
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
-        let response = server.delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -645,15 +628,16 @@ mod tests {
         // Read-only API keys are able to list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/messages"
             ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         // Read-only API keys are able to view messages
-        let response = server.get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/streams/{stream_1}/messages/{message_1}"
+        let response = server
+            .get(format!(
+                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
             ))
             .await
             .unwrap();
@@ -685,7 +669,6 @@ mod tests {
             "api_keys",
             "api_users",
             "projects",
-            "streams",
             "smtp_credentials",
             "messages",
         )

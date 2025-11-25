@@ -41,7 +41,7 @@ export function CredentialsOverview() {
         <Table.Td>{formatDateTime(credential.updated_at)}</Table.Td>
         <Table.Td align={"right"}>
           <EditButton
-            route="projects.project.streams.stream.credentials.credential"
+            route="projects.project.credentials.credential"
             params={{
               credential_id: credential.id,
             }}
@@ -55,8 +55,8 @@ export function CredentialsOverview() {
     <>
       <InfoAlert stateName={"smtp-cred"}>
         <Text mb="sm">
-          Create SMTP credentials for this Stream. Each set of credentials is unique to the Stream and can be used to
-          authenticate email sending. You can create multiple credentials per Stream if needed.
+          Create SMTP credentials for this Project. Each set of credentials is unique to the Project and can be used to
+          authenticate email sending. You can create multiple credentials per Project if needed.
         </Text>
         <SmtpInfo />
       </InfoAlert>

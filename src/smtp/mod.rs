@@ -49,11 +49,14 @@ mod test {
     use crate::{
         bus::client::BusClient,
         models::{
-            MessageRepository, MessageStatus, SmtpCredentialRepository, SmtpCredentialRequest,
+            Label, MessageRepository, MessageStatus, SmtpCredentialRepository,
+            SmtpCredentialRequest,
         },
         smtp::{SmtpConfig, server::SmtpServer},
-        test::{TestStreams, random_port},
+        test::{TestProjects, random_port},
     };
+    use mail_builder::headers::text::Text;
+    use mail_parser::MessageParser;
     use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
     use sqlx::PgPool;
     use std::{
@@ -68,7 +71,7 @@ mod test {
     ) -> (CancellationToken, JoinHandle<()>, u16, String, String) {
         let smtp_port = random_port();
 
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let credential_request = SmtpCredentialRequest {
             username: "john".to_string(),
@@ -77,7 +80,7 @@ mod test {
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
-            .generate(org_id, project_id, stream_id, &credential_request)
+            .generate(org_id, project_id, &credential_request)
             .await
             .unwrap();
 
@@ -115,7 +118,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -130,7 +132,9 @@ mod test {
             ])
             .subject("Hi!")
             .html_body("<h1>Hello, world!</h1>")
-            .text_body("Hello world!");
+            .text_body("Hello world!")
+            .message_id("83f667c7-1da8-4062-a936-fbfab899365b@my-custom-id")
+            .header("X-remails-LabeL", Text::new("my label"));
 
         SmtpClientBuilder::new("localhost", port)
             .implicit_tls(true)
@@ -147,10 +151,10 @@ mod test {
         server_handle.await.unwrap();
 
         // message should now be received and stored in the database
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let messages = MessageRepository::new(pool);
         let received_messages = messages
-            .list_message_metadata(org_id, project_id, stream_id, Default::default())
+            .list_message_metadata(org_id, project_id, Default::default())
             .await
             .unwrap();
         assert_eq!(received_messages.len(), 1);
@@ -159,11 +163,88 @@ mod test {
             received_messages[0].from_email,
             "john@test-org-1-project-1.com".parse().unwrap()
         );
+        assert_eq!(
+            received_messages[0].message_id_header,
+            Some("83f667c7-1da8-4062-a936-fbfab899365b@my-custom-id".to_owned()),
+        );
+        assert_eq!(received_messages[0].label, Some(Label::new("my-label")));
     }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_missing_headers_get_added(pool: PgPool) {
+        let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;
+
+        // message without Message-ID or Date
+        let message = "From: \"John Doe\" <john@test-org-1-project-1.com>\r\n\
+            To: \"Jane Doe\" <jane@test-org-1-project-1.com>\r\n\
+            Subject: Hi!\r\n\
+            X-remails-LabeL: my label \r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: text/plain; charset=\"utf-8\"\r\n\
+            Content-Transfer-Encoding: 7bit\r\n\
+            \r\n\
+            Hello world!";
+
+        let message = MessageParser::default().parse(message).unwrap();
+
+        SmtpClientBuilder::new("localhost", port)
+            .implicit_tls(true)
+            .allow_invalid_certs()
+            .credentials((username.as_str(), pwd.as_str()))
+            .connect()
+            .await
+            .unwrap()
+            .send(message)
+            .await
+            .unwrap();
+
+        shutdown.cancel();
+        server_handle.await.unwrap();
+
+        // message should now be received and stored in the database
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let messages = MessageRepository::new(pool);
+        let received_messages = messages
+            .list_message_metadata(org_id, project_id, Default::default())
+            .await
+            .unwrap();
+        assert_eq!(received_messages.len(), 1);
+        assert_eq!(received_messages[0].status, MessageStatus::Processing);
+        assert_eq!(
+            received_messages[0].from_email,
+            "john@test-org-1-project-1.com".parse().unwrap()
+        );
+        assert_eq!(
+            received_messages[0].message_id_header,
+            // automatically generated Message ID header
+            Some(format!(
+                "REMAILS-{}@test-org-1-project-1.com",
+                received_messages[0].id
+            )),
+        );
+        assert_eq!(received_messages[0].label, Some(Label::new("my-label")));
+
+        // raw data should have the missing headers added
+        let message = messages
+            .find_by_id(org_id, project_id, received_messages[0].id)
+            .await
+            .unwrap();
+        assert!(message.truncated_raw_data.contains("Date: "));
+        assert!(message.truncated_raw_data.contains("Message-ID: "));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
         let (shutdown, server_handle, port, username, _) = setup_server(pool).await;

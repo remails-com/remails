@@ -9,6 +9,7 @@ import MessageRetryButton from "./MessageRetryButton.tsx";
 import MessageDeleteButton from "./MessageDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import Header from "../Header.tsx";
+import Label from "./Label.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
   if (message.status == "Delivered") {
@@ -50,7 +51,14 @@ export default function MessageDetails() {
   const raw = completeMessage.truncated_raw_data;
 
   const table_data = [
-    { header: "Subject", value: subject ?? "no subject set" },
+    {
+      header: "Subject",
+      value: subject ?? (
+        <Text c="dimmed" fs="italic">
+          No subject
+        </Text>
+      ),
+    },
     { header: "From", value: completeMessage.from_email },
     {
       header: "Recipients",
@@ -118,7 +126,13 @@ export default function MessageDetails() {
 
   return (
     <>
-      <Header name={subject ?? "no subject set"} entityType="Message" Icon={IconMessage} divider />
+      <Header
+        name={subject ?? "No subject"}
+        entityType="Message"
+        Icon={IconMessage}
+        divider
+        addendum={currentMessage.label ? <Label label={currentMessage.label} clickable /> : null}
+      />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
         <Table.Tbody>

@@ -17,10 +17,10 @@ use base64ct::{Base64, Encoding};
 use chrono::Duration;
 use email_address::EmailAddress;
 use futures::StreamExt;
-use mail_parser::{HeaderName, MessageParser};
+use mail_parser::MessageParser;
 use mail_send::{SmtpClient, SmtpClientBuilder, smtp};
 use sqlx::PgPool;
-use std::{borrow::Cow::Borrowed, collections::BTreeSet, fmt::Display, net::IpAddr, sync::Arc};
+use std::{collections::BTreeSet, fmt::Display, net::IpAddr, sync::Arc};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -41,6 +41,10 @@ pub enum HandlerError {
     RepositoryError(#[from] crate::models::Error),
     #[error("failed to serialize message data: {0}")]
     SerializeMessageData(serde_json::Error),
+    #[error("failed to deserialize message data: {0}")]
+    DeserializeMessageData(serde_json::Error),
+    #[error("Email failed to parse")]
+    EmailFailedToParse,
     #[error("message is being {0:?}: {1}")]
     MessageNotAccepted(MessageStatus, String),
     #[error("Message is in an illegal state: {0}, {1:?}")]
@@ -119,6 +123,7 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    message_parser: MessageParser,
     k8s: Kubernetes,
     workers: Arc<Semaphore>,
     bus_client: BusClient,
@@ -143,6 +148,7 @@ impl Handler {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone()),
             organization_repository: OrganizationRepository::new(pool.clone()),
+            message_parser: MessageParser::default(),
             k8s: Kubernetes::new(pool.clone())
                 .await
                 .expect("Failed to initialize Kubernetes"),
@@ -185,7 +191,6 @@ impl Handler {
     async fn check_and_sign_message(
         &self,
         message: &Message,
-        parsed_msg: &mail_parser::Message<'_>,
     ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
@@ -211,6 +216,11 @@ impl Handler {
                 ),
             )));
         }
+
+        let parsed_msg = self
+            .message_parser
+            .parse(&message.raw_data)
+            .ok_or(HandlerError::EmailFailedToParse)?; // should not happen because we already parsed it before
 
         // check From domain (can be a different subdomain)
         if let Some(from) = parsed_msg.from() {
@@ -275,7 +285,7 @@ impl Handler {
         }
 
         trace!("signing with dkim");
-        let dkim_header = match dkim_key.dkim_header(parsed_msg) {
+        let dkim_header = match dkim_key.dkim_header(&parsed_msg) {
             Ok(header) => header,
             Err(e) => {
                 error!("error creating DKIM header: {e}");
@@ -311,54 +321,7 @@ impl Handler {
     }
 
     pub async fn handle_message(&self, message: &mut Message) -> Result<(), HandlerError> {
-        fn parse_message(raw_data: &Vec<u8>) -> mail_parser::Message<'_> {
-            MessageParser::default()
-                .parse(raw_data)
-                .unwrap_or_else(|| mail_parser::Message {
-                    raw_message: Borrowed(raw_data),
-                    ..Default::default()
-                })
-        }
-
-        // parse, add new headers if needed, and save message contents
-        let mut parsed_msg: mail_parser::Message = parse_message(&message.raw_data);
-
-        let has_header = |name: HeaderName| {
-            parsed_msg
-                .parts
-                .first()
-                .is_some_and(|msg| msg.headers.iter().any(|hdr| hdr.name == name))
-        };
-
-        let mut new_headers = Vec::new();
-
-        if !has_header(HeaderName::MessageId) {
-            let message_id_header =
-                MessageRepository::generate_message_id_header(&message.id(), &message.from_email);
-            trace!("adding Message-ID header: {message_id_header}");
-
-            new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
-            message.message_id_header = Some(message_id_header);
-        }
-
-        if !has_header(HeaderName::Date) {
-            trace!("adding Date header");
-            let date = chrono::Utc::now().to_rfc2822();
-            new_headers.push(format!("Date: {date}\r\n"));
-        }
-
-        if !new_headers.is_empty() {
-            trace!("updating message {}", message.id());
-            message.prepend_headers(&new_headers.join(""));
-
-            // we need to re-parse the message because the data has shifted
-            parsed_msg = parse_message(&message.raw_data);
-        }
-
-        message.message_data =
-            serde_json::to_value(&parsed_msg).map_err(HandlerError::SerializeMessageData)?;
-
-        let result = self.check_and_sign_message(message, &parsed_msg).await?;
+        let result = self.check_and_sign_message(message).await?;
         match result {
             Ok(_) => match &message.status {
                 // For messages being sent for the first time, update message status
@@ -389,7 +352,7 @@ impl Handler {
         message.set_next_retry(&self.config.retry);
 
         self.message_repository
-            .update_message_data_and_status(message)
+            .update_message_status(message)
             .await
             .map_err(HandlerError::RepositoryError)?;
 
@@ -581,7 +544,6 @@ impl Handler {
         fields(
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
-            stream_id = message.stream_id.to_string(),
             outbound_ip = outbound_ip.to_string(),
         ))]
     pub async fn send_message(
@@ -848,7 +810,7 @@ mod test {
     use crate::{
         handler::dns::DnsResolver,
         models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
-        test::{TestStreams, random_port},
+        test::{TestProjects, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
     use mailcrab::TestMailServerHandle;
@@ -883,7 +845,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -910,22 +871,18 @@ mod test {
             description: "Test SMTP credential description".to_string(),
         };
 
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
-            .generate(org_id, project_id, stream_id, &credential_request)
+            .generate(org_id, project_id, &credential_request)
             .await
             .unwrap();
 
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-        let message_id = handler
-            .message_repository
-            .create(&message, 1)
-            .await
-            .unwrap();
+        let message_id = handler.message_repository.create(message, 1).await.unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -945,7 +902,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -979,11 +935,11 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
-                .generate(org_id, project_id, stream_id, &credential_request)
+                .generate(org_id, project_id, &credential_request)
                 .await
                 .unwrap();
 
@@ -991,11 +947,7 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let message_id = handler
-                .message_repository
-                .create(&message, 1)
-                .await
-                .unwrap();
+            let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1004,7 +956,7 @@ mod test {
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
-                .remove(org_id, project_id, stream_id, credential.id())
+                .remove(org_id, project_id, credential.id())
                 .await
                 .unwrap();
         }
@@ -1017,7 +969,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
@@ -1051,11 +1002,11 @@ mod test {
                 description: "Test SMTP credential description".to_string(),
             };
 
-            let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
             let credential_repo = SmtpCredentialRepository::new(pool.clone());
             let credential = credential_repo
-                .generate(org_id, project_id, stream_id, &credential_request)
+                .generate(org_id, project_id, &credential_request)
                 .await
                 .unwrap();
 
@@ -1067,11 +1018,7 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
 
-            let message_id = handler
-                .message_repository
-                .create(&message, 1)
-                .await
-                .unwrap();
+            let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1080,7 +1027,7 @@ mod test {
             assert!(handler.handle_message(&mut message).await.is_err());
 
             credential_repo
-                .remove(org_id, project_id, stream_id, credential.id())
+                .remove(org_id, project_id, credential.id())
                 .await
                 .unwrap();
         }

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM smtp_credentials c\n                   USING projects p\n                   WHERE c.project_id = p.id\n                     AND p.organization_id = $1\n                     AND p.id = $2\n                     AND c.id = $3\n            RETURNING c.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f987136726d4ef66513ba821070cfea02c7f599452cd82aad9d45fcb72c02898"
+}

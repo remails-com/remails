@@ -2,18 +2,19 @@ use crate::{
     bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
     models::{
-        ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, projects::ProjectId,
-        streams::StreamId,
+        ApiKeyId, Error, OrgBlockStatus, OrganizationId, SmtpCredentialId, labels::Label,
+        projects::ProjectId,
     },
 };
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
-use mail_parser::MimeHeaders;
-use serde::{Deserialize, Serialize};
+use mail_parser::{HeaderName, MessageParser, MimeHeaders};
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
+use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -30,7 +31,9 @@ impl MessageId {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, sqlx::Type, Display, ToSchema)]
+#[derive(
+    PartialEq, Eq, Debug, Clone, Deserialize, Serialize, FromStr, sqlx::Type, Display, ToSchema,
+)]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,
@@ -61,7 +64,6 @@ pub struct Message {
     id: MessageId,
     pub(crate) organization_id: OrganizationId,
     pub(crate) project_id: ProjectId,
-    pub(crate) stream_id: StreamId,
     pub(crate) smtp_credential_id: Option<SmtpCredentialId>,
     pub(crate) api_key_id: Option<ApiKeyId>,
     pub status: MessageStatus,
@@ -72,6 +74,7 @@ pub struct Message {
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
     pub message_id_header: Option<String>,
+    pub label: Option<Label>,
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
@@ -88,25 +91,6 @@ pub struct ApiMessage {
     /// Indicates if the `truncated_raw_data` are actually truncated.
     is_truncated: bool,
     message_data: ApiMessageData,
-}
-
-#[cfg(test)]
-impl ApiMessage {
-    pub fn id(&self) -> MessageId {
-        self.metadata.id
-    }
-
-    pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
-        self.metadata.smtp_credential_id
-    }
-
-    pub fn api_key_id(&self) -> Option<ApiKeyId> {
-        self.metadata.api_key_id
-    }
-
-    pub fn status(&self) -> &MessageStatus {
-        &self.metadata.status
-    }
 }
 
 #[cfg_attr(test, derive(Deserialize))]
@@ -128,6 +112,7 @@ pub struct ApiMessageMetadata {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
+    pub label: Option<Label>,
     #[schema(minimum = 0)]
     attempts: i32,
     #[schema(minimum = 0)]
@@ -226,21 +211,21 @@ impl Message {
 /// A new email coming from the in-bound SMTP server
 #[derive(Debug)]
 pub struct NewMessage {
+    pub message_id: MessageId,
     pub smtp_credential_id: SmtpCredentialId,
     pub from_email: EmailAddress,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
-    pub message_data: serde_json::Value,
 }
 
 impl NewMessage {
     pub fn new(smtp_credential_id: SmtpCredentialId, from_email: EmailAddress) -> Self {
         NewMessage {
+            message_id: MessageId::new_v4(),
             smtp_credential_id,
             from_email,
             recipients: vec![],
             raw_data: vec![],
-            message_data: Default::default(),
         }
     }
 }
@@ -248,10 +233,10 @@ impl NewMessage {
 /// A new email coming from the Remails API
 pub struct NewApiMessage {
     pub message_id: MessageId,
-    pub message_id_header: String,
     pub api_key_id: ApiKeyId,
-    pub stream_id: StreamId,
+    pub project_id: ProjectId,
     pub from_email: EmailAddress,
+    pub label: Option<Label>,
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
 }
@@ -261,25 +246,55 @@ pub struct MessageRepository {
     pool: sqlx::PgPool,
     rate_limit_timespan: PgInterval,
     rate_limit_max_messages: i64,
+    message_parser: MessageParser,
+}
+
+const fn default_limit() -> i64 {
+    10 // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
 }
 
 #[derive(Debug, Deserialize, IntoParams, Validate)]
 #[serde(default)]
 pub struct MessageFilter {
-    #[param(minimum = 1, maximum = 100, default = 10)]
+    #[param(minimum = 1, maximum = 100, default = default_limit)]
     #[garde(range(min = 1, max = 100))]
     limit: i64,
     #[garde(skip)]
-    status: Option<MessageStatus>,
+    #[serde(deserialize_with = "deserialize_comma_separated_list")]
+    status: Option<Vec<MessageStatus>>,
+    #[garde(length(max = 20), dive)]
+    #[param(max_items = 20)]
+    #[serde(deserialize_with = "deserialize_comma_separated_list")]
+    labels: Option<Vec<Label>>,
     #[garde(skip)]
     before: Option<DateTime<Utc>>,
+}
+
+fn deserialize_comma_separated_list<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    let s = Option::<String>::deserialize(deserializer)?;
+    Ok(match s {
+        None => None,
+        Some(values) => Some(
+            values
+                .split(',')
+                .map(FromStr::from_str)
+                .collect::<Result<Vec<T>, _>>()
+                .map_err(|g| serde::de::Error::custom(format!("{:?}", g)))?,
+        ),
+    })
 }
 
 impl Default for MessageFilter {
     fn default() -> Self {
         Self {
-            limit: 10, // should match LIMIT_DEFAULT in frontend/src/components/messages/MessageLog.tsx
+            limit: default_limit(),
             status: None,
+            labels: None,
             before: None,
         }
     }
@@ -289,7 +304,6 @@ struct PgMessage {
     id: MessageId,
     organization_id: OrganizationId,
     project_id: ProjectId,
-    stream_id: StreamId,
     smtp_credential_id: Option<Uuid>,
     api_key_id: Option<Uuid>,
     status: MessageStatus,
@@ -304,6 +318,7 @@ struct PgMessage {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
+    label: Option<Label>,
     attempts: i32,
     max_attempts: i32,
 }
@@ -316,7 +331,6 @@ impl TryFrom<PgMessage> for Message {
             id: m.id,
             organization_id: m.organization_id,
             project_id: m.project_id,
-            stream_id: m.stream_id,
             smtp_credential_id: m.smtp_credential_id.map(Into::into),
             api_key_id: m.api_key_id.map(Into::into),
             status: m.status,
@@ -331,6 +345,7 @@ impl TryFrom<PgMessage> for Message {
             raw_data: m.raw_data,
             message_data: m.message_data,
             message_id_header: m.message_id_header,
+            label: m.label,
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
@@ -413,6 +428,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
+            label: m.label,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
         })
@@ -435,6 +451,7 @@ impl MessageRepository {
             ))
             .expect("Could not set rate limit timespan"),
             rate_limit_max_messages,
+            message_parser: MessageParser::default(),
         }
     }
 
@@ -476,26 +493,93 @@ impl MessageRepository {
         format!("REMAILS-{id}@{sender_domain}")
     }
 
+    /// Parse message, add new headers if needed, and return message contents to be stored in the database
+    fn parse_message(
+        &self,
+        raw_data: &mut Vec<u8>,
+        id: &MessageId,
+        from_email: &EmailAddress,
+    ) -> Result<(serde_json::Value, String, Option<Label>), Error> {
+        let mut parsed_msg = self
+            .message_parser
+            .parse(raw_data)
+            .ok_or(Error::EmailFailedToParse)?;
+
+        let mut new_headers = Vec::new();
+
+        if parsed_msg.header(HeaderName::MessageId).is_none() {
+            let message_id_header = MessageRepository::generate_message_id_header(id, from_email);
+            trace!("adding Message-ID header: {message_id_header}");
+
+            new_headers.push(format!("Message-ID: <{message_id_header}>\r\n"));
+        }
+
+        if parsed_msg.header(HeaderName::Date).is_none() {
+            trace!("adding Date header");
+            let date = chrono::Utc::now().to_rfc2822();
+            new_headers.push(format!("Date: {date}\r\n"));
+        }
+
+        if !new_headers.is_empty() {
+            trace!("updating message {}", id);
+            let headers = new_headers.join("");
+            let hdr_size = headers.len();
+            let msg_len = raw_data.len();
+
+            raw_data.resize(msg_len + hdr_size, Default::default());
+            raw_data.copy_within(..msg_len, hdr_size);
+            raw_data[..hdr_size].copy_from_slice(headers.as_bytes());
+
+            // we need to re-parse the message because the data has shifted
+            parsed_msg = self
+                .message_parser
+                .parse(raw_data)
+                .ok_or(Error::EmailFailedToParse)?;
+        }
+
+        let label = parsed_msg
+            .remove_header("X-REMAILS-LABEL")
+            .and_then(|l| l.as_text().map(Label::new));
+
+        let message_data = serde_json::to_value(&parsed_msg).map_err(Error::Serialization)?;
+        let message_id_header =
+            parsed_msg
+                .message_id()
+                .map(|s| s.to_owned())
+                .ok_or(Error::Internal(
+                    "failed to get Message ID header".to_owned(), // should not happen
+                ))?;
+
+        Ok((message_data, message_id_header, label))
+    }
+
     pub async fn create(
         &self,
-        message: &NewMessage,
+        mut message: NewMessage,
         max_attempts: i32,
     ) -> Result<MessageId, Error> {
+        let (message_data, message_id_header, label) = self.parse_message(
+            &mut message.raw_data,
+            &message.message_id,
+            &message.from_email,
+        )?;
+
         Ok(sqlx::query_scalar!(
             r#"
             INSERT INTO messages AS m (
-                id, organization_id, project_id, stream_id, smtp_credential_id,
-                from_email, recipients, raw_data, message_data, max_attempts
+                id, organization_id, project_id, smtp_credential_id,
+                from_email, recipients, raw_data, max_attempts,
+                message_data, message_id_header, label
             )
-            SELECT gen_random_uuid(), o.id, p.id, streams.id, $1, $2, $3, $4, $5, $6
+            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8, $9
             FROM smtp_credentials s
-                JOIN streams ON s.stream_id = streams.id
-                JOIN projects p ON p.id = streams.project_id
+                JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
-            WHERE s.id = $1
+            WHERE s.id = $2
             RETURNING
                 m.id
             "#,
+            *message.message_id,
             *message.smtp_credential_id,
             message.from_email.as_str(),
             &message
@@ -504,8 +588,10 @@ impl MessageRepository {
                 .map(|r| r.email())
                 .collect::<Vec<_>>(),
             message.raw_data,
-            message.message_data,
             max_attempts,
+            message_data,
+            message_id_header,
+            label.as_deref(),
         )
         .fetch_one(&self.pool)
         .await?
@@ -514,26 +600,32 @@ impl MessageRepository {
 
     pub async fn create_from_api(
         &self,
-        message: &NewApiMessage,
+        mut message: NewApiMessage,
         max_attempts: i32,
     ) -> Result<ApiMessageMetadata, Error> {
+        // the REST API provides its own message label and does not use the X-REMAILS-LABEL header
+        let (message_data, message_id_header, _) = self.parse_message(
+            &mut message.raw_data,
+            &message.message_id,
+            &message.from_email,
+        )?;
+
         sqlx::query_as!(
             PgMessage,
             r#"
             INSERT INTO messages AS m (
-                id, organization_id, project_id, stream_id, api_key_id, 
-                from_email, recipients, raw_data, max_attempts, message_id_header
+                id, organization_id, project_id, api_key_id,
+                from_email, recipients, raw_data, max_attempts,
+                message_data, message_id_header, label
             )
-            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8
-            FROM streams s
-                JOIN projects p ON p.id = s.project_id
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
+            FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
-            WHERE s.id = $2
+            WHERE p.id = $2
             RETURNING
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -549,10 +641,11 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             "#,
             *message.message_id,
-            *message.stream_id,
+            *message.project_id,
             *message.api_key_id,
             message.from_email.as_str(),
             &message
@@ -562,7 +655,9 @@ impl MessageRepository {
                 .collect::<Vec<_>>(),
             message.raw_data,
             max_attempts,
-            message.message_id_header
+            message_data,
+            message_id_header,
+            message.label.as_deref()
         )
         .fetch_one(&self.pool)
         .await?
@@ -598,39 +693,10 @@ impl MessageRepository {
         Ok(())
     }
 
-    pub async fn update_message_data_and_status(&self, message: &Message) -> Result<(), Error> {
-        sqlx::query!(
-            r#"
-            UPDATE messages
-            SET message_data = $2,
-                status = $3,
-                reason = $4,
-                retry_after = $5,
-                attempts = $6,
-                max_attempts = $7,
-                message_id_header = $8
-            WHERE id = $1
-            "#,
-            *message.id,
-            message.message_data,
-            message.status as _,
-            message.reason,
-            message.retry_after,
-            message.attempts,
-            message.max_attempts,
-            message.message_id_header,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     pub async fn list_message_metadata(
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         filter: MessageFilter,
     ) -> Result<Vec<ApiMessageMetadata>, Error> {
         sqlx::query_as!(
@@ -640,7 +706,6 @@ impl MessageRepository {
                 id,
                 organization_id,
                 project_id,
-                stream_id,
                 smtp_credential_id,
                 api_key_id,
                 status AS "status: _",
@@ -656,22 +721,23 @@ impl MessageRepository {
                 updated_at,
                 retry_after,
                 attempts,
-                max_attempts
+                max_attempts,
+                label AS "label:Label"
             FROM messages m
             WHERE organization_id = $1
                 AND project_id = $2
-                AND stream_id = $3
-                AND ($5::message_status IS NULL OR status = $5)
-                AND ($6::timestamptz IS NULL OR created_at <= $6)
+                AND ($4::message_status[] IS NULL OR status = ANY($4))
+                AND ($5::timestamptz IS NULL OR created_at <= $5)
+                AND ($6::text[] IS NULL OR label = ANY($6))
             ORDER BY created_at DESC
-            LIMIT $4
+            LIMIT $3
             "#,
             *org_id,
             *project_id,
-            *stream_id,
             std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
-            filter.status as _,
+            filter.status as Option<Vec<MessageStatus>>,
             filter.before,
+            filter.labels as Option<Vec<Label>>,
         )
         .fetch_all(&self.pool)
         .await?
@@ -691,7 +757,6 @@ impl MessageRepository {
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -707,7 +772,8 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             FROM messages m
             JOIN organizations o ON o.id = m.organization_id
             WHERE m.id = $1 AND o.block_status = 'not_blocked'
@@ -723,7 +789,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<ApiMessage, Error> {
         sqlx::query_as!(
@@ -733,7 +798,6 @@ impl MessageRepository {
                 m.id,
                 m.organization_id,
                 m.project_id,
-                m.stream_id,
                 m.smtp_credential_id,
                 m.api_key_id,
                 m.status as "status: _",
@@ -742,7 +806,7 @@ impl MessageRepository {
                 m.from_email,
                 m.recipients,
                 -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.
-                substring(m.raw_data FOR $5) as "raw_data!",
+                substring(m.raw_data FOR $4) as "raw_data!",
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.message_id_header,
@@ -750,17 +814,16 @@ impl MessageRepository {
                 m.updated_at,
                 m.retry_after,
                 m.attempts,
-                m.max_attempts
+                m.max_attempts,
+                m.label AS "label:Label"
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
               AND m.project_id = $3
-              AND m.stream_id = $4
             "#,
             *message_id,
             *org_id,
             *project_id,
-            *stream_id,
             API_RAW_TRUNCATE_LENGTH,
         )
         .fetch_one(&self.pool)
@@ -772,7 +835,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<MessageId, Error> {
         Ok(sqlx::query_scalar!(
@@ -781,13 +843,11 @@ impl MessageRepository {
             WHERE id = $1
               AND organization_id = $2
               AND project_id = $3
-              AND stream_id = $4
             RETURNING id
             "#,
             *message_id,
             *org_id,
             *project_id,
-            *stream_id,
         )
         .fetch_one(&self.pool)
         .await?
@@ -825,7 +885,6 @@ impl MessageRepository {
         &self,
         org_id: OrganizationId,
         project_id: ProjectId,
-        stream_id: StreamId,
         message_id: MessageId,
     ) -> Result<MessageStatus, Error> {
         Ok(sqlx::query_scalar!(
@@ -833,13 +892,11 @@ impl MessageRepository {
             SELECT m.status AS "status:MessageStatus"
             FROM messages m
             WHERE m.organization_id = $1 
-              AND m.project_id = $2 
-              AND m.stream_id = $3 
-              AND m.id = $4
+              AND m.project_id = $2
+              AND m.id = $3
             "#,
             *org_id,
             *project_id,
-            *stream_id,
             *message_id,
         )
         .fetch_one(&self.pool)
@@ -851,7 +908,7 @@ impl MessageRepository {
     /// Automatically resets when the time span has expired, if so, it starts a new time span
     ///
     /// Also checks if the organization is allowed to receive new emails (is not blocked)
-    pub async fn email_creation_rate_limit(&self, id: StreamId) -> Result<i64, Error> {
+    pub async fn email_creation_rate_limit(&self, id: ProjectId) -> Result<i64, Error> {
         let result = sqlx::query!(
             r#"
             UPDATE organizations o
@@ -866,9 +923,9 @@ impl MessageRepository {
                 THEN now() + $3
                 ELSE rate_limit_reset
             END
-            FROM streams s
-              JOIN projects p ON p.id = s.project_id
-            WHERE p.organization_id = o.id AND s.id = $1
+            FROM projects p
+            WHERE p.organization_id = o.id
+              AND p.id = $1
             RETURNING remaining_rate_limit, o.block_status as "block_status: OrgBlockStatus"
             "#,
             *id,
@@ -884,6 +941,28 @@ impl MessageRepository {
 
         Ok(result.remaining_rate_limit)
     }
+
+    /// Lists all labels within the project. It only shows labels for which at least one message exists
+    pub async fn list_labels(
+        &self,
+        organization_id: OrganizationId,
+        project_id: ProjectId,
+    ) -> Result<Vec<Label>, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT DISTINCT label AS "label!:Label"
+            FROM messages
+            WHERE organization_id = $1
+              AND project_id = $2
+              AND label IS NOT NULL
+            ORDER BY label
+            "#,
+            *organization_id,
+            *project_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
 }
 
 #[cfg(test)]
@@ -898,8 +977,26 @@ mod test {
             ApiKeyRepository, ApiKeyRequest, OrganizationRepository, Role,
             SmtpCredentialRepository, SmtpCredentialRequest,
         },
-        test::TestStreams,
+        test::TestProjects,
     };
+
+    impl ApiMessage {
+        pub fn id(&self) -> MessageId {
+            self.metadata.id
+        }
+
+        pub fn smtp_credential_id(&self) -> Option<SmtpCredentialId> {
+            self.metadata.smtp_credential_id
+        }
+
+        pub fn api_key_id(&self) -> Option<ApiKeyId> {
+            self.metadata.api_key_id
+        }
+
+        pub fn status(&self) -> &MessageStatus {
+            &self.metadata.status
+        }
+    }
 
     impl NewMessage {
         pub fn from_builder_message(
@@ -930,6 +1027,15 @@ mod test {
         }
     }
 
+    #[sqlx::test]
+    async fn no_labels_does_not_err(pool: PgPool) {
+        let repository = MessageRepository::new(pool.clone());
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+
+        let labels = repository.list_labels(org_id, project_id).await.unwrap();
+        assert_eq!(labels.len(), 0);
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
         scripts(
@@ -937,13 +1043,12 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "k8s_nodes"
         )
     ))]
     async fn message_repository(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let message = MessageBuilder::new()
             .from(("John Doe", "john@test-org-1-project-1.com"))
@@ -963,7 +1068,6 @@ mod test {
             .generate(
                 org_id,
                 project_id,
-                stream_id,
                 &SmtpCredentialRequest {
                     username: "user".to_string(),
                     description: "Test SMTP credential description".to_string(),
@@ -974,11 +1078,11 @@ mod test {
 
         // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
-        let message_id = repository.create(&new_message, 5).await.unwrap();
+        let message_id = repository.create(new_message, 5).await.unwrap();
 
         // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message_id)
+            .find_by_id(org_id, project_id, message_id)
             .await
             .unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
@@ -1002,10 +1106,10 @@ mod test {
             .list_message_metadata(
                 org_id,
                 project_id,
-                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
+                    labels: None,
                     before: None,
                 },
             )
@@ -1016,7 +1120,7 @@ mod test {
 
         // remove message
         repository
-            .remove(org_id, project_id, stream_id, message_id)
+            .remove(org_id, project_id, message_id)
             .await
             .unwrap();
 
@@ -1025,10 +1129,10 @@ mod test {
             .list_message_metadata(
                 org_id,
                 project_id,
-                stream_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
+                    labels: None,
                     before: None,
                 },
             )
@@ -1039,11 +1143,11 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains", "streams")
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_message_from_api(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
-        let (org_id, project_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let from = "john@test-org-1-project-1.com";
         let message_id = MessageId::new_v4();
@@ -1078,9 +1182,9 @@ mod test {
         // create message
         let new_message = NewApiMessage {
             message_id,
-            message_id_header,
             api_key_id: *api_key.id(),
-            stream_id,
+            project_id,
+            label: Some("up,date".parse().unwrap()),
             from_email: "john@test-org-1-project-1.com".parse().unwrap(),
             recipients: vec![
                 "james@test.com".parse().unwrap(),
@@ -1088,11 +1192,13 @@ mod test {
             ],
             raw_data: message.into_message().unwrap().body.to_vec(),
         };
-        let message = repository.create_from_api(&new_message, 5).await.unwrap();
+        let message = repository.create_from_api(new_message, 5).await.unwrap();
+        assert_eq!(message.message_id_header, Some(message_id_header.clone()));
+        assert_eq!(message.label, Some(Label::new("up-date")));
 
         // get message
         let mut fetched_message = repository
-            .find_by_id(org_id, project_id, stream_id, message.id)
+            .find_by_id(org_id, project_id, message.id)
             .await
             .unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), None);
@@ -1110,23 +1216,27 @@ mod test {
             "jane@test-org-1-project-1.com".parse().unwrap(),
         ];
         assert_eq!(fetched_message.metadata.recipients, expected);
+        assert_eq!(
+            fetched_message.metadata.message_id_header,
+            Some(message_id_header)
+        );
+        assert_eq!(fetched_message.metadata.label, Some(Label::new("up-date")));
     }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "projects", "streams", "messages_length_truncation")
+        scripts("organizations", "projects", "messages_length_truncation")
     ))]
     async fn truncation(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
 
         let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let proj_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
-        let stream_id = "85785f4c-9167-4393-bbf2-3c3e21067e4a".parse().unwrap();
         let message_just_fits = "525f7d40-cb6d-402b-9078-0275c22808d7".parse().unwrap();
         let message_just_too_log = "c1d2c3d6-1521-4f77-804a-2034d121c9b0".parse().unwrap();
 
         let message = repository
-            .find_by_id(org_id, proj_id, stream_id, message_just_fits)
+            .find_by_id(org_id, proj_id, message_just_fits)
             .await
             .unwrap();
         assert!(!message.is_truncated);
@@ -1136,7 +1246,7 @@ mod test {
         );
 
         let message = repository
-            .find_by_id(org_id, proj_id, stream_id, message_just_too_log)
+            .find_by_id(org_id, proj_id, message_just_too_log)
             .await
             .unwrap();
         assert!(message.is_truncated);
@@ -1153,7 +1263,6 @@ mod test {
             "projects",
             "org_domains",
             "proj_domains",
-            "streams",
             "smtp_credentials",
             "messages"
         )
@@ -1162,14 +1271,14 @@ mod test {
         let organizations = OrganizationRepository::new(pool.clone());
         let messages = MessageRepository::new(pool.clone());
 
-        let (org_id, _proj_id, stream_id) = TestStreams::Org1Project1Stream1.get_ids();
+        let (org_id, proj_id) = TestProjects::Org1Project1.get_ids();
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
 
         // org 1 starts out as Not Blocked
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
 
         // set org 1 to No Sending
         organizations
@@ -1180,7 +1289,7 @@ mod test {
         let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
         assert!(matches!(err, Error::NotFound(_)));
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
 
         // set org 1 to No Sending Or Receiving
         organizations
@@ -1192,7 +1301,7 @@ mod test {
         assert!(matches!(err, Error::NotFound(_)));
 
         let err = messages
-            .email_creation_rate_limit(stream_id)
+            .email_creation_rate_limit(proj_id)
             .await
             .unwrap_err();
         assert!(matches!(err, Error::OrgBlocked)); // can't receive
@@ -1206,6 +1315,6 @@ mod test {
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send again
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(stream_id).await.unwrap(); // can receive again
+        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive again
     }
 }

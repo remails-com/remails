@@ -7,7 +7,6 @@ const FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/organizations.sql"),
     ),
     ("projects.sql", include_str!("fixtures/projects.sql")),
-    ("streams.sql", include_str!("fixtures/streams.sql")),
     ("org_domains.sql", include_str!("fixtures/org_domains.sql")),
     (
         "proj_domains.sql",

@@ -60,6 +60,7 @@ export interface MessageMetadata {
   retry_after: string | undefined;
   attempts: number;
   max_attempts: number;
+  label: string | undefined;
 }
 
 export interface Message extends MessageMetadata {
@@ -94,7 +95,7 @@ export interface State {
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
   projects: Project[] | null;
-  streams: Stream[] | null;
+  labels: string[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
   organizationDomains: Domain[] | null;
@@ -148,16 +149,8 @@ export type Action =
       projectId: string;
     }
   | {
-      type: "set_streams";
-      streams: Stream[] | null;
-    }
-  | {
-      type: "add_stream";
-      stream: Stream;
-    }
-  | {
-      type: "remove_stream";
-      streamId: string;
+      type: "set_labels";
+      labels: string[] | null;
     }
   | {
       type: "set_messages";
@@ -255,13 +248,6 @@ export interface Project {
   updated_at: string;
 }
 
-export interface Stream {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface VerifyResult {
   status: "Success" | "Info" | "Warning" | "Error";
   reason: string;
@@ -291,7 +277,7 @@ export interface Domain {
 
 export interface SmtpCredential {
   id: string;
-  stream_id: string;
+  project_id: string;
   description: string;
   username: string;
   created_at: string;

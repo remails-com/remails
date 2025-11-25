@@ -21,14 +21,8 @@ const actionHandler: {
   remove_project: function (state, action) {
     return { ...state, projects: state.projects?.filter((p) => p.id !== action.projectId) || [] };
   },
-  set_streams: function (state, action) {
-    return { ...state, streams: action.streams };
-  },
-  add_stream: function (state, action) {
-    return { ...state, streams: [...(state.streams || []), action.stream] };
-  },
-  remove_stream: function (state, action) {
-    return { ...state, streams: state.streams?.filter((p) => p.id !== action.streamId) || [] };
+  set_labels: function (state, action) {
+    return { ...state, labels: action.labels };
   },
   set_messages: function (state, action) {
     return { ...state, messages: action.messages };

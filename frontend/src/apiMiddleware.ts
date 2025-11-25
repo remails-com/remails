@@ -91,9 +91,7 @@ export default async function apiMiddleware(
   }
 
   const newProjId = navState.to.params.proj_id;
-  const newStreamId = navState.to.params.stream_id;
   const projChanged = newProjId !== navState.from.params.proj_id && newProjId !== null;
-  const streamChanged = newStreamId !== navState.from.params.stream_id && newStreamId !== null;
 
   if (orgChanged) {
     dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
@@ -106,38 +104,31 @@ export default async function apiMiddleware(
 
   if (projChanged && newProjId) {
     dispatch({
-      type: "set_streams",
-      streams: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/streams`),
-    });
-    dispatch({
       type: "set_domains",
       domains: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`),
       from_organization: false,
+    });
+    dispatch({
+      type: "set_credentials",
+      credentials: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/smtp_credentials`),
+    });
+    dispatch({
+      type: "set_labels",
+      labels: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/labels`),
     });
   }
 
   let messageFilterChanged = false;
   const messageFilter = new URLSearchParams();
-  for (const param of ["limit", "status", "before"]) {
+  for (const param of ["limit", "status", "before", "labels"]) {
     const value = navState.to.params[param];
     if (value != navState.from.params[param]) messageFilterChanged = true;
     if (value) messageFilter.append(param, value);
   }
-  if ((streamChanged || messageFilterChanged || navState.to.params.force == "reload") && newStreamId) {
+  if ((projChanged || messageFilterChanged || navState.to.params.force == "reload") && newProjId) {
     dispatch({
       type: "set_messages",
-      messages: await get(
-        `/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/messages?${messageFilter.toString()}`
-      ),
-    });
-  }
-
-  if (streamChanged && newStreamId) {
-    dispatch({
-      type: "set_credentials",
-      credentials: await get(
-        `/api/organizations/${newOrgId}/projects/${newProjId}/streams/${newStreamId}/smtp_credentials`
-      ),
+      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/messages?${messageFilter.toString()}`),
     });
   }
 
