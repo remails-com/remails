@@ -17,22 +17,41 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
+    middleware,
+    middleware::Next,
     response::IntoResponse,
 };
 use garde::Validate;
 use http::StatusCode;
 use mail_builder::MessageBuilder;
 use serde::Deserialize;
+use tower_http::limit::RequestBodyLimitLayer;
 use tracing::{debug, error, warn};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
-        .routes(routes!(create_message, list_messages))
+        .routes(routes!(list_messages))
         .routes(routes!(get_message, remove_message))
         .routes(routes!(retry_now))
         .routes(routes!(list_labels))
+}
+
+/// The 'create message' route is separated to allow setting a different request body size limit
+pub fn create_message_router() -> OpenApiRouter<ApiState> {
+    OpenApiRouter::new()
+        .routes(routes!(create_message))
+        .layer(RequestBodyLimitLayer::new(1_200_000))
+        .layer(middleware::from_fn(|req, next: Next| async move {
+            // TODO I'd prefer a more clean solution for catching errors produced by the
+            //  RequestBodyLimitLayer, but could not find any. Also note the [`ValidatedJson`]
+            let res = next.run(req).await;
+            if res.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                return AppError::PayloadTooLarge.into_response();
+            }
+            res
+        }))
 }
 
 /// Contains either a simple email address or a name and email address
@@ -90,12 +109,12 @@ pub struct EmailParameters {
     subject: String,
     // In case we ever increase the size limits or introduce the option to add attachments,
     // we have to take care the global axum request size limitation is adopted accordingly.
-    // It's currently limited to 120,000 bytes
-    #[schema[max_length = 50_000]]
-    #[garde(length(bytes, max = 50_000))]
+    // It's currently limited to 1,200,000 bytes for the create_message route.
+    #[schema[max_length = 500_000]]
+    #[garde(length(bytes, max = 500_000))]
     text_body: Option<String>,
-    #[schema[max_length = 50_000]]
-    #[garde(length(bytes, max = 50_000))]
+    #[schema[max_length = 500_000]]
+    #[garde(length(bytes, max = 500_000))]
     html_body: Option<String>,
     #[schema[max_length = 500]]
     #[garde(length(max = 500))]
@@ -123,7 +142,8 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
 /// Use this endpoint to send an email message via the HTTP REST API.
 #[utoipa::path(
     post,
-    path = "/organizations/{org_id}/projects/{project_id}/messages",
+    // Note that the /api prefix is added here because its mounted separately to the router because of its higher request size limit
+    path = "/api/organizations/{org_id}/projects/{project_id}/messages",
     tags = ["Messages"],
     request_body = EmailParameters,
     responses(

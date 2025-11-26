@@ -1,8 +1,9 @@
 use crate::api::{
     ApiServerError, ApiState, api_fallback, api_keys, api_users, auth, domains,
     domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-    error, invites, messages, organizations, projects, smtp_credentials, subscriptions,
-    wait_for_shutdown, whoami,
+    error, invites, messages,
+    messages::create_message_router,
+    organizations, projects, smtp_credentials, subscriptions, wait_for_shutdown, whoami,
 };
 use axum::{Json, Router, routing::get};
 use memory_serve::{MemoryServe, load_assets};
@@ -101,6 +102,7 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
     );
 
     let api_doc = router.get_openapi_mut();
+    api_doc.merge(create_message_router().to_openapi());
     #[cfg(not(feature = "internal-api-docs"))]
     hide_internal(api_doc);
     api_doc.info.title = "Remails API".to_string();

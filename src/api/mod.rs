@@ -2,6 +2,7 @@ use crate::{
     Environment,
     api::{
         error::AppError,
+        messages::create_message_router,
         oauth::GithubOauthService,
         openapi::{docs_router, openapi_router},
     },
@@ -25,7 +26,10 @@ use axum::{
 use base64ct::Encoding;
 use http::{
     HeaderName, HeaderValue, Method, StatusCode,
-    header::{ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, USER_AGENT},
+    header::{
+        ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, CONNECTION, COOKIE, HOST, ORIGIN, REFERER,
+        USER_AGENT,
+    },
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -222,6 +226,29 @@ async fn ip_middleware(mut request: Request, next: Next) -> Response {
     next.run(request).instrument(span).await
 }
 
+fn cors_layer(api_server_name: &str) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(
+            format!("https://docs.{}", api_server_name)
+                .parse::<HeaderValue>()
+                .expect("Could not parse CORS allow origin"),
+        )
+        .allow_credentials(true)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers([
+            AUTHORIZATION,
+            COOKIE,
+            ACCEPT,
+            ACCEPT_ENCODING,
+            USER_AGENT,
+            CONNECTION,
+            HOST,
+            ORIGIN,
+            REFERER,
+            HeaderName::from_static("priority"),
+        ])
+}
+
 pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
@@ -282,20 +309,7 @@ impl ApiServer {
                 TraceLayer::new_for_http(),
                 middleware::from_fn(ip_middleware),
             ))
-            .layer(
-                CorsLayer::new()
-                    .allow_origin(
-                        format!(
-                            "https://docs.{}",
-                            state.config.remails_config.api_server_name
-                        )
-                        .parse::<HeaderValue>()
-                        .expect("Could not parse CORS allow origin"),
-                    )
-                    .allow_credentials(true)
-                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-                    .allow_headers([AUTHORIZATION, ACCEPT, ACCEPT_ENCODING, USER_AGENT]),
-            )
+            .layer(cors_layer(&state.config.remails_config.api_server_name))
             .with_state(state.clone());
 
         if with_frontend {
@@ -314,18 +328,11 @@ impl ApiServer {
                 .route("/docs", get(async || Redirect::permanent("/docs/")))
         }
 
-        router = router.layer(middleware::from_fn_with_state(
-            state.config.clone(),
-            append_default_headers,
-        ));
-
-        // Set a hard limit to the size of all requests. Currently, we allow at most 50,000 bytes
-        // for the text and HTML body of an email message created via the API. Rounding this up
-        // a bit, results in the limit of 120,000 bytes chosen here. If we increase the size limit
-        // for messages, we should consider setting a higher limit specifically to the API endpoints
-        // that require it and a smaller to the rest.
+        // Set a hard limit to the size of all requests.
+        // Currently, API endpoint to create a new message is the only that allows a larger payload
+        // of about 1,2 MB
         router = router
-            .layer(RequestBodyLimitLayer::new(120_000))
+            .layer(RequestBodyLimitLayer::new(12_000))
             .layer(middleware::from_fn(|req, next: Next| async move {
                 // TODO I'd prefer a more clean solution for catching errors produced by the
                 //  RequestBodyLimitLayer, but could not find any. Also note the [`ValidatedJson`]
@@ -335,6 +342,23 @@ impl ApiServer {
                 }
                 res
             }));
+
+        router = router.merge(
+            create_message_router()
+                .split_for_parts()
+                .0
+                .layer((
+                    TraceLayer::new_for_http(),
+                    middleware::from_fn(ip_middleware),
+                ))
+                .layer(cors_layer(&state.config.remails_config.api_server_name))
+                .with_state(state.clone()),
+        );
+
+        router = router.layer(middleware::from_fn_with_state(
+            state.config.clone(),
+            append_default_headers,
+        ));
 
         router = router.layer(
             ServiceBuilder::new()
@@ -463,7 +487,11 @@ async fn handle_timeout_error(err: BoxError) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{bus::server::Bus, models::ApiUserId};
+    use crate::{
+        api::error::ApiErrorResponse,
+        bus::server::Bus,
+        models::{ApiUserId, Role},
+    };
     use axum::body::Body;
     use http::{Method, header::CONTENT_LENGTH};
     use std::{
@@ -471,7 +499,6 @@ mod tests {
         net::{Ipv4Addr, SocketAddrV4},
     };
     use tower::{ServiceExt, util::Oneshot};
-    use tower_http::body::Full;
 
     pub struct TestServer {
         server: ApiServer,
@@ -512,6 +539,14 @@ mod tests {
                 self.headers.insert("X-Test-Login-ID", user.to_string());
             } else {
                 self.headers.remove("X-Test-Login-ID");
+            }
+        }
+
+        pub fn set_header(&mut self, name: &'static str, value: Option<String>) {
+            if let Some(value) = value {
+                self.headers.insert(name, value);
+            } else {
+                self.headers.remove(name);
             }
         }
 
@@ -591,35 +626,65 @@ mod tests {
         let _: RemailsConfig = deserialize_body(response.into_body()).await;
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects")
+    ))]
     async fn test_request_size_limit(pool: PgPool) {
         let mut server = TestServer::new(pool.clone(), None).await;
-
-        let mut request = Request::builder().method(Method::GET).uri("/api/healthy");
-
-        for (&name, value) in server.headers.iter() {
-            request = request.header(name, value);
-        }
-        request = request.header(CONTENT_LENGTH, HeaderValue::from_static("120001"));
-
-        let request = request.body(Full::default()).unwrap();
-
-        let response = server.server.router.clone().oneshot(request).await.unwrap();
-        let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), 8192)
-            .await
-            .unwrap();
-        let msg = String::from_utf8(bytes.to_vec()).unwrap();
-        println!("{msg}");
-        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-
         server.set_user(Some(
             "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(),
         ));
+        server
+            .use_api_key(
+                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                Role::Maintainer,
+            )
+            .await;
+
+        for (path, method, size_limit, expected) in [
+            (
+                "/api/healthy",
+                Method::GET,
+                12_001,
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
+            (
+                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/messages",
+                Method::POST,
+                1_200_001,
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
+            (
+                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/messages",
+                Method::POST,
+                1_200_000,
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            server.set_header(CONTENT_LENGTH.as_str(), Some(size_limit.to_string()));
+            let response = match method {
+                Method::GET => server.get(path),
+                Method::POST => server.post(path, Body::default()),
+                _ => panic!("Unsupported method"),
+            }
+            .await
+            .unwrap();
+
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), 8192)
+                .await
+                .unwrap();
+            let msg = String::from_utf8(bytes.to_vec()).unwrap();
+            println!("{msg}");
+            assert_eq!(status, expected);
+            let _: ApiErrorResponse = serde_json::from_str(&msg).unwrap();
+        }
+
         let response = server
             .post(
                 "/api/organizations",
-                Body::from(format!(r#""name":"{}""#, "a".repeat(120_000))),
+                Body::from(format!(r#""name":"{}""#, "a".repeat(12_000))),
             )
             .await
             .unwrap();
@@ -630,6 +695,7 @@ mod tests {
             .unwrap();
         let msg = String::from_utf8(bytes.to_vec()).unwrap();
         println!("{msg}");
+        let _: ApiErrorResponse = serde_json::from_str(&msg).unwrap();
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     }
 }
