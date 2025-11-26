@@ -20,13 +20,13 @@ export function CredentialsOverview() {
   }
 
   const rows = credentials.map((credential) => {
-    const username_parts = credential.username.split("-", 2);
+    const username_parts = credential.username.split("-");
     const username = (
       <>
         <Text span c="dimmed">
           {username_parts[0]}-
         </Text>
-        <Text span>{username_parts[1]}</Text>
+        <Text span>{username_parts.slice(1).join('-')}</Text>
       </>
     );
 
