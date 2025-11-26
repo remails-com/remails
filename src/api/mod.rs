@@ -650,13 +650,13 @@ mod tests {
                 StatusCode::PAYLOAD_TOO_LARGE,
             ),
             (
-                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/messages",
+                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/emails",
                 Method::POST,
                 1_200_001,
                 StatusCode::PAYLOAD_TOO_LARGE,
             ),
             (
-                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/messages",
+                "/api/organizations/44729d9f-a7dc-4226-b412-36a7537f5176/projects/3ba14adf-4de1-4fb6-8c20-50cc2ded5462/emails",
                 Method::POST,
                 1_200_000,
                 StatusCode::BAD_REQUEST,

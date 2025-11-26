@@ -128,7 +128,7 @@ export default async function apiMiddleware(
   if ((projChanged || messageFilterChanged || navState.to.params.force == "reload") && newProjId) {
     dispatch({
       type: "set_messages",
-      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/messages?${messageFilter.toString()}`),
+      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/emails?${messageFilter.toString()}`),
     });
   }
 

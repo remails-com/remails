@@ -12,8 +12,8 @@ export default function Quota() {
   return (
     <Group>
       <Card withBorder radius="md" shadow="sm">
-        <Text fz="sm" tt="uppercase" fw={700} ta="center">
-          Used message quota
+        <Text fz="sm" tt="uppercase" fw={700}>
+          Used email quota
         </Text>
         <Tooltip
           events={{ touch: true, hover: true, focus: false }}

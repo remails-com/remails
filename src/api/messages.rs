@@ -143,8 +143,8 @@ impl<'a> From<EmailAddresses> for mail_builder::headers::address::Address<'a> {
 #[utoipa::path(
     post,
     // Note that the /api prefix is added here because its mounted separately to the router because of its higher request size limit
-    path = "/api/organizations/{org_id}/projects/{project_id}/messages",
-    tags = ["Messages"],
+    path = "/api/organizations/{org_id}/projects/{project_id}/emails",
+    tags = ["Emails"],
     request_body = EmailParameters,
     responses(
         (status = 201, description = "Message created successfully", body = ApiMessageMetadata),
@@ -279,9 +279,9 @@ pub async fn create_message(
 /// of the previous request.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/messages",
+    path = "/organizations/{org_id}/projects/{project_id}/emails",
     params(MessageFilter),
-    tags = ["Messages"],
+    tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully fetched messages", body = [ApiMessageMetadata]),
         AppError
@@ -317,8 +317,8 @@ pub async fn list_messages(
 /// was actually truncated or did fit into the 10,000-character limit.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
-    tags = ["Messages"],
+    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}",
+    tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully fetched message", body = ApiMessage),
         AppError
@@ -347,8 +347,8 @@ pub async fn get_message(
 /// Delete email message
 #[utoipa::path(
     delete,
-    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}",
-    tags = ["Messages"],
+    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}",
+    tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully deleted message", body = MessageId),
         AppError
@@ -381,8 +381,8 @@ pub async fn remove_message(
 /// who have not previously generated a permanent failure response.
 #[utoipa::path(
     put,
-    path = "/organizations/{org_id}/projects/{project_id}/messages/{message_id}/retry",
-    tags = ["Messages"],
+    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}/retry",
+    tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully initiated retry"),
         AppError
@@ -429,13 +429,13 @@ pub async fn retry_now(
     Ok(())
 }
 
-/// List message labels
+/// List email labels
 ///
-/// Lists all labels that exist on at least one message within that project.
+/// Lists all labels that exist on at least one email message within that project.
 #[utoipa::path(
     get,
     path = "/organizations/{org_id}/projects/{project_id}/labels",
-    tags = ["Messages"],
+    tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully fetched labels", body = [Label]),
         AppError
@@ -493,7 +493,7 @@ mod tests {
         // list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -505,7 +505,7 @@ mod tests {
         // filter by single label
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?labels=label-1"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails?labels=label-1"
             ))
             .await
             .unwrap();
@@ -516,7 +516,7 @@ mod tests {
         // filter by multiple labels
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?labels=label-1,label-2"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails?labels=label-1,label-2"
             ))
             .await
             .unwrap();
@@ -527,7 +527,7 @@ mod tests {
         // filter without labels
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -553,7 +553,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -565,7 +565,7 @@ mod tests {
         // update message to retry asap
         let response = server
             .put(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}/retry"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}/retry"),
                 Body::empty(),
             )
             .await
@@ -593,7 +593,7 @@ mod tests {
         // remove message
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -602,7 +602,7 @@ mod tests {
         // check if message is deleted
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -622,7 +622,7 @@ mod tests {
         // can't list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -632,7 +632,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -641,7 +641,7 @@ mod tests {
         // can't update message to retry asap
         let response = server
             .put(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}/retry"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}/retry"),
                 Body::empty(),
             )
             .await
@@ -651,7 +651,7 @@ mod tests {
         // can't remove message
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -723,7 +723,7 @@ mod tests {
 
         let too_low_limit = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?limit=0"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails?limit=0"
             ))
             .await
             .unwrap();
@@ -732,7 +732,7 @@ mod tests {
 
         let too_high_limit = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?limit=101"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails?limit=101"
             ))
             .await
             .unwrap();
@@ -741,7 +741,7 @@ mod tests {
 
         let invalid_timestamp = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages?before=invalid_time"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails?before=invalid_time"
             ))
             .await
             .unwrap();
@@ -761,7 +761,7 @@ mod tests {
 
         let too_many_recipients = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [
@@ -785,7 +785,7 @@ mod tests {
 
         let invalid_email = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient1atexample.com"
@@ -797,7 +797,7 @@ mod tests {
 
         let invalid_email_list = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1atexample.com"]
@@ -810,7 +810,7 @@ mod tests {
 
         let missing_recipient = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [],
@@ -822,7 +822,7 @@ mod tests {
 
         let too_long_subject = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1@example.com"],
@@ -847,7 +847,7 @@ mod tests {
         // send email with 1 recipient, text and HTML body, `in_reply_to`, `references` and `reply_to`
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient@example.com",
@@ -877,7 +877,7 @@ mod tests {
         // send email with 2 recipients, only text body, and custom from name
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": {"name": "Test", "address": "test@example.com"},
                     "to": ["recipient1@example.com", "recipient2@example.com"],
@@ -906,7 +906,7 @@ mod tests {
         // send email with 3 recipients, only HTML body
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": ["recipient1@example.com", "recipient2@example.com", {"name": "Recipient 3", "address": "recipient3@example.com"}],
@@ -948,7 +948,7 @@ mod tests {
         // reject emails without body
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": "recipient@example.com",
@@ -962,7 +962,7 @@ mod tests {
         // reject emails without recipients
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "test@example.com",
                     "to": [],
@@ -977,7 +977,7 @@ mod tests {
         // reject emails with invalid from email
         let response = server
             .post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(json!({
                     "from": "remails.net",
                     "to": "recipient@example.com",
@@ -1007,7 +1007,7 @@ mod tests {
         });
         let try_post = |server: &TestServer| {
             server.post(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/messages"),
+                format!("/api/organizations/{org_1}/projects/{proj_1}/emails"),
                 serialize_body(message_request.clone()),
             )
         };

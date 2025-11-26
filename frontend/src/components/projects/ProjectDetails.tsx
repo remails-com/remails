@@ -17,8 +17,8 @@ export default function ProjectDetails() {
       <Tabs
         tabs={[
           {
-            route: "projects.project.messages",
-            name: "Messages",
+            route: "projects.project.emails",
+            name: "Emails",
             icon: <IconMessage size={14} />,
             content: <MessageLog />,
           },

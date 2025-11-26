@@ -20,21 +20,21 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
 
   const deleteMessage = async () => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/messages/${message.id}`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${message.id}`,
       {
         method: "DELETE",
       }
     );
     if (res.status === 200) {
       notifications.show({
-        title: "Message deleted",
-        message: "Message was deleted",
+        title: "Email deleted",
+        message: "Email was deleted",
         color: "green",
       });
-      navigate("projects.project.messages");
+      navigate("projects.project.emails");
       dispatch({ type: "remove_message", messageId: message.id });
     } else {
-      errorNotification("Message could not be deleted");
+      errorNotification("Email could not be deleted");
       console.error(res);
     }
   };

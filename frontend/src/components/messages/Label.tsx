@@ -27,7 +27,7 @@ export default function Label({ label, clickable }: { label: string; clickable?:
         onClick={(e) => {
           if (clickable) {
             e.stopPropagation();
-            navigate("projects.project.messages", {
+            navigate("projects.project.emails", {
               labels: label,
             });
           }
