@@ -48,10 +48,8 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to connect to database")?;
 
-    #[cfg(feature = "load-fixtures")]
-    if let Err(e) = remails::load_fixtures(&pool).await {
-        error!("Failed to load fixtures: {e:?}");
-    }
+    #[cfg(feature = "apply-db-migrations")]
+    sqlx::migrate!().run(&pool).await?;
 
     let api_socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 3000);
     let smtp_config = SmtpConfig::default();
