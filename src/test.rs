@@ -244,7 +244,7 @@ async fn integration_test(pool: PgPool) {
     // Eddy sends a message via the Remails REST API
     let message: ApiMessageMetadata = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/messages"
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/emails"
         ))
         .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
         .json(&json!({
@@ -277,7 +277,7 @@ async fn integration_test(pool: PgPool) {
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
         ))
         .header("X-Test-Login", &jorg)
         .send()
@@ -291,7 +291,7 @@ async fn integration_test(pool: PgPool) {
     // cannot check someone else's messages
     let status = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
         ))
         .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
         .send()
@@ -325,7 +325,7 @@ async fn integration_test(pool: PgPool) {
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/messages"
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
         ))
         .header("X-Test-Login", &jorg)
         .send()
@@ -382,7 +382,7 @@ async fn integration_test(pool: PgPool) {
     // Eddy can no longer send emails via the REST API
     let res = client
         .post(format!(
-            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/messages"
+            "http://localhost:{http_port}/api/organizations/{eorg}/projects/{eproj}/emails"
         ))
         .basic_auth(eddy_cred.id(), Some(eddy_cred.password()))
         .json(&json!({

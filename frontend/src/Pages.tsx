@@ -25,8 +25,8 @@ import Admin from "./components/admin/Admin.tsx";
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
   "projects.project": <ProjectDetails />,
-  "projects.project.messages": <ProjectDetails />,
-  "projects.project.messages.message": <MessageDetails />,
+  "projects.project.emails": <ProjectDetails />,
+  "projects.project.emails.email": <MessageDetails />,
   "projects.project.credentials": <ProjectDetails />,
   "projects.project.credentials.credential": <CredentialDetails />,
   "projects.project.domains": <ProjectDetails />,

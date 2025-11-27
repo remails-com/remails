@@ -39,7 +39,7 @@ export default function CredentialDetails() {
       children: (
         <Text>
           Are you sure you want to delete the SMTP credential with the username <strong>{credential.username}</strong>?
-          You won't be able to sent messages with this credential anymore. This action cannot be undone.
+          You won't be able to sent emails with this credential anymore. This action cannot be undone.
         </Text>
       ),
       labels: { confirm: "Confirm", cancel: "Cancel" },

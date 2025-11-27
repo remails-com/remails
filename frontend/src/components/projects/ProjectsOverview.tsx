@@ -23,7 +23,7 @@ export default function ProjectsOverview() {
   const rows = projects.map((project) => (
     <Table.Tr key={project.id}>
       <Table.Td>
-        <Link to="projects.project.messages" params={{ proj_id: project.id }}>
+        <Link to="projects.project.emails" params={{ proj_id: project.id }}>
           {project.name}
         </Link>
       </Table.Td>

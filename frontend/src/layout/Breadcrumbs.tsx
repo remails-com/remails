@@ -58,7 +58,7 @@ export function Breadcrumbs() {
     // set user-defined name as breadcrumb title
     if (route == "projects.project") {
       title = currentProject?.name;
-    } else if (route == "projects.project.messages.message") {
+    } else if (route == "projects.project.emails.email") {
       let subject: string | null = null;
       if (currentMessage && "message_data" in currentMessage) {
         subject = currentMessage?.message_data?.subject;

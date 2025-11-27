@@ -29,7 +29,7 @@ export function Recipients({ message, mr, ml }: RecipientsProps): ReactElement {
     const details = message.delivery_details[recipient];
     const status = details?.status ?? { type: "NotSent" };
 
-    let tooltip = "Message not (yet) sent";
+    let tooltip = "Email not (yet) sent";
     if (status.type == "Failed") {
       tooltip = "Permanent failure";
     } else if (status.type == "Reattempt") {

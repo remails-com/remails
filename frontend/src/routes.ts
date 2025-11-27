@@ -10,11 +10,11 @@ export const routes = [
         path: "/{proj_id}",
         children: [
           {
-            name: "messages",
-            path: "/messages",
+            name: "emails",
+            path: "/emails",
             children: [
               {
-                name: "message",
+                name: "email",
                 path: "/{message_id}",
               },
             ],

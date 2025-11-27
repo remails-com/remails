@@ -147,7 +147,7 @@ export function MessageLog() {
               leftSection={<IconEye />}
               variant="light"
               size="xs"
-              onClick={() => navigate("projects.project.messages.message", { message_id: message.id })}
+              onClick={() => navigate("projects.project.emails.email", { message_id: message.id })}
             >
               View Message
             </Button>
@@ -181,7 +181,7 @@ export function MessageLog() {
   return (
     <>
       <InfoAlert stateName="messages">
-        This page shows a list of all messages sent in this Project. Use it to check delivery status, inspect metadata,
+        This page shows a list of all emails sent in this project. Use it to check delivery status, inspect metadata,
         and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
       </InfoAlert>
       <Group justify="space-between" align="flex-end">
@@ -246,7 +246,7 @@ export function MessageLog() {
       </Group>
       {rows.length == 0 ? (
         <Text c="dimmed" mt="md">
-          No messages found...
+          No emails found...
         </Text>
       ) : (
         <>

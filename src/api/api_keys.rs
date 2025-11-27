@@ -419,7 +419,7 @@ mod tests {
         // list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -431,7 +431,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -442,7 +442,7 @@ mod tests {
         // delete a message
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -451,7 +451,7 @@ mod tests {
         // check that is was removed
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -612,7 +612,7 @@ mod tests {
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
             .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();
@@ -628,7 +628,7 @@ mod tests {
         // Read-only API keys are able to list messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails"
             ))
             .await
             .unwrap();
@@ -637,7 +637,7 @@ mod tests {
         // Read-only API keys are able to view messages
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/messages/{message_1}"
+                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
             ))
             .await
             .unwrap();

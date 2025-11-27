@@ -22,7 +22,7 @@ export function useMessages() {
       setCurrentMessage(incompleteMessage);
       if (currentOrganization && currentProject) {
         fetch(
-          `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/messages/${routerState.params.message_id}`
+          `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${routerState.params.message_id}`
         )
           .then((res) => {
             if (res.ok) {
