@@ -12,16 +12,13 @@ import VerificationBadge from "./VerificationBadge.tsx";
 import EditButton from "../EditButton.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
+import { useProjectWithId } from "../../hooks/useProjects.ts";
+import { Domain } from "../../types.ts";
 
-export default function DomainsOverview() {
-  const [opened, { open, close }] = useDisclosure(false);
-  const { domains } = useDomains();
+function DomainRow({ domain }: { domain: Domain }) {
+  const project_name = useProjectWithId(domain.project_id)?.name;
 
-  if (domains === null) {
-    return <Loader />;
-  }
-
-  const rows = domains.map((domain) => (
+  return (
     <Table.Tr key={domain.id}>
       <Table.Td>
         <Link to={"domains.domain"} params={{ domain_id: domain.id }}>
@@ -36,7 +33,7 @@ export default function DomainsOverview() {
       <Table.Td>
         {domain.project_id && (
           <Link to={"projects.project"} params={{ proj_id: domain.project_id }}>
-            {domain.project_id}
+            {project_name ?? domain.project_id}
           </Link>
         )}
       </Table.Td>
@@ -50,7 +47,16 @@ export default function DomainsOverview() {
         />
       </Table.Td>
     </Table.Tr>
-  ));
+  );
+}
+
+export default function DomainsOverview() {
+  const [opened, { open, close }] = useDisclosure(false);
+  const { domains } = useDomains();
+
+  if (domains === null) {
+    return <Loader />;
+  }
 
   return (
     <>
@@ -61,7 +67,11 @@ export default function DomainsOverview() {
       </InfoAlert>
 
       <NewDomain opened={opened} close={close} />
-      <StyledTable headers={["Domains", "DNS Status", "Project", "Updated", ""]}>{rows}</StyledTable>
+      <StyledTable headers={["Domains", "DNS Status", "Project", "Updated", ""]}>
+        {domains.map((domain) => (
+          <DomainRow domain={domain} />
+        ))}
+      </StyledTable>
       <Flex justify="center" mt="md">
         <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Domain

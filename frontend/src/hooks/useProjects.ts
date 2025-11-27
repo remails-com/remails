@@ -12,3 +12,9 @@ export function useProjects() {
 
   return { projects, currentProject };
 }
+
+export function useProjectWithId(project_id: string | null) {
+  const projects = useSelector((state) => state.projects || []);
+
+  return project_id ? (projects?.find((p) => p.id === project_id) ?? null) : null;
+}
