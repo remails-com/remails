@@ -2,7 +2,6 @@ use crate::models::{Error, OrganizationId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
-use sqlx::{Executor, Postgres};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -133,24 +132,4 @@ impl ProjectRepository {
         .await?
         .into())
     }
-}
-
-pub async fn check_org_match<'e, E>(
-    org_id: OrganizationId,
-    proj_id: ProjectId,
-    executor: E,
-) -> Result<bool, Error>
-where
-    E: 'e + Executor<'e, Database = Postgres>,
-{
-    let pg_org_id = sqlx::query_scalar!(
-        r#"
-        SELECT organization_id FROM projects WHERE id = $1
-        "#,
-        *proj_id
-    )
-    .fetch_one(executor)
-    .await?;
-
-    Ok(pg_org_id == *org_id)
 }

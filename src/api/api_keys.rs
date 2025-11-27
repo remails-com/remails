@@ -400,7 +400,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
-        assert_eq!(domains.len(), 2);
+        assert_eq!(domains.len(), 5);
         assert!(domains.iter().any(|d| d.id() == org_dom_1));
 
         // list projects
@@ -647,16 +647,6 @@ mod tests {
         let org_dom_1 = "ed28baa5-57f7-413f-8c77-7797ba6a8780";
         let response = server
             .get(format!("/api/organizations/{org_1}/domains/{org_dom_1}"))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        // Read-only API keys are able to view project domains
-        let proj_dom_1 = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a";
-        let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/domains/{proj_dom_1}"
-            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);

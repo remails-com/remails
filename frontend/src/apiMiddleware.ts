@@ -98,16 +98,10 @@ export default async function apiMiddleware(
     dispatch({
       type: "set_domains",
       domains: await get(`/api/organizations/${newOrgId}/domains`),
-      from_organization: true,
     });
   }
 
   if (projChanged && newProjId) {
-    dispatch({
-      type: "set_domains",
-      domains: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/domains`),
-      from_organization: false,
-    });
     dispatch({
       type: "set_credentials",
       credentials: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/smtp_credentials`),

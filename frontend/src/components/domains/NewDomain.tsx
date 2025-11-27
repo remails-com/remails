@@ -4,7 +4,6 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useEffect, useState } from "react";
 import { Domain } from "../../types.ts";
-import { useProjects } from "../../hooks/useProjects.ts";
 import { DnsRecords } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.ts";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
@@ -17,7 +16,6 @@ interface FormValues {
 interface NewDomainProps {
   opened: boolean;
   close: () => void;
-  projectId: string | null;
 }
 
 function validateDomain(domain: string) {
@@ -56,18 +54,15 @@ function validateDomain(domain: string) {
   return null;
 }
 
-export function NewDomain({ opened, close, projectId }: NewDomainProps) {
+export function NewDomain({ opened, close }: NewDomainProps) {
   const [activeStep, setActiveStep] = useState(0);
   const { currentOrganization } = useOrganizations();
-  const { currentProject } = useProjects();
   const [newDomain, setNewDomain] = useState<Domain | null>(null);
   const { navigate, dispatch } = useRemails();
 
-  const domainsApi = projectId
-    ? `/api/organizations/${currentOrganization?.id}/projects/${projectId}/domains`
-    : `/api/organizations/${currentOrganization?.id}/domains`;
+  const domainsApi = `/api/organizations/${currentOrganization?.id}/domains`;
 
-  const { reverifyDomain: verifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, newDomain);
+  const { reverifyDomain: verifyDomain, domainVerified, verificationResult } = useVerifyDomain(newDomain);
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -100,7 +95,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
       if (res.status === 201) {
         res.json().then((newDomain) => {
           setNewDomain(newDomain);
-          dispatch({ type: "add_domain", domain: newDomain, from_organization: !projectId });
+          dispatch({ type: "add_domain", domain: newDomain });
           setActiveStep(1);
         });
       } else if (res.status === 409) {
@@ -125,7 +120,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
         console.error(r);
         return;
       }
-      dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !projectId });
+      dispatch({ type: "remove_domain", domainId: domain.id });
     });
   };
 
@@ -217,8 +212,7 @@ export function NewDomain({ opened, close, projectId }: NewDomainProps) {
               onClick={() => {
                 setActiveStep(0);
                 close();
-                const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
-                navigate(route, { domain_id: newDomain?.id || "" });
+                navigate("domains.domain", { domain_id: newDomain?.id || "" });
               }}
             >
               Show {newDomain?.domain}

@@ -1,8 +1,10 @@
 import { useCallback, useState } from "react";
 import { Domain, DomainVerificationResult, DomainVerificationStatus } from "../types";
 import { errorNotification } from "../notify";
+import { useOrganizations } from "./useOrganizations";
 
-export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
+export function useVerifyDomain(domain: Domain | null) {
+  const { currentOrganization } = useOrganizations();
   const [verificationResult, setVerificationResult] = useState<DomainVerificationResult | null>(
     domain?.verification_status ?? null
   );
@@ -20,7 +22,7 @@ export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
       setDomainVerified("loading");
       setTimeout(
         () =>
-          fetch(`${domainsApi}/${domain.id}/verify`).then((res) => {
+          fetch(`/api/organizations/${currentOrganization?.id}/domains/${domain.id}/verify`).then((res) => {
             if (res.status !== 200) {
               errorNotification(`Domain ${domain.domain} could not be verified`);
               console.error(res);
@@ -36,7 +38,7 @@ export function useVerifyDomain(domainsApi: string, domain: Domain | null) {
         300
       );
     },
-    [domainsApi]
+    [currentOrganization]
   );
 
   return { reverifyDomain, domainVerified, verificationResult };

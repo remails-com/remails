@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at\n            FROM projects p\n                LEFT JOIN domains d ON p.id = d.project_id OR p.organization_id = d.organization_id\n            WHERE p.id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain\n            ORDER BY char_length(d.domain) DESC\n            LIMIT 1\n            ",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at\n            FROM domains d\n            WHERE d.id = $2 AND d.organization_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -57,13 +57,13 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
-      true,
+      false,
       true,
       false,
       false,
@@ -71,5 +71,5 @@
       false
     ]
   },
-  "hash": "4b365ddfddb5fb70b7d6d1601105cb898204becd6283560405cd51fd56a81a2d"
+  "hash": "f1bca16369c0cdae446a4138e81a52f1de1d159941117150a1544b48b61276ee"
 }

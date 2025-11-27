@@ -1,5 +1,4 @@
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
-import { useProjects } from "../../hooks/useProjects.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Domain, VerifyResult } from "../../types.ts";
@@ -113,7 +112,6 @@ function DnsTable({ rows }: { rows: DnsRow[] }) {
 
 export default function DomainDetails() {
   const { currentOrganization } = useOrganizations();
-  const { currentProject } = useProjects();
   const { currentDomain } = useDomains();
   const {
     dispatch,
@@ -121,10 +119,7 @@ export default function DomainDetails() {
     state: { config },
   } = useRemails();
 
-  const domainsApi = currentProject
-    ? `/api/organizations/${currentOrganization?.id}/projects/${currentProject.id}/domains`
-    : `/api/organizations/${currentOrganization?.id}/domains`;
-  const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(domainsApi, currentDomain);
+  const { reverifyDomain, domainVerified, verificationResult } = useVerifyDomain(currentDomain);
 
   if (!currentDomain || !currentOrganization || !config) {
     return null;
@@ -144,14 +139,8 @@ export default function DomainDetails() {
     });
   };
 
-  const domain_route = currentProject ? "projects.project.domains" : "domains";
-
   const deleteDomain = async (domain: Domain) => {
-    const url = currentProject
-      ? `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/domains/${domain.id}`
-      : `/api/organizations/${currentOrganization.id}/domains/${domain.id}`;
-
-    const res = await fetch(url, {
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/domains/${domain.id}`, {
       method: "DELETE",
     });
     if (res.status === 200) {
@@ -160,8 +149,8 @@ export default function DomainDetails() {
         message: `Domain ${domain.domain} deleted`,
         color: "green",
       });
-      navigate(domain_route);
-      dispatch({ type: "remove_domain", domainId: domain.id, from_organization: !currentProject });
+      navigate("domains");
+      dispatch({ type: "remove_domain", domainId: domain.id });
     } else {
       errorNotification(`Domain ${domain.domain} could not be deleted`);
       console.error(res);
@@ -170,12 +159,7 @@ export default function DomainDetails() {
 
   return (
     <>
-      <Header
-        name={currentDomain.domain}
-        entityType={currentProject ? "Project Domain" : "Organization Domain"}
-        Icon={IconWorldWww}
-        divider
-      />
+      <Header name={currentDomain.domain} entityType={"Domain"} Icon={IconWorldWww} divider />
       <h3>Required DNS records</h3>
       <DnsTable
         rows={[

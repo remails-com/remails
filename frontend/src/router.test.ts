@@ -35,16 +35,6 @@ const routes = [
             name: "settings",
             path: "/settings",
           },
-          {
-            name: "domains",
-            path: "/domains",
-            children: [
-              {
-                name: "domain",
-                path: "/{domain_id}",
-              },
-            ],
-          },
         ],
       },
     ],
@@ -211,14 +201,6 @@ test("flattenRoutes", () => {
     {
       name: "projects.project.settings",
       path: "/{org_id}/projects/{proj_id}/settings",
-    },
-    {
-      name: "projects.project.domains",
-      path: "/{org_id}/projects/{proj_id}/domains",
-    },
-    {
-      name: "projects.project.domains.domain",
-      path: "/{org_id}/projects/{proj_id}/domains/{domain_id}",
     },
     {
       name: "domains",

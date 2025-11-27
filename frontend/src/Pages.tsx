@@ -29,8 +29,6 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "projects.project.emails.email": <MessageDetails />,
   "projects.project.credentials": <ProjectDetails />,
   "projects.project.credentials.credential": <CredentialDetails />,
-  "projects.project.domains": <ProjectDetails />,
-  "projects.project.domains.domain": <DomainDetails />,
   "projects.project.settings": <ProjectDetails />,
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,

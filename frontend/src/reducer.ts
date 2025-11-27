@@ -37,28 +37,13 @@ const actionHandler: {
     return { ...state, messages: state.messages?.filter((m) => m.id !== action.messageId) || [] };
   },
   set_domains: function (state, action) {
-    if (action.from_organization) {
-      return { ...state, organizationDomains: action.domains };
-    } else {
-      return { ...state, domains: action.domains };
-    }
+    return { ...state, domains: action.domains };
   },
   add_domain: function (state, action) {
-    if (action.from_organization) {
-      return { ...state, organizationDomains: [...(state.organizationDomains || []), action.domain] };
-    } else {
-      return { ...state, domains: [...(state.domains || []), action.domain] };
-    }
+    return { ...state, domains: [...(state.domains || []), action.domain] };
   },
   remove_domain: function (state, action) {
-    if (action.from_organization) {
-      return {
-        ...state,
-        organizationDomains: state.organizationDomains?.filter((d) => d.id !== action.domainId) || [],
-      };
-    } else {
-      return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
-    }
+    return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
   },
   set_credentials: function (state, action) {
     return { ...state, credentials: action.credentials };

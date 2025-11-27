@@ -33,16 +33,6 @@ export const routes = [
             name: "settings",
             path: "/settings",
           },
-          {
-            name: "domains",
-            path: "/domains",
-            children: [
-              {
-                name: "domain",
-                path: "/{domain_id}",
-              },
-            ],
-          },
         ],
       },
     ],
