@@ -30,31 +30,30 @@ export function PasswordSettings() {
     },
   });
 
-  const updatePassword = (update: PasswordForm) => {
-    fetch(`/api/api_user/${user.id}/password`, {
+  const updatePassword = async (update: PasswordForm) => {
+    const res = await fetch(`/api/api_user/${user.id}/password`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ current_password: update.old_password, new_password: update.new_password1 }),
-    }).then((res) => {
-      if (res.status === 200) {
-        passwordForm.reset();
-        dispatch({ type: "set_user", user: { ...user, password_enabled: true } });
-        notifications.show({
-          title: "Updated",
-          color: "green",
-          message: "",
-        });
-      } else if (res.status === 400) {
-        passwordForm.setFieldError("old_password", "Wrong password");
-      } else {
-        errorNotification("Something went wrong");
-      }
     });
+    if (res.status === 200) {
+      passwordForm.reset();
+      dispatch({ type: "set_user", user: { ...user, password_enabled: true } });
+      notifications.show({
+        title: "Updated",
+        color: "green",
+        message: "",
+      });
+    } else if (res.status === 400) {
+      passwordForm.setFieldError("old_password", "Wrong password");
+    } else {
+      errorNotification("Something went wrong");
+    }
   };
 
-  const removePassword = (update: PasswordForm) => {
+  const removePassword = async (update: PasswordForm) => {
     if (update.old_password.length <= 6) {
       passwordForm.setFieldError("old_password", "Password should include at least 6 characters");
       return;
@@ -67,27 +66,26 @@ export function PasswordSettings() {
       return;
     }
 
-    fetch(`/api/api_user/${user.id}/password`, {
+    const res = await fetch(`/api/api_user/${user.id}/password`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ current_password: update.old_password }),
-    }).then((res) => {
-      if (res.status === 200) {
-        passwordForm.reset();
-        dispatch({ type: "set_user", user: { ...user, password_enabled: false } });
-        notifications.show({
-          title: "Removed Password login",
-          color: "green",
-          message: "",
-        });
-      } else if (res.status === 400) {
-        passwordForm.setFieldError("old_password", "Wrong password");
-      } else {
-        errorNotification("Something went wrong");
-      }
-    });
+    })
+    if (res.status === 200) {
+      passwordForm.reset();
+      dispatch({ type: "set_user", user: { ...user, password_enabled: false } });
+      notifications.show({
+        title: "Removed Password login",
+        color: "green",
+        message: "",
+      });
+    } else if (res.status === 400) {
+      passwordForm.setFieldError("old_password", "Wrong password");
+    } else {
+      errorNotification("Something went wrong");
+    }
   };
 
   return (
@@ -142,7 +140,7 @@ export function PasswordSettings() {
             </Grid.Col>
           )}
           <Grid.Col span={user.password_enabled ? { base: 12, sm: 6 } : 12}>
-            <Button type="submit" fullWidth={true}>
+            <Button type="submit" fullWidth={true} loading={passwordForm.submitting}>
               {user.password_enabled ? "Update Password" : "Create Password"}
             </Button>
           </Grid.Col>
