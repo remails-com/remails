@@ -1,9 +1,9 @@
 // based on https://playwright.dev/docs/auth#moderate-one-account-per-parallel-worker
 
-import { test as baseTest, expect } from '@playwright/test';
+import { test as baseTest } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
-import { v4 as uuid } from "uuid";
+import { createAccount } from "../tests/util.ts";
 
 export * from '@playwright/test';
 export const test = baseTest.extend<object, { workerStorageState: string }>({
@@ -26,21 +26,7 @@ export const test = baseTest.extend<object, { workerStorageState: string }>({
     // Important: make sure we authenticate in a clean environment by unsetting storage state.
     const page = await browser.newPage({ storageState: undefined });
 
-    await page.goto("http://localhost:3000/login?type=register");
-
-    await page.getByRole("textbox", { name: "Name" }).fill("Playwright");
-    await page.getByRole("textbox", { name: "Email" }).fill(`${uuid()}@playwrighttest.com`);
-    await page.getByRole("textbox", { name: "Password" }).fill("playwrighttest");
-    await page.getByRole("button", { name: "Register" }).click();
-    await expect(page.getByRole("textbox", { name: "Name" })).toBeFocused();
-    await page.getByRole("textbox", { name: "Name" }).fill("test-organization");
-    await page.getByRole("button", { name: "Create Organization" }).click();
-    await page.getByRole("button", { name: "Choose your subscription" }).click();
-
-    await expect(async () => {
-      await page.getByRole("main").getByRole("button").filter({ hasText: /^$/ }).click();
-      await expect(page.getByText("Organization", { exact: true })).toBeVisible();
-    }).toPass();
+    await createAccount(page);
     // End of authentication steps.
 
     await page.context().storageState({ path: fileName });

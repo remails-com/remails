@@ -50,8 +50,8 @@ export function ConfirmInvite() {
     }
 
     const newOrg = await res.json();
-    dispatch({ type: "add_organization", organization: newOrg });
-    navigate("projects", { org_id: newOrg.id });
+    // dispatch({ type: "add_organization", organization: newOrg });
+    navigate("projects", { org_id: newOrg.id, force: "reload-orgs" });
   };
 
   const already_joined = user.org_roles.some((o) => o.org_id == invite?.organization_id);
