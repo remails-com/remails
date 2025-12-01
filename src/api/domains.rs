@@ -6,7 +6,7 @@ use crate::{
         validation::ValidatedJson,
     },
     handler::dns::{DnsResolver, DomainVerificationStatus},
-    models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId},
+    models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
 };
 use axum::{
     Json,
@@ -20,7 +20,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(create_domain, list_domains))
-        .routes(routes!(get_domain, delete_domain))
+        .routes(routes!(get_domain, delete_domain, update_domain))
         .routes(routes!(verify_domain))
 }
 
@@ -133,6 +133,40 @@ pub async fn get_domain(
     Ok(Json(domain))
 }
 
+/// Update domain
+#[utoipa::path(put, path = "/organizations/{org_id}/domains/{domain_id}",
+    tags = ["Domains"],
+    request_body = Option<ProjectId>,
+    responses(
+        (status = 200, description = "Domain successfully updated", body = ApiDomain),
+        AppError,
+    )
+)]
+pub async fn update_domain(
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
+    Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
+    user: Box<dyn Authenticated>,
+    Json(update): Json<Option<ProjectId>>,
+) -> ApiResult<ApiDomain> {
+    user.has_org_write_access(&org_id)?;
+
+    let domain = repo.update(org_id, domain_id, update).await?;
+    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
+    let domain = ApiDomain::verified(domain, status);
+
+    debug!(
+        user_id = user.log_id(),
+        organization_id = org_id.to_string(),
+        domain_id = domain_id.to_string(),
+        project_id = update.map(|p| p.to_string()),
+        "updated domain",
+    );
+
+    Ok(Json(domain))
+}
+
 /// Delete domain
 #[utoipa::path(delete, path = "/organizations/{org_id}/domains/{domain_id}",
     tags = ["Domains"],
@@ -233,8 +267,25 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
         assert_eq!(domains.len(), 1);
-        assert_eq!(domains[0].domain(), "remails.com");
         assert_eq!(domains[0].id(), created_domain.id());
+        assert_eq!(domains[0].domain(), "remails.com");
+        assert_eq!(domains[0].organization_id(), org_1.parse().unwrap());
+        assert_eq!(domains[0].project_id(), project_id);
+
+        // update domain with new project ID
+        let proj_2: ProjectId = "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap();
+        let response = server
+            .put(
+                format!("{endpoint}/domains/{}", created_domain.id()),
+                serialize_body(Some(proj_2)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), Some(proj_2));
 
         // get domain
         let response = server
@@ -243,8 +294,23 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let domain: ApiDomain = deserialize_body(response.into_body()).await;
-        assert_eq!(domain.domain(), "remails.com");
         assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), Some(proj_2));
+
+        // update domain with removed project ID
+        let response = server
+            .put(
+                format!("{endpoint}/domains/{}", created_domain.id()),
+                serialize_body(None::<ProjectId>),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), None);
 
         // verify domain
         let response = server
@@ -277,7 +343,10 @@ mod tests {
         test_domain_lifecycle(pool, Some(proj_1.parse().unwrap())).await;
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects")
+    ))]
     async fn test_org_domains_lifecycle(pool: PgPool) {
         test_domain_lifecycle(pool, None).await;
     }

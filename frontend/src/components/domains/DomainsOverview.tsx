@@ -1,8 +1,8 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Table, Text } from "@mantine/core";
+import { Flex, Group, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconPlus } from "@tabler/icons-react";
+import { IconPlus, IconServer } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
 import { Link } from "../../Link.tsx";
@@ -33,7 +33,9 @@ function DomainRow({ domain }: { domain: Domain }) {
       <Table.Td>
         {domain.project_id ? (
           <Link to={"projects.project"} params={{ proj_id: domain.project_id }}>
-            {project_name ?? domain.project_id}
+            <Group gap="0.4em">
+              <IconServer /> {project_name ?? domain.project_id}
+            </Group>
           </Link>
         ) : (
           <Text fs="italic" c="dimmed">
@@ -44,7 +46,7 @@ function DomainRow({ domain }: { domain: Domain }) {
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <EditButton
-          route={"domains.domain"}
+          route={"domains.domain.settings"}
           params={{
             domain_id: domain.id,
           }}
@@ -66,7 +68,7 @@ export default function DomainsOverview() {
     <>
       <OrganizationHeader />
       <InfoAlert stateName="project-domains">
-        Domains must be verified via DNS (SPF, DKIM, and DMARC) before emails can be sent from it. Optionally, domains
+        Domains must be verified via DNS (SPF, DKIM, and DMARC) before emails can be sent from them. Optionally, domains
         can be restricted to a single project.
       </InfoAlert>
 

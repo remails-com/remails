@@ -44,6 +44,12 @@ export const routes = [
       {
         name: "domain",
         path: "/{domain_id}",
+        children: [
+          {
+            name: "settings",
+            path: "/settings",
+          },
+        ],
       },
     ],
   },

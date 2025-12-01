@@ -130,6 +130,10 @@ impl ApiDomain {
         self.organization_id
     }
 
+    pub fn project_id(&self) -> Option<ProjectId> {
+        self.project_id
+    }
+
     pub fn domain(&self) -> &str {
         &self.domain
     }
@@ -148,9 +152,9 @@ pub struct Domain {
 
 struct PgDomain {
     id: DomainId,
+    domain: String,
     organization_id: OrganizationId,
     project_id: Option<Uuid>,
-    domain: String,
     dkim_key_type: DkimKeyType,
     dkim_pkcs8_der: Vec<u8>,
     created_at: DateTime<Utc>,
@@ -309,6 +313,31 @@ impl DomainRepository {
             "#,
             *org_id,
             *domain_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
+    }
+
+    pub async fn update(
+        &self,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+        update: Option<ProjectId>,
+    ) -> Result<Domain, Error> {
+        sqlx::query_as!(
+            PgDomain,
+            r#"
+            UPDATE domains
+            SET project_id = $3
+            WHERE id = $2 AND organization_id = $1
+            RETURNING id, domain, organization_id, project_id,
+                dkim_key_type as "dkim_key_type: DkimKeyType",
+                dkim_pkcs8_der, created_at, updated_at
+            "#,
+            *org_id,
+            *domain_id,
+            update.as_deref()
         )
         .fetch_one(&self.pool)
         .await?

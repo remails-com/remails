@@ -1,5 +1,4 @@
 import { JSX } from "react";
-import DomainDetails from "./components/domains/DomainDetails.tsx";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
 import OrganizationsOverview from "./components/organizations/OrganizationsOverview.tsx";
@@ -21,6 +20,7 @@ import SetupSubscription from "./components/SetupSubscription.tsx";
 import { useSubscription } from "./hooks/useSubscription.ts";
 import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
 import Admin from "./components/admin/Admin.tsx";
+import DomainDetails from "./components/domains/DomainDetails.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -32,6 +32,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "projects.project.settings": <ProjectDetails />,
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,
+  "domains.domain.settings": <DomainDetails />,
   settings: <OrganizationSettings />,
   "settings.members": <OrganizationSettings />,
   "settings.API keys": <OrganizationSettings />,
