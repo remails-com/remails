@@ -1,4 +1,4 @@
-import { Button, Group, Modal, Stack, Stepper, TextInput, Title } from "@mantine/core";
+import { Button, Group, Modal, Select, Stack, Stepper, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -8,9 +8,11 @@ import { DnsRecords } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.ts";
 import { DnsVerificationContent } from "./DnsVerificationContent.tsx";
 import { errorNotification } from "../../notify.tsx";
+import { useProjects } from "../../hooks/useProjects.ts";
 
 interface FormValues {
   domain: string;
+  project_id: string | null;
 }
 
 interface NewDomainProps {
@@ -59,6 +61,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
   const { currentOrganization } = useOrganizations();
   const [newDomain, setNewDomain] = useState<Domain | null>(null);
   const { navigate, dispatch } = useRemails();
+  const { projects } = useProjects();
 
   const domainsApi = `/api/organizations/${currentOrganization?.id}/domains`;
 
@@ -67,6 +70,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
   const form = useForm<FormValues>({
     initialValues: {
       domain: "",
+      project_id: null,
     },
     validate: {
       domain: validateDomain,
@@ -151,6 +155,16 @@ export function NewDomain({ opened, close }: NewDomainProps) {
                 placeholder="example.com"
                 error={form.errors.domain}
                 onChange={(event) => form.setFieldValue("domain", event.currentTarget.value)}
+              />
+              <Select
+                label="Usable by"
+                placeholder="any project"
+                data={projects.map((p) => ({ value: p.id, label: p.name }))}
+                value={form.values.project_id}
+                onChange={(project_id) => form.setFieldValue("project_id", project_id)}
+                clearable
+                searchable
+                nothingFoundMessage="No project found..."
               />
             </Stack>
 

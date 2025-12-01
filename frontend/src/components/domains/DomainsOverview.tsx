@@ -1,6 +1,6 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Table } from "@mantine/core";
+import { Flex, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
@@ -19,7 +19,7 @@ function DomainRow({ domain }: { domain: Domain }) {
   const project_name = useProjectWithId(domain.project_id)?.name;
 
   return (
-    <Table.Tr key={domain.id}>
+    <Table.Tr>
       <Table.Td>
         <Link to={"domains.domain"} params={{ domain_id: domain.id }}>
           {domain.domain}
@@ -31,10 +31,14 @@ function DomainRow({ domain }: { domain: Domain }) {
         </Link>
       </Table.Td>
       <Table.Td>
-        {domain.project_id && (
+        {domain.project_id ? (
           <Link to={"projects.project"} params={{ proj_id: domain.project_id }}>
             {project_name ?? domain.project_id}
           </Link>
+        ) : (
+          <Text fs="italic" c="dimmed">
+            any project
+          </Text>
         )}
       </Table.Td>
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
@@ -67,9 +71,9 @@ export default function DomainsOverview() {
       </InfoAlert>
 
       <NewDomain opened={opened} close={close} />
-      <StyledTable headers={["Domains", "DNS Status", "Project", "Updated", ""]}>
+      <StyledTable headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
         {domains.map((domain) => (
-          <DomainRow domain={domain} />
+          <DomainRow domain={domain} key={domain.id} />
         ))}
       </StyledTable>
       <Flex justify="center" mt="md">
