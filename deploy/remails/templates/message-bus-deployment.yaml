@@ -29,8 +29,9 @@ spec:
           image: "{{ .Values.images.message_bus.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.message_bus.pullPolicy }}
           livenessProbe:
-            tcpSocket:
+            httpGet:
               port: http
+              path: /healthy
             initialDelaySeconds: 15
             periodSeconds: 30
           env:
