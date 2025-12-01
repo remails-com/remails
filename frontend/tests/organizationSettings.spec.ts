@@ -150,6 +150,12 @@ test("organization API key", async ({ page }) => {
   // Open API key details
   await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
 
+  // Check we are put on the API key details page
+  {
+    const expectedUrl = new RegExp(`${uuidRegex}/settings/api_keys/${uuidRegex}`);
+    await expect(page).toHaveURL(expectedUrl);
+  }
+
   // Confirm details are correct
   await expect(page.getByLabel("Description")).toContainText("Playwright test API key");
   await expect(page.getByRole("textbox", { name: "Access level" })).toHaveValue("Read-only");
