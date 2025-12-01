@@ -1,4 +1,7 @@
-use remails::{bus::server::Bus, init_tracing};
+use remails::{
+    bus::server::{Bus, CAPACITY},
+    init_tracing,
+};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::sync::broadcast;
 
@@ -14,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("MESSAGE_BUS_PORT must be a u16");
 
     let socket = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
-    let (tx, _rx) = broadcast::channel::<String>(100);
+    let tx = broadcast::Sender::<String>::new(CAPACITY);
     let bus = Bus::new(socket, tx);
 
     bus.serve().await

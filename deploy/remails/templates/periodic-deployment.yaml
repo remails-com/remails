@@ -26,6 +26,25 @@ spec:
       containers:
         - name: periodic
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp-volume
+          livenessProbe:
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 2
+            successThreshold: 1
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test $(find /tmp/check_node_health.healthcheck -mmin -1)
+                - test $(find /tmp/message_retry_interval.healthcheck -mmin -5)
+                - test $(find /tmp/reset_all_quotas_interval.healthcheck -mmin -20)
+                - test $(find /tmp/clean_up_invites_interval.healthcheck -mmin -300)
           env:
             - name: RATE_LIMIT_MINUTES
               value: {{ .Values.smtp.rate_limit_minutes | quote }}
@@ -60,5 +79,6 @@ spec:
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
               value: message-bus.{{ .Release.Namespace }}.svc.cluster.local
-
-          imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}
+      volumes:
+        - name: tmp-volume
+          emptyDir: { }

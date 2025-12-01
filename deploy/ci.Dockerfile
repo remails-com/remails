@@ -8,14 +8,14 @@ ARG uid=2000
 ARG gid=2000
 RUN addgroup --gid ${gid} ${group} && adduser --uid ${uid} --gid ${gid} --system --disabled-login --disabled-password ${user}
 
-WORKDIR /home/nonroot
+WORKDIR /home/${user}
 USER $user
 
 FROM final-base AS management
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./management ./management
-RUN chmod 777 management
+RUN chmod 700 management
 
 EXPOSE 3000
 ENV VERSION=${version}
@@ -25,7 +25,7 @@ FROM final-base AS inbound
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./inbound ./inbound
-RUN chmod 777 inbound
+RUN chmod 700 inbound
 
 EXPOSE 3025
 ENV VERSION=${version}
@@ -35,7 +35,7 @@ FROM final-base AS outbound
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./outbound ./outbound
-RUN chmod 777 outbound
+RUN chmod 700 outbound
 
 EXPOSE 3025
 ENV VERSION=${version}
@@ -45,7 +45,7 @@ FROM final-base AS periodic
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./periodic ./periodic
-RUN chmod 777 periodic
+RUN chmod 700 periodic
 
 ENV VERSION=${version}
 ENTRYPOINT ["./periodic"]
@@ -54,7 +54,7 @@ FROM final-base AS migrate-db
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./migrate_db ./migrate_db
-RUN chmod 777 migrate_db
+RUN chmod 700 migrate_db
 
 ENV VERSION=${version}
 ENTRYPOINT ["./migrate_db"]
@@ -63,7 +63,7 @@ FROM final-base AS message-bus
 ARG version=dev
 
 COPY --chown=nonroot:nonroot ./message_bus ./message_bus
-RUN chmod 777 message_bus
+RUN chmod 700 message_bus
 
 ENV VERSION=${version}
 ENTRYPOINT ["./message_bus"]
