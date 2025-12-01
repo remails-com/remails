@@ -63,12 +63,12 @@ futures = "0.3.31"
 tokio-tungstenite = "0.28.0"
 tokio-util = { version = "0.7.17", features = ["io"] }
 tower = { version = "0.5", features = ["limit"] }
-tower-http = { version = "0.6.6", features = ["trace", "timeout", "limit", "compression-br", "cors"] }
+tower-http = { version = "0.6.7", features = ["trace", "timeout", "limit", "compression-br", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 oauth2 = { version = "5.0.0" }
-http = "1.3.1"
+http = "1.4.0"
 base64ct = "1.8.0"
 reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
 cookie = "0.18.1"
@@ -83,7 +83,7 @@ humansize = "2.1.3"
 ppp = "2.3.0"
 url = "2.5.4"
 totp-rs = { version = "5.7.0", features = ["gen_secret", "qr"] }
-garde = { version = "0.22.0", features = ["derive", "regex", "serde", "email"] }
+garde = { version = "0.22.1", features = ["derive", "regex", "serde", "email"] }
 async-trait = "0.1.89"
 async-stream = "0.3.6"
 if-addrs = "0.14.0"

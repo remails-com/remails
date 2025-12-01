@@ -6,6 +6,7 @@ use crate::api::{
     organizations, projects, smtp_credentials, subscriptions, wait_for_shutdown, whoami,
 };
 use axum::{Json, Router, routing::get};
+use http::StatusCode;
 use memory_serve::{MemoryServe, load_assets};
 use std::{env, net::SocketAddr, time::Duration};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -130,7 +131,10 @@ pub fn docs_router() -> Router {
                 .layer(CompressionLayer::new().br(true)),
         )
         .layer(RequestBodyLimitLayer::new(12_000))
-        .layer(TimeoutLayer::new(Duration::from_secs(10)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(10),
+        ))
 }
 
 async fn serve_docs(socket: SocketAddr, shutdown: CancellationToken) -> Result<(), ApiServerError> {
