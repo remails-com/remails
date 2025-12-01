@@ -98,7 +98,6 @@ export interface State {
   labels: string[] | null;
   messages: MessageMetadata[] | null;
   domains: Domain[] | null;
-  organizationDomains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
   config: RemailsConfig | null;
@@ -168,17 +167,14 @@ export type Action =
   | {
       type: "set_domains";
       domains: Domain[] | null;
-      from_organization: boolean;
     }
   | {
       type: "add_domain";
       domain: Domain;
-      from_organization: boolean;
     }
   | {
       type: "remove_domain";
       domainId: string;
-      from_organization: boolean;
     }
   | {
       type: "set_credentials";
@@ -266,7 +262,8 @@ export type DomainVerificationStatus = "verified" | "failed" | "loading";
 
 export interface Domain {
   id: string;
-  parent_id: { organization: string } | { project: string };
+  organization_id: string;
+  project_id: string | null;
   domain: string;
   dkim_key_type: "rsa_sha265" | "ed25519";
   dkim_public_key: string;

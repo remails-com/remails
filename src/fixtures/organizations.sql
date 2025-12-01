@@ -2,9 +2,7 @@ INSERT INTO organizations (id, name, total_message_quota, used_message_quota, qu
                            rate_limit_reset)
 VALUES ('44729d9f-a7dc-4226-b412-36a7537f5176',
         'test org 1',
-        800,
-        0,
-        now() + INTERVAL '1 month',
+        800, 0, now() + INTERVAL '1 month',
         500000, now() + '1 day'), -- practically unlimited rate limit for testing quota
        ('5d55aec5-136a-407c-952f-5348d4398204',
         'test org 2',

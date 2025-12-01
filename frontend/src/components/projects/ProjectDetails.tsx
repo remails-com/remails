@@ -1,6 +1,5 @@
-import DomainsOverview from "../domains/DomainsOverview.tsx";
 import ProjectSettings from "./ProjectSettings.tsx";
-import { IconKey, IconMessage, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { IconKey, IconMessage, IconServer, IconSettings } from "@tabler/icons-react";
 import Tabs from "../../layout/Tabs.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 import Header from "../Header.tsx";
@@ -21,12 +20,6 @@ export default function ProjectDetails() {
             name: "Emails",
             icon: <IconMessage size={14} />,
             content: <MessageLog />,
-          },
-          {
-            route: "projects.project.domains",
-            name: "Domains",
-            icon: <IconWorldWww size={14} />,
-            content: <DomainsOverview />,
           },
           {
             route: "projects.project.credentials",

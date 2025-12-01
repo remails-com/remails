@@ -1,11 +1,10 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Table } from "@mantine/core";
+import { Flex, Group, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconPlus } from "@tabler/icons-react";
+import { IconPlus, IconServer } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
-import { useProjects } from "../../hooks/useProjects.ts";
 import { Link } from "../../Link.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import StyledTable from "../StyledTable.tsx";
@@ -13,58 +12,72 @@ import VerificationBadge from "./VerificationBadge.tsx";
 import EditButton from "../EditButton.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
+import { useProjectWithId } from "../../hooks/useProjects.ts";
+import { Domain } from "../../types.ts";
 
-export default function DomainsOverview() {
-  const [opened, { open, close }] = useDisclosure(false);
-  const { currentProject } = useProjects();
-  const { domains } = useDomains();
+function DomainRow({ domain }: { domain: Domain }) {
+  const project_name = useProjectWithId(domain.project_id)?.name;
 
-  if (domains === null) {
-    return <Loader />;
-  }
-
-  const route = currentProject ? "projects.project.domains.domain" : "domains.domain";
-
-  const rows = domains.map((domain) => (
-    <Table.Tr key={domain.id}>
+  return (
+    <Table.Tr>
       <Table.Td>
-        <Link to={route} params={{ domain_id: domain.id }}>
+        <Link to={"domains.domain"} params={{ domain_id: domain.id }}>
           {domain.domain}
         </Link>
       </Table.Td>
       <Table.Td>
-        <Link to={route} params={{ domain_id: domain.id }}>
+        <Link to={"domains.domain"} params={{ domain_id: domain.id }}>
           <VerificationBadge status={domain.verification_status} />
         </Link>
+      </Table.Td>
+      <Table.Td>
+        {domain.project_id ? (
+          <Link to={"projects.project"} params={{ proj_id: domain.project_id }}>
+            <Group gap="0.4em">
+              <IconServer /> {project_name ?? domain.project_id}
+            </Group>
+          </Link>
+        ) : (
+          <Text fs="italic" c="dimmed">
+            any project
+          </Text>
+        )}
       </Table.Td>
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
       <Table.Td align={"right"}>
         <EditButton
-          route={route}
+          route={"domains.domain.settings"}
           params={{
             domain_id: domain.id,
           }}
         />
       </Table.Td>
     </Table.Tr>
-  ));
+  );
+}
+
+export default function DomainsOverview() {
+  const [opened, { open, close }] = useDisclosure(false);
+  const { domains } = useDomains();
+
+  if (domains === null) {
+    return <Loader />;
+  }
 
   return (
     <>
-      {!currentProject && <OrganizationHeader />}
-      {currentProject ? (
-        <InfoAlert stateName="project-domains">
-          Domains added here can be used only in this project. Each domain must be verified via DNS (SPF, DKIM, and
-          DMARC) before emails can be sent from it.
-        </InfoAlert>
-      ) : (
-        <InfoAlert stateName="global-domains">
-          Organization domains are available across all projects in the organization. Use this to manage domains
-          centrally if they’re shared between multiple projects.
-        </InfoAlert>
-      )}
-      <NewDomain opened={opened} close={close} projectId={currentProject?.id || null} />
-      <StyledTable headers={["Domains", "DNS Status", "Updated", ""]}>{rows}</StyledTable>
+      <OrganizationHeader />
+      <InfoAlert stateName="project-domains">
+        Domains must be verified via DNS (SPF, DKIM, and DMARC) before emails can be sent from them. Optionally, domains
+        can be restricted to a single project.
+      </InfoAlert>
+
+      <NewDomain opened={opened} close={close} />
+      <StyledTable headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
+        {domains.map((domain) => (
+          <DomainRow domain={domain} key={domain.id} />
+        ))}
+      </StyledTable>
       <Flex justify="center" mt="md">
         <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
           New Domain

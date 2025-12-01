@@ -66,7 +66,7 @@ export function Breadcrumbs() {
       title = subject ?? "No subject";
     } else if (route == "projects.project.credentials.credential") {
       title = currentCredential?.username;
-    } else if (route == "domains.domain" || route == "projects.project.domains.domain") {
+    } else if (route == "domains.domain") {
       title = currentDomain?.domain;
     }
 

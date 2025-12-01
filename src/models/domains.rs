@@ -1,6 +1,6 @@
 use crate::{
     handler::dns::DomainVerificationStatus,
-    models::{Error, OrganizationId, ProjectId, projects},
+    models::{Error, OrganizationId, ProjectId},
 };
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
@@ -12,7 +12,6 @@ use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use std::fmt::{Debug, Formatter};
-use tracing::error;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -34,26 +33,6 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 #[into_params(names("domain_id"))]
 pub struct DomainId(Uuid);
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Copy, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DomainParent {
-    Organization(OrganizationId),
-    Project(ProjectId),
-}
-
-impl Debug for DomainParent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DomainParent::Organization(o) => {
-                write!(f, "Organization({})", o.as_uuid())
-            }
-            DomainParent::Project(p) => {
-                write!(f, "Project({})", p.as_uuid())
-            }
-        }
-    }
-}
 
 #[derive(sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]
@@ -132,7 +111,8 @@ impl Debug for DkimKey {
 #[cfg_attr(test, derive(Deserialize))]
 pub struct ApiDomain {
     id: DomainId,
-    parent_id: DomainParent,
+    organization_id: OrganizationId,
+    project_id: Option<ProjectId>,
     domain: String,
     dkim_key_type: DkimKeyType,
     dkim_public_key: String,
@@ -145,9 +125,15 @@ impl ApiDomain {
     pub fn id(&self) -> DomainId {
         self.id
     }
-    pub fn parent_id(&self) -> DomainParent {
-        self.parent_id
+
+    pub fn organization_id(&self) -> OrganizationId {
+        self.organization_id
     }
+
+    pub fn project_id(&self) -> Option<ProjectId> {
+        self.project_id
+    }
+
     pub fn domain(&self) -> &str {
         &self.domain
     }
@@ -156,7 +142,8 @@ impl ApiDomain {
 #[derive(Debug)]
 pub struct Domain {
     pub(crate) id: DomainId,
-    parent_id: DomainParent,
+    organization_id: OrganizationId,
+    project_id: Option<ProjectId>,
     pub(crate) domain: String,
     pub(crate) dkim_key: DkimKey,
     created_at: DateTime<Utc>,
@@ -165,9 +152,9 @@ pub struct Domain {
 
 struct PgDomain {
     id: DomainId,
-    organization_id: Option<Uuid>,
-    project_id: Option<Uuid>,
     domain: String,
+    organization_id: OrganizationId,
+    project_id: Option<Uuid>,
     dkim_key_type: DkimKeyType,
     dkim_pkcs8_der: Vec<u8>,
     created_at: DateTime<Utc>,
@@ -178,18 +165,6 @@ impl TryFrom<PgDomain> for Domain {
     type Error = Error;
 
     fn try_from(pg: PgDomain) -> Result<Self, Self::Error> {
-        let parent_id = if let Some(org) = pg.organization_id {
-            if pg.project_id.is_some() {
-                error!("Domain has a organization and project as parent");
-            }
-            DomainParent::Organization(org.into())
-        } else if let Some(proj) = pg.project_id {
-            DomainParent::Project(proj.into())
-        } else {
-            error!("Domain does not have a parent");
-            Err(Error::Internal("Domain does not have a parent".to_string()))?
-        };
-
         let dkim_key = match pg.dkim_key_type {
             DkimKeyType::RsaSha256 => {
                 DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?)
@@ -201,7 +176,8 @@ impl TryFrom<PgDomain> for Domain {
 
         Ok(Self {
             id: pg.id,
-            parent_id,
+            organization_id: pg.organization_id,
+            project_id: pg.project_id.map(Into::into),
             domain: pg.domain,
             dkim_key,
             created_at: pg.created_at,
@@ -219,7 +195,8 @@ impl ApiDomain {
 
         Self {
             id: d.id,
-            parent_id: d.parent_id,
+            organization_id: d.organization_id,
+            project_id: d.project_id,
             domain: d.domain,
             dkim_key_type,
             dkim_public_key: Base64::encode_string(d.dkim_key.pub_key().expect("As we generate the keys ourselves, we should never run into a marshalling problem").as_ref()),
@@ -237,6 +214,8 @@ pub struct NewDomain {
     #[schema(min_length = 3, max_length = 253)]
     pub domain: String,
     #[garde(skip)]
+    pub project_id: Option<ProjectId>,
+    #[garde(skip)]
     pub dkim_key_type: DkimKeyType,
 }
 
@@ -250,24 +229,7 @@ impl DomainRepository {
         Self { pool }
     }
 
-    pub async fn create(
-        &self,
-        new: NewDomain,
-        org_id: OrganizationId,
-        proj_id: Option<ProjectId>,
-    ) -> Result<Domain, Error> {
-        let parent_id = if let Some(proj_id) = proj_id {
-            if !projects::check_org_match(org_id, proj_id, &self.pool).await? {
-                return Err(Error::BadRequest(
-                    "Project ID does not match organization ID".to_string(),
-                ));
-            }
-
-            DomainParent::Project(proj_id)
-        } else {
-            DomainParent::Organization(org_id)
-        };
-
+    pub async fn create(&self, new: NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
         let key_bytes = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
                 aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?.as_der()?
@@ -275,12 +237,22 @@ impl DomainRepository {
             DkimKeyType::Ed25519 => aws_lc_rs::signature::Ed25519KeyPair::generate()?.as_der()?,
         };
 
-        let (org_id, proj_id): (Option<Uuid>, Option<Uuid>) = match parent_id {
-            DomainParent::Organization(org) => (Some(org.as_uuid()), None),
-            DomainParent::Project(proj) => (None, Some(proj.as_uuid())),
-        };
-
         let mut tx = self.pool.begin().await?;
+
+        if let Some(project_id) = new.project_id {
+            let proj_org_id = sqlx::query_scalar!(
+                r#"SELECT organization_id FROM projects WHERE id = $1"#,
+                *project_id
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if proj_org_id != *org_id {
+                return Err(Error::BadRequest(
+                    "Project ID does not match organization ID".to_string(),
+                ));
+            }
+        }
 
         let id = sqlx::query_scalar!(
             r#"
@@ -289,8 +261,8 @@ impl DomainRepository {
             RETURNING id
             "#,
             new.domain,
-            org_id,
-            proj_id,
+            *org_id,
+            new.project_id.map(|p| p.as_uuid()),
             new.dkim_key_type as DkimKeyType,
             key_bytes.as_ref(),
         ).fetch_one(&mut *tx).await?;
@@ -324,12 +296,7 @@ impl DomainRepository {
         .try_into()
     }
 
-    pub async fn get(
-        &self,
-        org_id: OrganizationId,
-        proj_id: Option<ProjectId>,
-        domain_id: DomainId,
-    ) -> Result<Domain, Error> {
+    pub async fn get(&self, org_id: OrganizationId, domain_id: DomainId) -> Result<Domain, Error> {
         sqlx::query_as!(
             PgDomain,
             r#"
@@ -342,17 +309,35 @@ impl DomainRepository {
                    d.created_at,
                    d.updated_at
             FROM domains d
-                LEFT JOIN projects p ON d.project_id = p.id
-            WHERE d.id = $3
-              AND (
-                  ($2::uuid IS NULL AND d.organization_id = $1)
-                      OR
-                  ($2 IS NOT NULL AND d.project_id = $2 AND p.organization_id = $1)
-                  )
+            WHERE d.id = $2 AND d.organization_id = $1
             "#,
             *org_id,
-            proj_id.map(|p| p.as_uuid()),
             *domain_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .try_into()
+    }
+
+    pub async fn update(
+        &self,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+        update: Option<ProjectId>,
+    ) -> Result<Domain, Error> {
+        sqlx::query_as!(
+            PgDomain,
+            r#"
+            UPDATE domains
+            SET project_id = $3
+            WHERE id = $2 AND organization_id = $1
+            RETURNING id, domain, organization_id, project_id,
+                dkim_key_type as "dkim_key_type: DkimKeyType",
+                dkim_pkcs8_der, created_at, updated_at
+            "#,
+            *org_id,
+            *domain_id,
+            update.as_deref()
         )
         .fetch_one(&self.pool)
         .await?
@@ -387,39 +372,22 @@ impl DomainRepository {
         .try_into()
     }
 
-    pub async fn list(
-        &self,
-        org_id: OrganizationId,
-        proj_id: Option<ProjectId>,
-    ) -> Result<Vec<Domain>, Error> {
-        if let Some(proj_id) = proj_id
-            && !projects::check_org_match(org_id, proj_id, &self.pool).await?
-        {
-            return Err(Error::BadRequest(
-                "Project ID does not match organization ID".to_string(),
-            ));
-        }
-
+    pub async fn list(&self, org_id: OrganizationId) -> Result<Vec<Domain>, Error> {
         sqlx::query_as!(
             PgDomain,
             r#"
-            SELECT d.id,
-                   d.domain,
-                   d.organization_id,
-                   d.project_id,
-                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
-                   d.dkim_pkcs8_der,
-                   d.created_at,
-                   d.updated_at
-            FROM domains d
-                LEFT JOIN projects p ON p.id = d.project_id
-            WHERE (d.organization_id = $1 AND $2::uuid IS NULL)
-               OR ($2 IS NOT NULL
-                       AND (d.project_id = $2 AND p.organization_id = $1)
-                  )
+            SELECT id,
+                   domain,
+                   organization_id,
+                   project_id,
+                   dkim_key_type as "dkim_key_type: DkimKeyType",
+                   dkim_pkcs8_der,
+                   created_at,
+                   updated_at
+            FROM domains
+            WHERE organization_id = $1
             "#,
             *org_id,
-            proj_id.map(|p| p.as_uuid()),
         )
         .fetch_all(&self.pool)
         .await?
@@ -431,32 +399,16 @@ impl DomainRepository {
     pub async fn remove(
         &self,
         org_id: OrganizationId,
-        proj_id: Option<ProjectId>,
         domain_id: DomainId,
     ) -> Result<DomainId, Error> {
         let id = sqlx::query_scalar!(
             r#"
             DELETE
             FROM domains
-            WHERE domains.id = (SELECT d.id
-                                FROM domains d
-                                         LEFT JOIN projects p on p.id = d.project_id
-                                WHERE (d.project_id IS NULL OR
-                                       (
-                                           d.project_id = p.id
-                                               AND d.project_id = $2
-                                               AND p.organization_id = $1
-                                           )
-                                    )
-                                  AND (d.organization_id IS NULL OR
-                                       (d.organization_id = $1
-                                           AND $2::uuid IS NULL)
-                                    )
-                                  AND (d.id = $3))
+            WHERE id = $2 AND organization_id = $1
             RETURNING domains.id
             "#,
             *org_id,
-            proj_id.map(|p| p.as_uuid()),
             *domain_id
         )
         .fetch_one(&self.pool)
@@ -489,7 +441,7 @@ impl DomainRepository {
                    d.created_at,
                    d.updated_at
             FROM projects p
-                LEFT JOIN domains d ON p.id = d.project_id OR p.organization_id = d.organization_id
+                LEFT JOIN domains d ON p.id = d.project_id OR (p.organization_id = d.organization_id AND d.project_id IS NULL)
             WHERE p.id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain
             ORDER BY char_length(d.domain) DESC
             LIMIT 1
@@ -647,11 +599,11 @@ mod test {
                 NewDomain {
                     domain: "test-domain.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
+                    // Project 1 Organization 2
+                    project_id: Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
                 },
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 2
-                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
             )
             .await
             .unwrap_err();
@@ -664,43 +616,38 @@ mod test {
     ))]
     async fn create_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
 
         let domain = repo
             .create(
                 NewDomain {
                     domain: "test-domain1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
+                    project_id: Some(proj_1),
                 },
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                org_1,
             )
             .await
             .unwrap();
         assert_eq!(domain.domain, "test-domain1.com");
-        assert_eq!(
-            domain.parent_id,
-            DomainParent::Project("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap())
-        );
+        assert_eq!(domain.organization_id, org_1);
+        assert_eq!(domain.project_id, Some(proj_1));
 
         let domain = repo
             .create(
                 NewDomain {
                     domain: "test-domain2.com".to_string(),
                     dkim_key_type: DkimKeyType::Ed25519,
+                    project_id: None,
                 },
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
+                org_1,
             )
             .await
             .unwrap();
         assert_eq!(domain.domain, "test-domain2.com");
-        assert_eq!(
-            domain.parent_id,
-            DomainParent::Organization("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
-        );
+        assert_eq!(domain.organization_id, org_1);
+        assert_eq!(domain.project_id, None);
     }
 
     #[sqlx::test(fixtures(
@@ -715,70 +662,15 @@ mod test {
                 NewDomain {
                     domain: "test-org-2-project-1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
+                    // Project 1 Organization 1
+                    project_id: Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 },
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
             )
             .await
             .unwrap_err();
         assert!(matches!(conflict, Error::Conflict))
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains")
-    ))]
-    async fn get_org_does_not_match_proj(db: PgPool) {
-        let repo = DomainRepository::new(db);
-
-        let not_found = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 2
-                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
-                // test-org-2-project-1.com
-                "ae5ff990-d2c3-4368-a58f-003581705086".parse().unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(not_found, Error::NotFound(_)));
-
-        let not_found = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 2
-                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
-                // test-org-1-project-1.com
-                "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(not_found, Error::NotFound(_)));
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains")
-    ))]
-    async fn get_with_proj_id_from_org_domain(db: PgPool) {
-        let repo = DomainRepository::new(db);
-
-        let not_found = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(not_found, Error::NotFound(_)));
     }
 
     #[sqlx::test(fixtures(
@@ -792,8 +684,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -806,7 +696,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )
@@ -820,25 +709,6 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
-    async fn list_org_does_not_match_proj(db: PgPool) {
-        let repo = DomainRepository::new(db);
-
-        let err = repo
-            .list(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 2
-                Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(err, Error::BadRequest(_)));
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains")
-    ))]
     async fn list_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db);
 
@@ -846,37 +716,15 @@ mod test {
             .list(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
             )
             .await
             .unwrap();
-        assert_eq!(domains.len(), 2);
+        assert_eq!(domains.len(), 5);
         assert!(domains.iter().any(|d| d.domain == "test-org-1.com"));
         assert!(
             domains
                 .iter()
                 .any(|d| d.domain == "subdomain.test-org-1.com")
-        );
-
-        let domains = repo
-            .list(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
-            )
-            .await
-            .unwrap();
-        assert_eq!(domains.len(), 2);
-        assert!(
-            domains
-                .iter()
-                .any(|d| d.domain == "test-org-1-project-1.com")
-        );
-        assert!(
-            domains
-                .iter()
-                .any(|d| d.domain == "subdomain2.test-org-1.com")
         );
     }
 
@@ -884,15 +732,13 @@ mod test {
         path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
-    async fn remove_with_project_id_that_does_not_match_org_id(db: PgPool) {
+    async fn remove_with_org_id_that_does_not_match(db: PgPool) {
         let repo = DomainRepository::new(db);
 
         let domain1 = repo
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -905,8 +751,6 @@ mod test {
             .remove(
                 // test org 2
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -918,8 +762,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -938,8 +780,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )
@@ -952,8 +792,6 @@ mod test {
             .remove(
                 // test org 2
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
-                // Project 1 Organization 1
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )
@@ -966,55 +804,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                None,
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap();
-    }
-
-    #[sqlx::test(fixtures(
-        path = "../fixtures",
-        scripts("organizations", "projects", "org_domains", "proj_domains")
-    ))]
-    async fn remove_with_proj_id_from_org_domain(db: PgPool) {
-        let repo = DomainRepository::new(db);
-
-        let domain = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                None,
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(domain.domain, "test-org-1.com");
-
-        let not_found = repo
-            .remove(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(not_found, Error::NotFound(_)));
-
-        let _still_there = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )
@@ -1033,8 +822,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -1046,8 +833,6 @@ mod test {
         repo.remove(
             // test org 1
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-            // Project 1 Organization 1
-            Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
             // test-org-1-project-1.com
             "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
         )
@@ -1058,8 +843,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                // Project 1 Organization 1
-                Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
             )
@@ -1067,53 +850,16 @@ mod test {
             .unwrap_err();
 
         assert!(matches!(not_found, Error::NotFound(_)));
-
-        let domain_org = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(domain_org.domain, "test-org-1.com");
-
-        repo.remove(
-            // test org 2
-            "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-            None,
-            // test-org-1.com
-            "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-        )
-        .await
-        .unwrap();
-
-        let not_found = repo
-            .get(
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
-                // test-org-1.com
-                "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
-            )
-            .await
-            .unwrap_err();
-
-        assert!(matches!(not_found, Error::NotFound(_)))
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "org_domains")))]
-    async fn remove_happy_flow_without_projects(db: PgPool) {
+    async fn remove_happy_flow_without_project(db: PgPool) {
         let repo = DomainRepository::new(db);
 
         let domain_org = repo
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )
@@ -1125,7 +871,6 @@ mod test {
         repo.remove(
             // test org 2
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-            None,
             // test-org-1.com
             "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
         )
@@ -1136,7 +881,6 @@ mod test {
             .get(
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-                None,
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )

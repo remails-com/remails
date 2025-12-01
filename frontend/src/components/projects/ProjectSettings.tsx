@@ -129,7 +129,8 @@ export default function ProjectSettings() {
             value={form.values.name}
             onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
           />
-          <Group>
+
+          <Group mt="md">
             <MaintainerButton
               leftSection={<IconTrash />}
               variant="outline"

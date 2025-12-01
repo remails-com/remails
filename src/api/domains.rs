@@ -14,34 +14,17 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use serde::Deserialize;
 use tracing::{debug, info};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(create_domain, list_domains))
-        .routes(routes!(get_domain, delete_domain))
+        .routes(routes!(get_domain, delete_domain, update_domain))
         .routes(routes!(verify_domain))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct DomainPath {
-    org_id: OrganizationId,
-    project_id: Option<ProjectId>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SpecificDomainPath {
-    org_id: OrganizationId,
-    project_id: Option<ProjectId>,
-    domain_id: DomainId,
-}
-
 /// Create a new domain
-///
-/// TODO: utoipa does not support registering the same handler with to different paths yet.
-///  Looking at #344, I did not spend effort making this possible.
 #[utoipa::path(post, path = "/organizations/{org_id}/domains",
     tags = ["Domains"],
     params(OrganizationId),
@@ -56,12 +39,12 @@ pub(crate) async fn create_domain(
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
-    Path(DomainPath { org_id, project_id }): Path<DomainPath>,
+    Path(org_id): Path<OrganizationId>,
     ValidatedJson(new): ValidatedJson<NewDomain>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.create(new, org_id, project_id).await?;
+    let domain = repo.create(new, org_id).await?;
 
     let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
@@ -70,7 +53,7 @@ pub(crate) async fn create_domain(
     info!(
         user_id = user.log_id(),
         domain_id = domain.id().to_string(),
-        parent_id = ?domain.parent_id(),
+        organization_id = ?domain.organization_id(),
         domain = domain.domain(),
         "created domain");
 
@@ -78,9 +61,6 @@ pub(crate) async fn create_domain(
 }
 
 /// List all domains
-///
-/// TODO: utoipa does not support registering the same handler with to different paths yet.
-///  Looking at #344, I did not spend effort making this possible.
 #[utoipa::path(get, path = "/organizations/{org_id}/domains",
     tags = ["Domains"],
     params(OrganizationId),
@@ -94,11 +74,11 @@ pub(crate) async fn list_domains(
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
-    Path(DomainPath { org_id, project_id }): Path<DomainPath>,
+    Path(org_id): Path<OrganizationId>,
 ) -> ApiResult<Vec<ApiDomain>> {
     user.has_org_read_access(&org_id)?;
 
-    let domains = repo.list(org_id, project_id).await?;
+    let domains = repo.list(org_id).await?;
 
     let mut verified_domains = Vec::with_capacity(domains.len());
 
@@ -111,7 +91,6 @@ pub(crate) async fn list_domains(
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
         "verified & listed {} domains",
         verified_domains.len()
     );
@@ -120,9 +99,6 @@ pub(crate) async fn list_domains(
 }
 
 /// Get domain by ID
-///
-/// TODO: utoipa does not support registering the same handler with to different paths yet.
-///  Looking at #344, I did not spend effort making this possible.
 #[utoipa::path(get, path = "/organizations/{org_id}/domains/{domain_id}",
     tags = ["Domains"],
     params(OrganizationId, DomainId),
@@ -136,15 +112,11 @@ pub async fn get_domain(
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
-    Path(SpecificDomainPath {
-        org_id,
-        project_id,
-        domain_id,
-    }): Path<SpecificDomainPath>,
+    Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<ApiDomain> {
     user.has_org_read_access(&org_id)?;
 
-    let domain = repo.get(org_id, project_id, domain_id).await?;
+    let domain = repo.get(org_id, domain_id).await?;
 
     let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
@@ -153,7 +125,6 @@ pub async fn get_domain(
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
         domain_id = domain_id.to_string(),
         domain = domain.domain(),
         "retrieved domain",
@@ -162,10 +133,41 @@ pub async fn get_domain(
     Ok(Json(domain))
 }
 
+/// Update domain
+#[utoipa::path(put, path = "/organizations/{org_id}/domains/{domain_id}",
+    tags = ["Domains"],
+    request_body = Option<ProjectId>,
+    responses(
+        (status = 200, description = "Domain successfully updated", body = ApiDomain),
+        AppError,
+    )
+)]
+pub async fn update_domain(
+    State(repo): State<DomainRepository>,
+    State(resolver): State<DnsResolver>,
+    State(config): State<RemailsConfig>,
+    Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
+    user: Box<dyn Authenticated>,
+    Json(update): Json<Option<ProjectId>>,
+) -> ApiResult<ApiDomain> {
+    user.has_org_write_access(&org_id)?;
+
+    let domain = repo.update(org_id, domain_id, update).await?;
+    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
+    let domain = ApiDomain::verified(domain, status);
+
+    debug!(
+        user_id = user.log_id(),
+        organization_id = org_id.to_string(),
+        domain_id = domain_id.to_string(),
+        project_id = update.map(|p| p.to_string()),
+        "updated domain",
+    );
+
+    Ok(Json(domain))
+}
+
 /// Delete domain
-///
-/// TODO: utoipa does not support registering the same handler with to different paths yet.
-///  Looking at #344, I did not spend effort making this possible.
 #[utoipa::path(delete, path = "/organizations/{org_id}/domains/{domain_id}",
     tags = ["Domains"],
     params(OrganizationId, DomainId),
@@ -177,20 +179,15 @@ pub async fn get_domain(
 pub async fn delete_domain(
     State(repo): State<DomainRepository>,
     user: Box<dyn Authenticated>,
-    Path(SpecificDomainPath {
-        org_id,
-        project_id,
-        domain_id,
-    }): Path<SpecificDomainPath>,
+    Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<DomainId> {
     user.has_org_write_access(&org_id)?;
 
-    let domain_id = repo.remove(org_id, project_id, domain_id).await?;
+    let domain_id = repo.remove(org_id, domain_id).await?;
 
     info!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.map(|id| id.to_string()),
         domain_id = domain_id.to_string(),
         "deleted domain",
     );
@@ -201,9 +198,6 @@ pub async fn delete_domain(
 /// Verify domain
 ///
 /// Checks if the various DNS entries required or recommended for sending are set correctly.
-///
-/// TODO: utoipa does not support registering the same handler with to different paths yet.
-///  Looking at #344, I did not spend effort making this possible.
 #[utoipa::path(get, path = "/organizations/{org_id}/domains/{domain_id}/verify",
     tags = ["Domains"],
     params(OrganizationId, DomainId),
@@ -217,15 +211,11 @@ pub(super) async fn verify_domain(
     State(resolver): State<DnsResolver>,
     State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
-    Path(SpecificDomainPath {
-        org_id,
-        project_id,
-        domain_id,
-    }): Path<SpecificDomainPath>,
+    Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<DomainVerificationStatus> {
     user.has_org_read_access(&org_id)?;
 
-    let domain = repo.get(org_id, project_id, domain_id).await?;
+    let domain = repo.get(org_id, domain_id).await?;
 
     let status = resolver.verify_domain(&domain, &config.spf_include).await?;
 
@@ -238,12 +228,15 @@ mod tests {
 
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
-        models::DkimKeyType,
+        models::{DkimKeyType, ProjectId},
     };
 
     use super::*;
 
-    async fn test_domain_lifecycle(pool: PgPool, endpoint: String) {
+    async fn test_domain_lifecycle(pool: PgPool, project_id: Option<ProjectId>) {
+        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
+        let endpoint = format!("/api/organizations/{org_1}");
+
         let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
@@ -260,6 +253,7 @@ mod tests {
                 serialize_body(NewDomain {
                     domain: "remails.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
+                    project_id,
                 }),
             )
             .await
@@ -273,8 +267,25 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let domains: Vec<ApiDomain> = deserialize_body(response.into_body()).await;
         assert_eq!(domains.len(), 1);
-        assert_eq!(domains[0].domain(), "remails.com");
         assert_eq!(domains[0].id(), created_domain.id());
+        assert_eq!(domains[0].domain(), "remails.com");
+        assert_eq!(domains[0].organization_id(), org_1.parse().unwrap());
+        assert_eq!(domains[0].project_id(), project_id);
+
+        // update domain with new project ID
+        let proj_2: ProjectId = "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap();
+        let response = server
+            .put(
+                format!("{endpoint}/domains/{}", created_domain.id()),
+                serialize_body(Some(proj_2)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), Some(proj_2));
 
         // get domain
         let response = server
@@ -283,8 +294,23 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let domain: ApiDomain = deserialize_body(response.into_body()).await;
-        assert_eq!(domain.domain(), "remails.com");
         assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), Some(proj_2));
+
+        // update domain with removed project ID
+        let response = server
+            .put(
+                format!("{endpoint}/domains/{}", created_domain.id()),
+                serialize_body(None::<ProjectId>),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let domain: ApiDomain = deserialize_body(response.into_body()).await;
+        assert_eq!(domain.id(), created_domain.id());
+        assert_eq!(domain.domain(), "remails.com");
+        assert_eq!(domain.project_id(), None);
 
         // verify domain
         let response = server
@@ -313,20 +339,22 @@ mod tests {
         scripts("organizations", "api_users", "projects")
     ))]
     async fn test_project_domains_lifecycle(pool: PgPool) {
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        let endpoint = format!("/api/organizations/{org_1}/projects/{proj_1}");
-        test_domain_lifecycle(pool, endpoint).await;
+        test_domain_lifecycle(pool, Some(proj_1.parse().unwrap())).await;
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects")
+    ))]
     async fn test_org_domains_lifecycle(pool: PgPool) {
+        test_domain_lifecycle(pool, None).await;
+    }
+
+    async fn test_domains_no_access(pool: PgPool, domain_id: &str, project_id: Option<ProjectId>) {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let endpoint = format!("/api/organizations/{org_1}");
-        test_domain_lifecycle(pool, endpoint).await;
-    }
 
-    async fn test_domains_no_access(pool: PgPool, endpoint: String, domain_id: &str) {
         let user_b = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is only member of org 2
         let server = TestServer::new(pool.clone(), Some(user_b)).await;
 
@@ -341,6 +369,7 @@ mod tests {
                 serialize_body(NewDomain {
                     domain: "remails.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
+                    project_id,
                 }),
             )
             .await
@@ -374,11 +403,9 @@ mod tests {
         scripts("organizations", "api_users", "projects", "proj_domains")
     ))]
     async fn test_project_domains_no_access(pool: PgPool) {
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        let endpoint = format!("/api/organizations/{org_1}/projects/{proj_1}");
         let proj_domain = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a"; // test-org-1-project-1.com
-        test_domains_no_access(pool, endpoint, proj_domain).await;
+        test_domains_no_access(pool, proj_domain, Some(proj_1.parse().unwrap())).await;
     }
 
     #[sqlx::test(fixtures(
@@ -386,9 +413,7 @@ mod tests {
         scripts("organizations", "api_users", "org_domains")
     ))]
     async fn test_org_domains_no_access(pool: PgPool) {
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
-        let endpoint = format!("/api/organizations/{org_1}");
         let org_domain = "ed28baa5-57f7-413f-8c77-7797ba6a8780"; // test-org-1.com
-        test_domains_no_access(pool, endpoint, org_domain).await;
+        test_domains_no_access(pool, org_domain, None).await;
     }
 }

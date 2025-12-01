@@ -1,9 +1,7 @@
 use crate::api::{
-    ApiServerError, ApiState, api_fallback, api_keys, api_users, auth, domains,
-    domains::{create_domain, delete_domain, get_domain, list_domains, verify_domain},
-    error, invites, messages,
-    messages::create_message_router,
-    organizations, projects, smtp_credentials, subscriptions, wait_for_shutdown, whoami,
+    ApiServerError, ApiState, api_fallback, api_keys, api_users, auth, domains, error, invites,
+    messages, messages::create_message_router, organizations, projects, smtp_credentials,
+    subscriptions, wait_for_shutdown, whoami,
 };
 use axum::{Json, Router, routing::get};
 use http::StatusCode;
@@ -87,18 +85,6 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             .merge(auth::router())
             .routes(routes!(crate::api::config))
             .routes(routes!(crate::api::healthy))
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains",
-                get(list_domains).post(create_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}",
-                get(get_domain).delete(delete_domain),
-            )
-            .route(
-                "/organizations/{org_id}/projects/{project_id}/domains/{domain_id}/verify",
-                get(verify_domain),
-            )
             .fallback(api_fallback),
     );
 
