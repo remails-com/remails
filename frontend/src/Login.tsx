@@ -49,51 +49,50 @@ export default function Login({ setUser }: LoginProps) {
     },
   });
 
-  const submit = ({ email, name, password }: SignUpRequest) => {
+  const submit = async ({ email, name, password }: SignUpRequest) => {
     setGlobalError(null);
     if (type === "login") {
-      fetch("/api/login/password", {
+      const res = await fetch("/api/login/password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
-      }).then(async (res) => {
-        if (res.status === 404) {
-          form.setFieldError("password", "Wrong username or password");
-        } else if (res.status !== 200) {
-          setGlobalError("Something went wrong");
-        } else {
-          const whoami: WhoamiResponse = await res.json();
-          if (!whoami || "error" in whoami) {
-            setGlobalError("Something went wrong");
-            return;
-          }
-          if (whoami.login_status === "mfa_pending") {
-            navigate("mfa", routerState.params);
-          }
-          redirect();
-        }
       });
+      if (res.status === 404) {
+        form.setFieldError("password", "Wrong username or password");
+      } else if (res.status !== 200) {
+        setGlobalError("Something went wrong");
+      } else {
+        const whoami: WhoamiResponse = await res.json();
+        if (!whoami || "error" in whoami) {
+          setGlobalError("Something went wrong");
+          return;
+        }
+        if (whoami.login_status === "mfa_pending") {
+          navigate("mfa", routerState.params);
+        }
+        redirect();
+      }
     }
 
     if (type === "register") {
-      fetch("/api/register/password", {
+      const res = await fetch("/api/register/password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, name, password }),
-      }).then((res) => {
-        if (res.status === 409) {
-          form.setFieldError("email", "This email is already registered, try logging in instead");
-        } else if (res.status !== 201) {
-          setGlobalError("Something went wrong");
-        } else {
-          res.json().then(setUser);
-          redirect();
-        }
       });
+      if (res.status === 409) {
+        form.setFieldError("email", "This email is already registered, try logging in instead");
+      } else if (res.status !== 201) {
+        setGlobalError("Something went wrong");
+      } else {
+        const user = await res.json();
+        setUser(user);
+        redirect();
+      }
     }
   };
 
@@ -167,13 +166,11 @@ export default function Login({ setUser }: LoginProps) {
               onClick={() =>
                 navigate(routerState.name, { ...routerState.params, type: type === "register" ? "login" : "register" })
               }
-              // c="dimmed"
-              // fw="bold"
               size="sm"
             >
               {type === "register" ? "Already have an account? Login" : "Don't have an account? Register"}
             </Anchor>
-            <Button type="submit" radius="xl">
+            <Button type="submit" radius="xl" loading={form.submitting}>
               {upperFirst(type)}
             </Button>
           </Group>
