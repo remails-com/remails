@@ -1,5 +1,5 @@
 import { test, expect } from "../playwright/fixtures";
-import { test as baseTest } from '@playwright/test';
+import { test as baseTest } from "@playwright/test";
 import { createAccount, uuidRegex } from "./util.ts";
 import { Page } from "@playwright/test";
 
@@ -91,7 +91,7 @@ baseTest("accept organization invite", async ({ browser }) => {
 
   await page1.getByRole("button", { name: "Done" }).click();
 
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   await page2.goto(inviteLink!);
 
@@ -104,7 +104,6 @@ baseTest("accept organization invite", async ({ browser }) => {
   // Check that it is allowed to create new projects
   await expect(page2.getByRole("button", { name: "New Project" })).not.toBeDisabled();
 });
-
 
 test("organization API key", async ({ page }) => {
   await page.goto("/");

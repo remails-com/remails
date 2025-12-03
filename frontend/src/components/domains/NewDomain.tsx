@@ -95,7 +95,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ ...values, dkim_key_type: "rsa_sha256" }),
-    })
+    });
     if (res.status === 201) {
       res.json().then((newDomain) => {
         setNewDomain(newDomain);
@@ -117,7 +117,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
 
     const res = await fetch(`${domainsApi}/${domain.id}`, {
       method: "DELETE",
-    })
+    });
     if (res.status !== 200) {
       errorNotification(`Domain ${domain.domain} could not be deleted`);
       console.error(res);
