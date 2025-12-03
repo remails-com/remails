@@ -17,6 +17,11 @@ destinations:
       password: REPLACE_WITH_ACCESS_POLICY_TOKEN
 clusterMetrics:
   enabled: true
+  windows-exporter:
+    enabled: false
+    deploy: false
+  kube-state-metrics:
+    namespacesDenylist: ["kube-system"]
 annotationAutodiscovery:
   enabled: true
 clusterEvents:
