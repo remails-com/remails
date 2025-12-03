@@ -72,7 +72,7 @@ export function PasswordSettings() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ current_password: update.old_password }),
-    })
+    });
     if (res.status === 200) {
       passwordForm.reset();
       dispatch({ type: "set_user", user: { ...user, password_enabled: false } });

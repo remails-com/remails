@@ -29,7 +29,7 @@ export async function createAccount(page: Page) {
   await page.getByRole("button", { name: "Choose your subscription" }).click();
 
   await expect(async () => {
-    await page.getByRole("main").getByRole("button").locator('.tabler-icon.tabler-icon-reload').click();
+    await page.getByRole("main").getByRole("button").locator(".tabler-icon.tabler-icon-reload").click();
     await expect(page.getByText("Organization", { exact: true })).toBeVisible();
   }).toPass();
 }

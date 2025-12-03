@@ -87,29 +87,26 @@ test("Credentials lifecycle", async ({ page }) => {
   await createProject(page);
 
   // Create new SMTP credential
-  await page.getByRole('button', { name: 'New Credential' }).click();
-  await expect(page.getByRole('dialog', { name: 'Create new SMTP credential' })).toBeVisible();
+  await page.getByRole("button", { name: "New Credential" }).click();
+  await expect(page.getByRole("dialog", { name: "Create new SMTP credential" })).toBeVisible();
 
   // Fill in details
-  await page.getByRole('textbox', { name: 'Username' }).fill('playwright-smtp-user');
-  await page.getByRole('textbox', { name: 'Description' }).fill('This is created by Playwright');
-  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole("textbox", { name: "Username" }).fill("playwright-smtp-user");
+  await page.getByRole("textbox", { name: "Description" }).fill("This is created by Playwright");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
 
   // Check that credential name has the expected format
-  await expect(page.getByLabel('Create new SMTP credential')).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
-  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByLabel("Create new SMTP credential")).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
+  await page.getByRole("button", { name: "Done" }).click();
 
   // Check that the new credential is listed
-  await expect(page.getByLabel('Credentials')).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
+  await expect(page.getByLabel("Credentials")).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
 
   // Check the description is correct
-  await expect(page.getByLabel('Credentials')).toContainText('This is created by Playwright');
+  await expect(page.getByLabel("Credentials")).toContainText("This is created by Playwright");
 
   // Go to credential edit page
-  await page
-    .getByRole('table').getByRole('button')
-    .locator('.tabler-icon.tabler-icon-edit')
-    .click();
+  await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Check we are on the credentials edit page
   {
@@ -118,31 +115,28 @@ test("Credentials lifecycle", async ({ page }) => {
   }
 
   // Edit description
-  await page.getByRole('textbox', { name: 'Description' }).fill('This is made by Playwright');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole("textbox", { name: "Description" }).fill("This is made by Playwright");
+  await page.getByRole("button", { name: "Save" }).click();
 
   // Ensure success message is visible
-  await expect(page.getByText('SMTP credential updated')).toBeVisible();
+  await expect(page.getByText("SMTP credential updated")).toBeVisible();
 
   // Use breadcrumb to go back to the credentials list
-  await page.getByRole('button', { name: 'credentials' }).click();
+  await page.getByRole("button", { name: "credentials" }).click();
 
   // Ensure updated description is visible
-  await expect(page.getByLabel('Credentials')).toContainText('This is made by Playwright');
+  await expect(page.getByLabel("Credentials")).toContainText("This is made by Playwright");
 
   // Back to credential edit page
-  await page
-    .getByRole('table').getByRole('button')
-    .locator('.tabler-icon.tabler-icon-edit')
-    .click();
+  await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Delete the credential
-  await page.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByRole('strong')).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
-  await page.getByRole('button', { name: 'Confirm' }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("strong")).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
+  await page.getByRole("button", { name: "Confirm" }).click();
 
   // Ensure success message is visible
-  await expect(page.getByText('Credential deleted')).toBeVisible();
+  await expect(page.getByText("Credential deleted")).toBeVisible();
 
   // Check we are on the credentials list page
   {
@@ -151,5 +145,5 @@ test("Credentials lifecycle", async ({ page }) => {
   }
 
   // Ensure the credential is no longer listed
-  await expect(page.getByLabel('Credentials')).not.toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
+  await expect(page.getByLabel("Credentials")).not.toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
 });
