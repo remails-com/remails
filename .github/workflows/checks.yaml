@@ -155,7 +155,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: backend logs (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+          name: backend logs (${{ matrix.shardIndex }} of ${{ matrix.shardTotal }})
           path: logs-${{ matrix.shardIndex }}_of_${{ matrix.shardTotal }}
 
 
