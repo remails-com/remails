@@ -1,9 +1,9 @@
 //! A minimal mock-up for hickory_resolver
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Resolver {
     pub host: (&'static str, u16),
-    pub txt: &'static str,
+    pub txt: Vec<&'static str>,
 }
 
 impl Resolver {
@@ -11,7 +11,7 @@ impl Resolver {
         &self,
         _: impl AsRef<str>,
     ) -> Result<[MX; 1], hickory_resolver::ResolveError> {
-        Ok([MX(*self)])
+        Ok([MX(self.host.0, self.host.1)])
     }
 
     pub async fn lookup_ip(
@@ -24,8 +24,8 @@ impl Resolver {
     pub async fn txt_lookup(
         &self,
         _: impl AsRef<str>,
-    ) -> Result<[Txt; 1], hickory_resolver::ResolveError> {
-        Ok([Txt(self.txt)])
+    ) -> Result<impl Iterator<Item = Txt>, hickory_resolver::ResolveError> {
+        Ok(self.txt.iter().map(|txt| Txt(txt)))
     }
 }
 
@@ -39,7 +39,7 @@ impl Txt {
 }
 
 #[derive(Debug)]
-pub struct MX(Resolver);
+pub struct MX(&'static str, u16);
 
 impl MX {
     pub fn preference(&self) -> u16 {
@@ -51,14 +51,14 @@ impl MX {
     }
 
     pub fn port(&self) -> u16 {
-        self.0.host.1
+        self.1
     }
 }
 
-pub struct ToStr(Resolver);
+pub struct ToStr(&'static str);
 
 impl ToStr {
     pub fn to_utf8(&self) -> String {
-        self.0.host.0.into()
+        self.0.into()
     }
 }

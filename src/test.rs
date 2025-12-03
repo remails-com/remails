@@ -108,10 +108,11 @@ async fn setup(
 
     let handler_config = HandlerConfig {
         allow_plain: true,
-        domain: "test".to_string(),
+        domain: "test".to_owned(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         environment: Environment::Development,
         retry: retry_config,
+        spf_include: "include:spf.remails.net".to_owned(),
     };
 
     let bus_port = Bus::spawn_random_port().await;

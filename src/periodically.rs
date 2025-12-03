@@ -125,13 +125,14 @@ mod test {
         let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
             allow_plain: true,
-            domain: "test".to_string(),
+            domain: "test".to_owned(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             environment: Environment::Development,
             retry: RetryConfig {
                 delay: Duration::minutes(60),
                 max_automatic_retries: 3,
             },
+            spf_include: "include:spf.remails.net".to_owned(),
         };
         let handler = Handler::new(
             pool.clone(),
@@ -265,13 +266,14 @@ mod test {
         let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
             allow_plain: true,
-            domain: "test".to_string(),
+            domain: "test".to_owned(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry: RetryConfig {
                 delay: Duration::minutes(60),
                 max_automatic_retries: 3,
             },
             environment: Environment::Development,
+            spf_include: "include:spf.remails.net".to_owned(),
         };
         let handler = Handler::new(
             pool.clone(),
