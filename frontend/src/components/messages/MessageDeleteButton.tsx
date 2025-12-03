@@ -42,7 +42,7 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
   const confirmDeleteCredential = () => {
     modals.openConfirmModal({
       title: "Please confirm your action",
-      children: <Text>Are you sure you want to delete this message?</Text>,
+      children: <Text>Are you sure you want to delete this email?</Text>,
       labels: { confirm: "Confirm", cancel: "Cancel" },
       onCancel: () => {},
       onConfirm: () => deleteMessage(),
@@ -51,14 +51,14 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
 
   if (small) {
     return (
-      <MaintainerActionIcon tooltip="Delete message" variant="light" onClick={confirmDeleteCredential} size={30}>
+      <MaintainerActionIcon tooltip="Delete email" variant="light" onClick={confirmDeleteCredential} size={30}>
         <IconTrash />
       </MaintainerActionIcon>
     );
   } else {
     return (
       <MaintainerButton
-        tooltip="Delete message"
+        tooltip="Delete email"
         leftSection={<IconTrash />}
         variant="outline"
         onClick={confirmDeleteCredential}

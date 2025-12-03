@@ -35,14 +35,14 @@ export default function MessageRetryButton({
       },
     });
     if (res.status !== 200) {
-      errorNotification("Message could not be retried");
+      errorNotification("Email could not be retried");
       console.error(res);
       return;
     }
 
     notifications.show({
       title: "Scheduled retry",
-      message: "Message will be retried soon",
+      message: "Email will be retried soon",
       color: "blue",
       autoClose: 20000,
       icon: <IconReload size={20} />,
@@ -52,7 +52,7 @@ export default function MessageRetryButton({
 
     const update = await fetch(message_endpoint);
     if (update.status !== 200) {
-      errorNotification("Message could not be found");
+      errorNotification("Email could not be found");
       console.error(update);
       return;
     }
@@ -75,9 +75,9 @@ export default function MessageRetryButton({
 
   const tooltip = status_retryable
     ? already_scheduled
-      ? "Message is already scheduled to retry as soon as possible"
+      ? "Email is already scheduled to retry as soon as possible"
       : "(Re-)schedule retry"
-    : `Message is ${message.status.toLowerCase()}`;
+    : `Email is ${message.status.toLowerCase()}`;
 
   if (small) {
     return (

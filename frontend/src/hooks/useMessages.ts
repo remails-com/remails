@@ -29,7 +29,7 @@ export function useMessages() {
               return res.json();
             } else {
               const error = new RemailsError(
-                `Could not load message with ID ${routerState.params.message_id} (${res.status} ${res.statusText})`,
+                `Could not load email with ID ${routerState.params.message_id} (${res.status} ${res.statusText})`,
                 res.status
               );
               dispatch({ type: "set_error", error });
