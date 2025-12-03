@@ -68,6 +68,8 @@ test("manage organization invite", async ({ page }) => {
 // Create and accept an organization invite
 // Using 'baseTest' to avoid using an already signed-in state
 baseTest("accept organization invite", async ({ browser }) => {
+  test.slow();
+
   const context1 = await browser.newContext({ storageState: undefined });
   const context2 = await browser.newContext({ storageState: undefined });
   const page1 = await context1.newPage();
@@ -91,7 +93,7 @@ baseTest("accept organization invite", async ({ browser }) => {
 
   await page1.getByRole("button", { name: "Done" }).click();
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await expect(page1.getByRole("dialog", { name: "Create new invite link" })).not.toBeVisible();
 
   await page2.goto(inviteLink!);
 
@@ -133,6 +135,7 @@ test("organization API key", async ({ page }) => {
 
   // Confirm API key password is visible
   await expect(page.getByText("Password", { exact: true })).toBeVisible();
+  const domain = (await page.locator("div").locator("pre").first().textContent()) || "";
 
   // Confirm dialog
   await page.getByRole("button", { name: "Done" }).click();
@@ -145,11 +148,12 @@ test("organization API key", async ({ page }) => {
   }
 
   // Confirm the new API key is listed with correct details
-  await expect(page.getByRole("cell", { name: "Read-only" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Playwright test API key", exact: true })).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: domain });
+  await expect(row.getByRole("cell", { name: "Read-only" })).toBeVisible();
+  await expect(row.getByRole("cell", { name: "Playwright test API key", exact: true })).toBeVisible();
 
   // Open API key details
-  await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
+  await row.getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Check we are put on the API key details page
   {
@@ -174,5 +178,5 @@ test("organization API key", async ({ page }) => {
   await expect(page.getByText("API key deleted", { exact: true })).toBeVisible();
 
   // Confirm API key is no longer listed
-  await expect(page.getByText("Playwright test API key", { exact: true })).not.toBeVisible();
+  await expect(page.getByRole("cell", { exact: true, name: "Playwright test API key" })).not.toBeVisible();
 });

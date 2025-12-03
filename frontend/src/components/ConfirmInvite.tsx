@@ -50,7 +50,6 @@ export function ConfirmInvite() {
     }
 
     const newOrg = await res.json();
-    // dispatch({ type: "add_organization", organization: newOrg });
     navigate("projects", { org_id: newOrg.id, force: "reload-orgs" });
   };
 
