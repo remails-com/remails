@@ -55,7 +55,7 @@ export interface MessageMetadata {
   status: "Processing" | "Held" | "Accepted" | "Rejected" | "Delivered" | "Reattempt" | "Failed";
   reason: string | undefined;
   raw_size: string;
-  message_id_header?: string;
+  message_id_header: string;
   delivery_details: { [receiver: string]: DeliveryDetails };
   retry_after: string | undefined;
   attempts: number;

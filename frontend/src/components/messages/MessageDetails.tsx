@@ -68,11 +68,7 @@ export default function MessageDetails() {
     {
       header: "Message ID",
       info: "The Message-ID email header is used to identify emails (e.g. used to send replies)",
-      value: completeMessage.message_id_header ?? (
-        <Text c="dimmed" fs="italic">
-          Emails has not yet been assigned a message ID
-        </Text>
-      ),
+      value: completeMessage.message_id_header,
     },
     {
       header: "Date",

@@ -870,7 +870,7 @@ mod tests {
         assert_eq!(message.api_key_id, Some(api_key_id));
         assert_eq!(
             message.message_id_header,
-            Some(format!("REMAILS-{}@example.com", message.id))
+            format!("REMAILS-{}@example.com", message.id)
         );
         assert_eq!(message.label, None);
 

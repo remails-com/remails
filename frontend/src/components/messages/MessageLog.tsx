@@ -131,14 +131,7 @@ export function MessageLog() {
         </Text>
         <Group justify="space-between" align="end">
           <Text fz="sm" c="dimmed">
-            Message ID:{" "}
-            {message.message_id_header ? (
-              <Code>{message.message_id_header}</Code>
-            ) : (
-              <Text c="dimmed" fs="italic" span>
-                Email has not yet been assigned a message ID
-              </Text>
-            )}
+            Message ID: {<Code>{message.message_id_header}</Code>}
           </Text>
           <Group>
             <MessageDeleteButton message={message} small />

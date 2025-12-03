@@ -165,7 +165,7 @@ mod test {
         );
         assert_eq!(
             received_messages[0].message_id_header,
-            Some("83f667c7-1da8-4062-a936-fbfab899365b@my-custom-id".to_owned()),
+            "83f667c7-1da8-4062-a936-fbfab899365b@my-custom-id".to_owned(),
         );
         assert_eq!(received_messages[0].label, Some(Label::new("my-label")));
     }
@@ -226,10 +226,10 @@ mod test {
         assert_eq!(
             received_messages[0].message_id_header,
             // automatically generated Message ID header
-            Some(format!(
+            format!(
                 "REMAILS-{}@test-org-1-project-1.com",
                 received_messages[0].id
-            )),
+            ),
         );
         assert_eq!(received_messages[0].label, Some(Label::new("my-label")));
 
