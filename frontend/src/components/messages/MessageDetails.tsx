@@ -62,21 +62,17 @@ export default function MessageDetails() {
     { header: "From", value: completeMessage.from_email },
     {
       header: "Recipients",
-      info: 'The recipients who will receive this message based on the "RCPT TO" SMTP header',
+      info: 'The recipients who will receive this email based on the "RCPT TO" SMTP header',
       value: <Recipients message={completeMessage} mr="sm" />,
     },
     {
       header: "Message ID",
       info: "The Message-ID email header is used to identify emails (e.g. used to send replies)",
-      value: completeMessage.message_id_header ?? (
-        <Text c="dimmed" fs="italic">
-          Emails has not yet been assigned a message ID
-        </Text>
-      ),
+      value: completeMessage.message_id_header,
     },
     {
       header: "Date",
-      info: "The time mentioned in the Date header of the message",
+      info: "The time mentioned in the Date header of the email",
       value: completeMessage.message_data.date ? (
         formatDateTime(completeMessage.message_data.date)
       ) : (
@@ -87,12 +83,12 @@ export default function MessageDetails() {
     },
     {
       header: "Created",
-      info: "The time that remails received this message",
+      info: "The time that remails received this email",
       value: formatDateTime(completeMessage.created_at),
     },
     {
       header: "Total size",
-      info: "The size of the whole message",
+      info: "The size of the whole email",
       value: completeMessage.raw_size,
     },
     {
@@ -104,7 +100,7 @@ export default function MessageDetails() {
       value:
         completeMessage.message_data.attachments.length === 0 ? (
           <Text c="dimmed" fs="italic">
-            Message has no attachments
+            Email has no attachments
           </Text>
         ) : (
           completeMessage.message_data.attachments.map((attachment, index) => (
@@ -128,7 +124,7 @@ export default function MessageDetails() {
     <>
       <Header
         name={subject ?? "No subject"}
-        entityType="Message"
+        entityType="Email"
         Icon={IconMessage}
         divider
         addendum={currentMessage.label ? <Label label={currentMessage.label} clickable /> : null}
@@ -186,13 +182,13 @@ export default function MessageDetails() {
               </Text>
               {completeMessage.is_truncated && (
                 <Text c="dimmed" fs="italic">
-                  Message truncated
+                  Email truncated
                 </Text>
               )}
             </>
           ) : (
             <Text c="dimmed" fs="italic">
-              Failed to load raw message data
+              Failed to load raw email data
             </Text>
           ))}
       </Paper>

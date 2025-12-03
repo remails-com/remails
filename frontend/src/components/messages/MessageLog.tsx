@@ -110,7 +110,7 @@ export function MessageLog() {
       <Accordion.Control icon={statusIcons(message.status)}>
         <Group gap={0} justify="space-between" align="center">
           <Box>
-            Message from
+            Email from
             <Badge color="secondary" size="lg" variant="light" mx="xs" tt="none">
               {message.from_email}
             </Badge>
@@ -131,14 +131,7 @@ export function MessageLog() {
         </Text>
         <Group justify="space-between" align="end">
           <Text fz="sm" c="dimmed">
-            Message ID:{" "}
-            {message.message_id_header ? (
-              <Code>{message.message_id_header}</Code>
-            ) : (
-              <Text c="dimmed" fs="italic" span>
-                Email has not yet been assigned a message ID
-              </Text>
-            )}
+            Message ID: {<Code>{message.message_id_header}</Code>}
           </Text>
           <Group>
             <MessageDeleteButton message={message} small />
@@ -149,7 +142,7 @@ export function MessageLog() {
               size="xs"
               onClick={() => navigate("projects.project.emails.email", { message_id: message.id })}
             >
-              View Message
+              View email
             </Button>
           </Group>
         </Group>
@@ -165,7 +158,7 @@ export function MessageLog() {
         onClick={loadOlder}
         disabled={!has_more_entries || messages.length == 0}
       >
-        older messages
+        older emails
       </Button>
       <Button
         variant="default"
@@ -173,7 +166,7 @@ export function MessageLog() {
         onClick={loadNewer}
         disabled={!routerState.params.before}
       >
-        newer messages
+        newer emails
       </Button>
     </>
   );

@@ -73,7 +73,7 @@ pub struct Message {
     pub recipients: Vec<EmailAddress>,
     pub raw_data: Vec<u8>,
     pub message_data: serde_json::Value,
-    pub message_id_header: Option<String>,
+    pub message_id_header: String,
     pub label: Option<Label>,
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -108,7 +108,7 @@ pub struct ApiMessageMetadata {
     pub recipients: Vec<EmailAddress>,
     /// Human-readable size
     raw_size: String,
-    pub message_id_header: Option<String>,
+    pub message_id_header: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
@@ -314,7 +314,7 @@ struct PgMessage {
     raw_data: Vec<u8>,
     raw_size: i32,
     message_data: serde_json::Value,
-    message_id_header: Option<String>,
+    message_id_header: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
@@ -1193,7 +1193,7 @@ mod test {
             raw_data: message.into_message().unwrap().body.to_vec(),
         };
         let message = repository.create_from_api(new_message, 5).await.unwrap();
-        assert_eq!(message.message_id_header, Some(message_id_header.clone()));
+        assert_eq!(message.message_id_header, message_id_header);
         assert_eq!(message.label, Some(Label::new("up-date")));
 
         // get message
@@ -1218,7 +1218,7 @@ mod test {
         assert_eq!(fetched_message.metadata.recipients, expected);
         assert_eq!(
             fetched_message.metadata.message_id_header,
-            Some(message_id_header)
+            message_id_header
         );
         assert_eq!(fetched_message.metadata.label, Some(Label::new("up-date")));
     }
