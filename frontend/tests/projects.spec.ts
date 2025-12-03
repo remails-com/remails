@@ -1,12 +1,8 @@
 import { expect, test } from "../playwright/fixtures.ts";
 import { createProject, uuidRegex } from "./util.ts";
 
-test("Project lifecycle", async ({ page, isMobile }) => {
+test("Project lifecycle", async ({ page }) => {
   await page.goto("/");
-
-  if (isMobile) {
-    await page.getByRole('button').first().click();
-  }
 
   const projectUuid = await createProject(page);
 

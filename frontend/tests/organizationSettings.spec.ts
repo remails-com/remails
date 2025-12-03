@@ -91,6 +91,8 @@ baseTest("accept organization invite", async ({ browser }) => {
 
   await page1.getByRole("button", { name: "Done" }).click();
 
+  await new Promise(resolve => setTimeout(resolve, 500));
+
   await page2.goto(inviteLink!);
 
   // Confirm joining the organization

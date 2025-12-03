@@ -2,12 +2,8 @@ import { createAccount, uuidRegex } from "./util.ts";
 // As we directly import from playwright/test, we are not logged in automatically.
 import { Page, test, expect } from "@playwright/test";
 
-async function toUserSettings(page: Page, isMobile: boolean) {
+async function toUserSettings(page: Page) {
   await page.goto("/");
-
-  if (isMobile) {
-    await page.getByRole('button').first().click();
-  }
 
   // Navigate to user settings
   await page.getByRole("button", { name: "Playwright" }).click();
@@ -22,9 +18,9 @@ async function toUserSettings(page: Page, isMobile: boolean) {
   }
 }
 
-test("Password change", async ({ page, isMobile }) => {
+test("Password change", async ({ page }) => {
   await createAccount(page);
-  await toUserSettings(page, isMobile);
+  await toUserSettings(page);
   const currentEmail = await page.getByRole("textbox", { name: "Email" }).inputValue();
 
   // Change password
@@ -63,9 +59,9 @@ test("Password change", async ({ page, isMobile }) => {
   }
 });
 
-test("Email and name change", async ({ page, isMobile }) => {
+test("Email and name change", async ({ page }) => {
   await createAccount(page);
-  await toUserSettings(page, isMobile);
+  await toUserSettings(page);
   const currentEmail = await page.getByRole("textbox", { name: "Email" }).inputValue();
 
   // Change to invalid email

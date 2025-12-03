@@ -88,44 +88,42 @@ export function NewDomain({ opened, close }: NewDomainProps) {
     return null;
   }
 
-  const save = (values: FormValues) => {
-    fetch(domainsApi, {
+  const save = async (values: FormValues) => {
+    const res = await fetch(domainsApi, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ ...values, dkim_key_type: "rsa_sha256" }),
-    }).then((res) => {
-      if (res.status === 201) {
-        res.json().then((newDomain) => {
-          setNewDomain(newDomain);
-          dispatch({ type: "add_domain", domain: newDomain });
-          setActiveStep(1);
-        });
-      } else if (res.status === 409) {
-        form.setFieldError("domain", "This domain is already configured");
-      } else {
-        errorNotification(`Domain ${values.domain} could not be created`);
-        console.error(res);
-      }
-    });
+    })
+    if (res.status === 201) {
+      res.json().then((newDomain) => {
+        setNewDomain(newDomain);
+        dispatch({ type: "add_domain", domain: newDomain });
+        setActiveStep(1);
+      });
+    } else if (res.status === 409) {
+      form.setFieldError("domain", "This domain is already configured");
+    } else {
+      errorNotification(`Domain ${values.domain} could not be created`);
+      console.error(res);
+    }
   };
 
-  const deleteDomain = (domain: Domain | null) => {
+  const deleteDomain = async (domain: Domain | null) => {
     if (!domain) {
       return;
     }
 
-    fetch(`${domainsApi}/${domain.id}`, {
+    const res = await fetch(`${domainsApi}/${domain.id}`, {
       method: "DELETE",
-    }).then((r) => {
-      if (r.status !== 200) {
-        errorNotification(`Domain ${domain.domain} could not be deleted`);
-        console.error(r);
-        return;
-      }
-      dispatch({ type: "remove_domain", domainId: domain.id });
-    });
+    })
+    if (res.status !== 200) {
+      errorNotification(`Domain ${domain.domain} could not be deleted`);
+      console.error(res);
+      return;
+    }
+    dispatch({ type: "remove_domain", domainId: domain.id });
   };
 
   return (
@@ -183,9 +181,9 @@ export function NewDomain({ opened, close }: NewDomainProps) {
           <Group justify="space-between" mt="md">
             <Button
               variant="outline"
-              onClick={() => {
+              onClick={async () => {
                 setActiveStep(0);
-                deleteDomain(newDomain);
+                await deleteDomain(newDomain);
                 close();
               }}
             >
