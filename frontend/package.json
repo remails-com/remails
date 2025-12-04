@@ -9,7 +9,8 @@
     "lint": "eslint . && tsc --noEmit",
     "format": "prettier . --write",
     "preview": "vite preview",
-    "test": "vitest --exclude '**/tests/*.ts'"
+    "test": "vitest --exclude '**/tests/*.ts'",
+    "playwright": "playwright test"
   },
   "dependencies": {
     "@mantine/core": "^8.3.9",

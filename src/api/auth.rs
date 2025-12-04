@@ -366,6 +366,11 @@ pub(super) fn login(
     session_cookie.set_max_age(cookie::time::Duration::days(7));
     session_cookie.set_path("/");
 
+    #[cfg(debug_assertions)]
+    warn!(
+        "Setting session cookie without 'secure' flag. To set the 'secure' flag, please compile in release mode"
+    );
+
     Ok(cookie_storage.add(session_cookie))
 }
 
