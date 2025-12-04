@@ -5,7 +5,7 @@ use crate::{
     dkim::PrivateKey,
     handler::{
         connection_log::LogLevel,
-        dns::{DnsResolver, ResolveError},
+        dns::{DnsResolver, ResolveError, VerifyResultStatus},
     },
     kubernetes::Kubernetes,
     models::{
@@ -95,6 +95,7 @@ pub struct HandlerConfig {
     pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
     pub(crate) environment: Environment,
+    pub(crate) spf_include: String,
 }
 
 #[cfg(not(test))]
@@ -107,6 +108,8 @@ impl HandlerConfig {
             resolver: DnsResolver::new(),
             retry: Default::default(),
             environment: Environment::from_env(),
+            spf_include: std::env::var("SPF_INCLUDE")
+                .unwrap_or("include:spf.remails.net".to_owned()),
         }
     }
 }
@@ -255,6 +258,19 @@ impl Handler {
                 ),
             )));
         };
+
+        // check SPF record
+        let spf = self
+            .config
+            .resolver
+            .verify_spf(sender_domain, &self.config.spf_include)
+            .await;
+        if matches!(spf.status, VerifyResultStatus::Error) {
+            return Ok(Err((
+                MessageStatus::Held,
+                format!("invalid SPF on {sender_domain}: {}", spf.reason),
+            )));
+        }
 
         // check dkim key
         let dkim_key = match PrivateKey::new(&domain, &self.config.resolver.dkim_selector) {
@@ -817,16 +833,25 @@ mod test {
     use std::net::Ipv4Addr;
 
     impl Handler {
-        pub(crate) async fn test_handler(pool: PgPool, mailcrab_port: u16) -> Self {
+        pub(crate) async fn test_handler(
+            pool: PgPool,
+            mailcrab_port: u16,
+            records: Option<Vec<&'static str>>,
+        ) -> Self {
             let config = HandlerConfig {
                 allow_plain: true,
                 domain: "test".to_string(),
-                resolver: DnsResolver::mock("localhost", mailcrab_port),
+                resolver: if let Some(records) = records {
+                    DnsResolver::mock_custom_records("localhost", mailcrab_port, records)
+                } else {
+                    DnsResolver::mock("localhost", mailcrab_port) // default DKIM + SPF records
+                },
                 environment: Environment::Development,
                 retry: RetryConfig {
                     delay: Duration::minutes(5),
                     max_automatic_retries: 1,
                 },
+                spf_include: "include:spf.remails.net".to_owned(),
             };
             Handler::new(
                 pool,
@@ -880,7 +905,7 @@ mod test {
             .unwrap();
 
         let message = NewMessage::from_builder_message(message, credential.id());
-        let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
+        let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
         let message_id = handler.message_repository.create(message, 1).await.unwrap();
         let mut message = handler
@@ -905,21 +930,46 @@ mod test {
             "k8s_nodes"
         )
     ))]
-    async fn test_handle_invalid_mail_from(pool: PgPool) {
+    async fn test_handle_incorrect_dns_records(pool: PgPool) {
         let mailcrab_port = random_port();
         let TestMailServerHandle { token, rx: _rx } =
             mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
-        let we_cant_use_these_emails = [
-            "john@gmail.com",
-            "john@gmail.com/test-org-1-project-1.com",
-            "john@gmail.com?q=test-org-1-project-1.com",
-            "john@gmail.com#test-org-1-project-1.com",
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(org_id, project_id, &credential_request)
+            .await
+            .unwrap();
+
+        let dns_records = [
+            // Missing DKIM
+            vec!["v=spf1 include:spf.remails.net -all"],
+            // Invalid DKIM
+            vec!["v=DKIM1; k=rsa; p=", "v=spf1 include:spf.remails.net -all"],
+            // Missing SPF
+            vec![
+                "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+            ],
+            // Invalid SPF (no -all or ~all)
+            vec![
+                "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+                "v=spf1 include:spf.remails.net +all",
+            ],
+            // Invalid SPF (wrong include)
+            vec![
+                "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+                "v=spf1 include:spf.remails.com -all",
+            ],
         ];
-        for from_email in we_cant_use_these_emails {
+        for dns_records in dns_records {
             let message: mail_send::smtp::message::Message = MessageBuilder::new()
-                .from(("John Doe", from_email))
+                .from(("John Doe", "john@test-org-1-project-1.com"))
                 .to(vec![
                     ("Jane Doe", "jane@test-org-1-project-1.com"),
                     ("James Smith", "james@test.com"),
@@ -930,22 +980,9 @@ mod test {
                 .into_message()
                 .unwrap();
 
-            let credential_request = SmtpCredentialRequest {
-                username: "user".to_string(),
-                description: "Test SMTP credential description".to_string(),
-            };
-
-            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
-
-            let credential_repo = SmtpCredentialRepository::new(pool.clone());
-            let credential = credential_repo
-                .generate(org_id, project_id, &credential_request)
-                .await
-                .unwrap();
-
-            // Message has invalid "MAIL FROM" and invalid "From"
             let message = NewMessage::from_builder_message(message, credential.id());
-            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
+            let handler =
+                Handler::test_handler(pool.clone(), mailcrab_port, Some(dns_records)).await;
 
             let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
@@ -954,11 +991,67 @@ mod test {
                 .await
                 .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
+        }
+    }
 
-            credential_repo
-                .remove(org_id, project_id, credential.id())
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_handle_invalid_mail_from(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(org_id, project_id, &credential_request)
+            .await
+            .unwrap();
+
+        let we_cant_use_these_emails = [
+            "john@gmail.com",
+            "john@gmail.com/test-org-1-project-1.com",
+            "john@gmail.com?q=test-org-1-project-1.com",
+            "john@gmail.com#test-org-1-project-1.com",
+        ];
+        for from_email in we_cant_use_these_emails {
+            let message: mail_send::smtp::message::Message = MessageBuilder::new()
+                .from(("John Doe", "john@test-org-1-project-1.com"))
+                .to(vec![
+                    ("Jane Doe", "jane@test-org-1-project-1.com"),
+                    ("James Smith", "james@test.com"),
+                ])
+                .subject("Hi!")
+                .html_body("<h1>Hello, world!</h1>")
+                .text_body("Hello world!")
+                .into_message()
+                .unwrap();
+
+            // Message has invalid "MAIL FROM" and valid "From"
+            let message =
+                NewMessage::from_builder_message_custom_from(message, credential.id(), from_email);
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
+
+            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let mut message = handler
+                .message_repository
+                .get_if_org_may_send(message_id)
                 .await
                 .unwrap();
+            assert!(handler.handle_message(&mut message).await.is_err());
         }
     }
 
@@ -978,6 +1071,17 @@ mod test {
             mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
         let _drop_guard = token.drop_guard();
 
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(org_id, project_id, &credential_request)
+            .await
+            .unwrap();
+
         let we_cant_use_these_emails = [
             "john@gmail.com",
             "john@gmail.com/test-org-1-project-1.com",
@@ -997,26 +1101,13 @@ mod test {
                 .into_message()
                 .unwrap();
 
-            let credential_request = SmtpCredentialRequest {
-                username: "user".to_string(),
-                description: "Test SMTP credential description".to_string(),
-            };
-
-            let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
-
-            let credential_repo = SmtpCredentialRepository::new(pool.clone());
-            let credential = credential_repo
-                .generate(org_id, project_id, &credential_request)
-                .await
-                .unwrap();
-
             // Message has valid "MAIL FROM" and invalid "From"
             let message = NewMessage::from_builder_message_custom_from(
                 message,
                 credential.id(),
                 "john@test-org-1-project-1.com",
             );
-            let handler = Handler::test_handler(pool.clone(), mailcrab_port).await;
+            let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
             let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
@@ -1025,11 +1116,6 @@ mod test {
                 .await
                 .unwrap();
             assert!(handler.handle_message(&mut message).await.is_err());
-
-            credential_repo
-                .remove(org_id, project_id, credential.id())
-                .await
-                .unwrap();
         }
     }
 }
