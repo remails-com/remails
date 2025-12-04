@@ -165,10 +165,26 @@ impl DnsResolver {
 
     #[cfg(test)]
     pub fn mock(domain: &'static str, port: u16) -> Self {
+        Self::mock_custom_records(
+            domain,
+            port,
+            vec![
+                "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+                "v=spf1 include:spf.remails.net -all",
+            ],
+        )
+    }
+
+    #[cfg(test)]
+    pub fn mock_custom_records(
+        domain: &'static str,
+        port: u16,
+        records: Vec<&'static str>,
+    ) -> Self {
         Self {
             resolver: mock::Resolver {
                 host: (domain, port),
-                txt: "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
+                txt: records,
             },
             dkim_selector: "remails-testing".to_string(),
         }
@@ -291,7 +307,7 @@ impl DnsResolver {
         }
 
         if !spf_data.split(' ').any(|x| x == spf_include) {
-            return VerifyResult::warning(
+            return VerifyResult::error(
                 format!("SPF record is missing \"{spf_include}\":"),
                 Some(spf_data),
             );
@@ -299,7 +315,7 @@ impl DnsResolver {
 
         let last = spf_data.split(' ').next_back();
         if last != Some("-all") && last != Some("~all") {
-            return VerifyResult::warning(
+            return VerifyResult::error(
                 "SPF record should end with -all (or ~all):",
                 Some(spf_data),
             );
@@ -380,7 +396,7 @@ mod test {
 
         dns.verify_dkim(domain, &dkim_key).await.unwrap();
 
-        dns.resolver.txt = "v=DKIM1; k=rsa; p=wrongDkimKey";
+        dns.resolver.txt[0] = "v=DKIM1; k=rsa; p=wrongDkimKey";
         dns.verify_dkim(domain, &dkim_key)
             .await
             .expect_err("should error");
@@ -391,34 +407,34 @@ mod test {
         let domain = "localhost";
         let mut dns = DnsResolver::mock(domain, 0);
 
-        dns.resolver.txt = ""; // spf record does not exist
+        dns.resolver.txt[1] = ""; // spf record does not exist
         assert!(matches!(
             dns.verify_spf(domain, "include:test.com").await.status,
             VerifyResultStatus::Error
         ));
 
-        dns.resolver.txt = "v=spf1 include:test.com -all";
+        dns.resolver.txt[1] = "v=spf1 include:test.com -all";
         assert!(matches!(
             dns.verify_spf(domain, "include:test.com").await.status,
             VerifyResultStatus::Success
         ));
 
-        dns.resolver.txt = "v=spf1 include:test.com include:spf.remails.com ~all";
+        dns.resolver.txt[1] = "v=spf1 include:test.com include:spf.remails.com ~all";
         assert!(matches!(
             dns.verify_spf(domain, "include:test.com").await.status,
             VerifyResultStatus::Info
         ));
 
-        dns.resolver.txt = "v=spf1 include:spf.remails.com -all";
+        dns.resolver.txt[1] = "v=spf1 include:spf.remails.com -all";
         assert!(matches!(
             dns.verify_spf(domain, "include:test.com").await.status,
-            VerifyResultStatus::Warning
+            VerifyResultStatus::Error
         ));
 
-        dns.resolver.txt = "v=spf1 include:test.com +all";
+        dns.resolver.txt[1] = "v=spf1 include:test.com +all";
         assert!(matches!(
             dns.verify_spf(domain, "include:test.com").await.status,
-            VerifyResultStatus::Warning
+            VerifyResultStatus::Error
         ));
     }
 
@@ -426,31 +442,32 @@ mod test {
     async fn dmarc_verification() {
         let domain = "localhost";
         let mut dns = DnsResolver::mock(domain, 0);
-        dns.resolver.txt = ""; // dmarc record does not exist
+        // dmarc record does not exist
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
             VerifyResultStatus::Info
         ));
 
-        dns.resolver.txt = "v=DMARC1; p=reject";
+        dns.resolver.txt.push("v=DMARC1; p=reject");
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
             VerifyResultStatus::Success
         ));
 
-        dns.resolver.txt = "v=DMARC1; p=reject;";
+        let i = dns.resolver.txt.len() - 1;
+        dns.resolver.txt[i] = "v=DMARC1; p=reject;";
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
             VerifyResultStatus::Success
         ));
 
-        dns.resolver.txt = "v=DMARC1;p=reject";
+        dns.resolver.txt[i] = "v=DMARC1;p=reject";
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
             VerifyResultStatus::Success
         ));
 
-        dns.resolver.txt = "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s";
+        dns.resolver.txt[i] = "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s";
         assert!(matches!(
             dns.verify_dmarc(domain).await.status,
             VerifyResultStatus::Info
