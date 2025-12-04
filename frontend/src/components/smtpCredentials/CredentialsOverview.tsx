@@ -26,7 +26,7 @@ export function CredentialsOverview() {
         <Text span c="dimmed">
           {username_parts[0]}-
         </Text>
-        <Text span>{username_parts.slice(1).join('-')}</Text>
+        <Text span>{username_parts.slice(1).join("-")}</Text>
       </>
     );
 

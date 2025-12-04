@@ -37,7 +37,7 @@ name = "message_bus"
 path = "src/bin/message_bus.rs"
 
 [features]
-load-fixtures = []
+apply-db-migrations = []
 # Also show OpenAPI docs for internal types and endpoints
 internal-api-docs = []
 

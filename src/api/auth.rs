@@ -30,7 +30,11 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
+
+#[cfg(not(debug_assertions))]
 pub static SESSION_COOKIE_NAME: &str = "__Host-SESSION";
+#[cfg(debug_assertions)]
+pub static SESSION_COOKIE_NAME: &str = "SESSION";
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
@@ -356,10 +360,16 @@ pub(super) fn login(
     // Create a new session cookie
     let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_cookie_value);
     session_cookie.set_http_only(true);
+    #[cfg(not(debug_assertions))]
     session_cookie.set_secure(true);
     session_cookie.set_same_site(SameSite::Lax);
     session_cookie.set_max_age(cookie::time::Duration::days(7));
     session_cookie.set_path("/");
+
+    #[cfg(debug_assertions)]
+    warn!(
+        "Setting session cookie without 'secure' flag. To set the 'secure' flag, please compile in release mode"
+    );
 
     Ok(cookie_storage.add(session_cookie))
 }
@@ -382,6 +392,7 @@ pub(super) async fn logout(storage: SecureCookieStorage) -> impl IntoResponse {
     if let Some(mut cookie) = jar.get(SESSION_COOKIE_NAME) {
         // Set cookie attributes (necessary for removal) and remove it from the jar
         cookie.set_http_only(true);
+        #[cfg(not(debug_assertions))]
         cookie.set_secure(true);
         cookie.set_same_site(SameSite::Lax);
         cookie.set_path("/");

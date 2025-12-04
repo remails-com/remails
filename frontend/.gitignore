@@ -24,3 +24,10 @@ dist-ssr
 *.sln
 *.sw?
 *.tsbuildinfo
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
