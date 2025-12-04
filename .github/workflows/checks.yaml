@@ -191,10 +191,10 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install cargo-llvm-cov
+      - name: Install cargo-llvm-cov & cargo-nextest
         uses: taiki-e/install-action@3575e532701a5fc614b0c842e4119af4cc5fd16d # v2.62.60
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov,cargo-nextest
 
       - name: Rust cache
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
@@ -210,8 +210,8 @@ jobs:
           name: frontend
           path: frontend/dist
 
-      - name: cargo test
-        run: cargo llvm-cov --lcov --output-path lcov.info
+      - name: cargo llvm-cov nextest
+        run: cargo llvm-cov nextest --lcov --output-path lcov.info
         env:
           RUST_BACKTRACE: 1
 
