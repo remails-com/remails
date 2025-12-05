@@ -24,7 +24,6 @@ export default function ApiKeysOverview() {
   } else {
     docs_url = `https://docs.${window.location.host}`;
   }
-  console.log(docs_url);
 
   const rows = apiKeys.map((api_key) => {
     return (

@@ -22,7 +22,7 @@ interface FormValues {
   block_status: OrgBlockStatus;
 }
 
-export default function Admin() {
+export default function OrgBlock() {
   const { dispatch } = useRemails();
   const { currentOrganization } = useOrganizations();
 
@@ -65,10 +65,8 @@ export default function Admin() {
     form.resetDirty();
   };
 
-  return (
-    <>
-      <OrganizationHeader />
 
+  return (
       <Container size="sm" ml="0" pl="0">
         <form onSubmit={form.onSubmit(save)}>
           <Stack>
@@ -85,6 +83,5 @@ export default function Admin() {
           </Stack>
         </form>
       </Container>
-    </>
   );
 }

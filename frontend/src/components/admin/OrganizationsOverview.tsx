@@ -3,9 +3,9 @@ import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { IconExternalLink, IconGavel, IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
-import { NewOrganization } from "./NewOrganization.tsx";
 import StyledTable from "../StyledTable.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { NewOrganization } from "../organizations/NewOrganization.tsx";
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);

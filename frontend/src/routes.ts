@@ -71,6 +71,10 @@ export const routes = [
           },
         ],
       },
+      {
+        name: "admin",
+        path: "/admin",
+      },
     ],
   },
   {
@@ -84,10 +88,6 @@ export const routes = [
   {
     name: "organizations",
     path: "/{org_id}/organizations",
-  },
-  {
-    name: "admin",
-    path: "/{org_id}/admin",
   },
   {
     name: "default",
