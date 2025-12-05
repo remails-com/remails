@@ -72,7 +72,7 @@ http = "1.4.0"
 base64ct = "1.8.1"
 reqwest = { version = "0.12.25", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
 cookie = "0.18.1"
-email_address = { version = "0.2.9" , git = "https://github.com/pohlm01/rust-email_address.git", features = ["utoipa"]}
+email_address = { version = "0.2.9", git = "https://github.com/pohlm01/rust-email_address.git", features = ["utoipa"] }
 memory-serve = "1.2.2"
 derive_more = { version = "2.1.0", default-features = false, features = ["from", "display", "deref", "debug", "from_str"] }
 rand = "0.9.2"
@@ -92,6 +92,7 @@ k8s-openapi = { version = "0.26.0", features = ["v1_32"] }
 utoipa = { version = "5", features = ["chrono", "uuid", "axum_extras", "url"] }
 utoipa-axum = "0.2"
 regex = "1.12.2"
+askama = { version = "0.14.0", features = ["derive", "alloc", "config"], default-features = false }
 
 [dev-dependencies]
 reqwest = { version = "0.12.25", features = ["json"] }

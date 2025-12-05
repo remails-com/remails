@@ -141,7 +141,7 @@ pub struct ApiState {
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
     message_bus: Arc<BusClient>,
-    retry_config: Arc<RetryConfig>,
+    pub retry_config: Arc<RetryConfig>,
 }
 
 impl FromRef<ApiState> for MessageRepository {
@@ -253,6 +253,7 @@ pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
     shutdown: CancellationToken,
+    api_state: ApiState,
 }
 
 impl ApiServer {
@@ -370,7 +371,12 @@ impl ApiServer {
             socket,
             router,
             shutdown,
+            api_state: state,
         }
+    }
+
+    pub fn api_state(&self) -> &ApiState {
+        &self.api_state
     }
 
     pub async fn serve(self) -> Result<(), ApiServerError> {

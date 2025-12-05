@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
+use mail_builder::MessageBuilder;
 use mail_parser::{HeaderName, MessageParser, MimeHeaders};
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
@@ -516,7 +517,7 @@ impl MessageRepository {
 
         if parsed_msg.header(HeaderName::Date).is_none() {
             trace!("adding Date header");
-            let date = chrono::Utc::now().to_rfc2822();
+            let date = Utc::now().to_rfc2822();
             new_headers.push(format!("Date: {date}\r\n"));
         }
 
@@ -596,6 +597,81 @@ impl MessageRepository {
         .fetch_one(&self.pool)
         .await?
         .into())
+    }
+
+    async fn internal_email_config(&self) -> Result<(EmailAddress, ProjectId), Error> {
+        let res = sqlx::query!(
+            r#"
+            SELECT internal_email_address, internal_email_project FROM global_config
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok((
+            res.internal_email_address.ok_or(Error::Internal(
+                "Server is not configured to send out internal emails: missing internal email address".to_string(),
+            ))?.parse().map_err(|err| Error::Internal(format!("Server is not configured to send out internal emails: cannot parse internal email address: {err}")))?,
+            res.internal_email_project.ok_or(Error::Internal(
+                "Server is not configured to send out internal emails: missing internal email project id".to_string(),
+            ))?.into(),
+        ))
+    }
+
+    pub async fn create_internal(
+        &self,
+        to: EmailAddress,
+        subject: String,
+        text: String,
+        html: String,
+        label: Label,
+        max_attempts: i32,
+    ) -> Result<MessageId, Error> {
+        let (from_email, project_id) = self.internal_email_config().await?;
+        let message_id = MessageId::new_v4();
+        let message_id_header =
+            MessageRepository::generate_message_id_header(&message_id, &from_email);
+
+        let mut raw_message = MessageBuilder::new()
+            .from(from_email.as_str())
+            .to(to.as_str())
+            .subject(subject)
+            .message_id(message_id_header.as_str())
+            .html_body(html.as_str())
+            .text_body(text.as_str())
+            .write_to_vec()
+            .map_err(|err| Error::Internal(format!("Failed to create internal email: {err}")))?;
+
+        let (message_data, message_id_header, _) =
+            self.parse_message(&mut raw_message, &message_id, &from_email)?;
+
+        let to = [to.to_string()];
+        sqlx::query!(
+            r#"
+            INSERT INTO messages AS m (
+                id, organization_id, project_id,
+                from_email, recipients, raw_data, max_attempts,
+                message_data, message_id_header, label
+            )
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9
+            FROM projects p
+                JOIN organizations o ON o.id = p.organization_id
+            WHERE p.id = $2
+            "#,
+            *message_id,
+            *project_id,
+            from_email.as_str(),
+            to.as_slice(),
+            raw_message,
+            max_attempts,
+            message_data,
+            message_id_header,
+            label.as_str()
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(message_id)
     }
 
     pub async fn create_from_api(
@@ -826,9 +902,9 @@ impl MessageRepository {
             *project_id,
             API_RAW_TRUNCATE_LENGTH,
         )
-        .fetch_one(&self.pool)
-        .await?
-        .try_into()
+            .fetch_one(&self.pool)
+            .await?
+            .try_into()
     }
 
     pub async fn remove(
@@ -891,7 +967,7 @@ impl MessageRepository {
             r#"
             SELECT m.status AS "status:MessageStatus"
             FROM messages m
-            WHERE m.organization_id = $1 
+            WHERE m.organization_id = $1
               AND m.project_id = $2
               AND m.id = $3
             "#,
