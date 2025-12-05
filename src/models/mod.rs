@@ -53,6 +53,8 @@ pub enum Error {
     TooManyRequests,
     #[error("organization has been blocked")]
     OrgBlocked,
+    #[error("Template could not be rendered")]
+    Askama(#[from] askama::Error),
 }
 
 impl From<sqlx::Error> for Error {

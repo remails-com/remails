@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO messages AS m (\n                id, organization_id, project_id,\n                from_email, recipients, raw_data, max_attempts,\n                message_data, message_id_header, label\n            )\n            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9\n            FROM projects p\n                JOIN organizations o ON o.id = p.organization_id\n            WHERE p.id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "VarcharArray",
+        "Bytea",
+        "Int4",
+        "Jsonb",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9bdfa9ec93da44205794e8e6b95105e9c661bcba86ddf93c5068804b13ebacc6"
+}

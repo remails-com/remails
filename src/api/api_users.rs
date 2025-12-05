@@ -1,6 +1,7 @@
 use crate::{
     api::{
         ApiState,
+        auth::{LoginState, SecureCookieStorage, login},
         error::{ApiResult, AppError},
         validation::ValidatedJson,
         whoami::WhoamiResponse,
@@ -13,10 +14,11 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use garde::Validate;
-use http::header;
+use http::{StatusCode, header};
+use serde::Deserialize;
 use tracing::{debug, info};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -24,6 +26,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(update_user))
+        .routes(routes!(is_password_reset_active))
+        .routes(routes!(password_reset))
         .routes(routes!(update_password, delete_password))
         .routes(routes!(start_enroll_totp, finish_enroll_totp))
         .routes(routes!(totp_codes, delete_totp_code))
@@ -97,6 +101,70 @@ pub async fn update_password(
     );
 
     Ok(())
+}
+
+/// Check if the password reset link is still active
+#[utoipa::path(get, path = "/api_user/{user_id}/password/reset",
+    tags = ["internal", "API users"],
+    security(()),
+    responses(
+        (status = 200, description = "password reset link still valid", body = bool),
+        AppError,
+))]
+pub async fn is_password_reset_active(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id,)): Path<(ApiUserId,)>,
+) -> ApiResult<bool> {
+    let active = repo.is_password_reset_active(&user_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        active, "queried if password reset link is active"
+    );
+
+    Ok(Json(active))
+}
+
+#[derive(Deserialize, Validate, ToSchema)]
+struct PasswordReset {
+    #[garde(dive)]
+    reset_secret: Password,
+    #[garde(dive)]
+    new_password: Password,
+}
+
+/// Set new password using the password reset secret
+#[utoipa::path(post, path = "/api_user/{user_id}/password/reset",
+    tags = ["internal", "API users"],
+    request_body = PasswordReset,
+    security(()),
+    responses(
+        (status = 200, description = "password successfully set", body = WhoamiResponse,
+            headers(
+                ("set-cookie", description = "sets the authentication cookie")
+        )),
+        AppError,
+))]
+async fn password_reset(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id,)): Path<(ApiUserId,)>,
+    mut cookie_storage: SecureCookieStorage,
+    ValidatedJson(req): ValidatedJson<PasswordReset>,
+) -> Result<Response, AppError> {
+    repo.finish_password_reset(user_id, req.reset_secret, req.new_password)
+        .await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        "set new password using reset link"
+    );
+
+    let user = repo.find_by_id(&user_id).await?.ok_or(AppError::NotFound)?;
+
+    cookie_storage = login(&user, LoginState::LoggedIn, cookie_storage)?;
+    let whoami = WhoamiResponse::logged_in(user);
+
+    Ok((StatusCode::OK, cookie_storage, Json(whoami)).into_response())
 }
 
 #[derive(ToSchema)]

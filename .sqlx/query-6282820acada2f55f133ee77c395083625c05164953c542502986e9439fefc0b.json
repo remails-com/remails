@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users \n            SET password_reset_time = now(), \n                password_reset_secret = $1 \n            WHERE email = $2 \n              -- Allow at most one reset link per minute\n              AND password_reset_time IS NULL OR password_reset_time < now() + '1 min'\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6282820acada2f55f133ee77c395083625c05164953c542502986e9439fefc0b"
+}

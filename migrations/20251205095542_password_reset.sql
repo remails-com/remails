@@ -6,4 +6,9 @@ CREATE TABLE global_config
 );
 
 -- make sure the table row exists, even if no meaningfully content is provided
-INSERT INTO global_config (internal_email_project, internal_email_address) VALUES (NULL, NULL);
+INSERT INTO global_config (internal_email_project, internal_email_address)
+VALUES (NULL, NULL);
+
+ALTER TABLE api_users
+    ADD password_reset_secret text,
+    ADD password_reset_time   timestamp with time zone

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT m.status AS \"status:MessageStatus\"\n            FROM messages m\n            WHERE m.organization_id = $1 \n              AND m.project_id = $2\n              AND m.id = $3\n            ",
+  "query": "\n            SELECT m.status AS \"status:MessageStatus\"\n            FROM messages m\n            WHERE m.organization_id = $1\n              AND m.project_id = $2\n              AND m.id = $3\n            ",
   "describe": {
     "columns": [
       {
@@ -35,5 +35,5 @@
       false
     ]
   },
-  "hash": "73aaac6d96dae9e19d5547182b7550ca50d0c236c65d8264fca36f0e129a6fdc"
+  "hash": "2b8067e776808e7cda898bfbd9b9e6b2c023ad2ae85ddc84cac5eca371309d57"
 }

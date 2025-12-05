@@ -2,13 +2,13 @@ use crate::{
     api::ApiState,
     bus::client::BusClient,
     models,
-    models::{Label, MessageRepository},
+    models::{ApiUserRepository, Error, Label, MessageRepository},
 };
 use askama::Template;
 use axum::extract::FromRef;
 use email_address::EmailAddress;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, warn};
 
 #[derive(Template)]
 #[template(path = "password_reset.j2")]
@@ -34,14 +34,42 @@ pub async fn send_password_reset_email(
     api_state: &ApiState,
     email_address: EmailAddress,
 ) -> Result<(), models::Error> {
-    // TODO implement password reset logic
+    let repo = ApiUserRepository::from_ref(api_state);
+
+    let (user_id, reset_secret) = match repo.initiate_password_reset(&email_address).await {
+        Err(Error::NotFound(_)) => {
+            warn!(
+                email = email_address.as_str(),
+                "Requested password reset link for non-existent account"
+            );
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+        Ok(ok) => ok,
+    };
+
+    let link = format!(
+        "https://{}/api_user/{user_id}/password/reset#{}",
+        api_state.api_server_name(),
+        reset_secret
+    );
+
+    let html = HtmlTemplate {
+        password_reset_link: link.clone(),
+    }
+    .render()?;
+    let text = TxtTemplate {
+        password_reset_link: link.clone(),
+    }
+    .render()?;
+
     send_internal_email(
         api_state,
         InternalEmail {
             to: email_address,
-            subject: "test".to_string(),
-            text: "test".to_string(),
-            html: "test".to_string(),
+            subject: "Remails password reset".to_string(),
+            text,
+            html,
             label: "password-reset".parse().unwrap(),
         },
     )

@@ -144,6 +144,12 @@ pub struct ApiState {
     pub retry_config: Arc<RetryConfig>,
 }
 
+impl ApiState {
+    pub fn api_server_name(&self) -> &str {
+        self.config.remails_config.api_server_name.as_str()
+    }
+}
+
 impl FromRef<ApiState> for MessageRepository {
     fn from_ref(state: &ApiState) -> Self {
         MessageRepository::new(state.pool.clone())

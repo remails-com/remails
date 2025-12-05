@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
+use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use totp_rs::{Algorithm, Secret, TOTP};
@@ -439,7 +440,7 @@ impl ApiUserRepository {
             "#,
             **user_id
         )
-        .fetch_one(&self.pool).await?;
+            .fetch_one(&self.pool).await?;
 
         if counter > 3 {
             Err(Error::TooManyRequests)
@@ -585,6 +586,91 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn initiate_password_reset(
+        &self,
+        email: &EmailAddress,
+    ) -> Result<(ApiUserId, String), Error> {
+        let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
+        let password_hash = password_auth::generate_hash(password.as_bytes());
+
+        let user_id = sqlx::query_scalar!(
+            r#"
+            UPDATE api_users 
+            SET password_reset_time = now(), 
+                password_reset_secret = $1 
+            WHERE email = $2 
+              -- Allow at most one reset link per minute
+              AND password_reset_time IS NULL OR password_reset_time < now() + '1 min'
+            RETURNING id
+            "#,
+            password_hash,
+            email.as_str()
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok((user_id.into(), password))
+    }
+
+    pub async fn is_password_reset_active(&self, user_id: &ApiUserId) -> Result<bool, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT true 
+            FROM api_users 
+            WHERE id = $1 
+              AND password_reset_time > now() - '15 minutes'::interval
+            "#,
+            **user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .is_some())
+    }
+
+    pub async fn finish_password_reset(
+        &self,
+        user_id: ApiUserId,
+        reset_secret: Password,
+        new_password: Password,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let Some(reset_secret_hash) = sqlx::query_scalar!(
+            r#"
+            SELECT password_reset_secret
+            FROM api_users
+            WHERE id = $1
+              AND password_reset_time > now() - '15 minutes'::interval
+            "#,
+            *user_id
+        )
+        .fetch_one(&mut *tx)
+        .await?
+        else {
+            return Err(Error::NotFound("invalid password reset secret"));
+        };
+
+        reset_secret
+            .verify_password(&reset_secret_hash)
+            .map_err(|_| Error::NotFound("invalid password reset secret"))?;
+
+        sqlx::query!(
+            r#"
+            UPDATE api_users
+            SET password_hash = $1,
+                password_reset_time = null,
+                password_reset_secret = null
+            WHERE id = $2
+            "#,
+            new_password.generate_hash(),
+            *user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn delete_password(
         &self,
         current_password: Password,
@@ -696,8 +782,8 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-        .fetch_optional(&self.pool)
-        .await?;
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(HashAndCounter {
             hash: Some(hash),
