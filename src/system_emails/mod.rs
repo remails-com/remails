@@ -36,7 +36,7 @@ pub async fn send_password_reset_email(
 ) -> Result<(), models::Error> {
     let repo = ApiUserRepository::from_ref(api_state);
 
-    let (user_id, reset_secret) = match repo.initiate_password_reset(&email_address).await {
+    let (pw_reset_id, reset_secret) = match repo.initiate_password_reset(&email_address).await {
         Err(Error::NotFound(_)) => {
             warn!(
                 email = email_address.as_str(),
@@ -49,7 +49,7 @@ pub async fn send_password_reset_email(
     };
 
     let link = format!(
-        "https://{}/api_user/{user_id}/password/reset#{}",
+        "https://{}/login/password/reset/{pw_reset_id}#{}",
         api_state.api_server_name(),
         reset_secret
     );

@@ -44,6 +44,23 @@ pub struct ApiUserId(Uuid);
 #[into_params(names("totp_id"))]
 pub struct TotpId(Uuid);
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    ToSchema,
+    IntoParams,
+)]
+#[into_params(names("pw_reset_id"))]
+pub struct PwResetId(Uuid);
+
 #[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema, Validate)]
 #[debug("*****")]
 #[serde(transparent)]
@@ -141,7 +158,7 @@ pub struct PasswordUpdate {
     pub new_password: Password,
     #[garde(dive)]
     #[schema(min_length = 6, max_length = 256)]
-    pub current_password: Password,
+    pub current_password: Option<Password>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -236,6 +253,14 @@ impl TryFrom<PgApiUser> for ApiUser {
             password_enabled: u.password_enabled,
         })
     }
+}
+
+/// Indicates weather a password reset link is still valid and weather or not 2FA is activated on that account
+#[derive(Serialize, ToSchema, Debug)]
+pub enum ResetLinkCheck {
+    NotActive,
+    ActiveWithout2Fa,
+    ActiveWith2Fa,
 }
 
 #[derive(Debug, Clone)]
@@ -565,6 +590,9 @@ impl ApiUserRepository {
         if let Some(hash) = hash {
             update
                 .current_password
+                .ok_or(Error::BadRequest(
+                    "Must provide current password".to_string(),
+                ))?
                 .verify_password(&hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
@@ -589,22 +617,27 @@ impl ApiUserRepository {
     pub async fn initiate_password_reset(
         &self,
         email: &EmailAddress,
-    ) -> Result<(ApiUserId, String), Error> {
+    ) -> Result<(PwResetId, String), Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
         let user_id = sqlx::query_scalar!(
             r#"
-            UPDATE api_users 
-            SET password_reset_time = now(), 
-                password_reset_secret = $1 
-            WHERE email = $2 
-              -- Allow at most one reset link per minute
-              AND password_reset_time IS NULL OR password_reset_time < now() + '1 min'
+            INSERT INTO password_reset (id, api_user_id, password_reset_secret, password_reset_time)
+            SELECT gen_random_uuid(), u.id, $2, now()
+            FROM api_users u
+                LEFT JOIN password_reset pr on u.id = pr.api_user_id
+            WHERE u.email = $1
+            -- Allow at most one reset link per minute
+              AND (password_reset_time IS NULL OR password_reset_time < now() - '1 min'::interval)
+            ON CONFLICT (api_user_id) DO UPDATE
+            SET password_reset_time = now(),
+                id = gen_random_uuid(),
+                password_reset_secret = $2
             RETURNING id
             "#,
+            email.as_str(),
             password_hash,
-            email.as_str()
         )
         .fetch_one(&self.pool)
         .await?;
@@ -612,61 +645,97 @@ impl ApiUserRepository {
         Ok((user_id.into(), password))
     }
 
-    pub async fn is_password_reset_active(&self, user_id: &ApiUserId) -> Result<bool, Error> {
-        Ok(sqlx::query_scalar!(
+    pub async fn is_password_reset_active(
+        &self,
+        pw_reset_id: PwResetId,
+    ) -> Result<ResetLinkCheck, Error> {
+        let count = sqlx::query_scalar!(
             r#"
-            SELECT true 
-            FROM api_users 
-            WHERE id = $1 
+            SELECT count(t.id) as "count!"
+            FROM password_reset r
+                LEFT JOIN totp t on r.api_user_id = t.user_id
+            WHERE r.id = $1
               AND password_reset_time > now() - '15 minutes'::interval
+              AND (t.state IS NULL OR t.state = 'enabled')
+            GROUP BY r.id
             "#,
-            **user_id
+            *pw_reset_id
         )
         .fetch_optional(&self.pool)
-        .await?
-        .is_some())
+        .await?;
+
+        match count {
+            None => Ok(ResetLinkCheck::NotActive),
+            Some(0) => Ok(ResetLinkCheck::ActiveWithout2Fa),
+            Some(_) => Ok(ResetLinkCheck::ActiveWith2Fa),
+        }
     }
 
     pub async fn finish_password_reset(
         &self,
-        user_id: ApiUserId,
+        pw_reset_id: PwResetId,
         reset_secret: Password,
         new_password: Password,
+        totp_code: Option<TotpCode>,
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
 
-        let Some(reset_secret_hash) = sqlx::query_scalar!(
+        let Some(record) = sqlx::query!(
             r#"
-            SELECT password_reset_secret
-            FROM api_users
-            WHERE id = $1
-              AND password_reset_time > now() - '15 minutes'::interval
+            SELECT pwr.password_reset_secret, pwr.api_user_id, count(t.id) AS "totp_count!"
+            FROM password_reset pwr
+                LEFT JOIN totp t ON t.user_id = api_user_id
+            WHERE pwr.id = $1
+              AND pwr.password_reset_time > now() - '15 minutes'::interval
+              AND (t.state IS NULL OR t.state = 'enabled')
+            GROUP BY pwr.id
             "#,
-            *user_id
+            *pw_reset_id
         )
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await?
         else {
             return Err(Error::NotFound("invalid password reset secret"));
         };
 
         reset_secret
-            .verify_password(&reset_secret_hash)
+            .verify_password(&record.password_reset_secret)
             .map_err(|_| Error::NotFound("invalid password reset secret"))?;
+
+        if record.totp_count > 0 {
+            let Some(totp_code) = totp_code else {
+                return Err(Error::BadRequest("Missing TOTP code".to_string()));
+            };
+            if !self
+                .check_totp_code(&record.api_user_id.into(), totp_code.as_ref())
+                .await?
+            {
+                return Err(Error::BadRequest("Invalid TOTP code".to_string()));
+            }
+        }
 
         sqlx::query!(
             r#"
             UPDATE api_users
-            SET password_hash = $1,
-                password_reset_time = null,
-                password_reset_secret = null
+            SET password_hash = $1
             WHERE id = $2
             "#,
             new_password.generate_hash(),
-            *user_id
+            record.api_user_id
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        sqlx::query!(
+            r#"
+            DELETE FROM password_reset WHERE id = $1
+            "#,
+            *pw_reset_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

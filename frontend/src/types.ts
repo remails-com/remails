@@ -236,6 +236,8 @@ export type Action =
 
 export type OrgBlockStatus = "not_blocked" | "no_sending" | "no_sending_or_receiving";
 
+export type PasswordResetState = "NotActive" | "ActiveWithout2Fa" | "ActiveWith2Fa";
+
 export interface Organization {
   id: string;
   name: string;

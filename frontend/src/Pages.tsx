@@ -20,6 +20,7 @@ import { useSubscription } from "./hooks/useSubscription.ts";
 import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
 import GlobalAdmin from "./components/admin/GlobalAdmin.tsx";
+import PasswordReset from "./PasswordReset.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -43,6 +44,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   statistics: <Statistics />,
   default: null,
   login: null,
+  "login.password_reset": null,
   mfa: null,
   invite: <ConfirmInvite />,
 };
@@ -82,6 +84,10 @@ export function Pages() {
 
   if (routerState.name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
+  }
+
+  if (routerState.name === "login.password_reset") {
+    return <PasswordReset />;
   }
 
   if (routerState.name === "mfa") {

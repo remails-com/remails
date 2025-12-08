@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT count(t.id) as \"count!\"\n            FROM password_reset r\n                LEFT JOIN totp t on r.api_user_id = t.user_id\n            WHERE r.id = $1\n              AND password_reset_time > now() - '15 minutes'::interval\n              AND (t.state IS NULL OR t.state = 'enabled')\n            GROUP BY r.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bf83e7f030cea8733c25a2ea69049b2c863279c1381912b86093f3dda58cae93"
+}

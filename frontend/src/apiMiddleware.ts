@@ -34,7 +34,7 @@ export default async function apiMiddleware(
     if (updated_user === null || "error" in updated_user) {
       dispatch({ type: "set_user", user: null });
 
-      if (navState.to.name === "login") {
+      if (navState.to.name.startsWith("login")) {
         return navState.to;
       } else {
         // If the user is not logged in, redirect to the login page

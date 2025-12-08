@@ -102,6 +102,12 @@ export const routes = [
   {
     name: "login",
     path: "/login",
+    children: [
+      {
+        name: "password_reset",
+        path: "/password/reset/{pw_reset_id}",
+      },
+    ],
   },
   {
     name: "mfa",
