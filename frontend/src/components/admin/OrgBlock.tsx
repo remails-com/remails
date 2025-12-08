@@ -1,6 +1,5 @@
 import { Container, Select, Stack } from "@mantine/core";
 import { useOrganizations } from "../../hooks/useOrganizations";
-import OrganizationHeader from "../organizations/OrganizationHeader";
 import { OrgBlockStatus } from "../../types";
 import { useForm } from "@mantine/form";
 import { MaintainerButton } from "../RoleButtons";
@@ -65,23 +64,22 @@ export default function OrgBlock() {
     form.resetDirty();
   };
 
-
   return (
-      <Container size="sm" ml="0" pl="0">
-        <form onSubmit={form.onSubmit(save)}>
-          <Stack>
-            <Select
-              label="Organization block status"
-              data={blockSelectData}
-              value={form.values.block_status}
-              error={form.errors.block_status}
-              onChange={(value) => value && isValidBlockStatus(value) && form.setFieldValue("block_status", value)}
-            />
-            <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
-              Save
-            </MaintainerButton>
-          </Stack>
-        </form>
-      </Container>
+    <Container size="sm" ml="0" pl="0">
+      <form onSubmit={form.onSubmit(save)}>
+        <Stack>
+          <Select
+            label="Organization block status"
+            data={blockSelectData}
+            value={form.values.block_status}
+            error={form.errors.block_status}
+            onChange={(value) => value && isValidBlockStatus(value) && form.setFieldValue("block_status", value)}
+          />
+          <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+            Save
+          </MaintainerButton>
+        </Stack>
+      </form>
+    </Container>
   );
 }

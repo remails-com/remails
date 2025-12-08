@@ -10,7 +10,8 @@ use crate::{
     handler::{RetryConfig, dns::DnsResolver},
     models::{
         ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        OrganizationRepository, ProjectRepository, SmtpCredentialRepository,
+        OrganizationRepository, ProjectRepository, RuntimeConfigRepository,
+        SmtpCredentialRepository,
     },
     moneybird::MoneyBird,
 };
@@ -59,6 +60,7 @@ mod organizations;
 mod projects;
 mod smtp_credentials;
 mod subscriptions;
+mod system;
 mod validation;
 mod whoami;
 
@@ -195,6 +197,12 @@ impl FromRef<ApiState> for ApiUserRepository {
 impl FromRef<ApiState> for InviteRepository {
     fn from_ref(state: &ApiState) -> Self {
         InviteRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for RuntimeConfigRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        RuntimeConfigRepository::new(state.pool.clone())
     }
 }
 
@@ -416,50 +424,6 @@ impl ApiServer {
 
 async fn wait_for_shutdown(token: CancellationToken) {
     token.cancelled().await;
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-struct HealthyResponse {
-    healthy: bool,
-    status: &'static str,
-}
-
-/// Remails health check
-#[utoipa::path(get, path = "/healthy",
-    tags = ["internal", "Misc"],
-    responses(
-        (status = 200, description = "Remails health status", body = HealthyResponse),
-    )
-)]
-async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
-    match sqlx::query("SELECT 1").execute(&pool).await {
-        Ok(_) => Json(HealthyResponse {
-            healthy: true,
-            status: "OK",
-        }),
-        Err(e) => {
-            error!("database error: {:?}", e);
-
-            Json(HealthyResponse {
-                healthy: false,
-                status: "database error",
-            })
-        }
-    }
-}
-
-/// Remails configuration
-///
-/// Get the configuration and environment details of the Remails server
-#[utoipa::path(get, path = "/config",
-    security(()),
-    tags = ["Misc"],
-    responses(
-        (status = 200, description = "Remails configuration", body = RemailsConfig),
-    )
-)]
-pub async fn config(State(config): State<RemailsConfig>) -> Response {
-    Json(config).into_response()
 }
 
 async fn append_default_headers(

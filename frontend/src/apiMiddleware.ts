@@ -71,7 +71,11 @@ export default async function apiMiddleware(
     dispatch({ type: "set_config", config: await get("/api/config") });
   }
 
-  if (navState.state.totpCodes === null && user) {
+  if (user.global_role === "admin" && navState.state.runtimeConfig === null) {
+    dispatch({ type: "set_runtime_config", config: await get("/api/config/runtime") });
+  }
+
+  if (navState.state.totpCodes === null) {
     dispatch({ type: "set_totp_codes", totpCodes: await get(`/api/api_user/${user.id}/totp`) });
   }
 
@@ -82,8 +86,8 @@ export default async function apiMiddleware(
   }
 
   // navigate to the first organization if none is selected
-  if (navState.to.name === "default" && user?.org_roles && organizations && organizations.length > 0) {
-    newOrgId = user?.org_roles.find((r) => r.role === "admin")?.org_id || organizations[0].id;
+  if (navState.to.name === "default" && user.org_roles && organizations && organizations.length > 0) {
+    newOrgId = user.org_roles.find((r) => r.role === "admin")?.org_id || organizations[0].id;
     navState.to = router.navigate("projects", {
       org_id: newOrgId,
     });

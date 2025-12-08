@@ -1,0 +1,120 @@
+import { useForm } from "@mantine/form";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { Container, Popover, Select, Stack, TextInput, Text, Group, Button } from "@mantine/core";
+import { IconHelp } from "@tabler/icons-react";
+import { useRuntimeConfig } from "../../hooks/useRuntimeConfig.ts";
+import { useRemails } from "../../hooks/useRemails.ts";
+import { notifications } from "@mantine/notifications";
+import { errorNotification } from "../../notify.tsx";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+
+interface FormValues {
+  system_email_address: string;
+  system_email_project: string | null;
+}
+
+export default function RuntimeConfig() {
+  const { projects } = useProjects();
+  const { organizations, currentOrganization } = useOrganizations();
+  const { dispatch } = useRemails();
+  const { runtimeConfig } = useRuntimeConfig();
+
+  const configForm = useForm<FormValues>({
+    initialValues: {
+      system_email_address: runtimeConfig.system_email_address,
+      system_email_project: runtimeConfig.system_email_project,
+    },
+    validate: {
+      system_email_address: (value) => (/^\S+@\S+$/.test(value) ? null : "Invalid email"),
+    },
+  });
+
+  const updateSettings = async (c: FormValues) => {
+    const res = await fetch("/api/config/runtime", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(c),
+    });
+    if (res.status === 200) {
+      dispatch({ type: "set_runtime_config", config: await res.json() });
+      configForm.resetDirty();
+      notifications.show({
+        title: "Updated",
+        color: "green",
+        message: "",
+      });
+    } else {
+      errorNotification("Config could not be updated");
+      console.error(res);
+    }
+  };
+
+  const systemEmailDropdownOptions = [
+    {
+      group: currentOrganization?.name || "Unknown organization",
+      items: projects.map((p) => {
+        return { value: p.id, label: p.name };
+      }),
+    },
+  ];
+
+  if (currentOrganization?.id !== runtimeConfig.system_email_organization) {
+    systemEmailDropdownOptions.push({
+      group:
+        organizations.find((o) => o.id === runtimeConfig.system_email_organization)?.name ||
+        `organization ${runtimeConfig.system_email_organization}`,
+      items: [{ value: runtimeConfig.system_email_project, label: runtimeConfig.system_email_project_name }],
+    });
+  }
+
+  console.log(systemEmailDropdownOptions);
+
+  return (
+    <Container size="xs" ml="0" pl="0">
+      <Stack>
+        <form onSubmit={configForm.onSubmit(updateSettings)}>
+          <Stack>
+            <TextInput
+              label={
+                <Group gap="xs">
+                  System email address
+                  <Popover width={200} position="bottom" withArrow shadow="md">
+                    <Popover.Target>
+                      <IconHelp size={20} color="gray" />
+                    </Popover.Target>
+                    <Popover.Dropdown>
+                      <Text size="xs">
+                        Use this address to send out system emails such as password resets. Make sure the domain is
+                        configured in the corresponding organization.
+                      </Text>
+                    </Popover.Dropdown>
+                  </Popover>
+                </Group>
+              }
+              key={configForm.key("system_email_address")}
+              value={configForm.values.system_email_address}
+              placeholder="e.g., noreply@remails.com"
+              type="email"
+              error={configForm.errors.system_email_address}
+              onChange={(event) => configForm.setFieldValue("system_email_address", event.currentTarget.value)}
+            />
+            <Select
+              label="System email project"
+              placeholder="Pick project to send system emails"
+              clearable
+              allowDeselect
+              searchable
+              nothingFoundMessage="This project does not exist, in the currently active organization..."
+              data={systemEmailDropdownOptions}
+              value={configForm.values.system_email_project}
+              onChange={(value) => configForm.setFieldValue("system_email_project", value)}
+            />
+            <Button type="submit">Save</Button>
+          </Stack>
+        </form>
+      </Stack>
+    </Container>
+  );
+}

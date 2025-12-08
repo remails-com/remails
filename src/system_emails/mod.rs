@@ -86,7 +86,7 @@ async fn send_internal_email(
     let bus = Arc::<BusClient>::from_ref(api_state);
 
     let message_id = message_repo
-        .create_internal(
+        .create_system_email(
             email.to,
             email.subject,
             email.text,

@@ -1,13 +1,5 @@
 import { NavLink } from "@mantine/core";
-import {
-  IconBuildings,
-  IconChartBar,
-  IconGavel,
-  IconGrave,
-  IconServer,
-  IconSettings,
-  IconWorldWww,
-} from "@tabler/icons-react";
+import { IconChartBar, IconGavel, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
@@ -30,10 +22,10 @@ export function NavBar({ close }: { close: () => void }) {
         <NavLink
           mb="md"
           label="Admin"
-          active={routerState.name === "organizations"}
+          active={routerState.name.startsWith("admin")}
           leftSection={<IconGavel size={20} stroke={1.8} />}
           onClick={() => {
-            navigate("organizations");
+            navigate("admin");
             close();
           }}
         />

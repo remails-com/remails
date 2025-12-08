@@ -33,7 +33,7 @@ export default function OrganizationsOverview() {
           leftSection={currentOrganization?.id == organization.id ? <IconSquareCheck /> : <IconSquare />}
           variant="subtle"
           onClick={() => {
-            navigate("organizations", { org_id: organization.id });
+            navigate("admin.organizations", { org_id: organization.id });
           }}
         >
           Act as this organization
@@ -74,7 +74,7 @@ export default function OrganizationsOverview() {
       <NewOrganization
         opened={opened}
         close={close}
-        done={(newOrg) => navigate("organizations", { org_id: newOrg.id })}
+        done={(newOrg) => navigate("admin.organizations", { org_id: newOrg.id })}
       />
       <StyledTable headers={["ID", "Name", "", "Moneybird contact ID", "Quota", "Updated", ""]}>{rows}</StyledTable>
 

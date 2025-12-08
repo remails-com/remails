@@ -602,23 +602,23 @@ impl MessageRepository {
     async fn internal_email_config(&self) -> Result<(EmailAddress, ProjectId), Error> {
         let res = sqlx::query!(
             r#"
-            SELECT internal_email_address, internal_email_project FROM global_config
+            SELECT system_email_address, system_email_project FROM runtime_config
             "#
         )
         .fetch_one(&self.pool)
         .await?;
 
         Ok((
-            res.internal_email_address.ok_or(Error::Internal(
-                "Server is not configured to send out internal emails: missing internal email address".to_string(),
-            ))?.parse().map_err(|err| Error::Internal(format!("Server is not configured to send out internal emails: cannot parse internal email address: {err}")))?,
-            res.internal_email_project.ok_or(Error::Internal(
-                "Server is not configured to send out internal emails: missing internal email project id".to_string(),
+            res.system_email_address.ok_or(Error::Internal(
+                "Server is not configured to send out system emails: missing system email address".to_string(),
+            ))?.parse().map_err(|err| Error::Internal(format!("Server is not configured to send out system emails: cannot parse system email address: {err}")))?,
+            res.system_email_project.ok_or(Error::Internal(
+                "Server is not configured to send out system emails: missing system email project id".to_string(),
             ))?.into(),
         ))
     }
 
-    pub async fn create_internal(
+    pub async fn create_system_email(
         &self,
         to: EmailAddress,
         subject: String,

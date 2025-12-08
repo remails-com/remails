@@ -18,9 +18,8 @@ import Mfa from "./Mfa.tsx";
 import SetupSubscription from "./components/SetupSubscription.tsx";
 import { useSubscription } from "./hooks/useSubscription.ts";
 import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
-import OrgBlock from "./components/admin/OrgBlock.tsx";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
-import OrganizationsOverview from "./components/admin/OrganizationsOverview.tsx";
+import GlobalAdmin from "./components/admin/GlobalAdmin.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -38,9 +37,10 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "settings.API keys": <OrganizationSettings />,
   "settings.API keys.API key": <ApiKeyDetails />,
   "settings.admin": <OrganizationSettings />,
+  admin: <GlobalAdmin />,
+  "admin.organizations": <GlobalAdmin />,
   account: <UserSettings />,
   statistics: <Statistics />,
-  organizations: <OrganizationsOverview />,
   default: null,
   login: null,
   mfa: null,

@@ -89,6 +89,13 @@ export interface RemailsConfig {
   moneybird_administration_id: string;
 }
 
+export interface RuntimeConfig {
+  system_email_project: string;
+  system_email_project_name: string;
+  system_email_address: string;
+  system_email_organization: string;
+}
+
 export interface State {
   user: User | null;
   userFetched: boolean;
@@ -101,6 +108,7 @@ export interface State {
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
   config: RemailsConfig | null;
+  runtimeConfig: RuntimeConfig | null;
   routerState: RouterState;
   nextRouterState: RouterState | null;
   error: RemailsError | null;
@@ -211,6 +219,10 @@ export type Action =
   | {
       type: "set_config";
       config: RemailsConfig;
+    }
+  | {
+      type: "set_runtime_config";
+      config: RuntimeConfig;
     }
   | {
       type: "set_subscription";

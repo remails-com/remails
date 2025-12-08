@@ -86,8 +86,14 @@ export const routes = [
     path: "/{org_id}/statistics",
   },
   {
-    name: "organizations",
-    path: "/{org_id}/organizations",
+    name: "admin",
+    path: "/{org_id}/admin",
+    children: [
+      {
+        name: "organizations",
+        path: "/organizations",
+      },
+    ],
   },
   {
     name: "default",
