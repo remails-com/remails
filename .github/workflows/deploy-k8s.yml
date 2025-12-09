@@ -23,7 +23,7 @@ jobs:
     outputs:
       tag: ${{ steps.create-tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Create version tag
         id: create-tag
         shell: bash
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-frontend
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Download frontend
         uses: actions/download-artifact@v6
         with:
@@ -92,7 +92,7 @@ jobs:
       - build-backend
       - build-frontend
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -179,7 +179,7 @@ jobs:
       - build-frontend
     environment: ${{ github.event.inputs.env }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Install Helm
         run: "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
       - name: Create kubeconfig file
