@@ -90,15 +90,12 @@ export function MessageLog() {
       return;
     }
     const previousDate = pages[pages.length - 2];
-    console.log("previousDate", previousDate);
-    console.log("pages", pages.slice(0, pages.length - 1));
     setPages(pages.slice(0, pages.length - 1));
     setFilter("before", previousDate);
   }
 
   function loadOlder() {
     const lastDate = messages![messages!.length - 1].created_at;
-    console.log("pages", [...pages, lastDate]);
     setPages([...pages, lastDate]);
     setFilter("before", lastDate);
   }

@@ -69,8 +69,6 @@ export default function RuntimeConfig() {
     });
   }
 
-  console.log(systemEmailDropdownOptions);
-
   return (
     <Container size="xs" ml="0" pl="0">
       <Stack>

@@ -119,3 +119,49 @@ test("Email and name change", async ({ page }) => {
     await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
   }
 });
+
+test("Password reset link", async ({ browser }) => {
+  const context1 = await browser.newContext({ storageState: undefined });
+  const context2 = await browser.newContext({ storageState: undefined });
+  const page1 = await context1.newPage();
+  const page2 = await context2.newPage();
+
+  await page1.goto("http://localhost:3000/login");
+  await page2.goto("http://localhost:3000/login");
+
+  // Initiate password reset email
+  await page1.getByRole("button", { name: "Forgot your password?" }).click();
+
+  await page1.getByRole("textbox", { name: "Email" }).fill("test-api@user-2");
+  await page1.getByRole("button", { name: "Reset password" }).click();
+  await expect(page1.getByText("Please check your inbox")).toBeVisible();
+
+  // Use admin account to find the password reset email
+  await page2.getByRole("textbox", { name: "Email" }).fill("admin@example.com");
+  await page2.getByRole("textbox", { name: "Password" }).fill("unsecure123");
+  await page2.getByRole("button", { name: "Login" }).click();
+  await expect(page2.getByRole("row", { name: "Project 1 Organization 1" })).toBeVisible();
+  await page2.getByText("Project 1 Organization").click();
+  await page2.getByRole("button", { name: "Email from noreply@remails.com" }).first().click();
+  await page2.getByRole("button", { name: "View email" }).click();
+
+  // extract link from email
+  const email = await page2.getByText("Dear Test API User 2").textContent();
+  expect(email).toBeTruthy();
+  const regex = new RegExp(/https:\/\/[^/]*\/([^\s)]*)/);
+  const reset_link = email!.match(regex)![1];
+  expect(reset_link).toBeTruthy();
+
+  // Use password reset link
+  await page1.goto(`http://localhost:3000/${reset_link}`);
+  await expect(page1.getByRole("img", { name: "Remails logo" })).toBeVisible();
+
+  await page1.getByRole("textbox", { name: "Password" }).fill("thisismynewpassword");
+  await page1.getByRole("button", { name: "Reset password" }).click();
+  await expect(page1.getByRole("link", { name: "Github" })).toBeVisible();
+
+  await page1.getByRole("textbox", { name: "Password" }).fill("thisismynewpassword");
+  await page1.getByRole("textbox", { name: "Email" }).fill("test-api@user-2");
+  await page1.getByRole("button", { name: "Login" }).click();
+  await expect(page1.getByRole("button", { name: "Test API User 2" })).toBeVisible();
+});

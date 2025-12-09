@@ -122,18 +122,19 @@ jobs:
           name: frontend
           path: frontend/dist
 
-      - name: Apply some DB fixtures
-        run: |
-          psql -h localhost -U remails -w < src/fixtures/organizations.sql && \
-          psql -h localhost -U remails -w < src/fixtures/api_users.sql && \
-          psql -h localhost -U remails -w < src/fixtures/projects.sql && \
-          psql -h localhost -U remails -w < src/fixtures/runtime_config.sql && \
-
       - name: mark backend as executable
         run: chmod +x target/debug/app
 
       - name: run backend
         run: NO_COLOR=true ./target/debug/app > logs-${{ matrix.shardIndex }}_of_${{ matrix.shardTotal }} &
+
+
+      - name: Apply some DB fixtures
+        run: |
+          psql -h localhost -U remails -w remails < src/fixtures/organizations.sql && \
+          psql -h localhost -U remails -w remails < src/fixtures/api_users.sql && \
+          psql -h localhost -U remails -w remails < src/fixtures/projects.sql && \
+          psql -h localhost -U remails -w remails < src/fixtures/runtime_config.sql
 
       - uses: actions/setup-node@v6
         with:

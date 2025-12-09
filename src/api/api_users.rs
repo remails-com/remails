@@ -647,7 +647,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
         // Set new password
         let res = server
@@ -678,7 +678,7 @@ mod tests {
         let _ = get_session_cookie(response);
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("runtime_config",)))]
+    #[sqlx::test]
     async fn test_password_reset_request_returns_ok_if_mail_does_not_exist(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
 

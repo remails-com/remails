@@ -119,7 +119,6 @@ export default function Login({ setUser }: LoginProps) {
       if (res.status !== 200) {
         setGlobalError("Something went wrong");
       } else {
-        console.log("notification");
         notifications.show({
           title: "Please check your inbox",
           message: "If this email is registered at Remails you should receive a password reset link shortly",
