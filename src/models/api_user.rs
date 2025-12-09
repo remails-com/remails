@@ -7,6 +7,7 @@ use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use totp_rs::{Algorithm, Secret, TOTP};
+use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -633,17 +634,17 @@ impl ApiUserRepository {
         let record = sqlx::query!(
             r#"
             WITH ins AS (
-                INSERT INTO password_reset (id, api_user_id, password_reset_secret, password_reset_time)
+                INSERT INTO password_reset (id, api_user_id, reset_secret, created_at)
                 SELECT gen_random_uuid(), u.id, $2, now()
                 FROM api_users u
                     LEFT JOIN password_reset pr on u.id = pr.api_user_id
                 WHERE u.email = $1
                 -- Allow at most one reset link per minute
-                  AND (pr.password_reset_time IS NULL OR pr.password_reset_time < now() - '1 min'::interval)
+                  AND (pr.created_at IS NULL OR pr.created_at < now() - '1 min'::interval)
                 ON CONFLICT (api_user_id) DO UPDATE
-                SET password_reset_time = now(),
+                SET created_at = now(),
                     id = gen_random_uuid(),
-                    password_reset_secret = $2
+                    reset_secret = $2
                 RETURNING id, api_user_id
             )
             SELECT ins.id, u.name
@@ -673,7 +674,7 @@ impl ApiUserRepository {
             FROM password_reset r
                 LEFT JOIN totp t on r.api_user_id = t.user_id
             WHERE r.id = $1
-              AND password_reset_time > now() - '15 minutes'::interval
+              AND r.created_at > now() - '15 minutes'::interval
               AND (t.state IS NULL OR t.state = 'enabled')
             GROUP BY r.id
             "#,
@@ -700,11 +701,11 @@ impl ApiUserRepository {
 
         let Some(record) = sqlx::query!(
             r#"
-            SELECT pwr.password_reset_secret, pwr.api_user_id, count(t.id) AS "totp_count!"
+            SELECT pwr.reset_secret, pwr.api_user_id, count(t.id) AS "totp_count!"
             FROM password_reset pwr
                 LEFT JOIN totp t ON t.user_id = api_user_id
             WHERE pwr.id = $1
-              AND pwr.password_reset_time > now() - '15 minutes'::interval
+              AND pwr.created_at > now() - '15 minutes'::interval
               AND (t.state IS NULL OR t.state = 'enabled')
             GROUP BY pwr.id
             "#,
@@ -717,7 +718,7 @@ impl ApiUserRepository {
         };
 
         reset_secret
-            .verify_password(&record.password_reset_secret)
+            .verify_password(&record.reset_secret)
             .map_err(|_| Error::NotFound("invalid password reset secret"))?;
 
         if record.totp_count > 0 {
@@ -758,6 +759,29 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn remove_password_reset_expired_before(
+        &self,
+        before: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        trace!("Removing password reset links before {}", before);
+        let rows = sqlx::query!(
+            r#"
+            DELETE FROM password_reset
+            WHERE created_at < $1
+            "#,
+            before
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows > 0 {
+            tracing::debug!("Removed {} password reset links", rows);
+        }
+
+        Ok(())
+    }
+
     pub async fn delete_password(
         &self,
         current_password: Password,
@@ -775,9 +799,7 @@ impl ApiUserRepository {
         if let Some(hash) = hash {
             current_password
                 .verify_password(&hash)
-                .inspect_err(|err| {
-                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
-                })
+                .inspect_err(|err| trace!(user_id = user_id.to_string(), "wrong password: {}", err))
                 .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
         } else {
             return Ok(());

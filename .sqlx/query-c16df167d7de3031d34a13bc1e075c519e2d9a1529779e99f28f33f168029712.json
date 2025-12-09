@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT pwr.reset_secret, pwr.api_user_id, count(t.id) AS \"totp_count!\"\n            FROM password_reset pwr\n                LEFT JOIN totp t ON t.user_id = api_user_id\n            WHERE pwr.id = $1\n              AND pwr.created_at > now() - '15 minutes'::interval\n              AND (t.state IS NULL OR t.state = 'enabled')\n            GROUP BY pwr.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reset_secret",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "api_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "totp_count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c16df167d7de3031d34a13bc1e075c519e2d9a1529779e99f28f33f168029712"
+}

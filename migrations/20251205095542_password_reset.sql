@@ -11,8 +11,8 @@ VALUES (NULL, NULL);
 
 CREATE TABLE password_reset
 (
-    id                    uuid PRIMARY KEY,
-    api_user_id           uuid                     NOT NULL REFERENCES api_users (id) ON DELETE CASCADE UNIQUE,
-    password_reset_secret text                     NOT NULL,
-    password_reset_time   timestamp with time zone NOT NULL
+    id           uuid PRIMARY KEY,
+    api_user_id  uuid                     NOT NULL REFERENCES api_users (id) ON DELETE CASCADE UNIQUE,
+    reset_secret text                     NOT NULL,
+    created_at   timestamp with time zone NOT NULL
 );

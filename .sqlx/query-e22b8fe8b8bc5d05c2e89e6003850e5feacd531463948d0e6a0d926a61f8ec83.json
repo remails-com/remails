@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH ins AS (\n                INSERT INTO password_reset (id, api_user_id, reset_secret, created_at)\n                SELECT gen_random_uuid(), u.id, $2, now()\n                FROM api_users u\n                    LEFT JOIN password_reset pr on u.id = pr.api_user_id\n                WHERE u.email = $1\n                -- Allow at most one reset link per minute\n                  AND (pr.created_at IS NULL OR pr.created_at < now() - '1 min'::interval)\n                ON CONFLICT (api_user_id) DO UPDATE\n                SET created_at = now(),\n                    id = gen_random_uuid(),\n                    reset_secret = $2\n                RETURNING id, api_user_id\n            )\n            SELECT ins.id, u.name\n            FROM ins\n            JOIN api_users u ON ins.api_user_id = u.id;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e22b8fe8b8bc5d05c2e89e6003850e5feacd531463948d0e6a0d926a61f8ec83"
+}

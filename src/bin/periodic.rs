@@ -39,11 +39,11 @@ async fn main() -> anyhow::Result<()> {
     let mut check_nodes_interval = time::interval(Duration::from_secs(10)); // Every 10 seconds
     let mut message_retry_interval = time::interval(Duration::from_secs(60)); // Every minute
     let mut reset_all_quotas_interval = time::interval(Duration::from_secs(10 * 60)); // Every 10 minutes
-    let mut clean_up_invites_interval = time::interval(Duration::from_secs(4 * 60 * 60)); // Every 4 hours
+    let mut clean_up_interval = time::interval(Duration::from_secs(4 * 60 * 60)); // Every 4 hours
     check_nodes_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     message_retry_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     reset_all_quotas_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    clean_up_invites_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+    clean_up_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
 
     let shutdown_clone = shutdown.clone();
 
@@ -71,8 +71,8 @@ async fn main() -> anyhow::Result<()> {
                         update_healthcheck("reset_all_quotas")
                     }
                 },
-                _ = clean_up_invites_interval.tick() =>  {
-                    if let Err(err) = periodically.clean_up_invites().await {
+                _ = clean_up_interval.tick() =>  {
+                    if let Err(err) = periodically.clean_up().await {
                         error!("Failed to clean up invites: {}", err);
                     } else {
                         update_healthcheck("clean_up_invites")

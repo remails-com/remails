@@ -1,7 +1,7 @@
 use crate::{
     MoneyBird,
     bus::client::BusClient,
-    models::{self, InviteRepository, MessageRepository},
+    models::{self, ApiUserRepository, InviteRepository, MessageRepository},
     moneybird,
 };
 use chrono::Duration;
@@ -14,6 +14,7 @@ use tracing::{debug, error};
 pub struct Periodically {
     message_repository: MessageRepository,
     invite_repository: InviteRepository,
+    user_repository: ApiUserRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
 }
@@ -44,6 +45,7 @@ impl Periodically {
         Ok(Self {
             message_repository: MessageRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
+            user_repository: ApiUserRepository::new(pool.clone()),
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
         })
@@ -72,10 +74,14 @@ impl Periodically {
         Ok(())
     }
 
-    /// Clean up invites which have been expired for more than a day
-    pub async fn clean_up_invites(&self) -> Result<(), models::Error> {
+    /// Clean up organization invites and password reset links which have been expired for more than a day
+    pub async fn clean_up(&self) -> Result<(), models::Error> {
         self.invite_repository
             .remove_expired_before(chrono::Utc::now() - Duration::days(1))
+            .await?;
+
+        self.user_repository
+            .remove_password_reset_expired_before(chrono::Utc::now() - Duration::days(1))
             .await
     }
 

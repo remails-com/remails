@@ -507,7 +507,7 @@ mod tests {
         // expired invite will be removed eventually
         let bus_client = BusClient::new_from_env_var().unwrap();
         let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
-        periodically.clean_up_invites().await.unwrap();
+        periodically.clean_up().await.unwrap();
 
         // cannot get automatically removed expired invite
         let response = server.get(&invite_endpoint).await.unwrap();

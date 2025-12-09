@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT raw_data FROM messages WHERE recipients = '{\"test-api@user-2\"}'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "raw_data",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e908f79152bfd0a240f0e353599ea63b10970619f564f2168233dd52641bc156"
+}
