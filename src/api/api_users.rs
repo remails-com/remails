@@ -583,15 +583,22 @@ mod tests {
         .await;
     }
 
+    #[sqlx::test]
+    async fn test_invalid_rw_reset_link(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        let res = server
+            .get("/api/login/password/reset/4f6c6024-f1f0-468d-8166-a0824d26e86f")
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let status: ResetLinkCheck = deserialize_body(res.into_body()).await;
+        assert_eq!(status, ResetLinkCheck::NotActive);
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "runtime_config",
-            "k8s_nodes"
-        )
+        scripts("organizations", "api_users", "projects", "runtime_config",)
     ))]
     async fn test_password_reset(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
@@ -628,6 +635,20 @@ mod tests {
         let status: ResetLinkCheck = deserialize_body(res.into_body()).await;
         assert_eq!(status, ResetLinkCheck::ActiveWithout2Fa);
 
+        // Try invalid reset secret
+        let res = server
+            .post(
+                format!("/api/{reset_link}"),
+                serialize_body(json!({
+                    "new_password": "thisismynewpassword",
+                    "reset_secret": "invalidsecret"
+                    }
+                )),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
         // Set new password
         let res = server
             .post(
@@ -657,15 +678,23 @@ mod tests {
         let _ = get_session_cookie(response);
     }
 
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("runtime_config",)))]
+    async fn test_password_reset_request_returns_ok_if_mail_does_not_exist(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        let res = server
+            .post(
+                "/api/login/password/reset",
+                serialize_body(json! {"does-not-exist@email.com"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts(
-            "organizations",
-            "api_users",
-            "projects",
-            "runtime_config",
-            "k8s_nodes"
-        )
+        scripts("organizations", "api_users", "projects", "runtime_config",)
     ))]
     async fn test_password_reset_with_active_2fa(pool: PgPool) {
         let server = TestServer::new(pool.clone(), None).await;
@@ -709,6 +738,21 @@ mod tests {
                 serialize_body(json!({
                     "new_password": "thisismynewpassword",
                     "reset_secret": reset_secret,
+                    }
+                )),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // try invalid totp code
+        let res = server
+            .post(
+                format!("/api/{reset_link}"),
+                serialize_body(json!({
+                    "new_password": "thisismynewpassword",
+                    "reset_secret": reset_secret,
+                    "totp_code": "123456"
                     }
                 )),
             )

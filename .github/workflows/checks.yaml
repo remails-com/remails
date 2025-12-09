@@ -122,6 +122,13 @@ jobs:
           name: frontend
           path: frontend/dist
 
+      - name: Apply some DB fixtures
+        run: |
+          psql -h localhost -U remails -w < src/fixtures/organizations.sql && \
+          psql -h localhost -U remails -w < src/fixtures/api_users.sql && \
+          psql -h localhost -U remails -w < src/fixtures/projects.sql && \
+          psql -h localhost -U remails -w < src/fixtures/runtime_config.sql && \
+
       - name: mark backend as executable
         run: chmod +x target/debug/app
 
