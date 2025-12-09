@@ -10,7 +10,7 @@ import { IconX } from "@tabler/icons-react";
 interface FormValues {
   new_password: string;
   reset_secret: string;
-  totp_token: string;
+  totp_code: string;
 }
 
 export default function PasswordReset() {
@@ -24,13 +24,10 @@ export default function PasswordReset() {
     initialValues: {
       new_password: "",
       reset_secret: window.location.hash.substring(1),
-      totp_token: "",
+      totp_code: "",
     },
     validate: {
-      totp_token: (value) => {
-        console.log(value);
-        console.log(state);
-        console.log(state === "ActiveWith2Fa" && value.match(/^\d{6}$/));
+      totp_code: (value) => {
         return state !== "ActiveWith2Fa" || value.match(/^\d{6}$/) ? null : "2FA code must be exactly 6 digits";
       },
       new_password: (value) => (value.length >= 10 ? null : "Password must be at least 10 characters long"),
@@ -38,7 +35,7 @@ export default function PasswordReset() {
   });
 
   const submit = async (v: FormValues) => {
-    const req = state === "ActiveWith2Fa" ? { ...v } : { ...v, totp_token: null };
+    const req = state === "ActiveWith2Fa" ? { ...v } : { ...v, totp_code: null };
     const res = await fetch(`/api/login/password/reset/${routerState.params.pw_reset_id}`, {
       method: "POST",
       headers: {
@@ -102,13 +99,13 @@ export default function PasswordReset() {
               {state === "ActiveWith2Fa" && (
                 <TextInput
                   required
-                  value={form.values.totp_token}
+                  value={form.values.totp_code}
                   label="Your 6 digit 2FA code"
-                  key={form.key("totp_token")}
-                  onChange={(event) => form.setFieldValue("totp_token", event.currentTarget.value)}
+                  key={form.key("totp_code")}
+                  onChange={(event) => form.setFieldValue("totp_code", event.currentTarget.value)}
                   autoComplete="one-time-code"
                   radius="md"
-                  error={form.errors.totp_token}
+                  error={form.errors.totp_code}
                   placeholder="e.g. 123456"
                   type="number"
                 />

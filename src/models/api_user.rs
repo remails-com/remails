@@ -257,10 +257,19 @@ impl TryFrom<PgApiUser> for ApiUser {
 
 /// Indicates weather a password reset link is still valid and weather or not 2FA is activated on that account
 #[derive(Serialize, ToSchema, Debug)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
 pub enum ResetLinkCheck {
     NotActive,
     ActiveWithout2Fa,
     ActiveWith2Fa,
+}
+
+#[derive(derive_more::Debug)]
+pub struct PwResetData {
+    pub pw_reset_id: PwResetId,
+    #[debug("*******")]
+    pub reset_secret: String,
+    pub user_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -617,32 +626,41 @@ impl ApiUserRepository {
     pub async fn initiate_password_reset(
         &self,
         email: &EmailAddress,
-    ) -> Result<(PwResetId, String), Error> {
-        let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
-        let password_hash = password_auth::generate_hash(password.as_bytes());
+    ) -> Result<PwResetData, Error> {
+        let reset_secret = Alphanumeric.sample_string(&mut rand::rng(), 32);
+        let reset_secret_hash = password_auth::generate_hash(reset_secret.as_bytes());
 
-        let user_id = sqlx::query_scalar!(
+        let record = sqlx::query!(
             r#"
-            INSERT INTO password_reset (id, api_user_id, password_reset_secret, password_reset_time)
-            SELECT gen_random_uuid(), u.id, $2, now()
-            FROM api_users u
-                LEFT JOIN password_reset pr on u.id = pr.api_user_id
-            WHERE u.email = $1
-            -- Allow at most one reset link per minute
-              AND (password_reset_time IS NULL OR password_reset_time < now() - '1 min'::interval)
-            ON CONFLICT (api_user_id) DO UPDATE
-            SET password_reset_time = now(),
-                id = gen_random_uuid(),
-                password_reset_secret = $2
-            RETURNING id
+            WITH ins AS (
+                INSERT INTO password_reset (id, api_user_id, password_reset_secret, password_reset_time)
+                SELECT gen_random_uuid(), u.id, $2, now()
+                FROM api_users u
+                    LEFT JOIN password_reset pr on u.id = pr.api_user_id
+                WHERE u.email = $1
+                -- Allow at most one reset link per minute
+                  AND (pr.password_reset_time IS NULL OR pr.password_reset_time < now() - '1 min'::interval)
+                ON CONFLICT (api_user_id) DO UPDATE
+                SET password_reset_time = now(),
+                    id = gen_random_uuid(),
+                    password_reset_secret = $2
+                RETURNING id, api_user_id
+            )
+            SELECT ins.id, u.name
+            FROM ins
+            JOIN api_users u ON ins.api_user_id = u.id;
             "#,
             email.as_str(),
-            password_hash,
+            reset_secret_hash,
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok((user_id.into(), password))
+        Ok(PwResetData {
+            pw_reset_id: record.id.into(),
+            reset_secret,
+            user_name: record.name,
+        })
     }
 
     pub async fn is_password_reset_active(

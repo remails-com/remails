@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 
 #[derive(ToSchema, Validate, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct RuntimeConfig {
     #[garde(skip)]
     system_email_project: Option<ProjectId>,
@@ -12,7 +13,8 @@ pub struct RuntimeConfig {
     system_email_address: Option<String>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, Debug)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
 pub struct RuntimeConfigResponse {
     system_email_project: Option<ProjectId>,
     system_email_project_name: Option<String>,
@@ -39,7 +41,7 @@ impl RuntimeConfigRepository {
                 p.name AS system_email_project_name,
                 p.organization_id AS "system_email_organization:OrganizationId"
             FROM runtime_config 
-                JOIN projects p ON p.id = system_email_project
+                LEFT JOIN projects p ON p.id = system_email_project
             "#
         )
         .fetch_one(&self.pool)
@@ -66,5 +68,38 @@ impl RuntimeConfigRepository {
         )
         .fetch_one(&self.pool)
         .await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::{OrganizationId, ProjectId, RuntimeConfig, RuntimeConfigResponse};
+
+    impl RuntimeConfigResponse {
+        pub fn new(
+            system_email_project: Option<ProjectId>,
+            system_email_project_name: Option<String>,
+            system_email_organization: Option<OrganizationId>,
+            system_email_address: Option<String>,
+        ) -> Self {
+            Self {
+                system_email_project,
+                system_email_project_name,
+                system_email_organization,
+                system_email_address,
+            }
+        }
+    }
+
+    impl RuntimeConfig {
+        pub fn new(
+            system_email_project: Option<ProjectId>,
+            system_email_address: Option<String>,
+        ) -> Self {
+            Self {
+                system_email_project,
+                system_email_address,
+            }
+        }
     }
 }

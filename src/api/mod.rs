@@ -498,6 +498,7 @@ mod tests {
                 message_bus_client.clone(),
             )
             .await;
+
             let mut headers = HashMap::new();
             headers.insert("Content-Type", "application/json".to_string());
             if let Some(user) = user {
@@ -582,24 +583,6 @@ mod tests {
     {
         let bytes = axum::body::to_bytes(body, 8192).await.unwrap();
         serde_json::from_slice(&bytes).expect("Failed to deserialize response body")
-    }
-
-    #[sqlx::test]
-    async fn test_util_endpoints(pool: PgPool) {
-        let server = TestServer::new(pool.clone(), None).await;
-
-        // can access health check
-        let response = server.get("/api/healthy").await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let bytes = axum::body::to_bytes(response.into_body(), 8192)
-            .await
-            .unwrap();
-        assert!(bytes.iter().eq(b"{\"healthy\":true,\"status\":\"OK\"}"));
-
-        // can access Remails config
-        let response = server.get("/api/config").await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let _: RemailsConfig = deserialize_body(response.into_body()).await;
     }
 
     #[sqlx::test(fixtures(

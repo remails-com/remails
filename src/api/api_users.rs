@@ -102,6 +102,8 @@ pub async fn update_password(
     Ok(())
 }
 
+/// Check password reset link
+///
 /// Check if the password reset link is still active and weather 2FA is active for that account
 #[utoipa::path(get, path = "/login/password/reset/{pw_reset_id}",
     tags = ["internal", "API users"],
@@ -132,10 +134,13 @@ struct PasswordReset {
     #[garde(dive)]
     new_password: Password,
     #[garde(dive)]
-    totp_token: Option<TotpCode>,
+    totp_code: Option<TotpCode>,
 }
 
-/// Set new password using the password reset secret
+/// Reset password
+///
+/// Set new password using the password reset secret that was sent by mail.
+/// If the user has 2FA activated, they must also provide a valid TOTP code
 #[utoipa::path(post, path = "/login/password/reset/{pw_reset_id}",
     tags = ["internal", "API users"],
     request_body = PasswordReset,
@@ -153,7 +158,7 @@ async fn password_reset(
         pw_reset_id,
         req.reset_secret,
         req.new_password,
-        req.totp_token,
+        req.totp_code,
     )
     .await?;
 
@@ -336,16 +341,17 @@ pub async fn delete_password(
 
 #[cfg(test)]
 mod tests {
-    use http::StatusCode;
-    use serde_json::json;
-    use sqlx::PgPool;
-
+    use super::*;
     use crate::api::{
+        auth::tests::get_session_cookie,
         tests::{TestServer, deserialize_body, serialize_body},
         whoami::Whoami,
     };
-
-    use super::*;
+    use http::StatusCode;
+    use mail_parser::MessageParser;
+    use regex::Regex;
+    use serde_json::json;
+    use sqlx::PgPool;
 
     impl Whoami {
         fn unwrap_email(&self) -> &str {
@@ -575,5 +581,182 @@ mod tests {
             StatusCode::BAD_REQUEST,
         )
         .await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "runtime_config",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_password_reset(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        let res = server
+            .post(
+                "/api/login/password/reset",
+                serialize_body(json! {"test-api@user-2"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let raw_data = sqlx::query_scalar!(
+            r#"
+            SELECT raw_data FROM messages WHERE recipients = '{"test-api@user-2"}'
+            "#
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let message = MessageParser::default().parse(&raw_data).unwrap();
+        let message = message.body_text(0).unwrap().to_string();
+
+        let regex = Regex::new(r#"https://[^/]*/([^\s#]*)#([^\s)]*)"#).unwrap();
+        let captures = regex.captures(message.as_str()).unwrap();
+        let reset_link = captures.get(1).unwrap().as_str();
+        let reset_secret = captures.get(2).unwrap().as_str();
+
+        // Check reset link status
+        let res = server.get(format!("/api/{reset_link}")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let status: ResetLinkCheck = deserialize_body(res.into_body()).await;
+        assert_eq!(status, ResetLinkCheck::ActiveWithout2Fa);
+
+        // Set new password
+        let res = server
+            .post(
+                format!("/api/{reset_link}"),
+                serialize_body(json!({
+                    "new_password": "thisismynewpassword",
+                    "reset_secret": reset_secret
+                    }
+                )),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Login with new password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-api@user-2",
+                    "password": "thisismynewpassword"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = get_session_cookie(response);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "runtime_config",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_password_reset_with_active_2fa(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        let res = server
+            .post(
+                "/api/login/password/reset",
+                serialize_body(json! {"test-totp-rate-limit@user-4"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let raw_data = sqlx::query_scalar!(
+            r#"
+            SELECT raw_data FROM messages WHERE recipients = '{"test-totp-rate-limit@user-4"}'
+            "#
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let message = MessageParser::default().parse(&raw_data).unwrap();
+        let message = message.body_text(0).unwrap().to_string();
+
+        let regex = Regex::new(r#"https://[^/]*/([^\s#]*)#([^\s)]*)"#).unwrap();
+        let captures = regex.captures(message.as_str()).unwrap();
+        let reset_link = captures.get(1).unwrap().as_str();
+        let reset_secret = captures.get(2).unwrap().as_str();
+
+        // Check reset link status
+        let res = server.get(format!("/api/{reset_link}")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let status: ResetLinkCheck = deserialize_body(res.into_body()).await;
+        assert_eq!(status, ResetLinkCheck::ActiveWith2Fa);
+
+        // Make sure TOTP is required
+        let res = server
+            .post(
+                format!("/api/{reset_link}"),
+                serialize_body(json!({
+                    "new_password": "thisismynewpassword",
+                    "reset_secret": reset_secret,
+                    }
+                )),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        let totp_url = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM totp WHERE id = '448f8b7c-e6b9-4038-ab73-bc35826fd5da'
+            "#
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let totp_code = totp_rs::TOTP::from_url(totp_url)
+            .unwrap()
+            .generate_current()
+            .unwrap();
+
+        // Set new password
+        let res = server
+            .post(
+                format!("/api/{reset_link}"),
+                serialize_body(json!({
+                    "new_password": "thisismynewpassword",
+                    "reset_secret": reset_secret,
+                    "totp_code": totp_code
+                    }
+                )),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Login with new password
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-totp-rate-limit@user-4",
+                    "password": "thisismynewpassword"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = get_session_cookie(response);
     }
 }

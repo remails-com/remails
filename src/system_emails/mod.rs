@@ -1,7 +1,6 @@
 use crate::{
     api::ApiState,
     bus::client::BusClient,
-    models,
     models::{ApiUserRepository, Error, Label, MessageRepository},
 };
 use askama::Template;
@@ -12,14 +11,16 @@ use tracing::{error, warn};
 
 #[derive(Template)]
 #[template(path = "password_reset.j2")]
-struct HtmlTemplate {
-    password_reset_link: String,
+struct HtmlTemplate<'a> {
+    password_reset_link: &'a str,
+    name: &'a str,
 }
 
 #[derive(Template)]
 #[template(path = "password_reset.txt")]
-struct TxtTemplate {
-    password_reset_link: String,
+struct TxtTemplate<'a> {
+    password_reset_link: &'a str,
+    name: &'a str,
 }
 
 struct InternalEmail {
@@ -33,10 +34,10 @@ struct InternalEmail {
 pub async fn send_password_reset_email(
     api_state: &ApiState,
     email_address: EmailAddress,
-) -> Result<(), models::Error> {
+) -> Result<(), Error> {
     let repo = ApiUserRepository::from_ref(api_state);
 
-    let (pw_reset_id, reset_secret) = match repo.initiate_password_reset(&email_address).await {
+    let reset_data = match repo.initiate_password_reset(&email_address).await {
         Err(Error::NotFound(_)) => {
             warn!(
                 email = email_address.as_str(),
@@ -49,17 +50,21 @@ pub async fn send_password_reset_email(
     };
 
     let link = format!(
-        "https://{}/login/password/reset/{pw_reset_id}#{}",
+        "https://{}/login/password/reset/{}#{}",
         api_state.api_server_name(),
-        reset_secret
+        reset_data.pw_reset_id,
+        reset_data.reset_secret
     );
 
     let html = HtmlTemplate {
-        password_reset_link: link.clone(),
+        password_reset_link: &link,
+        name: &reset_data.user_name,
     }
     .render()?;
+
     let text = TxtTemplate {
-        password_reset_link: link.clone(),
+        password_reset_link: &link,
+        name: &reset_data.user_name,
     }
     .render()?;
 
@@ -78,10 +83,7 @@ pub async fn send_password_reset_email(
     Ok(())
 }
 
-async fn send_internal_email(
-    api_state: &ApiState,
-    email: InternalEmail,
-) -> Result<(), models::Error> {
+async fn send_internal_email(api_state: &ApiState, email: InternalEmail) -> Result<(), Error> {
     let message_repo = MessageRepository::from_ref(api_state);
     let bus = Arc::<BusClient>::from_ref(api_state);
 

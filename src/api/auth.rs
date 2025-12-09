@@ -214,7 +214,7 @@ impl UserCookie {
     }
 }
 
-/// Password reset
+/// Initiate password reset
 ///
 /// Triggers an email to be sent with a password reset link if the account exists. This function
 /// returns the same response independently on if the account actually exists to not leak information
@@ -667,7 +667,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
@@ -678,7 +678,7 @@ mod tests {
     use sqlx::PgPool;
     use totp_rs::TOTP;
 
-    fn get_session_cookie(response: Response<Body>) -> String {
+    pub fn get_session_cookie(response: Response<Body>) -> String {
         let cookies = response.headers().get_all("set-cookie");
         let cookies = cookies.iter().collect::<Vec<_>>();
         assert_eq!(cookies.len(), 1);
