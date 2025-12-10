@@ -9,7 +9,7 @@ import { errorNotification } from "../../notify.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 
 interface FormValues {
-  system_email_address: string;
+  system_email_address: string | null;
   system_email_project: string | null;
 }
 
@@ -25,7 +25,7 @@ export default function RuntimeConfig() {
       system_email_project: runtimeConfig.system_email_project,
     },
     validate: {
-      system_email_address: (value) => (/^\S+@\S+$/.test(value) ? null : "Invalid email"),
+      system_email_address: (value) => (!value || /^\S+@\S+$/.test(value) ? null : "Invalid email"),
     },
   });
 
@@ -60,7 +60,7 @@ export default function RuntimeConfig() {
     },
   ];
 
-  if (currentOrganization?.id !== runtimeConfig.system_email_organization) {
+  if (runtimeConfig.system_email_organization && currentOrganization?.id !== runtimeConfig.system_email_organization) {
     systemEmailDropdownOptions.push({
       group:
         organizations.find((o) => o.id === runtimeConfig.system_email_organization)?.name ||
@@ -92,24 +92,28 @@ export default function RuntimeConfig() {
                 </Group>
               }
               key={configForm.key("system_email_address")}
-              value={configForm.values.system_email_address}
+              value={configForm.values.system_email_address || ""}
               placeholder="e.g., noreply@remails.com"
               type="email"
               error={configForm.errors.system_email_address}
-              onChange={(event) => configForm.setFieldValue("system_email_address", event.currentTarget.value)}
+              onChange={(event) => {
+                const value = event.currentTarget.value.trim() || null;
+                configForm.setFieldValue("system_email_address", value);
+              }}
             />
             <Select
               label="System email project"
               placeholder="Pick project to send system emails"
               clearable
-              allowDeselect
               searchable
               nothingFoundMessage="This project does not exist, in the currently active organization..."
               data={systemEmailDropdownOptions}
               value={configForm.values.system_email_project}
               onChange={(value) => configForm.setFieldValue("system_email_project", value)}
             />
-            <Button type="submit">Save</Button>
+            <Button type="submit" disabled={!configForm.isDirty()}>
+              Save
+            </Button>
           </Stack>
         </form>
       </Stack>

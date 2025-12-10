@@ -60,8 +60,8 @@ impl RuntimeConfigRepository {
             RETURNING
                 rc.system_email_address,
                 rc.system_email_project AS "system_email_project:ProjectId",
-                p.name AS system_email_project_name,
-                p.organization_id AS "system_email_organization:OrganizationId";
+                p.name AS "system_email_project_name?",
+                p.organization_id AS "system_email_organization?:OrganizationId";
             "#,
             config.system_email_address,
             config.system_email_project.map(|c| c.as_uuid())

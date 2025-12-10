@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE runtime_config rc\n            SET system_email_address = $1,\n                system_email_project = $2\n            FROM runtime_config\n                     LEFT JOIN projects p ON p.id = $2\n            RETURNING\n                rc.system_email_address,\n                rc.system_email_project AS \"system_email_project:ProjectId\",\n                p.name AS \"system_email_project_name?\",\n                p.organization_id AS \"system_email_organization?:OrganizationId\";\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "system_email_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "system_email_project:ProjectId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "system_email_project_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "system_email_organization?:OrganizationId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9579721cfc016131fa7afd6357a6503f363adb22406dfd0f69204e3015739fa4"
+}
