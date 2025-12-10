@@ -72,6 +72,9 @@ const actionHandler: {
   set_config: function (state, action) {
     return { ...state, config: action.config };
   },
+  set_runtime_config: function (state, action) {
+    return { ...state, runtimeConfig: action.config };
+  },
   set_user: function (state, action) {
     return { ...state, user: action.user, userFetched: true };
   },

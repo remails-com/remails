@@ -1,5 +1,5 @@
 import { NavLink } from "@mantine/core";
-import { IconBuildings, IconChartBar, IconGavel, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { IconChartBar, IconGavel, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
@@ -21,11 +21,11 @@ export function NavBar({ close }: { close: () => void }) {
       {user.global_role === "admin" && (
         <NavLink
           mb="md"
-          label="Organizations"
-          active={routerState.name === "organizations"}
-          leftSection={<IconBuildings size={20} stroke={1.8} />}
+          label="Admin"
+          active={routerState.name.startsWith("admin")}
+          leftSection={<IconGavel size={20} stroke={1.8} />}
           onClick={() => {
-            navigate("organizations");
+            navigate("admin");
             close();
           }}
         />
@@ -78,17 +78,6 @@ export function NavBar({ close }: { close: () => void }) {
           close();
         }}
       />
-      {user.global_role === "admin" && (
-        <NavLink
-          label="Admin"
-          active={routerState.name.startsWith("admin")}
-          leftSection={<IconGavel size={20} stroke={1.8} />}
-          onClick={() => {
-            navigate("admin");
-            close();
-          }}
-        />
-      )}
     </>
   );
 }

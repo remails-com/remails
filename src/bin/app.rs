@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = periodically.retry_messages().await {
                 error!("Error retrying: {e}")
             };
-            if let Err(e) = periodically.clean_up_invites().await {
+            if let Err(e) = periodically.clean_up().await {
                 error!("Error during clean up: {e}")
             }
             if let Err(e) = kubernetes.check_node_health().await {

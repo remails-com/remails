@@ -31,12 +31,16 @@ export function PasswordSettings() {
   });
 
   const updatePassword = async (update: PasswordForm) => {
+    const current_password = update.old_password === "" ? null : update.old_password;
     const res = await fetch(`/api/api_user/${user.id}/password`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ current_password: update.old_password, new_password: update.new_password1 }),
+      body: JSON.stringify({
+        current_password,
+        new_password: update.new_password1,
+      }),
     });
     if (res.status === 200) {
       passwordForm.reset();

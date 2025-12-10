@@ -26,6 +26,7 @@ mod test;
 
 mod kubernetes;
 mod moneybird;
+mod system_emails;
 
 pub use kubernetes::Kubernetes;
 pub use moneybird::*;

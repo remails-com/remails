@@ -26,6 +26,7 @@ export const RemailsContext = createContext<{
     credentials: null,
     apiKeys: null,
     config: null,
+    runtimeConfig: null,
     routerState: {
       name: "default",
       params: {},
@@ -67,6 +68,7 @@ export function useLoadRemails() {
     credentials: null,
     error: null,
     config: null,
+    runtimeConfig: null,
     routerState: router.initialState,
     nextRouterState: null,
     apiKeys: null,
@@ -76,7 +78,7 @@ export function useLoadRemails() {
 
   useEffect(() => {
     // initial navigation
-    const route = router.match(window.location.pathname + window.location.search);
+    const route = router.match(window.location.pathname + window.location.search + window.location.hash);
 
     if (route) {
       navigate(route.name, route.params);

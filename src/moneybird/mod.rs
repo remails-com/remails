@@ -866,7 +866,7 @@ mod test {
             let (exp_total, reset, exp_subscription_status) =
                 match org.id().as_uuid().to_string().as_str() {
                     "44729d9f-a7dc-4226-b412-36a7537f5176" => {
-                        (800, Utc::now().checked_add_months(Months::new(1)), "none")
+                        (800, Utc::now().checked_add_months(Months::new(1)), "active")
                     }
                     "5d55aec5-136a-407c-952f-5348d4398204" => {
                         (500, Utc::now().checked_add_months(Months::new(1)), "none")

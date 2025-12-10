@@ -4,6 +4,7 @@ use crate::{
         ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
         OrganizationId, Password, Role, TotpCode,
     },
+    system_emails::send_password_reset_email,
 };
 use axum::{
     Json,
@@ -28,7 +29,6 @@ use tracing::error;
 use tracing::{debug, trace, warn};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
-
 // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
 
 #[cfg(not(debug_assertions))]
@@ -38,6 +38,7 @@ pub static SESSION_COOKIE_NAME: &str = "SESSION";
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
+        .routes(routes!(password_reset_email))
         .routes(routes!(password_login))
         .routes(routes!(totp_login))
         .routes(routes!(password_register))
@@ -211,6 +212,27 @@ impl UserCookie {
             expires_at: Utc::now() + Duration::days(7),
         }
     }
+}
+
+/// Initiate password reset
+///
+/// Triggers an email to be sent with a password reset link if the account exists. This function
+/// returns the same response independently on if the account actually exists to not leak information
+#[utoipa::path(post, path = "/login/password/reset",
+    tags = ["internal", "Auth"],
+    security(()),
+    request_body = EmailAddress,
+    responses(
+        (status = 200, description = "Successfully send email if account exists"),
+        AppError,
+))]
+async fn password_reset_email(
+    State(state): State<ApiState>,
+    Json(email): Json<EmailAddress>,
+) -> Result<(), AppError> {
+    send_password_reset_email(&state, email).await?;
+
+    Ok(())
 }
 
 #[derive(Deserialize, ToSchema, Validate)]
@@ -645,7 +667,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
@@ -656,7 +678,7 @@ mod tests {
     use sqlx::PgPool;
     use totp_rs::TOTP;
 
-    fn get_session_cookie(response: Response<Body>) -> String {
+    pub fn get_session_cookie(response: Response<Body>) -> String {
         let cookies = response.headers().get_all("set-cookie");
         let cookies = cookies.iter().collect::<Vec<_>>();
         assert_eq!(cookies.len(), 1);

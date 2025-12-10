@@ -3,9 +3,11 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
+use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use totp_rs::{Algorithm, Secret, TOTP};
+use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -42,6 +44,23 @@ pub struct ApiUserId(Uuid);
 )]
 #[into_params(names("totp_id"))]
 pub struct TotpId(Uuid);
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    FromStr,
+    ToSchema,
+    IntoParams,
+)]
+#[into_params(names("pw_reset_id"))]
+pub struct PwResetId(Uuid);
 
 #[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema, Validate)]
 #[debug("*****")]
@@ -140,7 +159,7 @@ pub struct PasswordUpdate {
     pub new_password: Password,
     #[garde(dive)]
     #[schema(min_length = 6, max_length = 256)]
-    pub current_password: Password,
+    pub current_password: Option<Password>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -235,6 +254,23 @@ impl TryFrom<PgApiUser> for ApiUser {
             password_enabled: u.password_enabled,
         })
     }
+}
+
+/// Indicates weather a password reset link is still valid and weather or not 2FA is activated on that account
+#[derive(Serialize, ToSchema, Debug)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
+pub enum ResetLinkCheck {
+    NotActive,
+    ActiveWithout2Fa,
+    ActiveWith2Fa,
+}
+
+#[derive(derive_more::Debug)]
+pub struct PwResetData {
+    pub pw_reset_id: PwResetId,
+    #[debug("*******")]
+    pub reset_secret: String,
+    pub user_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -439,7 +475,7 @@ impl ApiUserRepository {
             "#,
             **user_id
         )
-        .fetch_one(&self.pool).await?;
+            .fetch_one(&self.pool).await?;
 
         if counter > 3 {
             Err(Error::TooManyRequests)
@@ -564,6 +600,9 @@ impl ApiUserRepository {
         if let Some(hash) = hash {
             update
                 .current_password
+                .ok_or(Error::BadRequest(
+                    "Must provide current password".to_string(),
+                ))?
                 .verify_password(&hash)
                 .inspect_err(|err| {
                     tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
@@ -585,6 +624,165 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn initiate_password_reset(
+        &self,
+        email: &EmailAddress,
+    ) -> Result<PwResetData, Error> {
+        let reset_secret = Alphanumeric.sample_string(&mut rand::rng(), 32);
+        let reset_secret_hash = password_auth::generate_hash(reset_secret.as_bytes());
+
+        let record = sqlx::query!(
+            r#"
+            WITH ins AS (
+                INSERT INTO password_reset (id, api_user_id, reset_secret, created_at)
+                SELECT gen_random_uuid(), u.id, $2, now()
+                FROM api_users u
+                    LEFT JOIN password_reset pr on u.id = pr.api_user_id
+                WHERE u.email = $1
+                  AND u.password_hash IS NOT NULL
+                -- Allow at most one reset link per minute
+                  AND (pr.created_at IS NULL OR pr.created_at < now() - '1 min'::interval)
+                ON CONFLICT (api_user_id) DO UPDATE
+                SET created_at = now(),
+                    id = gen_random_uuid(),
+                    reset_secret = $2
+                RETURNING id, api_user_id
+            )
+            SELECT ins.id, u.name
+            FROM ins
+            JOIN api_users u ON ins.api_user_id = u.id;
+            "#,
+            email.as_str(),
+            reset_secret_hash,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(PwResetData {
+            pw_reset_id: record.id.into(),
+            reset_secret,
+            user_name: record.name,
+        })
+    }
+
+    pub async fn is_password_reset_active(
+        &self,
+        pw_reset_id: PwResetId,
+    ) -> Result<ResetLinkCheck, Error> {
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT count(t.id) as "count!"
+            FROM password_reset r
+                LEFT JOIN totp t on r.api_user_id = t.user_id
+            WHERE r.id = $1
+              AND r.created_at > now() - '15 minutes'::interval
+              AND (t.state IS NULL OR t.state = 'enabled')
+            GROUP BY r.id
+            "#,
+            *pw_reset_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match count {
+            None => Ok(ResetLinkCheck::NotActive),
+            Some(0) => Ok(ResetLinkCheck::ActiveWithout2Fa),
+            Some(_) => Ok(ResetLinkCheck::ActiveWith2Fa),
+        }
+    }
+
+    pub async fn finish_password_reset(
+        &self,
+        pw_reset_id: PwResetId,
+        reset_secret: Password,
+        new_password: Password,
+        totp_code: Option<TotpCode>,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let Some(record) = sqlx::query!(
+            r#"
+            SELECT pwr.reset_secret, pwr.api_user_id, count(t.id) AS "totp_count!"
+            FROM password_reset pwr
+                LEFT JOIN totp t ON t.user_id = api_user_id
+            WHERE pwr.id = $1
+              AND pwr.created_at > now() - '15 minutes'::interval
+              AND (t.state IS NULL OR t.state = 'enabled')
+            GROUP BY pwr.id
+            "#,
+            *pw_reset_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        else {
+            return Err(Error::NotFound("invalid password reset secret"));
+        };
+
+        reset_secret
+            .verify_password(&record.reset_secret)
+            .map_err(|_| Error::NotFound("invalid password reset secret"))?;
+
+        if record.totp_count > 0 {
+            let Some(totp_code) = totp_code else {
+                return Err(Error::BadRequest("Missing TOTP code".to_string()));
+            };
+            if !self
+                .check_totp_code(&record.api_user_id.into(), totp_code.as_ref())
+                .await?
+            {
+                return Err(Error::BadRequest("Invalid TOTP code".to_string()));
+            }
+        }
+
+        sqlx::query!(
+            r#"
+            UPDATE api_users
+            SET password_hash = $1
+            WHERE id = $2
+            "#,
+            new_password.generate_hash(),
+            record.api_user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            DELETE FROM password_reset WHERE id = $1
+            "#,
+            *pw_reset_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    pub async fn remove_password_reset_expired_before(
+        &self,
+        before: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        trace!("Removing password reset links before {}", before);
+        let rows = sqlx::query!(
+            r#"
+            DELETE FROM password_reset
+            WHERE created_at < $1
+            "#,
+            before
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows > 0 {
+            tracing::debug!("Removed {} password reset links", rows);
+        }
+
+        Ok(())
+    }
+
     pub async fn delete_password(
         &self,
         current_password: Password,
@@ -602,9 +800,7 @@ impl ApiUserRepository {
         if let Some(hash) = hash {
             current_password
                 .verify_password(&hash)
-                .inspect_err(|err| {
-                    tracing::trace!(user_id = user_id.to_string(), "wrong password: {}", err)
-                })
+                .inspect_err(|err| trace!(user_id = user_id.to_string(), "wrong password: {}", err))
                 .map_err(|_| Error::BadRequest("wrong password".to_string()))?;
         } else {
             return Ok(());
@@ -696,8 +892,8 @@ impl ApiUserRepository {
             "#,
             email.as_str()
         )
-        .fetch_optional(&self.pool)
-        .await?;
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(HashAndCounter {
             hash: Some(hash),

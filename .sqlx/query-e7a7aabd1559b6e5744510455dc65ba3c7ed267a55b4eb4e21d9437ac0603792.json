@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT system_email_address, system_email_project FROM runtime_config\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "system_email_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "system_email_project",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "e7a7aabd1559b6e5744510455dc65ba3c7ed267a55b4eb4e21d9437ac0603792"
+}

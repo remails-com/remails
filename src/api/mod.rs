@@ -10,7 +10,8 @@ use crate::{
     handler::{RetryConfig, dns::DnsResolver},
     models::{
         ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        OrganizationRepository, ProjectRepository, SmtpCredentialRepository,
+        OrganizationRepository, ProjectRepository, RuntimeConfigRepository,
+        SmtpCredentialRepository,
     },
     moneybird::MoneyBird,
 };
@@ -59,6 +60,7 @@ mod organizations;
 mod projects;
 mod smtp_credentials;
 mod subscriptions;
+mod system;
 mod validation;
 mod whoami;
 
@@ -141,7 +143,13 @@ pub struct ApiState {
     gh_oauth_service: GithubOauthService,
     resolver: DnsResolver,
     message_bus: Arc<BusClient>,
-    retry_config: Arc<RetryConfig>,
+    pub retry_config: Arc<RetryConfig>,
+}
+
+impl ApiState {
+    pub fn api_server_name(&self) -> &str {
+        self.config.remails_config.api_server_name.as_str()
+    }
 }
 
 impl FromRef<ApiState> for MessageRepository {
@@ -189,6 +197,12 @@ impl FromRef<ApiState> for ApiUserRepository {
 impl FromRef<ApiState> for InviteRepository {
     fn from_ref(state: &ApiState) -> Self {
         InviteRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for RuntimeConfigRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        RuntimeConfigRepository::new(state.pool.clone())
     }
 }
 
@@ -253,6 +267,7 @@ pub struct ApiServer {
     router: Router,
     socket: SocketAddr,
     shutdown: CancellationToken,
+    api_state: ApiState,
 }
 
 impl ApiServer {
@@ -370,7 +385,12 @@ impl ApiServer {
             socket,
             router,
             shutdown,
+            api_state: state,
         }
+    }
+
+    pub fn api_state(&self) -> &ApiState {
+        &self.api_state
     }
 
     pub async fn serve(self) -> Result<(), ApiServerError> {
@@ -404,50 +424,6 @@ impl ApiServer {
 
 async fn wait_for_shutdown(token: CancellationToken) {
     token.cancelled().await;
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-struct HealthyResponse {
-    healthy: bool,
-    status: &'static str,
-}
-
-/// Remails health check
-#[utoipa::path(get, path = "/healthy",
-    tags = ["internal", "Misc"],
-    responses(
-        (status = 200, description = "Remails health status", body = HealthyResponse),
-    )
-)]
-async fn healthy(State(pool): State<PgPool>) -> Json<HealthyResponse> {
-    match sqlx::query("SELECT 1").execute(&pool).await {
-        Ok(_) => Json(HealthyResponse {
-            healthy: true,
-            status: "OK",
-        }),
-        Err(e) => {
-            error!("database error: {:?}", e);
-
-            Json(HealthyResponse {
-                healthy: false,
-                status: "database error",
-            })
-        }
-    }
-}
-
-/// Remails configuration
-///
-/// Get the configuration and environment details of the Remails server
-#[utoipa::path(get, path = "/config",
-    security(()),
-    tags = ["Misc"],
-    responses(
-        (status = 200, description = "Remails configuration", body = RemailsConfig),
-    )
-)]
-pub async fn config(State(config): State<RemailsConfig>) -> Response {
-    Json(config).into_response()
 }
 
 async fn append_default_headers(
@@ -522,6 +498,7 @@ mod tests {
                 message_bus_client.clone(),
             )
             .await;
+
             let mut headers = HashMap::new();
             headers.insert("Content-Type", "application/json".to_string());
             if let Some(user) = user {
@@ -606,24 +583,6 @@ mod tests {
     {
         let bytes = axum::body::to_bytes(body, 8192).await.unwrap();
         serde_json::from_slice(&bytes).expect("Failed to deserialize response body")
-    }
-
-    #[sqlx::test]
-    async fn test_util_endpoints(pool: PgPool) {
-        let server = TestServer::new(pool.clone(), None).await;
-
-        // can access health check
-        let response = server.get("/api/healthy").await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let bytes = axum::body::to_bytes(response.into_body(), 8192)
-            .await
-            .unwrap();
-        assert!(bytes.iter().eq(b"{\"healthy\":true,\"status\":\"OK\"}"));
-
-        // can access Remails config
-        let response = server.get("/api/config").await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let _: RemailsConfig = deserialize_body(response.into_body()).await;
     }
 
     #[sqlx::test(fixtures(

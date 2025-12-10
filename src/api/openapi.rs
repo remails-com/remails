@@ -1,7 +1,7 @@
 use crate::api::{
     ApiServerError, ApiState, api_fallback, api_keys, api_users, auth, domains, error, invites,
     messages, messages::create_message_router, organizations, projects, smtp_credentials,
-    subscriptions, wait_for_shutdown, whoami,
+    subscriptions, system, wait_for_shutdown, whoami,
 };
 use axum::{Json, Router, routing::get};
 use http::StatusCode;
@@ -20,7 +20,7 @@ use utoipa::{
         security::{Http, HttpAuthScheme, SecurityScheme},
     },
 };
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_axum::router::OpenApiRouter;
 
 pub fn openapi_router() -> OpenApiRouter<ApiState> {
     let version = env::var("VERSION").unwrap_or("dev".to_string());
@@ -82,9 +82,8 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
             .merge(subscriptions::router())
             .merge(api_keys::router())
             .merge(smtp_credentials::router())
+            .merge(system::router())
             .merge(auth::router())
-            .routes(routes!(crate::api::config))
-            .routes(routes!(crate::api::healthy))
             .fallback(api_fallback),
     );
 

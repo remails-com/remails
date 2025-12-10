@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT raw_data FROM messages WHERE recipients = '{\"test-totp-rate-limit@user-4\"}'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "raw_data",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f1100bd0e8a38f33263c733c065edd35fc441692f322676c587807a1863e906c"
+}

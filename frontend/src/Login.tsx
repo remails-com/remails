@@ -12,12 +12,12 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { upperFirst } from "@mantine/hooks";
 import { IconBrandGithub, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { SignUpRequest, User, WhoamiResponse } from "./types.ts";
 import { RemailsLogo } from "./components/RemailsLogo.tsx";
 import { useRemails } from "./hooks/useRemails.ts";
+import { notifications } from "@mantine/notifications";
 
 interface LoginProps {
   setUser: (user: User | null) => void;
@@ -30,7 +30,19 @@ export default function Login({ setUser }: LoginProps) {
     redirect,
   } = useRemails();
 
-  const type: "login" | "register" = routerState.params.type === "register" ? "register" : "login";
+  let type: "login" | "register" | "reset_password" = "login";
+  let buttonName = "Login";
+
+  switch (routerState.params.type) {
+    case "register":
+      type = "register";
+      buttonName = "Register";
+      break;
+    case "reset_password":
+      type = "reset_password";
+      buttonName = "Reset password";
+      break;
+  }
 
   const [globalError, setGlobalError] = useState<string | null>(null);
 
@@ -45,7 +57,8 @@ export default function Login({ setUser }: LoginProps) {
     validate: {
       name: (val) => (type === "register" && val.trim().length === 0 ? "Name cannot be empty" : null),
       email: (val) => (/^\S+@\S+$/.test(val) ? null : "Invalid email"),
-      password: (val) => (val.length <= 6 ? "Password should include at least 6 characters" : null),
+      password: (val) =>
+        type !== "reset_password" && (val.length <= 6 ? "Password should include at least 6 characters" : null),
     },
   });
 
@@ -94,6 +107,26 @@ export default function Login({ setUser }: LoginProps) {
         redirect();
       }
     }
+
+    if (type === "reset_password") {
+      const res = await fetch("/api/login/password/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(email),
+      });
+      if (res.status !== 200) {
+        setGlobalError("Something went wrong");
+      } else {
+        notifications.show({
+          title: "Please check your inbox",
+          message: "If this email is registered at Remails you should receive a password reset link shortly",
+          color: "green",
+          autoClose: 20000,
+        });
+      }
+    }
   };
 
   const github_login = routerState.params.redirect
@@ -102,7 +135,7 @@ export default function Login({ setUser }: LoginProps) {
 
   return (
     <Center mih="100vh">
-      <Paper radius="md" p="xl" withBorder w="400">
+      <Paper radius="md" p="xl" withBorder w="450">
         <RemailsLogo style={{ height: 45 }} />
         <Text size="md">Welcome! {type == "login" ? "Login" : "Register"} with:</Text>
 
@@ -146,15 +179,17 @@ export default function Login({ setUser }: LoginProps) {
               radius="md"
             />
 
-            <PasswordInput
-              required
-              label="Password"
-              placeholder="Your password"
-              value={form.values.password}
-              onChange={(event) => form.setFieldValue("password", event.currentTarget.value)}
-              error={form.errors.password}
-              radius="md"
-            />
+            {type !== "reset_password" && (
+              <PasswordInput
+                required
+                label="Password"
+                placeholder="Your password"
+                value={form.values.password}
+                onChange={(event) => form.setFieldValue("password", event.currentTarget.value)}
+                error={form.errors.password}
+                radius="md"
+              />
+            )}
 
             {globalError && <Alert icon={xIcon}>{globalError}</Alert>}
           </Stack>
@@ -171,9 +206,26 @@ export default function Login({ setUser }: LoginProps) {
               {type === "register" ? "Already have an account? Login" : "Don't have an account? Register"}
             </Anchor>
             <Button type="submit" radius="xl" loading={form.submitting}>
-              {upperFirst(type)}
+              {buttonName}
             </Button>
           </Group>
+
+          {type === "login" && (
+            <Anchor
+              c="dimmed"
+              component="button"
+              type="button"
+              size="xs"
+              onClick={() =>
+                navigate(routerState.name, {
+                  ...routerState.params,
+                  type: "reset_password",
+                })
+              }
+            >
+              Forgot your password?
+            </Anchor>
+          )}
 
           {type === "register" && (
             <Text c="dimmed" size="sm" mt="xl">

@@ -1,7 +1,6 @@
 import { JSX } from "react";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import MessageDetails from "./components/messages/MessageDetails.tsx";
-import OrganizationsOverview from "./components/organizations/OrganizationsOverview.tsx";
 import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
 import OrganizationSettings from "./components/organizations/OrganizationSettings.tsx";
@@ -19,8 +18,9 @@ import Mfa from "./Mfa.tsx";
 import SetupSubscription from "./components/SetupSubscription.tsx";
 import { useSubscription } from "./hooks/useSubscription.ts";
 import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
-import Admin from "./components/admin/Admin.tsx";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
+import GlobalAdmin from "./components/admin/GlobalAdmin.tsx";
+import PasswordReset from "./PasswordReset.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
@@ -37,12 +37,14 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "settings.members": <OrganizationSettings />,
   "settings.API keys": <OrganizationSettings />,
   "settings.API keys.API key": <ApiKeyDetails />,
-  admin: <Admin />,
+  "settings.admin": <OrganizationSettings />,
+  admin: <GlobalAdmin />,
+  "admin.organizations": <GlobalAdmin />,
   account: <UserSettings />,
   statistics: <Statistics />,
-  organizations: <OrganizationsOverview />,
   default: null,
   login: null,
+  "login.password_reset": null,
   mfa: null,
   invite: <ConfirmInvite />,
 };
@@ -82,6 +84,10 @@ export function Pages() {
 
   if (routerState.name === "login") {
     return <Login setUser={(user) => dispatch({ type: "set_user", user })} />;
+  }
+
+  if (routerState.name === "login.password_reset") {
+    return <PasswordReset />;
   }
 
   if (routerState.name === "mfa") {

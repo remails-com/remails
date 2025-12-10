@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM password_reset\n            WHERE created_at < $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1f0fe68843222bf71f3283e73e363c5fc73f32a4c64ba53489e8f7cc200131d7"
+}

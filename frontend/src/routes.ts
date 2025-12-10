@@ -71,6 +71,10 @@ export const routes = [
           },
         ],
       },
+      {
+        name: "admin",
+        path: "/admin",
+      },
     ],
   },
   {
@@ -82,12 +86,14 @@ export const routes = [
     path: "/{org_id}/statistics",
   },
   {
-    name: "organizations",
-    path: "/{org_id}/organizations",
-  },
-  {
     name: "admin",
     path: "/{org_id}/admin",
+    children: [
+      {
+        name: "organizations",
+        path: "/organizations",
+      },
+    ],
   },
   {
     name: "default",
@@ -96,6 +102,12 @@ export const routes = [
   {
     name: "login",
     path: "/login",
+    children: [
+      {
+        name: "password_reset",
+        path: "/password/reset/{pw_reset_id}",
+      },
+    ],
   },
   {
     name: "mfa",

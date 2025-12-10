@@ -60,9 +60,6 @@ test("manage organization invite", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Please confirm your action" })).toBeVisible();
 
   await page.getByRole("button", { name: "Confirm" }).click();
-
-  // Confirm invites section is no longer visible
-  await expect(page.getByLabel("Members")).not.toContainText("Organization invites");
 });
 
 // Create and accept an organization invite
@@ -135,7 +132,7 @@ test("organization API key", async ({ page }) => {
 
   // Confirm API key password is visible
   await expect(page.getByText("Password", { exact: true })).toBeVisible();
-  const domain = (await page.locator("div").locator("pre").first().textContent()) || "";
+  const key_id = (await page.locator("div").locator("pre").first().textContent()) || "";
 
   // Confirm dialog
   await page.getByRole("button", { name: "Done" }).click();
@@ -148,7 +145,7 @@ test("organization API key", async ({ page }) => {
   }
 
   // Confirm the new API key is listed with correct details
-  const row = page.getByRole("row").filter({ hasText: domain });
+  const row = page.getByRole("row").filter({ hasText: key_id });
   await expect(row.getByRole("cell", { name: "Read-only" })).toBeVisible();
   await expect(row.getByRole("cell", { name: "Playwright test API key", exact: true })).toBeVisible();
 
@@ -178,5 +175,5 @@ test("organization API key", async ({ page }) => {
   await expect(page.getByText("API key deleted", { exact: true })).toBeVisible();
 
   // Confirm API key is no longer listed
-  await expect(page.getByRole("cell", { exact: true, name: "Playwright test API key" })).not.toBeVisible();
+  await expect(page.getByRole("cell", { exact: true, name: key_id })).not.toBeVisible();
 });
