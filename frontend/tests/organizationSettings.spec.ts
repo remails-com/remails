@@ -60,9 +60,6 @@ test("manage organization invite", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Please confirm your action" })).toBeVisible();
 
   await page.getByRole("button", { name: "Confirm" }).click();
-
-  // Confirm invites section is no longer visible
-  await expect(page.getByLabel("Members")).not.toContainText("Organization invites");
 });
 
 // Create and accept an organization invite

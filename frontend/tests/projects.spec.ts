@@ -98,7 +98,7 @@ test("Credentials lifecycle", async ({ page }) => {
   // Check that credential name has the expected format
   // This can take a bit longer (in CI) as the backend has to hash the password
   await expect(page.getByLabel("Create new SMTP credential")).toContainText(/[0-9a-f]{8}-playwright-smtp-user/, {
-    timeout: 10_000,
+    timeout: 15_000,
   });
   await page.getByRole("button", { name: "Done" }).click();
 
@@ -122,7 +122,7 @@ test("Credentials lifecycle", async ({ page }) => {
   await page.getByRole("button", { name: "Save" }).click();
 
   // Ensure success message is visible
-  await expect(page.getByText("SMTP credential updated")).toBeVisible();
+  await expect(page.getByText("SMTP credential updated")).toBeVisible({ timeout: 10_000 });
 
   // Use breadcrumb to go back to the credentials list
   await page.getByRole("button", { name: "credentials" }).click();

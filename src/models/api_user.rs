@@ -639,6 +639,7 @@ impl ApiUserRepository {
                 FROM api_users u
                     LEFT JOIN password_reset pr on u.id = pr.api_user_id
                 WHERE u.email = $1
+                  AND u.password_hash IS NOT NULL
                 -- Allow at most one reset link per minute
                   AND (pr.created_at IS NULL OR pr.created_at < now() - '1 min'::interval)
                 ON CONFLICT (api_user_id) DO UPDATE
