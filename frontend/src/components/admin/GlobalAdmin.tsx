@@ -15,6 +15,7 @@ export default function GlobalAdmin() {
             name: "Config",
             icon: <IconSettings size={14} />,
             content: <RuntimeConfig />,
+            notSoWide: true,
           },
           {
             route: "admin.organizations",

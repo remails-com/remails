@@ -133,7 +133,7 @@ mod tests {
             RemailsConfig,
             tests::{TestServer, deserialize_body, serialize_body},
         },
-        models::{RuntimeConfig, RuntimeConfigResponse},
+        models::{RuntimeConfig, RuntimeConfigRepository, RuntimeConfigResponse},
     };
     use axum::body::Body;
     use http::StatusCode;
@@ -165,6 +165,7 @@ mod tests {
         let invalid_project = "a6c2e1f0-60a8-4db0-9223-387d5d0eecc0".parse().unwrap();
         let project1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
         let org1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let config_repo = RuntimeConfigRepository::new(pool.clone());
 
         let server = TestServer::new(
             pool.clone(),
@@ -177,7 +178,10 @@ mod tests {
         let response = server.get("/api/config/runtime").await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let config: RuntimeConfigResponse = deserialize_body(response.into_body()).await;
-        assert_eq!(config, RuntimeConfigResponse::new(None, None, None, None));
+        assert_eq!(
+            config,
+            RuntimeConfigResponse::new(None, None, None, None, true)
+        );
 
         // Update the runtime with a non-existent project
         let response = server
@@ -186,6 +190,7 @@ mod tests {
                 serialize_body(RuntimeConfig::new(
                     Some(invalid_project),
                     Some("some@email.com".to_string()),
+                    false,
                 )),
             )
             .await
@@ -199,11 +204,14 @@ mod tests {
                 serialize_body(RuntimeConfig::new(
                     Some(project1),
                     Some("someemail.com".to_string()),
+                    false,
                 )),
             )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        assert!(config_repo.account_creation_is_enabled().await.unwrap());
 
         // Update with valid data
         let expected = RuntimeConfigResponse::new(
@@ -211,6 +219,7 @@ mod tests {
             Some("Project 1 Organization 1".to_string()),
             Some(org1),
             Some("some@email.com".to_string()),
+            false,
         );
 
         let response = server
@@ -219,6 +228,7 @@ mod tests {
                 serialize_body(RuntimeConfig::new(
                     Some(project1),
                     Some("some@email.com".to_string()),
+                    false,
                 )),
             )
             .await
@@ -232,6 +242,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let config: RuntimeConfigResponse = deserialize_body(response.into_body()).await;
         assert_eq!(config, expected);
+        assert!(!config_repo.account_creation_is_enabled().await.unwrap());
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -258,6 +269,7 @@ mod tests {
                 serialize_body(RuntimeConfig::new(
                     Some("a6c2e1f0-60a8-4db0-9223-387d5d0eecc0".parse().unwrap()),
                     Some("some@email.com".to_string()),
+                    false,
                 )),
             )
             .await

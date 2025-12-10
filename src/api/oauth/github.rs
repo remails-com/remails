@@ -5,8 +5,7 @@ use crate::{
         oauth::{Error, OAuthService},
         whoami::WhoamiResponse,
     },
-    models,
-    models::{ApiUser, ApiUserRepository, NewApiUser},
+    models::{self, ApiUser, ApiUserRepository, NewApiUser, RuntimeConfigRepository},
 };
 use axum::{Json, Router, extract::State, routing::get};
 use http::{
@@ -23,6 +22,7 @@ use oauth2::{
 };
 use reqwest::redirect::Policy;
 use serde::{Deserialize, de::DeserializeOwned};
+use sqlx::PgPool;
 use std::{env, fmt::Debug, time::Duration};
 use tracing::{debug, trace};
 
@@ -51,6 +51,7 @@ pub struct GithubOauthService {
     pub(super) oauth_client: GitHubOAuthClient,
     http_client: reqwest::Client,
     user_repository: ApiUserRepository,
+    config_repository: RuntimeConfigRepository,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,7 +101,7 @@ impl GithubOauthService {
     /// # Returns
     ///
     /// Returns a `Result` containing the `GithubOauthService` instance or an `Error` if there was an error creating the service.
-    pub fn new(user_repository: ApiUserRepository) -> Result<Self, Error> {
+    pub fn new(pool: PgPool) -> Result<Self, Error> {
         let client_id = env::var("OAUTH_CLIENT_ID")
             .map_err(|_| Error::MissingEnvironmentVariable("OAUTH_CLIENT_ID"))?;
         let client_secret = env::var("OAUTH_CLIENT_SECRET")
@@ -126,7 +127,8 @@ impl GithubOauthService {
         Ok(Self {
             oauth_client,
             http_client,
-            user_repository,
+            user_repository: ApiUserRepository::new(pool.clone()),
+            config_repository: RuntimeConfigRepository::new(pool),
         })
     }
 
@@ -152,6 +154,10 @@ impl GithubOauthService {
         github_user: GitHubUser,
         token: &AccessToken,
     ) -> Result<ApiUser, Error> {
+        if !self.config_repository.account_creation_is_enabled().await? {
+            return Err(Error::Forbidden);
+        }
+
         // Fetch email addresses from the GitHub API
         let emails: Vec<GitHubEmail> = self.fetch_gh_api(GITHUB_EMAILS_URL, token).await?;
 

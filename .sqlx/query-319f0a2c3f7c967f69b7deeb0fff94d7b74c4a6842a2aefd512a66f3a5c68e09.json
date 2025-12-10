@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                system_email_address,\n                system_email_project AS \"system_email_project:ProjectId\",\n                p.name AS system_email_project_name,\n                p.organization_id AS \"system_email_organization:OrganizationId\",\n                enable_account_creation\n            FROM runtime_config \n                LEFT JOIN projects p ON p.id = system_email_project\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "system_email_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "system_email_project:ProjectId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "system_email_project_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "system_email_organization:OrganizationId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "enable_account_creation",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "319f0a2c3f7c967f69b7deeb0fff94d7b74c4a6842a2aefd512a66f3a5c68e09"
+}

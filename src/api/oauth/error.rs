@@ -24,6 +24,8 @@ pub enum Error {
     Other(String),
     #[error("Precondition failed: {0}")]
     PreconditionFailed(String),
+    #[error("Forbidden")]
+    Forbidden,
 }
 
 impl Error {
@@ -41,6 +43,7 @@ impl Error {
             Self::Database(_) => "Database error occurred".to_string(),
             Self::Other(_) => "Unforeseen error occurred".to_string(),
             Self::PreconditionFailed(_) => "Precondition failed".to_string(),
+            Self::Forbidden => "Forbidden".to_string(),
         }
     }
 
@@ -57,6 +60,7 @@ impl Error {
                 StatusCode::UNAUTHORIZED
             }
             Error::PreconditionFailed(_) => StatusCode::PRECONDITION_FAILED,
+            Error::Forbidden => StatusCode::FORBIDDEN,
         }
     }
 }
