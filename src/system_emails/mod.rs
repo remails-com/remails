@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tracing::{error, warn};
 
 #[derive(Template)]
-#[template(path = "password_reset.j2")]
+#[template(path = "password_reset.html")]
 struct HtmlTemplate<'a> {
     password_reset_link: &'a str,
     name: &'a str,
