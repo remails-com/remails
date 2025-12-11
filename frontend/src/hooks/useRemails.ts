@@ -17,6 +17,7 @@ export const RemailsContext = createContext<{
 }>({
   state: {
     user: null,
+    apiUsers: null,
     userFetched: false,
     totpCodes: null,
     organizations: null,
@@ -57,6 +58,7 @@ const router = new Router(routes);
 
 export function useLoadRemails() {
   const [state, dispatch] = useReducer(reducer, {
+    apiUsers: null,
     labels: null,
     user: null,
     userFetched: false,
@@ -71,7 +73,7 @@ export function useLoadRemails() {
     runtimeConfig: null,
     routerState: router.initialState,
     nextRouterState: null,
-    apiKeys: null,
+    apiKeys: null
   });
 
   const { navigate, redirect } = useRouter(router, state, dispatch, [apiMiddleware]);

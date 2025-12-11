@@ -93,6 +93,10 @@ export const routes = [
         name: "organizations",
         path: "/organizations",
       },
+      {
+        name: "api_users",
+        path: "/api_users",
+      },
     ],
   },
   {

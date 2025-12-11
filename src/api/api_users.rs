@@ -3,11 +3,11 @@ use crate::{
         ApiState,
         error::{ApiResult, AppError},
         validation::ValidatedJson,
-        whoami::WhoamiResponse,
+        whoami::{Whoami, WhoamiResponse},
     },
     models::{
         ApiUser, ApiUserId, ApiUserRepository, ApiUserUpdate, Error, Password, PasswordUpdate,
-        PwResetId, ResetLinkCheck, TotpCode, TotpCodeDetails, TotpFinishEnroll, TotpId,
+        PwResetId, ResetLinkCheck, Role, TotpCode, TotpCodeDetails, TotpFinishEnroll, TotpId,
     },
 };
 use axum::{
@@ -25,6 +25,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(update_user))
+        .routes(routes!(get_all))
+        .routes(routes!(set_global_role))
         .routes(routes!(is_password_reset_active))
         .routes(routes!(password_reset))
         .routes(routes!(update_password, delete_password))
@@ -41,6 +43,62 @@ fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> 
         return Ok(());
     }
     Err(AppError::Forbidden)
+}
+
+/// Get all API users
+#[utoipa::path(get, path = "/api_user",
+    tags = ["internal", "API users"],
+    responses(
+        (status = 200, description = "User successfully updated", body = Vec<Whoami>),
+        AppError,
+))]
+pub async fn get_all(
+    State(repo): State<ApiUserRepository>,
+    user: ApiUser,
+) -> ApiResult<Vec<Whoami>> {
+    if !user.is_super_admin() {
+        return Err(AppError::Forbidden);
+    }
+
+    let users = repo.get_all().await?;
+
+    info!(
+        executing_user_id = user.id().to_string(),
+        "retrieved all API user details"
+    );
+
+    Ok(Json(users.into_iter().map(Into::into).collect()))
+}
+
+/// Set the global role of an API user
+#[utoipa::path(put, path = "/api_user/{user_id}/role",
+    tags = ["internal", "API users"],
+    request_body = Role,
+    responses(
+        (status = 200, description = "Successfully updated user role"),
+        AppError,
+))]
+pub async fn set_global_role(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id,)): Path<(ApiUserId,)>,
+    user: ApiUser,
+    Json(role): Json<Option<Role>>,
+) -> Result<(), AppError> {
+    if !user.is_super_admin() {
+        return Err(AppError::Forbidden);
+    }
+
+    let old_role = repo.set_global_role(user_id, role).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        ?old_role,
+        new_role = ?role,
+        "updated global user role"
+    );
+
+    Ok(())
 }
 
 /// Update API user details

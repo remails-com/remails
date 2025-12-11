@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   u.global_role AS \"global_role: Role\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\",\n                   u.updated_at,\n                   u.created_at\n            FROM api_users u\n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n            GROUP BY u.id\n            ORDER BY u.updated_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "github_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "organization_roles!: Vec<PgOrgRole>",
+        "type_info": {
+          "Custom": {
+            "name": "org_role[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "org_role",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "org_id",
+                        "Uuid"
+                      ],
+                      [
+                        "role",
+                        {
+                          "Custom": {
+                            "name": "role",
+                            "kind": {
+                              "Enum": [
+                                "admin",
+                                "maintainer",
+                                "read_only"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "global_role: Role",
+        "type_info": {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "password_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "51f71ecd188bce3735f351c4295139955575fb4f17913c8203bde81a9ac8d2ed"
+}

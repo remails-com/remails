@@ -1,4 +1,4 @@
-import { ActionIcon, Anchor, Button, Flex, Table, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Anchor, Button, Flex, Table } from "@mantine/core";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
@@ -6,10 +6,12 @@ import { IconExternalLink, IconGavel, IconPlus, IconSquare, IconSquareCheck } fr
 import StyledTable from "../StyledTable.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { NewOrganization } from "../organizations/NewOrganization.tsx";
+import TableId from "../TableId.tsx";
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
   const { currentOrganization, organizations } = useOrganizations();
+
   const {
     state: { config },
   } = useRemails();
@@ -20,12 +22,8 @@ export default function OrganizationsOverview() {
       key={organization.id}
       bg={currentOrganization?.id == organization.id ? "var(--mantine-color-blue-light)" : undefined}
     >
-      <Table.Td>
-        <Tooltip label={organization.id}>
-          <Text span c={"dimmed"} size="sm">
-            {organization.id.substring(0, 8)}
-          </Text>
-        </Tooltip>
+      <Table.Td w={80}>
+        <TableId id={organization.id} />
       </Table.Td>
       <Table.Td>{organization.name}</Table.Td>
       <Table.Td>
@@ -54,7 +52,7 @@ export default function OrganizationsOverview() {
       <Table.Td>
         {organization.used_message_quota} / {organization.total_message_quota}
       </Table.Td>
-      <Table.Td>{formatDateTime(organization.updated_at)}</Table.Td>
+      <Table.Td w={150}>{formatDateTime(organization.updated_at)}</Table.Td>
       <Table.Td align={"right"} pl="0">
         <ActionIcon
           size="30"

@@ -12,6 +12,8 @@ export interface User {
   email: string;
   github_id: string | null;
   password_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TotpCode {
@@ -99,6 +101,7 @@ export interface RuntimeConfig {
 
 export interface State {
   user: User | null;
+  apiUsers: User[] | null;
   userFetched: boolean;
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
@@ -119,6 +122,15 @@ export type Action =
   | {
       type: "set_user";
       user: User | null;
+    }
+  | {
+      type: "set_api_users";
+      users: User[] | null;
+    }
+  | {
+      type: "set_api_user_role";
+      user_id: string;
+      role: Role | null;
     }
   | {
       type: "set_totp_codes";

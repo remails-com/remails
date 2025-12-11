@@ -141,6 +141,8 @@ pub struct ApiUser {
     pub org_roles: Vec<OrgRole>,
     pub github_user_id: Option<i64>,
     pub password_enabled: bool,
+    pub updated_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
@@ -233,6 +235,8 @@ struct PgApiUser {
     global_role: Option<Role>,
     github_user_id: Option<i64>,
     password_enabled: bool,
+    updated_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<PgApiUser> for ApiUser {
@@ -252,6 +256,8 @@ impl TryFrom<PgApiUser> for ApiUser {
             org_roles,
             github_user_id: u.github_user_id,
             password_enabled: u.password_enabled,
+            updated_at: u.updated_at,
+            created_at: u.created_at,
         })
     }
 }
@@ -528,7 +534,9 @@ impl ApiUserRepository {
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
-                   u.password_hash IS NOT NULL AS "password_enabled!"
+                   u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.updated_at,
+                   u.created_at
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
             WHERE github_user_id = $1
@@ -581,6 +589,23 @@ impl ApiUserRepository {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn set_global_role(
+        &self,
+        id: ApiUserId,
+        role: Option<Role>,
+    ) -> Result<Option<Role>, Error> {
+        let old_role: Option<Role> = sqlx::query_scalar!(
+            r#"
+            UPDATE api_users SET global_role = $2 WHERE id = $1 RETURNING OLD.global_role AS "r:Role"
+            "#,
+            *id,
+            role as _
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(old_role)
     }
 
     pub async fn update_password(
@@ -829,7 +854,9 @@ impl ApiUserRepository {
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
-                   u.password_hash IS NOT NULL AS "password_enabled!"
+                   u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.updated_at,
+                   u.created_at
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
             WHERE u.id = $1
@@ -843,6 +870,32 @@ impl ApiUserRepository {
             .transpose()
     }
 
+    pub async fn get_all(&self) -> Result<Vec<ApiUser>, Error> {
+        sqlx::query_as!(
+            PgApiUser,
+            r#"
+            SELECT u.id,
+                   u.email,
+                   u.name,
+                   u.github_user_id,
+                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   u.global_role AS "global_role: Role",
+                   u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.updated_at,
+                   u.created_at
+            FROM api_users u
+                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+            GROUP BY u.id
+            ORDER BY u.updated_at DESC
+            "#
+        )
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect()
+    }
+
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(
             PgApiUser,
@@ -853,7 +906,9 @@ impl ApiUserRepository {
                    u.github_user_id,
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
-                   u.password_hash IS NOT NULL AS "password_enabled!"
+                   u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.updated_at,
+                   u.created_at
             FROM api_users u
                 LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
             WHERE u.email = $1
@@ -901,7 +956,7 @@ impl ApiUserRepository {
         }) = res
         {
             if counter > 3 {
-                // TODO, we might wan't to send an email to the user telling their account got temporarily blocked (see #222)
+                // TODO, we might want to send an email to the user telling their account got temporarily blocked (see #222)
                 // Note, we must not show any other behaviour to the outside world to avoid leaking if an account exists
                 tracing::warn!(
                     attempts = counter,
@@ -936,6 +991,8 @@ mod test {
                 org_roles,
                 github_user_id: None,
                 password_enabled: false,
+                updated_at: Utc::now(),
+                created_at: Utc::now(),
             }
         }
     }
