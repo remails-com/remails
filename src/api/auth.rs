@@ -2,7 +2,7 @@ use crate::{
     api::{ApiState, error::AppError, validation::ValidatedJson, whoami::WhoamiResponse},
     models::{
         ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
-        OrganizationId, Password, Role, TotpCode,
+        OrganizationId, Password, Role, RuntimeConfigRepository, TotpCode,
     },
     system_emails::send_password_reset_email,
 };
@@ -351,9 +351,14 @@ pub(super) struct PasswordRegister {
 ))]
 pub(super) async fn password_register(
     State(repo): State<ApiUserRepository>,
+    State(config_repo): State<RuntimeConfigRepository>,
     mut cookie_storage: SecureCookieStorage,
     ValidatedJson(register_attempt): ValidatedJson<PasswordRegister>,
 ) -> Result<Response, AppError> {
+    if !config_repo.account_creation_is_enabled().await? {
+        return Err(AppError::Forbidden);
+    }
+
     let new = NewApiUser {
         email: register_attempt.email,
         name: register_attempt.name.trim().to_string(),
@@ -671,7 +676,7 @@ pub mod tests {
     use super::*;
     use crate::{
         api::tests::{TestServer, deserialize_body, serialize_body},
-        models::TotpCodeDetails,
+        models::{RuntimeConfig, TotpCodeDetails},
     };
     use axum::body::Body;
     use serde_json::json;
@@ -753,6 +758,32 @@ pub mod tests {
             .insert("Cookie", "invalid_session".to_string());
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_cannot_register_when_account_creation_disabled(pool: PgPool) {
+        let config_repo = RuntimeConfigRepository::new(pool.clone());
+        let server = TestServer::new(pool, None).await;
+
+        // disable account creation
+        config_repo
+            .update(RuntimeConfig::new(None, None, false))
+            .await
+            .unwrap();
+
+        // try to register
+        let response = server
+            .post(
+                "/api/register/password",
+                serialize_body(json!({
+                    "name": "New User",
+                    "email": "test-api@new-user",
+                    "password": "unsecure123"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]

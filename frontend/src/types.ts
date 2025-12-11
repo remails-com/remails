@@ -94,6 +94,7 @@ export interface RuntimeConfig {
   system_email_project_name: string;
   system_email_address: string;
   system_email_organization: string;
+  enable_account_creation: boolean;
 }
 
 export interface State {

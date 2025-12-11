@@ -279,7 +279,7 @@ impl ApiServer {
         with_docs: bool,
         message_bus: BusClient,
     ) -> ApiServer {
-        let github_oauth = GithubOauthService::new(ApiUserRepository::new(pool.clone())).unwrap();
+        let github_oauth = GithubOauthService::new(pool.clone()).unwrap();
         let oauth_router = github_oauth.router();
 
         let session_key = match env::var("SESSION_KEY") {

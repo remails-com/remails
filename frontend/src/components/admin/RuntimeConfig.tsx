@@ -1,6 +1,6 @@
 import { useForm } from "@mantine/form";
 import { useProjects } from "../../hooks/useProjects.ts";
-import { Container, Popover, Select, Stack, TextInput, Text, Group, Button } from "@mantine/core";
+import { Popover, Select, Stack, TextInput, Text, Group, Button, Switch } from "@mantine/core";
 import { IconHelp } from "@tabler/icons-react";
 import { useRuntimeConfig } from "../../hooks/useRuntimeConfig.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -11,6 +11,7 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 interface FormValues {
   system_email_address: string | null;
   system_email_project: string | null;
+  enable_account_creation: boolean;
 }
 
 export default function RuntimeConfig() {
@@ -23,6 +24,7 @@ export default function RuntimeConfig() {
     initialValues: {
       system_email_address: runtimeConfig.system_email_address,
       system_email_project: runtimeConfig.system_email_project,
+      enable_account_creation: runtimeConfig.enable_account_creation,
     },
     validate: {
       system_email_address: (value) => (!value || /^\S+@\S+$/.test(value) ? null : "Invalid email"),
@@ -70,53 +72,56 @@ export default function RuntimeConfig() {
   }
 
   return (
-    <Container size="xs" ml="0" pl="0">
-      <Stack>
-        <form onSubmit={configForm.onSubmit(updateSettings)}>
-          <Stack>
-            <TextInput
-              label={
-                <Group gap="xs">
-                  System email address
-                  <Popover width={200} position="bottom" withArrow shadow="md">
-                    <Popover.Target>
-                      <IconHelp size={20} color="gray" />
-                    </Popover.Target>
-                    <Popover.Dropdown>
-                      <Text size="xs">
-                        Use this address to send out system emails such as password resets. Make sure the domain is
-                        configured in the corresponding organization.
-                      </Text>
-                    </Popover.Dropdown>
-                  </Popover>
-                </Group>
-              }
-              key={configForm.key("system_email_address")}
-              value={configForm.values.system_email_address || ""}
-              placeholder="e.g., noreply@remails.com"
-              type="email"
-              error={configForm.errors.system_email_address}
-              onChange={(event) => {
-                const value = event.currentTarget.value.trim() || null;
-                configForm.setFieldValue("system_email_address", value);
-              }}
-            />
-            <Select
-              label="System email project"
-              placeholder="Pick project to send system emails"
-              clearable
-              searchable
-              nothingFoundMessage="This project does not exist, in the currently active organization..."
-              data={systemEmailDropdownOptions}
-              value={configForm.values.system_email_project}
-              onChange={(value) => configForm.setFieldValue("system_email_project", value)}
-            />
-            <Button type="submit" disabled={!configForm.isDirty()}>
-              Save
-            </Button>
-          </Stack>
-        </form>
-      </Stack>
-    </Container>
+    <Stack>
+      <form onSubmit={configForm.onSubmit(updateSettings)}>
+        <Stack>
+          <TextInput
+            label={
+              <Group gap="xs">
+                System email address
+                <Popover width={200} position="bottom" withArrow shadow="md">
+                  <Popover.Target>
+                    <IconHelp size={20} color="gray" />
+                  </Popover.Target>
+                  <Popover.Dropdown>
+                    <Text size="xs">
+                      Use this address to send out system emails such as password resets. Make sure the domain is
+                      configured in the corresponding organization.
+                    </Text>
+                  </Popover.Dropdown>
+                </Popover>
+              </Group>
+            }
+            key={configForm.key("system_email_address")}
+            value={configForm.values.system_email_address || ""}
+            placeholder="e.g., noreply@remails.com"
+            type="email"
+            error={configForm.errors.system_email_address}
+            onChange={(event) => {
+              const value = event.currentTarget.value.trim() || null;
+              configForm.setFieldValue("system_email_address", value);
+            }}
+          />
+          <Select
+            label="System email project"
+            placeholder="Pick project to send system emails"
+            clearable
+            searchable
+            nothingFoundMessage="This project does not exist, in the currently active organization..."
+            data={systemEmailDropdownOptions}
+            value={configForm.values.system_email_project}
+            onChange={(value) => configForm.setFieldValue("system_email_project", value)}
+          />
+          <Switch
+            checked={configForm.values.enable_account_creation}
+            onChange={(ev) => configForm.setFieldValue("enable_account_creation", ev.currentTarget.checked)}
+            label="Enable new account creation"
+          />
+          <Button type="submit" disabled={!configForm.isDirty()}>
+            Save
+          </Button>
+        </Stack>
+      </form>
+    </Stack>
   );
 }

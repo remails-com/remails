@@ -121,6 +121,7 @@ impl From<oauth::Error> for AppError {
             | oauth::Error::MissingCSRFCookie
             | oauth::Error::CSRFTokenMismatch => AppError::Unauthorized,
             oauth::Error::PreconditionFailed(_) => AppError::PreconditionFailed(message),
+            oauth::Error::Forbidden => AppError::Forbidden,
         }
     }
 }
