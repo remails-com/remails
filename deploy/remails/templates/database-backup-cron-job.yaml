@@ -23,7 +23,7 @@ spec:
         {{- end }}
           restartPolicy: OnFailure
           containers:
-            - name: retry
+            - name: backup_db
               image: "{{ .Values.images.backup_db.repository }}:{{ .Chart.AppVersion }}"
               env:
                 - name: VERSION
