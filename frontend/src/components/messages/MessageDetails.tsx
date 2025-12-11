@@ -54,7 +54,7 @@ export default function MessageDetails() {
     {
       header: "Subject",
       value: subject ?? (
-        <Text c="dimmed" fs="italic">
+        <Text c="dimmed" fs="italic" fz="sm">
           No subject
         </Text>
       ),
@@ -76,7 +76,7 @@ export default function MessageDetails() {
       value: completeMessage.message_data.date ? (
         formatDateTime(completeMessage.message_data.date)
       ) : (
-        <Text c="dimmed" fs="italic">
+        <Text c="dimmed" fs="italic" fz="sm">
           Message does not contain a Date header
         </Text>
       ),
@@ -99,7 +99,7 @@ export default function MessageDetails() {
       header: "Attachments",
       value:
         completeMessage.message_data.attachments.length === 0 ? (
-          <Text c="dimmed" fs="italic">
+          <Text c="dimmed" fs="italic" fz="sm">
             Email has no attachments
           </Text>
         ) : (
