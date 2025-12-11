@@ -465,7 +465,7 @@ impl MessageRepository {
             JOIN k8s_nodes AS node on outbound_ips.node_id = node.id
             JOIN messages m ON m.id = $1
             JOIN organizations o ON o.id = m.organization_id
-            WHERE node.ready AND o.block_status = 'not_blocked'
+            WHERE node.ready AND o.block_status = 'not_blocked' AND octet_length(raw_data) > 0
             ORDER BY RANDOM()
             LIMIT 1
             "#,
@@ -805,6 +805,7 @@ impl MessageRepository {
                 AND ($4::message_status[] IS NULL OR status = ANY($4))
                 AND ($5::timestamptz IS NULL OR created_at <= $5)
                 AND ($6::text[] IS NULL OR label = ANY($6))
+                AND octet_length(raw_data) > 0 -- don't show deleted messages
             ORDER BY created_at DESC
             LIMIT $3
             "#,
@@ -852,7 +853,9 @@ impl MessageRepository {
                 m.label AS "label:Label"
             FROM messages m
             JOIN organizations o ON o.id = m.organization_id
-            WHERE m.id = $1 AND o.block_status = 'not_blocked'
+            WHERE m.id = $1
+              AND o.block_status = 'not_blocked'
+              AND octet_length(raw_data) > 0
             "#,
             *message_id,
         )
@@ -896,6 +899,7 @@ impl MessageRepository {
             WHERE m.id = $1
               AND m.organization_id = $2
               AND m.project_id = $3
+              AND octet_length(m.raw_data) > 0 -- don't show deleted messages
             "#,
             *message_id,
             *org_id,
@@ -907,6 +911,11 @@ impl MessageRepository {
             .try_into()
     }
 
+    /// Remove a message from the repository
+    ///
+    /// This removes the message's content and the recipient data, but keeps the other metadata of
+    /// message in the database to keep track of statistics. Eventually, the message's metadata will
+    /// be fully removed once its statistics have been aggregated.
     pub async fn remove(
         &self,
         org_id: OrganizationId,
@@ -915,7 +924,11 @@ impl MessageRepository {
     ) -> Result<MessageId, Error> {
         Ok(sqlx::query_scalar!(
             r#"
-            DELETE FROM messages
+            UPDATE messages
+            SET raw_data = '',
+                message_data = NULL,
+                recipients = '{}',
+                delivery_details = '{}'
             WHERE id = $1
               AND organization_id = $2
               AND project_id = $3
@@ -930,6 +943,35 @@ impl MessageRepository {
         .into())
     }
 
+    /// Remove message data from messages which are out of their retention period.
+    ///
+    /// Currently, the retention period is 30 days for all messages.
+    ///
+    /// Similar to `remove()`, the rows are not yet deleted to keep track of statistics.
+    pub async fn remove_expired_message_data(&self) -> Result<(), Error> {
+        trace!("Clearing message data from old messages");
+        let rows = sqlx::query!(
+            r#"
+            UPDATE messages
+            SET raw_data = '',
+                message_data = NULL,
+                recipients = '{}',
+                delivery_details = '{}'
+            WHERE created_at < NOW() - INTERVAL '30 days'
+              AND octet_length(raw_data) > 0;
+            "#
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows > 0 {
+            tracing::debug!("Cleared {} old messages", rows);
+        }
+
+        Ok(())
+    }
+
     /// Messages which should be retried are either:
     ///
     /// - on `held` or `reattempt`, not on timeout, with attempts left
@@ -941,7 +983,9 @@ impl MessageRepository {
             r#"
             SELECT m.id FROM messages m
             JOIN organizations o ON o.id = m.organization_id
-            WHERE o.block_status = 'not_blocked' AND (
+            WHERE o.block_status = 'not_blocked'
+              AND octet_length(m.raw_data) > 0
+              AND (
                 (m.status = 'held' OR m.status = 'reattempt')
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
               ) OR (

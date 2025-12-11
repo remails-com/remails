@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT ip AS outbound_ip\n            FROM outbound_ips\n            JOIN k8s_nodes AS node on outbound_ips.node_id = node.id\n            JOIN messages m ON m.id = $1\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE node.ready AND o.block_status = 'not_blocked' AND octet_length(raw_data) > 0\n            ORDER BY RANDOM()\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "outbound_ip",
+        "type_info": "Inet"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4b52013c6d0f63b83db94a51ef616015f68d4973ba77fb599a849f130e7b028c"
+}

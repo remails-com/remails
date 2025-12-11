@@ -74,7 +74,8 @@ impl Periodically {
         Ok(())
     }
 
-    /// Clean up organization invites and password reset links which have been expired for more than a day
+    /// Clean up organization invites and password reset links which have been expired for more than
+    /// a day, as well as messages that are out of their retention period
     pub async fn clean_up(&self) -> Result<(), models::Error> {
         self.invite_repository
             .remove_expired_before(chrono::Utc::now() - Duration::days(1))
@@ -82,7 +83,9 @@ impl Periodically {
 
         self.user_repository
             .remove_password_reset_expired_before(chrono::Utc::now() - Duration::days(1))
-            .await
+            .await?;
+
+        self.message_repository.remove_expired_message_data().await
     }
 
     /// Reset quotas for all organizations where the quota is ready to be reset
