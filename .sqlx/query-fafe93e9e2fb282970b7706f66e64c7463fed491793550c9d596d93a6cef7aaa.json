@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO statistics (organization_id, project_id, month, statistics)\n            SELECT organization_id, project_id, month,\n                jsonb_object_agg(status, count_per_status) AS statistics\n            FROM (\n                SELECT\n                    organization_id, project_id, status,\n                    date_trunc('month', created_at)::date AS month,\n                    COUNT(*) AS count_per_status\n                FROM messages\n                WHERE created_at < $1\n                GROUP BY\n                    organization_id, project_id, status,\n                    date_trunc('month', created_at)::date\n            )\n            GROUP BY organization_id, project_id, month\n            ON CONFLICT (organization_id, project_id, month)\n            DO UPDATE SET statistics = EXCLUDED.statistics;\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fafe93e9e2fb282970b7706f66e64c7463fed491793550c9d596d93a6cef7aaa"
+}

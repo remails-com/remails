@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM messages WHERE created_at < $1;\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eb9db7de1589ff7e2ed1853569ae7eca8889b99e64873e21da33e6712fe0e742"
+}

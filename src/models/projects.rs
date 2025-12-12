@@ -39,6 +39,7 @@ pub struct Project {
     pub name: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    retention_period_days: i32,
 }
 
 impl Project {

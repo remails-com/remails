@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "updated_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "retention_period_days",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -37,6 +42,7 @@
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
