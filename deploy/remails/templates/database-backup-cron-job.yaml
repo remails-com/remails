@@ -8,6 +8,8 @@ metadata:
     version: {{ .Chart.AppVersion }}
 spec:
   schedule: {{ .Values.backup.schedule | quote }}
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 3
   concurrencyPolicy: Replace
   jobTemplate:
     metadata:
@@ -23,7 +25,7 @@ spec:
         {{- end }}
           restartPolicy: OnFailure
           containers:
-            - name: backup_db
+            - name: backup-db
               image: "{{ .Values.images.backup_db.repository }}:{{ .Chart.AppVersion }}"
               env:
                 - name: VERSION
