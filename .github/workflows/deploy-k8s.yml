@@ -43,7 +43,7 @@ jobs:
           npm ci
           npm run build
       - name: upload frontend assets
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: frontend_dist
           path: frontend/dist/
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Download frontend
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: frontend_dist
           path: frontend/dist/
@@ -74,7 +74,7 @@ jobs:
         run: SQLX_OFFLINE=true cargo build --release --bins
 
       - name: upload backend binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: backend_target
           path: |
@@ -103,7 +103,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Download backend binaries
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: backend_target
           path: target/release/
