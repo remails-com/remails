@@ -43,7 +43,7 @@ jobs:
         working-directory: frontend
 
       - name: Upload frontend asset folder
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: frontend
           path: frontend/dist
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Download frontend asset folder
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: frontend
           path: frontend/dist
@@ -77,7 +77,7 @@ jobs:
         run: cargo build --features apply-db-migrations --bin app
 
       - name: Upload backend binary
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: 'app'
           path: target/debug/app
@@ -111,13 +111,13 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Download backend binary
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: app
           path: target/debug
 
       - name: Download frontend asset folder
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: frontend
           path: frontend/dist
@@ -153,14 +153,14 @@ jobs:
         working-directory: frontend
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-(${{ matrix.shardIndex }}_of_${{ matrix.shardTotal }})
           path: frontend/playwright-report/
 
       - name: Upload backend logs
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: backend logs (${{ matrix.shardIndex }} of ${{ matrix.shardTotal }})
@@ -200,7 +200,7 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-llvm-cov & cargo-nextest
-        uses: taiki-e/install-action@cf46383a970594553a83cc6140075ef6a7f54dee # v2.62.64
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
@@ -213,7 +213,7 @@ jobs:
         run: echo "::add-matcher::.github/problem-matchers/rust.json"
 
       - name: Download frontend asset folder
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: frontend
           path: frontend/dist
@@ -224,7 +224,7 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           files: lcov.info
           fail_ci_if_error: false
@@ -268,7 +268,7 @@ jobs:
         run: echo "::add-matcher::.github/problem-matchers/rust.json"
 
       - name: Download frontend asset folder
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: frontend
           path: frontend/dist
