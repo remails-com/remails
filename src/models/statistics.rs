@@ -1,11 +1,13 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+use serde::Serialize;
 use sqlx::PgPool;
 use tracing::debug;
+use utoipa::ToSchema;
 
 use crate::models::{Error, OrganizationId, ProjectId};
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[cfg_attr(test, derive(PartialEq, serde::Deserialize))]
 pub struct Statistics {
     organization_id: OrganizationId,
     project_id: ProjectId,
@@ -23,7 +25,10 @@ impl StatisticsRepository {
         Self { pool }
     }
 
-    async fn get_stats(&self, organization_id: OrganizationId) -> Result<Vec<Statistics>, Error> {
+    pub async fn get_stats(
+        &self,
+        organization_id: OrganizationId,
+    ) -> Result<Vec<Statistics>, Error> {
         Ok(sqlx::query_as!(
             Statistics,
             r#"
