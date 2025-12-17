@@ -58,7 +58,7 @@ export default function Login({ setUser }: LoginProps) {
       name: (val) => (type === "register" && val.trim().length === 0 ? "Name cannot be empty" : null),
       email: (val) => (/^\S+@\S+$/.test(val) ? null : "Invalid email"),
       password: (val) =>
-        type !== "reset_password" && (val.length <= 6 ? "Password should include at least 6 characters" : null),
+        type !== "reset_password" && (val.length <= 10 ? "Password should include at least 10 characters" : null),
     },
   });
 

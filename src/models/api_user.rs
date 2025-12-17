@@ -66,7 +66,7 @@ pub struct PwResetId(Uuid);
 #[debug("*****")]
 #[serde(transparent)]
 #[schema(format = Password)]
-pub struct Password(#[garde(length(min = 6, max = 256))] String);
+pub struct Password(#[garde(length(min = 10, max = 256))] String);
 
 impl Password {
     pub fn generate_hash(&self) -> String {
@@ -157,10 +157,10 @@ pub struct ApiUserUpdate {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct PasswordUpdate {
     #[garde(dive)]
-    #[schema(min_length = 6, max_length = 256)]
+    #[schema(min_length = 10, max_length = 256)]
     pub new_password: Password,
     #[garde(dive)]
-    #[schema(min_length = 6, max_length = 256)]
+    #[schema(min_length = 10, max_length = 256)]
     pub current_password: Option<Password>,
 }
 
