@@ -49,6 +49,13 @@ spec:
         - name: management
           image: "{{ .Values.images.management.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "55Mi"
+            limits:
+              cpu: "100m"
+              memory: "512Mi"
           livenessProbe:
             httpGet:
               path: /api/healthy

@@ -27,6 +27,13 @@ spec:
           containers:
             - name: backup-db
               image: "{{ .Values.images.backup_db.repository }}:{{ .Chart.AppVersion }}"
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "10Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
               env:
                 - name: VERSION
                   value: {{ .Chart.AppVersion }}

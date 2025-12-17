@@ -27,6 +27,13 @@ spec:
         - name: periodic
           image: "{{ .Values.images.periodic.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.periodic.pullPolicy }}
+          resources:
+            requests:
+              cpu: "1m"
+              memory: "5Mi"
+            limits:
+              cpu: "100m"
+              memory: "50Mi"
           securityContext:
             readOnlyRootFilesystem: true
           volumeMounts:
