@@ -45,7 +45,7 @@ Tokens can be listed and generated [here](https://remails.grafana.net/a/grafana-
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 export ACCESS_POLICY_TOKEN=<your token>
-helm upgrade --install --atomic --timeout 300s grafana-k8s-monitoring grafana/k8s-monitoring \
+helm upgrade --install --rollback-on-failure --timeout 300s grafana-k8s-monitoring grafana/k8s-monitoring \
     --namespace "metrics" \
     --create-namespace \
     -f grafana-cloud-values.yaml \

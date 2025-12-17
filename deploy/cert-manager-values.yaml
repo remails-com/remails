@@ -2,6 +2,14 @@ crds:
   enabled: true
   keep: false
 
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limit:
+    cpu: 50m
+    memory: 128Mi
+
 config:
   featureGates:
     # Disable the use of Exact PathType in Ingress resources, to work around a bug in ingress-nginx
