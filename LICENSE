@@ -7,35 +7,37 @@ Licensor:             Remails B.V.
 Licensed Work:        Remails software. The Licensed Work is (c) 2025
                       Remails B.V.
 Additional Use Grant: You may make production use of the Licensed Work, provided
-                      Your use does not include offering the Licensed Work to third
-                      parties on a hosted or embedded basis in order to compete with
+                      that Your use does not include offering the Licensed Work,
+                      whether on a paid or unpaid basis, to third parties on a
+                      hosted, managed, or embedded basis in order to compete with
                       Remails' paid version(s) of the Licensed Work. For purposes
                       of this license:
 
-                      A "competitive offering" is a Product that is offered to third
-                      parties on a paid basis, including through paid support
-                      arrangements, that significantly overlaps with the capabilities
-                      of Remails' paid version(s) of the Licensed Work. If Your
-                      Product is not a competitive offering when You first make it
-                      generally available, it will not become a competitive offering
-                      later due to Remails releasing a new version of the Licensed
-                      Work with additional capabilities. In addition, Products that
-                      are not provided on a paid basis are not competitive.
+                      A "competitive offering" is a Product that is offered to
+                      third parties, whether for a fee or free of charge (including
+                      through paid support, advertising, sponsorships, or other
+                      indirect monetization models), that significantly overlaps
+                      with the capabilities of Remails' paid version(s) of the
+                      Licensed Work. If Your Product is not a competitive offering
+                      when You first make it generally available, it will not
+                      become a competitive offering later solely due to Remails
+                      releasing a new version of the Licensed Work with additional
+                      capabilities.
 
-                      "Product" means software that is offered to end users to manage
-                      in their own environments or offered as a service on a hosted
-                      basis.
+                      "Product" means software that is offered to end users to
+                      manage in their own environments or that is offered as a
+                      service on a hosted or managed basis.
 
                       "Embedded" means including the source code or executable code
                       from the Licensed Work in a competitive offering. "Embedded"
                       also means packaging the competitive offering in such a way
-                      that the Licensed Work must be accessed or downloaded for the
-                      competitive offering to operate.
+                      that the Licensed Work must be accessed, downloaded, or
+                      integrated for the competitive offering to operate.
 
-                      Hosting or using the Licensed Work(s) for internal purposes
-                      within an organization is not considered a competitive
-                      offering. Remails considers your organization to include all
-                      of your affiliates under common control.
+                      Hosting, using, or making the Licensed Work available for
+                      internal purposes within an organization, including use by
+                      employees, contractors, or affiliates under common control,
+                      is not considered a competitive offering.
 Change Date:          Four years from the date the Licensed Work is published.
 Change License:       AGPLv3
 
