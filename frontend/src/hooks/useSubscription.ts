@@ -32,6 +32,28 @@ export function useSubscription() {
     window.open(link, "_blank")!.focus();
   };
 
+  const generateCustomerPortalLink = async (): Promise<string | null> => {
+    if (!currentOrganization) {
+      return null;
+    }
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/subscription/manage`);
+    if (res.status === 200) {
+      return res.json();
+    } else {
+      return null;
+    }
+  };
+
+  const navigateToCustomerPortal = async () => {
+    const link = await generateCustomerPortalLink();
+    if (!link) {
+      console.error("Could not connect to sales backend, try again later");
+      errorNotification("Can't connect to sales backend, try again later");
+      return;
+    }
+    window.open(link, "_blank")!.focus();
+  };
+
   const reloadSubscription = async () => {
     if (!currentOrganization) {
       console.error("Cannot reload subscription status without an organization");
@@ -48,5 +70,10 @@ export function useSubscription() {
     navigate(routerState.name, { force: "reload-orgs" });
   };
 
-  return { subscription: currentOrganization?.current_subscription, navigateToSales, reloadSubscription };
+  return {
+    subscription: currentOrganization?.current_subscription,
+    navigateToSales,
+    reloadSubscription,
+    navigateToCustomerPortal,
+  };
 }

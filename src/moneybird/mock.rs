@@ -81,4 +81,11 @@ impl MoneybirdApi for MockMoneybirdApi {
     ) -> Result<Url, Error> {
         Ok("https://tweedegolf.com".parse()?)
     }
+
+    async fn customer_contact_portal(
+        &self,
+        _moneybird_contact_id: MoneybirdContactId,
+    ) -> Result<Url, Error> {
+        Ok("https://tweedegolf.com".parse()?)
+    }
 }

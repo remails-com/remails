@@ -184,4 +184,20 @@ impl MoneybirdApi for ProductionMoneybirdApi {
 
         Ok(sales_link.parse()?)
     }
+
+    async fn customer_contact_portal(
+        &self,
+        moneybird_contact_id: MoneybirdContactId,
+    ) -> Result<Url, Error> {
+        let link: Url = self
+            .client
+            .get(self.url(&format!("customer_contact_portal/{moneybird_contact_id}")))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        Ok(link)
+    }
 }
