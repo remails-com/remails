@@ -5,7 +5,7 @@ use crate::{
         error::{ApiResult, AppError},
         validation::ValidatedJson,
     },
-    models::{ApiUser, OrganizationId},
+    models::{ApiUser, OrganizationId, OrganizationRepository},
     moneybird::{MoneyBird, MoneybirdWebhookPayload, SubscriptionStatus},
 };
 use axum::{
@@ -20,12 +20,14 @@ pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(get_subscription))
         .routes(routes!(get_sales_link))
+        .routes(routes!(customer_management_link))
         .routes(routes!(moneybird_webhook))
 }
 
 /// Get current subscription status
 #[utoipa::path(get, path = "/organizations/{org_id}/subscription",
     tags = ["internal", "Subscription"],
+    security(("cookieAuth" = [])),
     responses(
         (status = 200, description = "Successfully fetched subscription status", body = SubscriptionStatus),
         AppError
@@ -52,16 +54,38 @@ pub async fn get_subscription(
 /// and returns it
 #[utoipa::path(get, path = "/organizations/{org_id}/subscription/new",
     tags = ["internal", "Subscription"],
+    security(("cookieAuth" = [])),
     responses(
         (status = 200, description = "Successfully created sales link", body = SubscriptionStatus),
         AppError
 ))]
 pub async fn get_sales_link(
     State(moneybird): State<MoneyBird>,
+    State(org_repo): State<OrganizationRepository>,
     user: ApiUser,
     Path((org_id,)): Path<(OrganizationId,)>,
 ) -> ApiResult<Url> {
     user.has_org_read_access(&org_id)?;
+
+    let org = org_repo
+        .get_by_id(org_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    match org.current_subscription() {
+        SubscriptionStatus::Active(_) => {
+            user.has_org_admin_access(&org_id)?;
+            return Err(AppError::BadRequest(
+                "This organization currently has an active subscription. You cannot create a second."
+                    .to_string(),
+            ));
+        }
+        SubscriptionStatus::Expired(_) => {
+            // If the org ever had a subscription, only org admins are allowed to create a new subscription
+            user.has_org_admin_access(&org_id)?;
+        }
+        SubscriptionStatus::None => {}
+    }
 
     debug!(
         user_id = user.id().to_string(),
@@ -72,10 +96,38 @@ pub async fn get_sales_link(
     Ok(Json(moneybird.create_sales_link(org_id).await?))
 }
 
+/// Customer management link
+///
+/// Creates a link to Moneybird that is valid for one hour allowing the user to manage their subscription
+/// and other details.
+#[utoipa::path(get, path = "/organizations/{org_id}/subscription/manage",
+    tags = ["internal", "Subscription"],
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "Successfully created customer management link", body = Url),
+        AppError
+))]
+pub async fn customer_management_link(
+    State(moneybird): State<MoneyBird>,
+    user: ApiUser,
+    Path((org_id,)): Path<(OrganizationId,)>,
+) -> ApiResult<Url> {
+    user.has_org_admin_access(&org_id)?;
+
+    debug!(
+        user_id = user.id().to_string(),
+        organization_id = org_id.to_string(),
+        "create customer management link"
+    );
+
+    Ok(Json(moneybird.customer_contact_portal(org_id).await?))
+}
+
 /// Moneybird webhook endpoint
 #[utoipa::path(post, path = "/webhook/moneybird",
     request_body = MoneybirdWebhookPayload,
     tags = ["internal", "Subscription"],
+    security(()),
     responses(
         (status = 200, description = "Successfully handled webhook"),
         AppError

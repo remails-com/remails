@@ -80,6 +80,10 @@ impl Organization {
     pub fn id(&self) -> OrganizationId {
         self.id
     }
+
+    pub fn current_subscription(&self) -> &SubscriptionStatus {
+        &self.current_subscription
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
@@ -436,10 +440,6 @@ mod test {
 
         pub fn total_message_quota(&self) -> i64 {
             self.total_message_quota
-        }
-
-        pub fn current_subscription(&self) -> &SubscriptionStatus {
-            &self.current_subscription
         }
     }
 

@@ -264,6 +264,8 @@ pub enum Error {
     Unauthorized,
     #[error("Serde error: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("Precondition failed: {0}")]
+    PreconditionFailed(&'static str),
 }
 
 #[cfg(test)]

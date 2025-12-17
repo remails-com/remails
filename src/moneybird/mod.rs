@@ -155,6 +155,14 @@ trait MoneybirdApi {
         &self,
         moneybird_contact_id: MoneybirdContactId,
     ) -> Result<Url, Error>;
+    /// Allows the user to manage their subscription in Moneybird.
+    ///
+    /// The created link is only valid for one hour. See also
+    /// https://developer.moneybird.com/api/customer-contact-portal#get-a-temporary-link-to-the-customer-contact-portal
+    async fn customer_contact_portal(
+        &self,
+        moneybird_contact_id: MoneybirdContactId,
+    ) -> Result<Url, Error>;
 }
 
 impl MoneyBird {
@@ -762,6 +770,30 @@ impl MoneyBird {
         self.store_subscription_status(&status, &org_id).await?;
 
         Ok(status)
+    }
+
+    pub async fn customer_contact_portal(&self, org_id: OrganizationId) -> Result<Url, Error> {
+        let contact_id: Option<MoneybirdContactId> = sqlx::query_scalar!(
+            r#"
+            SELECT moneybird_contact_id FROM organizations WHERE id = $1
+            "#,
+            *org_id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .map(|id| id.into());
+
+        let Some(contact_id) = contact_id else {
+            error!(
+                organization_id = org_id.as_uuid().to_string(),
+                "No moneybird contact found"
+            );
+            return Err(Error::PreconditionFailed(
+                "Could not find moneybird contact",
+            ));
+        };
+
+        self.api.customer_contact_portal(contact_id).await
     }
 }
 

@@ -3,9 +3,11 @@ import { useSubscription } from "../../hooks/useSubscription.ts";
 import { SubscriptionStatus } from "../../types.ts";
 import React from "react";
 import { formatDate } from "../../util.ts";
+import { useOrgRole } from "../../hooks/useOrganizations.ts";
 
 export default function SubscriptionCard() {
-  const { subscription, navigateToSales } = useSubscription();
+  const { subscription, navigateToSales, navigateToCustomerPortal } = useSubscription();
+  const { isAdmin } = useOrgRole();
 
   if (!subscription) {
     return null;
@@ -54,11 +56,18 @@ export default function SubscriptionCard() {
           </React.Fragment>
         ))}
       </Text>
-      <Tooltip label="You will need a code that was send to you via email">
-        <Button component="a" href={subscription.sales_invoices_url} target="_blank">
+      <Tooltip disabled={isAdmin} label="You need to be organization admin to manage the subscription.">
+        <Button disabled={!isAdmin} onClick={navigateToCustomerPortal}>
           Manage invoices, subscription, and contact details
         </Button>
       </Tooltip>
+      {subscription.status === "expired" && (
+        <Tooltip disabled={isAdmin} label="You need to be organization admin to manage the subscription.">
+          <Button disabled={!isAdmin} onClick={navigateToSales}>
+            Choose new subscription
+          </Button>
+        </Tooltip>
+      )}
     </>
   );
 
