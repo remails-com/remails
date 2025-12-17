@@ -1059,4 +1059,12 @@ mod test {
 
         assert_eq!(created, user);
     }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn get_all(db: PgPool) {
+        let repo = ApiUserRepository::new(db);
+
+        let users = repo.get_all().await.unwrap();
+        assert_eq!(users.len(), 11);
+    }
 }
