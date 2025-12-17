@@ -52,6 +52,13 @@ spec:
         - name: inbound
           image: "{{ .Values.images.inbound.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "50Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           volumeMounts:
             - mountPath: "/etc/smtp-cert"
               name: smtp-cert

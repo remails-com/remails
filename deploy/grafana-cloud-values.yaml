@@ -26,6 +26,13 @@ podLogs:
 alloy-metrics:
   enabled: true
   alloy:
+    resources:
+      requests:
+        cpu: "5m"
+        memory: "256Mi"
+      limits:
+        cpu: "50m"
+        memory: "512Mi"
     extraEnv:
       - name: GCLOUD_RW_API_KEY
         valueFrom:
@@ -54,6 +61,13 @@ alloy-metrics:
 alloy-singleton:
   enabled: true
   alloy:
+    resources:
+      requests:
+        cpu: "5m"
+        memory: "100Mi"
+      limits:
+        cpu: "50m"
+        memory: "256Mi"
     extraEnv:
       - name: GCLOUD_RW_API_KEY
         valueFrom:
@@ -82,6 +96,13 @@ alloy-singleton:
 alloy-logs:
   enabled: true
   alloy:
+    resources:
+      requests:
+        cpu: "30m"
+        memory: "256Mi"
+      limits:
+        cpu: "100m"
+        memory: "512Mi"
     extraEnv:
       - name: GCLOUD_RW_API_KEY
         valueFrom:
@@ -111,3 +132,9 @@ alloy-logs:
       type: basic
       username: "1383763"
       password: REPLACE_WITH_ACCESS_POLICY_TOKEN
+integrations:
+  cert-manager:
+    instances:
+      - name: cert-manager
+        labelSelectors:
+          app.kubernetes.io/name: cert-manager

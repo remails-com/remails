@@ -29,6 +29,13 @@ spec:
         - name: outbound
           image: "{{ .Values.images.outbound.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.management.pullPolicy }}
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "10Mi"
+            limits:
+              cpu: "256m"
+              memory: "512Mi"
           # TODO: add a lifeness probe
           env:
             - name: RATE_LIMIT_MINUTES

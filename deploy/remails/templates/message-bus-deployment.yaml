@@ -28,6 +28,13 @@ spec:
         - name: message-bus
           image: "{{ .Values.images.message_bus.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.images.message_bus.pullPolicy }}
+          resources:
+            requests:
+              cpu: "1m"
+              memory: "2Mi"
+            limits:
+              cpu: "50m"
+              memory: "100Mi"
           livenessProbe:
             httpGet:
               port: http
