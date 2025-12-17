@@ -1,15 +1,15 @@
 import { Divider, Group, Stack, Text, ThemeIcon, Title, Flex, Box } from "@mantine/core";
-import { Icon, IconProps } from "@tabler/icons-react";
+import { IconProps } from "@tabler/icons-react";
 import Rename from "./Rename";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import classes from "./Header.module.css";
-import { ReactNode } from "react";
+import React, { ReactNode } from "react";
 
 interface HeaderProps {
   name: string;
   entityType: string;
   saveRename?: (values: { name: string }) => Promise<void>;
-  Icon: React.ForwardRefExoticComponent<IconProps & React.RefAttributes<Icon>>;
+  Icon: React.ForwardRefExoticComponent<IconProps & React.RefAttributes<SVGSVGElement>>;
   divider?: boolean; // we don't want the divider if we are using tabs
   addendum?: ReactNode;
 }
