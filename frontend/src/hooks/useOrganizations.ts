@@ -57,6 +57,12 @@ export function useMembers() {
   return { members, setMembers };
 }
 
+export function useStatistics() {
+  const statistics = useSelector((state) => state.statistics);
+
+  return { statistics };
+}
+
 export function useOrgRole() {
   const { currentOrganization } = useOrganizations();
   const user = useSelector((state) => state.user);

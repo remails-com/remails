@@ -113,6 +113,7 @@ export interface State {
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
+  statistics: Statistics[] | null;
   config: RemailsConfig | null;
   runtimeConfig: RuntimeConfig | null;
   routerState: RouterState;
@@ -243,6 +244,10 @@ export type Action =
       type: "set_subscription";
       status: SubscriptionStatus;
       organizationId: string;
+    }
+  | {
+      type: "set_statistics";
+      statistics: Statistics[] | null;
     }
   | {
       type: "set_error";
@@ -396,5 +401,5 @@ export type Statistics = {
   organization_id: string;
   project_id: string;
   month: string;
-  statistics: Record<MessageStatus, number>;
+  statistics: Record<MessageStatus, number | undefined>;
 };

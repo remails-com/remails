@@ -106,6 +106,10 @@ export default async function apiMiddleware(
     });
   }
 
+  if (navState.to.name == "statistics") {
+    dispatch({ type: "set_statistics", statistics: await get(`/api/organizations/${newOrgId}/statistics`) });
+  }
+
   if (projChanged && newProjId) {
     dispatch({
       type: "set_credentials",
