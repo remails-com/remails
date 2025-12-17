@@ -49,12 +49,14 @@ export interface Log {
   }>;
 }
 
+export type MessageStatus = "processing" | "held" | "accepted" | "rejected" | "delivered" | "reattempt" | "failed";
+
 export interface MessageMetadata {
   id: string;
   from_email: string;
   created_at: string;
   recipients: string[];
-  status: "Processing" | "Held" | "Accepted" | "Rejected" | "Delivered" | "Reattempt" | "Failed";
+  status: MessageStatus;
   reason: string | undefined;
   raw_size: string;
   message_id_header: string;
@@ -389,3 +391,10 @@ export type ApiKey = {
 };
 
 export type CreatedApiKeyWithPassword = ApiKey & { password: string };
+
+export type Statistics = {
+  organization_id: string;
+  project_id: string;
+  month: string;
+  statistics: Record<MessageStatus, number>;
+};

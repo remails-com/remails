@@ -65,9 +65,9 @@ export default function MessageRetryButton({
   };
 
   const status_retryable = !(
-    message.status == "Processing" ||
-    message.status == "Accepted" ||
-    message.status == "Delivered"
+    message.status == "processing" ||
+    message.status == "accepted" ||
+    message.status == "delivered"
   );
   const already_scheduled = message.retry_after && !is_in_the_future(message.retry_after);
 
@@ -77,7 +77,7 @@ export default function MessageRetryButton({
     ? already_scheduled
       ? "Email is already scheduled to retry as soon as possible"
       : "(Re-)schedule retry"
-    : `Email is ${message.status.toLowerCase()}`;
+    : `Email is ${message.status}`;
 
   if (small) {
     return (

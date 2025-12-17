@@ -35,6 +35,7 @@ impl MessageId {
 #[derive(
     PartialEq, Eq, Debug, Clone, Deserialize, Serialize, FromStr, sqlx::Type, Display, ToSchema,
 )]
+#[serde(rename_all = "lowercase")]
 #[sqlx(type_name = "message_status", rename_all = "lowercase")]
 pub enum MessageStatus {
     Processing,

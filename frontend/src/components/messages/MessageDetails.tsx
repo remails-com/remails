@@ -12,8 +12,8 @@ import Header from "../Header.tsx";
 import Label from "./Label.tsx";
 
 export function getFullStatusDescription(message: MessageMetadata) {
-  if (message.status == "Delivered") {
-    return `Delivered ${message.reason}`;
+  if (message.status == "delivered") {
+    return `delivered ${message.reason}`;
   } else {
     let s = message.status;
 

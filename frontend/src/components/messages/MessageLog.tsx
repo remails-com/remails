@@ -35,15 +35,16 @@ import MessageRetryButton from "./MessageRetryButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import Label from "./Label.tsx";
+import { MessageStatus } from "../../types.ts";
 
-function statusIcons(status: string) {
-  if (status == "Processing" || status == "Accepted") {
+function statusIcons(status: MessageStatus) {
+  if (status == "processing" || status == "accepted") {
     return <IconClock color="gray" />;
-  } else if (status == "Held" || status == "Reattempt") {
+  } else if (status == "held" || status == "reattempt") {
     return <IconClock color="orange" />;
-  } else if (status == "Rejected" || status == "Failed") {
+  } else if (status == "rejected" || status == "failed") {
     return <IconX color="red" />;
-  } else if (status == "Delivered") {
+  } else if (status == "delivered") {
     return <IconCheck color="green" />;
   }
   return <IconX color="gray" />;
