@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_users SET global_role = $2 WHERE id = $1 RETURNING OLD.global_role AS \"r:Role\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "r:Role",
+        "type_info": {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f095f62c28c250b56f649aa52bc283a1b1da03deb5378d6cfae9dbe2ba8218bd"
+}

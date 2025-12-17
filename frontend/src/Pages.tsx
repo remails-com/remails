@@ -40,6 +40,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "settings.admin": <OrganizationSettings />,
   admin: <GlobalAdmin />,
   "admin.organizations": <GlobalAdmin />,
+  "admin.api_users": <GlobalAdmin />,
   account: <UserSettings />,
   statistics: <Statistics />,
   default: null,

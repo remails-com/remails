@@ -6,6 +6,7 @@ use axum::{
     Json,
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
 use serde::Serialize;
 use serde_json::json;
@@ -44,6 +45,24 @@ pub struct Whoami {
     /// Unlike in `ApiUser`, here the GitHub ID is a string
     pub github_id: Option<String>,
     pub password_enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<ApiUser> for Whoami {
+    fn from(user: ApiUser) -> Self {
+        Self {
+            id: *user.id(),
+            global_role: user.global_role,
+            github_id: user.github_user_id().map(|id| id.to_string()),
+            password_enabled: user.password_enabled(),
+            org_roles: user.org_roles,
+            name: user.name,
+            email: user.email,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -56,15 +75,7 @@ pub enum WhoamiResponse {
 
 impl WhoamiResponse {
     pub fn logged_in(user: ApiUser) -> Self {
-        Self::LoggedIn(Whoami {
-            id: *user.id(),
-            global_role: user.global_role,
-            org_roles: user.org_roles.clone(),
-            github_id: user.github_user_id().map(|id| id.to_string()),
-            password_enabled: user.password_enabled(),
-            name: user.name,
-            email: user.email,
-        })
+        Self::LoggedIn(user.into())
     }
 
     /// Panics if whoami response is not logged in

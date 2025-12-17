@@ -64,7 +64,7 @@ export default async function apiMiddleware(
   }
 
   if (!user) {
-    throw new RemailsError("Something went wrong", 400);
+    throw new RemailsError("Could not log in", 401);
   }
 
   if (navState.state.config === null) {
@@ -73,6 +73,7 @@ export default async function apiMiddleware(
 
   if (user.global_role === "admin" && navState.state.runtimeConfig === null) {
     dispatch({ type: "set_runtime_config", config: await get("/api/config/runtime") });
+    dispatch({ type: "set_api_users", users: await get("/api/api_user") });
   }
 
   if (navState.state.totpCodes === null) {

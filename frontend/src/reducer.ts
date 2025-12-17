@@ -6,6 +6,21 @@ const actionHandler: {
   set_organizations: function (state, action) {
     return { ...state, organizations: action.organizations };
   },
+  set_api_users: function (state, action) {
+    return { ...state, apiUsers: action.users };
+  },
+  set_api_user_role: function (state, action) {
+    return {
+      ...state,
+      apiUsers:
+        state.apiUsers?.map((u) => {
+          if (u.id === action.user_id) {
+            u.global_role = action.role;
+          }
+          return u;
+        }) || [],
+    };
+  },
   add_organization: function (state, action) {
     return { ...state, organizations: [action.organization, ...(state.organizations || [])] };
   },
