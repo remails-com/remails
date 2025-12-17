@@ -9,11 +9,15 @@ export default function OrgPopover({ orgs }: { orgs: OrgRole[] }) {
   const { organizations } = useOrganizations();
   const { navigate } = useRemails();
 
+  if (orgs.length === 0) {
+    return null;
+  }
+
   return (
     <Popover>
       <Popover.Target>
         <ActionIcon size="sm" variant="outline">
-          <IconEye/>
+          <IconEye />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown>

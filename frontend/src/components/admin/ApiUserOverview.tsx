@@ -25,7 +25,7 @@ export default function ApiUserOverview() {
       </Table.Td>
       <Table.Td align="center" w={120}>
         <Group justify="center">
-          {user.org_roles.length}
+          {user.org_roles.length.toString()}
           <OrgPopover orgs={user.org_roles} />
         </Group>
       </Table.Td>

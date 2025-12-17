@@ -73,7 +73,7 @@ export function useLoadRemails() {
     runtimeConfig: null,
     routerState: router.initialState,
     nextRouterState: null,
-    apiKeys: null
+    apiKeys: null,
   });
 
   const { navigate, redirect } = useRouter(router, state, dispatch, [apiMiddleware]);
