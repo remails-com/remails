@@ -240,7 +240,7 @@ pub(super) struct PasswordLogin {
     #[garde(skip)]
     email: EmailAddress,
     #[garde(dive)]
-    #[schema(min_length = 6, max_length = 256)]
+    #[schema(min_length = 10, max_length = 256)]
     password: Password,
 }
 
@@ -331,7 +331,7 @@ pub(super) struct PasswordRegister {
     #[garde(skip)]
     email: EmailAddress,
     #[garde(dive)]
-    #[schema(min_length = 6, max_length = 256)]
+    #[schema(min_length = 10, max_length = 256)]
     password: Password,
 }
 

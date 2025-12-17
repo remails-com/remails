@@ -24,7 +24,7 @@ export function PasswordSettings() {
     },
     validate: {
       old_password: (value) =>
-        user.password_enabled && value.length <= 6 ? "Password should include at least 6 characters" : null,
+        user.password_enabled && value.length <= 10 ? "Password should include at least 10 characters" : null,
       new_password1: (value) => (value.length <= 10 ? "Password should include at least 10 characters" : null),
       new_password2: (value, values) => (values.new_password1 !== value ? "Passwords do not match" : null),
     },
@@ -58,8 +58,8 @@ export function PasswordSettings() {
   };
 
   const removePassword = async (update: PasswordForm) => {
-    if (update.old_password.length <= 6) {
-      passwordForm.setFieldError("old_password", "Password should include at least 6 characters");
+    if (update.old_password.length <= 10) {
+      passwordForm.setFieldError("old_password", "Password should include at least 10 characters");
       return;
     }
     if (update.new_password1 || update.new_password2) {

@@ -357,7 +357,7 @@ pub async fn delete_totp_code(
 #[derive(serde::Deserialize, ToSchema, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CurrentPassword {
-    #[schema(min_length = 6, max_length = 256)]
+    #[schema(min_length = 10, max_length = 256)]
     #[garde(dive)]
     current_password: Password,
 }
