@@ -185,7 +185,9 @@ pub async fn update_organization(
 
 /// Get organization statistics
 ///
-/// Returns all statistics of the organization.
+/// Returns all statistics of the organization. This includes:
+/// - Monthly statistics about the email statuses
+/// - Daily statistics about the emails statuses for the past 30 days
 #[utoipa::path(get, path = "/organizations/{org_id}/statistics",
     tags = ["Organizations"],
     responses(
@@ -197,7 +199,7 @@ pub async fn get_statistics(
     Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<StatisticsRepository>,
     user: Box<dyn Authenticated>,
-) -> ApiResult<Vec<Statistics>> {
+) -> ApiResult<Statistics> {
     user.has_org_read_access(&org_id)?;
 
     let statistics = repo.get_stats(org_id).await?;
@@ -205,8 +207,9 @@ pub async fn get_statistics(
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        "listed {} statistics",
-        statistics.len()
+        "listed statistics ({} monthly, {} daily)",
+        statistics.monthly.len(),
+        statistics.daily.len(),
     );
 
     Ok(Json(statistics))
@@ -545,8 +548,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let stats: Vec<Statistics> = deserialize_body(response.into_body()).await;
-        assert_eq!(stats.len(), 0);
+        let stats: Statistics = deserialize_body(response.into_body()).await;
+        assert_eq!(stats.monthly.len(), 0);
+        assert_eq!(stats.daily.len(), 0);
 
         // remove organization
         let response = server

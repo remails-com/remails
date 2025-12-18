@@ -6,9 +6,9 @@ import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
 export default function SuccessPercentage() {
   const { currentOrganization } = useOrganizations();
 
-  const { statistics } = useStatistics();
+  const { monthly_statistics } = useStatistics();
 
-  if (!currentOrganization || !statistics) {
+  if (!currentOrganization) {
     return null;
   }
 
@@ -21,8 +21,8 @@ export default function SuccessPercentage() {
 
   let success = 0;
   let total = 0;
-  for (const stat of statistics) {
-    if (months.includes(stat.month)) {
+  for (const stat of monthly_statistics) {
+    if (months.includes(stat.date)) {
       success += stat.statistics.delivered ?? 0;
       total += Object.values(stat.statistics).reduce((prev, cur) => (prev ?? 0) + (cur ?? 0)) ?? 0;
     }

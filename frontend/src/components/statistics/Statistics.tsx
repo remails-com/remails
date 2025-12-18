@@ -5,6 +5,7 @@ import { Group, Stack } from "@mantine/core";
 import TotalDelivered from "./TotalDelivered.tsx";
 import SuccessPercentage from "./SuccessPercentage.tsx";
 import PerMonthChart from "./PerMonthChart.tsx";
+import DailyChart from "./DailyChart.tsx";
 
 export default function Statistics() {
   return (
@@ -23,6 +24,7 @@ export default function Statistics() {
         </Group>
 
         <PerMonthChart />
+        <DailyChart />
       </Stack>
     </>
   );

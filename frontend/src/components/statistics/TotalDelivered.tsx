@@ -6,14 +6,14 @@ import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
 export default function TotalDelivered() {
   const { currentOrganization } = useOrganizations();
 
-  const { statistics } = useStatistics();
+  const { monthly_statistics } = useStatistics();
 
-  if (!currentOrganization || !statistics) {
+  if (!currentOrganization) {
     return null;
   }
 
   let total = 0;
-  for (const stat of statistics) {
+  for (const stat of monthly_statistics) {
     total += stat.statistics.delivered ?? 0;
   }
 

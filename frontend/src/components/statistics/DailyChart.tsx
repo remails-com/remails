@@ -1,16 +1,16 @@
 import { Card, Group, MultiSelect, Stack, Text } from "@mantine/core";
 import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
-import { BarChart } from "@mantine/charts";
+import { AreaChart } from "@mantine/charts";
 import { MessageStatus } from "../../types";
 import { useState } from "react";
 import { useProjects } from "../../hooks/useProjects";
-import { formatMonth } from "../../util";
 import { ALL_MESSAGE_STATUSES, STATUS_SERIES } from "./statuses";
+import { formatDate } from "../../util";
 
-export default function PerMonthChart() {
+export default function DailyChart() {
   const { currentOrganization } = useOrganizations();
   const { projects } = useProjects();
-  const { monthly_statistics } = useStatistics();
+  const { daily_statistics } = useStatistics();
 
   const [statusFilter, setStatusFilter] = useState<MessageStatus[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
@@ -19,11 +19,11 @@ export default function PerMonthChart() {
     return null;
   }
 
-  const data: Record<string, Record<MessageStatus, number> & { month: number }> = {};
-  for (const stat of monthly_statistics) {
+  const data: Record<string, Record<MessageStatus, number> & { day: number }> = {};
+  for (const stat of daily_statistics) {
     if (projectFilter.length == 0 || projectFilter.includes(stat.project_id)) {
       data[stat.date] ??= {
-        month: new Date(stat.date).getTime(),
+        day: new Date(stat.date).getTime(),
         accepted: 0,
         delivered: 0,
         failed: 0,
@@ -40,7 +40,7 @@ export default function PerMonthChart() {
   }
 
   const sorted_data = Object.values(data);
-  sorted_data.sort((a, b) => a.month - b.month);
+  sorted_data.sort((a, b) => a.day - b.day);
 
   return (
     <Card withBorder radius="md" shadow="sm" w="100%" miw={220}>
@@ -48,9 +48,9 @@ export default function PerMonthChart() {
         <Group gap="xs" justify="space-between" align="top">
           <Stack gap={0}>
             <Text fw={700} fz="lg">
-              Emails sent per month
+              Emails sent per day
             </Text>
-            <Text>since {formatMonth(sorted_data[0].month)}</Text>
+            <Text>for the past 30 days</Text>
           </Stack>
           <Group>
             <MultiSelect
@@ -88,28 +88,23 @@ export default function PerMonthChart() {
             />
           </Group>
         </Group>
-        <BarChart
+        <AreaChart
           h={320}
           data={sorted_data}
-          dataKey="month"
+          dataKey="day"
           xAxisProps={{
-            tickFormatter: (ts) => formatMonth(ts),
+            type: "number",
+            scale: "time",
+            domain: ["auto", "auto"],
+            tickFormatter: (ts) => formatDate(ts),
           }}
           tooltipProps={{
-            labelFormatter: (ts) => formatMonth(ts),
+            labelFormatter: (ts) => formatDate(ts),
           }}
           type="stacked"
           series={STATUS_SERIES.filter((series) => sorted_data.some((dataPoint) => dataPoint[series.name] > 0))}
           withLegend
           legendProps={{ verticalAlign: "bottom" }}
-          referenceLines={[
-            {
-              y: currentOrganization.total_message_quota,
-              color: "red.5",
-              label: "Quota",
-              labelPosition: "insideTopRight",
-            },
-          ]}
         />
       </Stack>
     </Card>

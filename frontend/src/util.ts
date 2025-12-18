@@ -19,6 +19,13 @@ export function formatDate(date: number | string | Date): string {
   });
 }
 
+export function formatMonth(date: number | string | Date): string {
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function formatNumber(number: number): string {
   return number.toLocaleString("en-US");
 }

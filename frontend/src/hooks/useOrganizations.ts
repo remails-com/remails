@@ -60,7 +60,7 @@ export function useMembers() {
 export function useStatistics() {
   const statistics = useSelector((state) => state.statistics);
 
-  return { statistics };
+  return { monthly_statistics: statistics.monthly, daily_statistics: statistics.daily };
 }
 
 export function useOrgRole() {

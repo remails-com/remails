@@ -8,11 +8,18 @@ use crate::models::{Error, OrganizationId, ProjectId};
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(test, derive(PartialEq, serde::Deserialize))]
-pub struct Statistics {
+pub struct StatisticsEntry {
     organization_id: OrganizationId,
     project_id: ProjectId,
-    month: NaiveDate,
+    date: NaiveDate,
     statistics: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[cfg_attr(test, derive(PartialEq, serde::Deserialize))]
+pub struct Statistics {
+    pub monthly: Vec<StatisticsEntry>,
+    pub daily: Vec<StatisticsEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,16 +32,53 @@ impl StatisticsRepository {
         Self { pool }
     }
 
-    pub async fn get_stats(
+    pub async fn get_stats(&self, organization_id: OrganizationId) -> Result<Statistics, Error> {
+        Ok(Statistics {
+            monthly: self.get_monthly_stats(organization_id).await?,
+            daily: self.get_daily_stats(organization_id).await?,
+        })
+    }
+
+    /// Gets daily stats for the past 30 days
+    async fn get_daily_stats(
         &self,
         organization_id: OrganizationId,
-    ) -> Result<Vec<Statistics>, Error> {
+    ) -> Result<Vec<StatisticsEntry>, Error> {
         Ok(sqlx::query_as!(
-            Statistics,
+            StatisticsEntry,
+            r#"
+            SELECT organization_id, project_id, day AS "date!",
+                    jsonb_object_agg(status, count_per_status) AS statistics
+            FROM (
+                SELECT
+                    organization_id, project_id, status,
+                    date_trunc('day', created_at)::date AS day,
+                    COUNT(*) AS count_per_status
+                FROM messages
+                GROUP BY
+                    organization_id, project_id, status,
+                    date_trunc('day', created_at)::date
+            )
+            WHERE organization_id = $1 AND day > NOW() - INTERVAL '30 days'
+            GROUP BY organization_id, project_id, day;
+            "#,
+            *organization_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Gets monthly stats from both the archived statistics as well as the live message data
+    async fn get_monthly_stats(
+        &self,
+        organization_id: OrganizationId,
+    ) -> Result<Vec<StatisticsEntry>, Error> {
+        Ok(sqlx::query_as!(
+            StatisticsEntry,
             r#"
             SELECT organization_id AS "organization_id!",
                     project_id AS "project_id!",
-                    month AS "month!",
+                    month AS "date!",
                     statistics AS "statistics!"
             FROM (
                 -- archived statistics
@@ -157,10 +201,10 @@ mod test {
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
 
         // get statistics from messages
-        let mut stats = repo.get_stats(org_1).await.unwrap();
+        let mut stats = repo.get_monthly_stats(org_1).await.unwrap();
         assert_eq!(stats.len(), 4);
         assert!(stats.iter().all(|stat| stat.organization_id == org_1));
-        stats.sort_by_key(|stat| (*stat.project_id, stat.month));
+        stats.sort_by_key(|stat| (*stat.project_id, stat.date));
 
         assert_eq!(stats[0].project_id, proj_1);
         assert_eq!(
@@ -183,9 +227,9 @@ mod test {
         assert_eq!(new_nr_of_messages, nr_of_messages - 1); // 1 message has been deleted
 
         // get statistics from messages again (should still be the same)
-        let mut new_stats = repo.get_stats(org_1).await.unwrap();
+        let mut new_stats = repo.get_monthly_stats(org_1).await.unwrap();
         assert!(new_stats.iter().all(|stat| stat.organization_id == org_1));
-        new_stats.sort_by_key(|stat| (*stat.project_id, stat.month));
+        new_stats.sort_by_key(|stat| (*stat.project_id, stat.date));
 
         assert_eq!(stats, new_stats);
     }

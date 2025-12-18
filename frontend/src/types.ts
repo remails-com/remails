@@ -113,7 +113,7 @@ export interface State {
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
-  statistics: Statistics[] | null;
+  statistics: Statistics | null;
   config: RemailsConfig | null;
   runtimeConfig: RuntimeConfig | null;
   routerState: RouterState;
@@ -247,7 +247,7 @@ export type Action =
     }
   | {
       type: "set_statistics";
-      statistics: Statistics[] | null;
+      statistics: Statistics | null;
     }
   | {
       type: "set_error";
@@ -397,9 +397,14 @@ export type ApiKey = {
 
 export type CreatedApiKeyWithPassword = ApiKey & { password: string };
 
-export type Statistics = {
+export type StatisticsEntry = {
   organization_id: string;
   project_id: string;
-  month: string;
+  date: string;
   statistics: Record<MessageStatus, number | undefined>;
+};
+
+export type Statistics = {
+  monthly: StatisticsEntry[];
+  daily: StatisticsEntry[];
 };
