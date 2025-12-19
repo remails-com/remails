@@ -9,6 +9,14 @@ import { formatDate } from "../../util";
 
 type Stats = Record<MessageStatus, number> & { day: number };
 
+// generates day keys, e.g. "2025-12-19"
+const dayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "UTC",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function getEmptyStats(date: string | number | Date): Stats {
   return {
     day: new Date(date).getTime(),
@@ -35,43 +43,27 @@ export default function DailyChart() {
   }
 
   const data: Record<string, Stats> = {};
+
+  // initialize past 30 days
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const timestamp = d.getTime();
+    data[dayFormatter.format(d)] = getEmptyStats(timestamp);
+  }
+
   for (const stat of daily_statistics) {
     if (projectFilter.length == 0 || projectFilter.includes(stat.project_id)) {
-      data[stat.date] ??= getEmptyStats(stat.date);
-
       for (const status of statusFilter.length > 0 ? statusFilter : ALL_MESSAGE_STATUSES) {
         data[stat.date][status] += stat.statistics[status] ?? 0;
       }
     }
   }
 
-  let sorted_data = Object.values(data);
+  const sorted_data = Object.values(data);
   sorted_data.sort((a, b) => a.day - b.day);
-
-  if (sorted_data.length >= 2) {
-    // fill missing dates
-    const final_data: Stats[] = [];
-
-    const current = new Date(sorted_data[0].day);
-    const end = new Date(sorted_data[sorted_data.length - 1].day);
-
-    let i = 0;
-
-    while (current <= end) {
-      const currentDayMs = current.getTime();
-
-      if (i < sorted_data.length && sorted_data[i].day === currentDayMs) {
-        final_data.push(sorted_data[i]);
-        i++;
-      } else {
-        final_data.push(getEmptyStats(currentDayMs));
-      }
-
-      current.setUTCDate(current.getUTCDate() + 1);
-    }
-
-    sorted_data = final_data;
-  }
 
   return (
     <Card withBorder radius="md" shadow="sm" w="100%" miw={220}>
