@@ -463,7 +463,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
         },
         bus::client::BusMessage,
-        models::{MessageStatus, OrganizationRepository, Role},
+        models::{MessageStatus, OrganizationRepository, Role, Statistics},
         periodically::Periodically,
         test::TestProjects,
     };
@@ -591,6 +591,15 @@ mod tests {
             BusMessage::EmailReadyToSend(message.id(), "127.0.0.1".parse().unwrap())
         );
 
+        // get organization statistics
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut stats: Statistics = deserialize_body(response.into_body()).await;
+        stats.sort();
+
         // remove message
         let response = server
             .delete(format!(
@@ -611,6 +620,16 @@ mod tests {
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
         assert_eq!(messages.len(), messages_in_fixture - 1);
         assert!(!messages.iter().any(|m| m.id == message_1.parse().unwrap()));
+
+        // statistics have not changed
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut new_stats: Statistics = deserialize_body(response.into_body()).await;
+        new_stats.sort();
+        assert_eq!(stats, new_stats);
     }
 
     async fn test_messages_no_access(
@@ -934,6 +953,18 @@ mod tests {
                 "recipient3@example.com"
             ]
         );
+
+        // get statistics
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let stats: Statistics = deserialize_body(response.into_body()).await;
+        assert_eq!(stats.monthly.len(), 1);
+        assert_eq!(stats.monthly[0].statistics, json!({"processing": 3}));
+        assert_eq!(stats.daily.len(), 1);
+        assert_eq!(stats.daily[0].statistics, json!({"processing": 3}));
     }
 
     #[sqlx::test(fixtures(
@@ -1070,6 +1101,14 @@ mod tests {
         let message: ApiMessage = deserialize_body(response.into_body()).await;
         assert_eq!(message.id(), message_id);
 
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut stats: Statistics = deserialize_body(response.into_body()).await;
+        stats.sort();
+
         // expired message data will be removed eventually
         let bus_client = BusClient::new_from_env_var().unwrap();
         let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
@@ -1093,5 +1132,15 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
         assert!(messages.iter().all(|m| m.id != message_id));
+
+        // statistics have not changed
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut new_stats: Statistics = deserialize_body(response.into_body()).await;
+        new_stats.sort();
+        assert_eq!(stats, new_stats);
     }
 }

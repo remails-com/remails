@@ -12,7 +12,7 @@ pub struct StatisticsEntry {
     organization_id: OrganizationId,
     project_id: ProjectId,
     date: NaiveDate,
-    statistics: serde_json::Value,
+    pub statistics: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -20,6 +20,15 @@ pub struct StatisticsEntry {
 pub struct Statistics {
     pub monthly: Vec<StatisticsEntry>,
     pub daily: Vec<StatisticsEntry>,
+}
+
+#[cfg(test)]
+impl Statistics {
+    pub fn sort(&mut self) {
+        self.monthly
+            .sort_by_key(|stat| (*stat.project_id, stat.date));
+        self.daily.sort_by_key(|stat| (*stat.project_id, stat.date));
+    }
 }
 
 #[derive(Debug, Clone)]
