@@ -45,28 +45,32 @@ export default function DailyChart() {
     }
   }
 
-  const sorted_data = Object.values(data);
+  let sorted_data = Object.values(data);
   sorted_data.sort((a, b) => a.day - b.day);
 
-  // fill missing dates
-  const final_data: Stats[] = [];
+  if (sorted_data.length >= 2) {
+    // fill missing dates
+    const final_data: Stats[] = [];
 
-  const current = new Date(sorted_data[0].day);
-  const end = new Date(sorted_data[sorted_data.length - 1].day);
+    const current = new Date(sorted_data[0].day);
+    const end = new Date(sorted_data[sorted_data.length - 1].day);
 
-  let i = 0;
+    let i = 0;
 
-  while (current <= end) {
-    const currentDayMs = current.getTime();
+    while (current <= end) {
+      const currentDayMs = current.getTime();
 
-    if (i < sorted_data.length && sorted_data[i].day === currentDayMs) {
-      final_data.push(sorted_data[i]);
-      i++;
-    } else {
-      final_data.push(getEmptyStats(currentDayMs));
+      if (i < sorted_data.length && sorted_data[i].day === currentDayMs) {
+        final_data.push(sorted_data[i]);
+        i++;
+      } else {
+        final_data.push(getEmptyStats(currentDayMs));
+      }
+
+      current.setUTCDate(current.getUTCDate() + 1);
     }
 
-    current.setUTCDate(current.getUTCDate() + 1);
+    sorted_data = final_data;
   }
 
   return (
@@ -117,7 +121,7 @@ export default function DailyChart() {
         </Group>
         <AreaChart
           h={320}
-          data={final_data}
+          data={sorted_data}
           dataKey="day"
           xAxisProps={{
             type: "number",

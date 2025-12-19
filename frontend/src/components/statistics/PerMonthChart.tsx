@@ -50,7 +50,7 @@ export default function PerMonthChart() {
             <Text fw={700} fz="lg">
               Emails sent per month
             </Text>
-            <Text>since {formatMonth(sorted_data[0].month)}</Text>
+            <Text>since {formatMonth(sorted_data.length > 0 ? sorted_data[0].month : new Date())}</Text>
           </Stack>
           <Group>
             <MultiSelect
