@@ -29,7 +29,7 @@ export default function SuccessPercentage() {
   }
 
   return (
-    <StatCard title="Successful delivery %" footer={`during last 3 months`}>
+    <StatCard title="Successful delivery rate" footer={`over the last 3 months`}>
       <Text fz="xl" fw="bold" c="remails-red">
         {total > 0 ? `${formatNumber((success / total) * 100)}%` : "-"}
       </Text>

@@ -7,6 +7,21 @@ import { useProjects } from "../../hooks/useProjects";
 import { ALL_MESSAGE_STATUSES, STATUS_SERIES } from "./statuses";
 import { formatDate } from "../../util";
 
+type Stats = Record<MessageStatus, number> & { day: number };
+
+function getEmptyStats(date: string | number | Date): Stats {
+  return {
+    day: new Date(date).getTime(),
+    accepted: 0,
+    delivered: 0,
+    failed: 0,
+    held: 0,
+    processing: 0,
+    reattempt: 0,
+    rejected: 0,
+  };
+}
+
 export default function DailyChart() {
   const { currentOrganization } = useOrganizations();
   const { projects } = useProjects();
@@ -19,19 +34,10 @@ export default function DailyChart() {
     return null;
   }
 
-  const data: Record<string, Record<MessageStatus, number> & { day: number }> = {};
+  const data: Record<string, Stats> = {};
   for (const stat of daily_statistics) {
     if (projectFilter.length == 0 || projectFilter.includes(stat.project_id)) {
-      data[stat.date] ??= {
-        day: new Date(stat.date).getTime(),
-        accepted: 0,
-        delivered: 0,
-        failed: 0,
-        held: 0,
-        processing: 0,
-        reattempt: 0,
-        rejected: 0,
-      };
+      data[stat.date] ??= getEmptyStats(stat.date);
 
       for (const status of statusFilter.length > 0 ? statusFilter : ALL_MESSAGE_STATUSES) {
         data[stat.date][status] += stat.statistics[status] ?? 0;
@@ -41,6 +47,27 @@ export default function DailyChart() {
 
   const sorted_data = Object.values(data);
   sorted_data.sort((a, b) => a.day - b.day);
+
+  // fill missing dates
+  const final_data: Stats[] = [];
+
+  const current = new Date(sorted_data[0].day);
+  const end = new Date(sorted_data[sorted_data.length - 1].day);
+
+  let i = 0;
+
+  while (current <= end) {
+    const currentDayMs = current.getTime();
+
+    if (i < sorted_data.length && sorted_data[i].day === currentDayMs) {
+      final_data.push(sorted_data[i]);
+      i++;
+    } else {
+      final_data.push(getEmptyStats(currentDayMs));
+    }
+
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
 
   return (
     <Card withBorder radius="md" shadow="sm" w="100%" miw={220}>
@@ -90,7 +117,7 @@ export default function DailyChart() {
         </Group>
         <AreaChart
           h={320}
-          data={sorted_data}
+          data={final_data}
           dataKey="day"
           xAxisProps={{
             type: "number",
@@ -101,7 +128,6 @@ export default function DailyChart() {
           tooltipProps={{
             labelFormatter: (ts) => formatDate(ts),
           }}
-          type="stacked"
           series={STATUS_SERIES.filter((series) => sorted_data.some((dataPoint) => dataPoint[series.name] > 0))}
           withLegend
           legendProps={{ verticalAlign: "bottom" }}

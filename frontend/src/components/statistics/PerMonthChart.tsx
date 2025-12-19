@@ -1,6 +1,6 @@
 import { Card, Group, MultiSelect, Stack, Text } from "@mantine/core";
 import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
-import { BarChart } from "@mantine/charts";
+import { AreaChart } from "@mantine/charts";
 import { MessageStatus } from "../../types";
 import { useState } from "react";
 import { useProjects } from "../../hooks/useProjects";
@@ -88,7 +88,7 @@ export default function PerMonthChart() {
             />
           </Group>
         </Group>
-        <BarChart
+        <AreaChart
           h={320}
           data={sorted_data}
           dataKey="month"
@@ -98,7 +98,6 @@ export default function PerMonthChart() {
           tooltipProps={{
             labelFormatter: (ts) => formatMonth(ts),
           }}
-          type="stacked"
           series={STATUS_SERIES.filter((series) => sorted_data.some((dataPoint) => dataPoint[series.name] > 0))}
           withLegend
           legendProps={{ verticalAlign: "bottom" }}
