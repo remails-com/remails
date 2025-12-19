@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT organization_id, project_id, day AS \"date!\",\n                    jsonb_object_agg(status, count_per_status) AS statistics\n            FROM (\n                SELECT\n                    organization_id, project_id, status,\n                    date_trunc('day', created_at)::date AS day,\n                    COUNT(*) AS count_per_status\n                FROM messages\n                GROUP BY\n                    organization_id, project_id, status,\n                    date_trunc('day', created_at)::date\n            )\n            WHERE organization_id = $1 AND day > NOW() - INTERVAL '30 days'\n            GROUP BY organization_id, project_id, day;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "date!",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "statistics",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "48d52ef309c0bb0fd8a8affe73d6433143508f3a83d5ad1df72584f15fed4415"
+}

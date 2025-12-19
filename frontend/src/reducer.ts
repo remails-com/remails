@@ -114,6 +114,9 @@ const actionHandler: {
       organizations: [...(state.organizations?.filter((o) => o.id !== action.organizationId) || []), org],
     };
   },
+  set_statistics: function (state, action) {
+    return { ...state, statistics: action.statistics };
+  },
   set_error: function (state, action) {
     return { ...state, error: action.error };
   },

@@ -7,7 +7,7 @@ use crate::{
     },
     models::{
         ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
-        OrganizationMember, OrganizationRepository, Role,
+        OrganizationMember, OrganizationRepository, Role, Statistics, StatisticsRepository,
     },
 };
 use axum::{
@@ -27,6 +27,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
             remove_organization,
             update_organization
         ))
+        .routes(routes!(get_statistics))
         .routes(routes!(list_members))
         .routes(routes!(remove_member, update_member_role))
         .routes(routes!(update_block_status))
@@ -180,6 +181,38 @@ pub async fn update_organization(
     );
 
     Ok(Json(organization))
+}
+
+/// Get organization statistics
+///
+/// Returns all statistics of the organization. This includes:
+/// - Monthly statistics about the email statuses
+/// - Daily statistics about the emails statuses for the past 30 days
+#[utoipa::path(get, path = "/organizations/{org_id}/statistics",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched organization statistics", body = [Statistics]),
+        AppError,
+    )
+)]
+pub async fn get_statistics(
+    Path((org_id,)): Path<(OrganizationId,)>,
+    State(repo): State<StatisticsRepository>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<Statistics> {
+    user.has_org_read_access(&org_id)?;
+
+    let statistics = repo.get_stats(org_id).await?;
+
+    debug!(
+        user_id = user.log_id(),
+        organization_id = org_id.to_string(),
+        "listed statistics ({} monthly, {} daily)",
+        statistics.monthly.len(),
+        statistics.daily.len(),
+    );
+
+    Ok(Json(statistics))
 }
 
 /// List organization members
@@ -506,6 +539,19 @@ mod tests {
         assert_eq!(organization.id(), created_org.id());
         assert_eq!(organization.name, "Updated Org");
 
+        // get organization statistics
+        let response = server
+            .get(format!(
+                "/api/organizations/{}/statistics",
+                created_org.id()
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let stats: Statistics = deserialize_body(response.into_body()).await;
+        assert_eq!(stats.monthly.len(), 0);
+        assert_eq!(stats.daily.len(), 0);
+
         // remove organization
         let response = server
             .delete(format!("/api/organizations/{}", created_org.id()))
@@ -559,6 +605,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
+
+        // can't get organization statistics
+        let response = server
+            .get(format!("/api/organizations/{org_1}/statistics"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), read_status_code);
 
         // can't get organization members
         let response = server

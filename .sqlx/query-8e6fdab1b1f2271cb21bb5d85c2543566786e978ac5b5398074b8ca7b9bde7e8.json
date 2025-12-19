@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $4) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND m.project_id = $3\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND o.block_status = 'not_blocked'\n              AND octet_length(raw_data) > 0\n            ",
   "describe": {
     "columns": [
       {
@@ -70,7 +70,7 @@
       },
       {
         "ordinal": 10,
-        "name": "raw_data!",
+        "name": "raw_data",
         "type_info": "Bytea"
       },
       {
@@ -121,10 +121,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Uuid",
-        "Uuid",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -138,7 +135,7 @@
       false,
       false,
       false,
-      null,
+      false,
       null,
       true,
       false,
@@ -150,5 +147,5 @@
       true
     ]
   },
-  "hash": "a96e1696f8f7ebb75c2f39732ca81cfa679da610697d5a3a7ec274d9c7a133a3"
+  "hash": "8e6fdab1b1f2271cb21bb5d85c2543566786e978ac5b5398074b8ca7b9bde7e8"
 }

@@ -1,7 +1,7 @@
 import { useForm } from "@mantine/form";
 import { useProjects } from "../../hooks/useProjects.ts";
-import { Popover, Select, Stack, TextInput, Text, Group, Button, Switch } from "@mantine/core";
-import { IconHelp } from "@tabler/icons-react";
+import { Popover, Select, Stack, TextInput, Text, Group, Button, Switch, Flex } from "@mantine/core";
+import { IconEye, IconHelp } from "@tabler/icons-react";
 import { useRuntimeConfig } from "../../hooks/useRuntimeConfig.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { notifications } from "@mantine/notifications";
@@ -17,7 +17,7 @@ interface FormValues {
 export default function RuntimeConfig() {
   const { projects } = useProjects();
   const { organizations, currentOrganization } = useOrganizations();
-  const { dispatch } = useRemails();
+  const { dispatch, navigate } = useRemails();
   const { runtimeConfig } = useRuntimeConfig();
 
   const configForm = useForm<FormValues>({
@@ -102,16 +102,36 @@ export default function RuntimeConfig() {
               configForm.setFieldValue("system_email_address", value);
             }}
           />
-          <Select
-            label="System email project"
-            placeholder="Pick project to send system emails"
-            clearable
-            searchable
-            nothingFoundMessage="This project does not exist, in the currently active organization..."
-            data={systemEmailDropdownOptions}
-            value={configForm.values.system_email_project}
-            onChange={(value) => configForm.setFieldValue("system_email_project", value)}
-          />
+          <Flex gap="sm" justify="space-between" align="end">
+            <Select
+              label="System email project"
+              placeholder="Pick project to send system emails"
+              clearable
+              searchable
+              nothingFoundMessage="This project does not exist, in the currently active organization..."
+              data={systemEmailDropdownOptions}
+              value={configForm.values.system_email_project}
+              onChange={(value) => configForm.setFieldValue("system_email_project", value)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              leftSection={<IconEye />}
+              variant="light"
+              onClick={() =>
+                configForm.values.system_email_project &&
+                navigate("projects.project", {
+                  org_id:
+                    configForm.values.system_email_project == runtimeConfig.system_email_project
+                      ? runtimeConfig.system_email_organization
+                      : currentOrganization!.id,
+                  proj_id: configForm.values.system_email_project,
+                })
+              }
+              disabled={!configForm.values.system_email_project}
+            >
+              View project
+            </Button>
+          </Flex>
           <Switch
             checked={configForm.values.enable_account_creation}
             onChange={(ev) => configForm.setFieldValue("enable_account_creation", ev.currentTarget.checked)}

@@ -11,7 +11,7 @@ export const RemailsContext = createContext<{
   state: State;
   dispatch: ActionDispatch<[Action]>;
   navigate: Navigate;
-  // Redirect to the page in the `redirect` query param. Used for navigating to the right page after loging in.
+  // Redirect to the page in the `redirect` query param. Used for navigating to the right page after logging in.
   redirect: () => void;
   match: Router["match"];
 }>({
@@ -25,6 +25,7 @@ export const RemailsContext = createContext<{
     messages: null,
     domains: null,
     credentials: null,
+    statistics: null,
     apiKeys: null,
     config: null,
     runtimeConfig: null,
@@ -73,6 +74,7 @@ export function useLoadRemails() {
     runtimeConfig: null,
     routerState: router.initialState,
     nextRouterState: null,
+    statistics: null,
     apiKeys: null,
   });
 
