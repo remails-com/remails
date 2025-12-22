@@ -12,6 +12,7 @@ use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use std::fmt::{Debug, Formatter};
+use tokio_rustls::rustls::pki_types::PrivatePkcs8KeyDer;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -64,8 +65,8 @@ impl DkimKey {
             )),
             DkimKey::RsaSha256(k) => Ok(MailAuthSigningKey::RsaSha256(mail_auth_crypto::RsaKey::<
                 mail_auth_crypto::Sha256,
-            >::from_pkcs8_der(
-                k.as_der()?.as_ref()
+            >::from_key_der(
+                PrivatePkcs8KeyDer::from(k.as_der()?.as_ref().to_vec()).into(),
             )?)),
         }
     }
