@@ -95,7 +95,6 @@ pub struct HandlerConfig {
     pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
     pub(crate) environment: Environment,
-    pub(crate) spf_include: String,
 }
 
 #[cfg(not(test))]
@@ -108,8 +107,6 @@ impl HandlerConfig {
             resolver: DnsResolver::new(),
             retry: Default::default(),
             environment: Environment::from_env(),
-            spf_include: std::env::var("SPF_INCLUDE")
-                .unwrap_or("include:spf.remails.net".to_owned()),
         }
     }
 }
@@ -147,9 +144,14 @@ impl Handler {
                 .expect("Failed to install crypto provider");
         }
 
+        #[cfg(test)]
+        let resolver = DnsResolver::mock("localhost", 1025);
+        #[cfg(not(test))]
+        let resolver = DnsResolver::default();
+
         Self {
             message_repository: MessageRepository::new(pool.clone()),
-            domain_repository: DomainRepository::new(pool.clone()),
+            domain_repository: DomainRepository::new(pool.clone(), resolver),
             organization_repository: OrganizationRepository::new(pool.clone()),
             message_parser: MessageParser::default(),
             k8s: Kubernetes::new(pool.clone())
@@ -260,11 +262,7 @@ impl Handler {
         };
 
         // check SPF record
-        let spf = self
-            .config
-            .resolver
-            .verify_spf(sender_domain, &self.config.spf_include)
-            .await;
+        let spf = self.config.resolver.verify_spf(sender_domain).await;
         if matches!(spf.status, VerifyResultStatus::Error) {
             return Ok(Err((
                 MessageStatus::Held,
@@ -851,7 +849,6 @@ mod test {
                     delay: Duration::minutes(5),
                     max_automatic_retries: 1,
                 },
-                spf_include: "include:spf.remails.net".to_owned(),
             };
             Handler::new(
                 pool,
@@ -964,7 +961,7 @@ mod test {
             // Invalid SPF (wrong include)
             vec![
                 "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyQtyx8uwJIJoQ3+LEetDzd+bpIkebVIYSq94OCOimHu/Pv7tPY5pn99JVv0rmdGHluuWEGxQNBYDBdk0FQF4+HP0MlPitJSdxawmCRsIcUZR3TQLf6dDBm2YPJ3G4xUQ2pT4GPMwCX9N1aAfO5qj2fBsjT8LvLeTRKEbHXGDM+m2yMF0dgr6AJLLVYjs3MSD273DEL5GnqhGXieziz4PI5TCJpxR3CVByguImG9tg1BySMu3f7VFmiToLCVeuk1UzIYAPZN6fvCcmyalADfG9rZa/60lxFzeorBtVk/Ej0braeX8AT8RX2Ozw9lg2Wzkwx5NyvqOFAcnkhDX4oTeVQIDAQAB",
-                "v=spf1 include:spf.remails.com -all",
+                "v=spf1 include:spf.remails.net -all",
             ],
         ];
         for dns_records in dns_records {

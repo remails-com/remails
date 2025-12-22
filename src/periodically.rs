@@ -150,7 +150,6 @@ mod test {
                 delay: Duration::minutes(60),
                 max_automatic_retries: 3,
             },
-            spf_include: "include:spf.remails.net".to_owned(),
         };
         let handler = Handler::new(
             pool.clone(),
@@ -291,7 +290,6 @@ mod test {
                 max_automatic_retries: 3,
             },
             environment: Environment::Development,
-            spf_include: "include:spf.remails.net".to_owned(),
         };
         let handler = Handler::new(
             pool.clone(),

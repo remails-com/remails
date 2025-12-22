@@ -1,6 +1,6 @@
 #[cfg(test)]
 use crate::handler::mock;
-use crate::models::{Domain, Error};
+use crate::models::Error;
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
 #[cfg(not(test))]
@@ -29,6 +29,7 @@ pub struct DnsResolver {
     #[cfg(test)]
     pub(crate) resolver: mock::Resolver,
     pub dkim_selector: String,
+    pub spf_include: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -98,6 +99,12 @@ pub struct DomainVerificationStatus {
     a: VerifyResult,
 }
 
+impl DomainVerificationStatus {
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        self.timestamp
+    }
+}
+
 #[cfg(not(test))]
 impl Default for DnsResolver {
     fn default() -> Self {
@@ -160,6 +167,8 @@ impl DnsResolver {
             .build(),
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .expect("DKIM_SELECTOR environment variable not set"),
+            spf_include: std::env::var("SPF_INCLUDE")
+                .unwrap_or("include:spf.remails.net".to_string()),
         }
     }
 
@@ -187,6 +196,7 @@ impl DnsResolver {
                 txt: records,
             },
             dkim_selector: "remails-testing".to_string(),
+            spf_include: "include:spf.remails.net".to_string(),
         }
     }
 
@@ -293,7 +303,7 @@ impl DnsResolver {
         }
     }
 
-    pub async fn verify_spf(&self, domain: &str, spf_include: &str) -> VerifyResult {
+    pub async fn verify_spf(&self, domain: &str) -> VerifyResult {
         let domain = domain.trim_matches('.');
         let record = format!("{domain}.");
         let spf_data = match self.get_singular_dns_record(&record, "v=spf1").await {
@@ -302,13 +312,13 @@ impl DnsResolver {
         };
         trace!("spf data: {spf_data:?}");
 
-        if spf_data == format!("v=spf1 {spf_include} -all") {
+        if spf_data == format!("v=spf1 {} -all", self.spf_include) {
             return VerifyResult::success("correct!");
         }
 
-        if !spf_data.split(' ').any(|x| x == spf_include) {
+        if !spf_data.split(' ').any(|x| x == self.spf_include) {
             return VerifyResult::error(
-                format!("SPF record is missing \"{spf_include}\":"),
+                format!("SPF record is missing \"{}\":", self.spf_include),
                 Some(spf_data),
             );
         }
@@ -361,18 +371,15 @@ impl DnsResolver {
 
     pub async fn verify_domain(
         &self,
-        domain: &Domain,
-        spf_include: &str,
+        domain_name: &str,
+        dkim_pk: &[u8],
     ) -> Result<DomainVerificationStatus, Error> {
         Ok(DomainVerificationStatus {
             timestamp: Utc::now(),
-            dkim: self
-                .verify_dkim(&domain.domain, domain.dkim_key.pub_key()?.as_ref())
-                .await
-                .into(),
-            spf: self.verify_spf(&domain.domain, spf_include).await,
-            dmarc: self.verify_dmarc(&domain.domain).await,
-            a: self.any_a_record(&domain.domain).await,
+            dkim: self.verify_dkim(domain_name, dkim_pk).await.into(),
+            spf: self.verify_spf(domain_name).await,
+            dmarc: self.verify_dmarc(domain_name).await,
+            a: self.any_a_record(domain_name).await,
         })
     }
 }
@@ -409,31 +416,31 @@ mod test {
 
         dns.resolver.txt[1] = ""; // spf record does not exist
         assert!(matches!(
-            dns.verify_spf(domain, "include:test.com").await.status,
+            dns.verify_spf(domain).await.status,
             VerifyResultStatus::Error
+        ));
+
+        dns.resolver.txt[1] = "v=spf1 include:spf.remails.net -all";
+        assert!(matches!(
+            dns.verify_spf(domain).await.status,
+            VerifyResultStatus::Success
+        ));
+
+        dns.resolver.txt[1] = "v=spf1 include:test.com include:spf.remails.net ~all";
+        assert!(matches!(
+            dns.verify_spf(domain).await.status,
+            VerifyResultStatus::Info
         ));
 
         dns.resolver.txt[1] = "v=spf1 include:test.com -all";
         assert!(matches!(
-            dns.verify_spf(domain, "include:test.com").await.status,
-            VerifyResultStatus::Success
-        ));
-
-        dns.resolver.txt[1] = "v=spf1 include:test.com include:spf.remails.com ~all";
-        assert!(matches!(
-            dns.verify_spf(domain, "include:test.com").await.status,
-            VerifyResultStatus::Info
-        ));
-
-        dns.resolver.txt[1] = "v=spf1 include:spf.remails.com -all";
-        assert!(matches!(
-            dns.verify_spf(domain, "include:test.com").await.status,
+            dns.verify_spf(domain).await.status,
             VerifyResultStatus::Error
         ));
 
-        dns.resolver.txt[1] = "v=spf1 include:test.com +all";
+        dns.resolver.txt[1] = "v=spf1 include:spf.remails.net +all";
         assert!(matches!(
-            dns.verify_spf(domain, "include:test.com").await.status,
+            dns.verify_spf(domain).await.status,
             VerifyResultStatus::Error
         ));
     }
@@ -479,7 +486,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn domain_verification(pool: PgPool) {
-        let domains = DomainRepository::new(pool);
+        let domains = DomainRepository::new(pool, DnsResolver::mock("localhost", 1025));
         let domain = domains
             .get_domain_by_id(
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -491,13 +498,12 @@ mod test {
         let dns = DnsResolver::mock("test-org-1.com", 0);
 
         let res = dns
-            .verify_domain(&domain, "include:test.com")
+            .verify_domain(&domain.domain, domain.dkim_key.pub_key().unwrap().as_ref())
             .await
             .unwrap();
 
-        // The mock DNS resolver only contains the DKIM record
         assert!(matches!(res.dkim.status, VerifyResultStatus::Success));
-        assert!(matches!(res.spf.status, VerifyResultStatus::Error));
+        assert!(matches!(res.spf.status, VerifyResultStatus::Success));
         assert!(matches!(res.dmarc.status, VerifyResultStatus::Info));
         assert!(matches!(res.a.status, VerifyResultStatus::Success));
     }

@@ -184,7 +184,7 @@ impl FromRef<ApiState> for ProjectRepository {
 
 impl FromRef<ApiState> for DomainRepository {
     fn from_ref(state: &ApiState) -> Self {
-        DomainRepository::new(state.pool.clone())
+        DomainRepository::new(state.pool.clone(), state.resolver.clone())
     }
 }
 
