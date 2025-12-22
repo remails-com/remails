@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)\n            RETURNING id\n            ",
+  "query": "\n            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)\n            RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -25,12 +25,14 @@
             }
           }
         },
-        "Bytea"
+        "Bytea",
+        "Timestamptz",
+        "Jsonb"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "f75bb1726ee446101f0dd2e34db901e37a95b6030450651bff224f1f9056582e"
+  "hash": "29f2c8b673d16eaf5dbc8948c6b12523d2d39e59538468c00e053e75c6817f32"
 }

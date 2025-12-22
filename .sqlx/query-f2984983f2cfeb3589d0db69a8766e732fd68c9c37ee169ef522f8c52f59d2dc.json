@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE domains SET verification_status = $3, last_verification_time = $2 WHERE id = $1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f2984983f2cfeb3589d0db69a8766e732fd68c9c37ee169ef522f8c52f59d2dc"
+}

@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id,\n                   verification_status,\n                   last_verification_time\n            FROM domains\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "verification_status",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_verification_time",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "280cdb44ac6bcb4f6512b3cb2fb2c435dd8ecf830a42f8e37b04f4af5bd855d5"
+}

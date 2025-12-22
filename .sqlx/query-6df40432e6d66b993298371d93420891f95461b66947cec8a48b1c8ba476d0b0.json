@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.created_at,\n                   d.updated_at\n            FROM projects p\n                LEFT JOIN domains d ON p.id = d.project_id OR (p.organization_id = d.organization_id AND d.project_id IS NULL)\n            WHERE p.id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain\n            ORDER BY char_length(d.domain) DESC\n            LIMIT 1\n            ",
+  "query": "\n            UPDATE domains\n            SET project_id = $3\n            WHERE id = $2 AND organization_id = $1\n            RETURNING id, domain, organization_id, project_id,\n                dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                dkim_pkcs8_der, verification_status, created_at, updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -45,11 +45,16 @@
       },
       {
         "ordinal": 6,
+        "name": "verification_status",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -57,7 +62,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Text"
+        "Uuid",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -68,8 +74,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "7b1aa362eecabb015f2615d92c830d2afd80c9cf8879b5ab5d92219c46430160"
+  "hash": "6df40432e6d66b993298371d93420891f95461b66947cec8a48b1c8ba476d0b0"
 }
