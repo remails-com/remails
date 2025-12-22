@@ -50,6 +50,7 @@ spec:
                 - -c
                 - test $(find /tmp/check_node_health.healthcheck -mmin -1)
                 - test $(find /tmp/message_retry_interval.healthcheck -mmin -5)
+                - test $(find /tmp/domain_verification_interval.healthcheck -mmin -10)
                 - test $(find /tmp/reset_all_quotas_interval.healthcheck -mmin -20)
                 - test $(find /tmp/clean_up_invites_interval.healthcheck -mmin -300)
           env:

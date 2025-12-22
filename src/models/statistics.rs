@@ -188,7 +188,7 @@ mod test {
     use serde_json::json;
 
     use crate::{bus::client::BusClient, periodically::Periodically, test::TestProjects};
-
+    use crate::handler::dns::DnsResolver;
     use super::*;
 
     #[sqlx::test(fixtures(
@@ -205,7 +205,8 @@ mod test {
     async fn test_get_statistics_before_and_after_removal(pool: PgPool) {
         let repo = StatisticsRepository::new(pool.clone());
         let bus_client = BusClient::new_from_env_var().unwrap();
-        let periodically = Periodically::new(pool, bus_client).await.unwrap();
+        let periodically = Periodically::new(pool, bus_client,
+                                             DnsResolver::mock("localhost", 1025)).await.unwrap();
 
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
 

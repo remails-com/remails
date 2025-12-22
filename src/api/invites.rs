@@ -185,17 +185,17 @@ mod tests {
     use http::StatusCode;
     use sqlx::PgPool;
 
+    use super::*;
     use crate::{
         api::{
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
         bus::client::BusClient,
+        handler::dns::DnsResolver,
         models::{CreatedInviteWithPassword, OrgRole, Organization, Role},
         periodically::Periodically,
     };
-
-    use super::*;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_create_and_use_invite(pool: PgPool) {
@@ -506,7 +506,13 @@ mod tests {
 
         // expired invite will be removed eventually
         let bus_client = BusClient::new_from_env_var().unwrap();
-        let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client,
+            DnsResolver::mock("localhost", 1025),
+        )
+        .await
+        .unwrap();
         periodically.clean_up().await.unwrap();
 
         // cannot get automatically removed expired invite

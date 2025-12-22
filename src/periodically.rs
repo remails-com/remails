@@ -1,7 +1,11 @@
 use crate::{
     MoneyBird,
     bus::client::BusClient,
-    models::{self, ApiUserRepository, InviteRepository, MessageRepository, StatisticsRepository},
+    handler::dns::DnsResolver,
+    models::{
+        self, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
+        StatisticsRepository,
+    },
     moneybird,
 };
 use chrono::Duration;
@@ -16,6 +20,7 @@ pub struct Periodically {
     invite_repository: InviteRepository,
     user_repository: ApiUserRepository,
     statistics_repository: StatisticsRepository,
+    domain_repository: DomainRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
 }
@@ -42,12 +47,17 @@ where
 }
 
 impl Periodically {
-    pub async fn new(pool: PgPool, bus_client: BusClient) -> Result<Self, moneybird::Error> {
+    pub async fn new(
+        pool: PgPool,
+        bus_client: BusClient,
+        resolver: DnsResolver,
+    ) -> Result<Self, moneybird::Error> {
         Ok(Self {
             message_repository: MessageRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
             user_repository: ApiUserRepository::new(pool.clone()),
             statistics_repository: StatisticsRepository::new(pool.clone()),
+            domain_repository: DomainRepository::new(pool.clone(), resolver),
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
         })
@@ -95,6 +105,10 @@ impl Periodically {
         self.statistics_repository
             .aggregate_and_archive_messages()
             .await
+    }
+
+    pub async fn verify_domains(&self) -> Result<(), models::Error> {
+        self.domain_repository.verify_all().await
     }
 
     /// Reset quotas for all organizations where the quota is ready to be reset
@@ -160,9 +174,13 @@ mod test {
         .await;
         handler.spawn();
 
-        let periodically = Periodically::new(pool.clone(), bus_client.clone())
-            .await
-            .unwrap();
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client.clone(),
+            DnsResolver::mock("localhost", 1025),
+        )
+        .await
+        .unwrap();
 
         let mut stream = bus_client.receive().await.unwrap();
 
@@ -302,7 +320,13 @@ mod test {
 
         tokio::time::sleep(core::time::Duration::from_secs(1)).await;
 
-        let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client,
+            DnsResolver::mock("localhost", 1025),
+        )
+        .await
+        .unwrap();
         periodically.retry_messages().await.unwrap();
 
         let mut senders = HashSet::new();

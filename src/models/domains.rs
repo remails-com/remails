@@ -6,12 +6,14 @@ use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use futures::StreamExt;
 use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
-use sqlx::PgConnection;
+use sqlx::{PgConnection, query};
 use std::fmt::{Debug, Formatter};
+use tracing::{error, trace};
 use tokio_rustls::rustls::pki_types::PrivatePkcs8KeyDer;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -69,6 +71,17 @@ impl DkimKey {
                 PrivatePkcs8KeyDer::from(k.as_der()?.as_ref().to_vec()).into(),
             )?)),
         }
+    }
+
+    pub fn try_from_db(kind: DkimKeyType, pkcs8_der: &[u8]) -> Result<Self, Error> {
+        Ok(match kind {
+            DkimKeyType::RsaSha256 => {
+                DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(pkcs8_der)?)
+            }
+            DkimKeyType::Ed25519 => {
+                DkimKey::Ed25519(aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(pkcs8_der)?)
+            }
+        })
     }
 }
 
@@ -168,14 +181,7 @@ impl TryFrom<PgDomain> for Domain {
     type Error = Error;
 
     fn try_from(pg: PgDomain) -> Result<Self, Self::Error> {
-        let dkim_key = match pg.dkim_key_type {
-            DkimKeyType::RsaSha256 => {
-                DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?)
-            }
-            DkimKeyType::Ed25519 => DkimKey::Ed25519(
-                aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?,
-            ),
-        };
+        let dkim_key = DkimKey::try_from_db(pg.dkim_key_type, &pg.dkim_pkcs8_der)?;
 
         Ok(Self {
             id: pg.id,
@@ -355,20 +361,12 @@ impl DomainRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        let pk_bytes = match row.dkim_key_type {
-            DkimKeyType::RsaSha256 => aws_lc_rs::rsa::KeyPair::from_pkcs8(&row.dkim_pkcs8_der)?
-                .public_key()
-                .as_ref()
-                .to_vec(),
-            DkimKeyType::Ed25519 => {
-                aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(&row.dkim_pkcs8_der)?
-                    .public_key()
-                    .as_ref()
-                    .to_vec()
-            }
-        };
+        let pk = DkimKey::try_from_db(row.dkim_key_type, &row.dkim_pkcs8_der)?;
 
-        let verification_status = self.resolver.verify_domain(&row.domain, &pk_bytes).await?;
+        let verification_status = self
+            .resolver
+            .verify_domain(&row.domain, pk.pub_key()?.as_ref())
+            .await?;
 
         sqlx::query!(
             r#"
@@ -378,9 +376,63 @@ impl DomainRepository {
             verification_status.timestamp(),
             serde_json::to_value(&verification_status)?,
         )
-        .execute(&self.pool).await?;
-        
+            .execute(&self.pool).await?;
+
         Ok(verification_status)
+    }
+
+    pub async fn verify_all(&self) -> Result<(), Error> {
+        let domains = query!(
+            r#"
+            SELECT id, domain, dkim_key_type AS "kind:DkimKeyType", dkim_pkcs8_der
+            FROM domains
+            WHERE last_verification_time < now() - '30 min'::interval
+            "#
+        )
+        .fetch(&self.pool);
+
+        domains.for_each_concurrent(None, async |res| {
+            match res {
+                Ok(domain) => {
+                    let pk = match DkimKey::try_from_db(domain.kind, &domain.dkim_pkcs8_der) {
+                        Err(err) => {
+                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            return;
+                        }
+                        Ok(pk) => pk
+                    };
+
+                    let verification = match self.resolver.verify_domain(&domain.domain, pk.pub_key().expect("We only generate the key internally, so they should work").as_ref()).await {
+                        Ok(v) => v,
+                        Err(err) => {
+                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            return;
+                        }
+                    };
+
+                    match sqlx::query!(
+                        r#"
+                        UPDATE domains SET verification_status = $1, last_verification_time = $2 WHERE id = $3
+                        "#,
+                        serde_json::to_value(&verification).expect("Should serialize"),
+                        verification.timestamp(),
+                        domain.id
+                    ).execute(&self.pool).await {
+                        Ok(_) => {
+                            trace!(domain_id = domain.id.to_string(), domain = domain.domain, "Updated verification status of domain")
+                        }
+                        Err(err) => {
+                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!("Encountered error while updating domain verification status: {err}");
+                }
+            }
+        }).await;
+
+        Ok(())
     }
 
     pub async fn update(
@@ -516,8 +568,8 @@ impl DomainRepository {
             *project_id,
             domain
         )
-        .fetch_optional(&self.pool)
-        .await?
+            .fetch_optional(&self.pool)
+            .await?
         {
             Some(domain) => Ok(Some(domain.try_into()?)),
             None => Ok(None),
@@ -529,6 +581,7 @@ impl DomainRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
+    use std::{ops::Sub, str::FromStr};
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -955,5 +1008,49 @@ mod test {
             .unwrap_err();
 
         assert!(matches!(not_found, Error::NotFound(_)))
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "org_domains", "projects", "proj_domains")
+    ))]
+    async fn verify_all(db: PgPool) {
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+
+        repo.verify_all().await.unwrap();
+
+        let domains = sqlx::query!(
+            r#"
+            SELECT id,
+                   verification_status,
+                   last_verification_time
+            FROM domains
+            "#
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+
+        for domain in domains {
+            let json_timestamp: DateTime<Utc> = DateTime::from_str(
+                domain
+                    .verification_status
+                    .get("timestamp")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                json_timestamp > Utc::now().sub(chrono::Duration::seconds(100)),
+                "{}",
+                domain.id
+            );
+            assert!(
+                domain.last_verification_time > Utc::now().sub(chrono::Duration::seconds(100)),
+                "{}",
+                domain.id
+            );
+        }
     }
 }

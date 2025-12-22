@@ -16,6 +16,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use remails::handler::dns::DnsResolver;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -86,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
     let kubernetes = Kubernetes::new(pool.clone()).await.unwrap();
 
     // Run retry service
-    let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+    let periodically = Periodically::new(pool.clone(), bus_client, DnsResolver::default()).await.unwrap();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {

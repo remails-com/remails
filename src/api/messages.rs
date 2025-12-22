@@ -473,6 +473,7 @@ mod tests {
     use ppp::v2::WriteToHeader;
     use serde_json::json;
     use sqlx::PgPool;
+    use crate::handler::dns::DnsResolver;
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -1111,7 +1112,8 @@ mod tests {
 
         // expired message data will be removed eventually
         let bus_client = BusClient::new_from_env_var().unwrap();
-        let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+        let periodically = Periodically::new(pool.clone(), bus_client,
+                                             DnsResolver::mock("localhost", 1025)).await.unwrap();
         periodically.clean_up().await.unwrap();
 
         // message data has been removed and can no longer be retrieved
