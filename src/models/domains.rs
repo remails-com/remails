@@ -12,8 +12,11 @@ use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, query};
-use std::fmt::{Debug, Formatter};
-use tracing::{error, trace};
+use std::{
+    fmt::{Debug, Formatter},
+    sync::atomic::{AtomicUsize, Ordering},
+};
+use tracing::{error, info, trace};
 use tokio_rustls::rustls::pki_types::PrivatePkcs8KeyDer;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -391,12 +394,16 @@ impl DomainRepository {
         )
         .fetch(&self.pool);
 
+        let mut error_count = AtomicUsize::new(0);
+        let mut success_count = AtomicUsize::new(0);
+
         domains.for_each_concurrent(None, async |res| {
             match res {
                 Ok(domain) => {
                     let pk = match DkimKey::try_from_db(domain.kind, &domain.dkim_pkcs8_der) {
                         Err(err) => {
                             error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error_count.fetch_add(1, Ordering::Relaxed);
                             return;
                         }
                         Ok(pk) => pk
@@ -406,6 +413,7 @@ impl DomainRepository {
                         Ok(v) => v,
                         Err(err) => {
                             error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error_count.fetch_add(1, Ordering::Relaxed);
                             return;
                         }
                     };
@@ -419,20 +427,35 @@ impl DomainRepository {
                         domain.id
                     ).execute(&self.pool).await {
                         Ok(_) => {
-                            trace!(domain_id = domain.id.to_string(), domain = domain.domain, "Updated verification status of domain")
+                            trace!(domain_id = domain.id.to_string(), domain = domain.domain, "Updated verification status of domain");
+                            success_count.fetch_add(1, Ordering::Relaxed);
                         }
                         Err(err) => {
                             error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error_count.fetch_add(1, Ordering::Relaxed);
                         }
                     }
                 }
                 Err(err) => {
                     error!("Encountered error while updating domain verification status: {err}");
+                    error_count.fetch_add(1, Ordering::Relaxed);
                 }
             }
         }).await;
 
-        Ok(())
+        info!(
+            "Updated {} DNS verifications ({} failed)",
+            success_count.get_mut(),
+            error_count.get_mut()
+        );
+
+        if error_count.get_mut() > &mut 0 {
+            Err(Error::Internal(
+                "Did not verify all DNS records".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn update(
