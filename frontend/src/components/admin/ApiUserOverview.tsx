@@ -1,15 +1,25 @@
 import { useApiUsers } from "../../hooks/useApiUsers.ts";
 import StyledTable from "../StyledTable.tsx";
-import { Anchor, Group, Table } from "@mantine/core";
+import { Anchor, Flex, Group, Pagination, Table } from "@mantine/core";
 import TableId from "../TableId.tsx";
 import RoleSelect from "./RoleSelect.tsx";
 import OrgPopover from "./OrgPopover.tsx";
 import { formatDateTime } from "../../util.ts";
+import { useState } from "react";
+import { useScrollIntoView } from "@mantine/hooks";
+
+const PER_PAGE = 20;
 
 export default function ApiUserOverview() {
+  const [activePage, setPage] = useState(1);
   const { apiUsers } = useApiUsers();
 
-  const rows = apiUsers.map((user) => (
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLDivElement>({
+    duration: 500,
+    offset: 100,
+  });
+
+  const rows = apiUsers.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((user) => (
     <Table.Tr key={user.id}>
       <Table.Td w={80}>
         <TableId id={user.id} />
@@ -35,10 +45,20 @@ export default function ApiUserOverview() {
   ));
 
   return (
-    <>
+    <div ref={targetRef}>
       <StyledTable headers={["ID", "Name", "Email", "Global Role", "Organizations", "Created", "Updated"]}>
         {rows}
       </StyledTable>
-    </>
+      <Flex justify="center" mt="md">
+        <Pagination
+          value={activePage}
+          onChange={(p) => {
+            setPage(p);
+            scrollIntoView({ alignment: "start" });
+          }}
+          total={Math.ceil(apiUsers.length / PER_PAGE)}
+        />
+      </Flex>
+    </div>
   );
 }

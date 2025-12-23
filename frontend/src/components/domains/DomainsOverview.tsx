@@ -1,9 +1,9 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Group, Table, Text } from "@mantine/core";
+import { Flex, Group, Pagination, Stack, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus, IconServer } from "@tabler/icons-react";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
 import { Link } from "../../Link.tsx";
 import InfoAlert from "../InfoAlert.tsx";
@@ -14,6 +14,9 @@ import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
 import { useProjectWithId } from "../../hooks/useProjects.ts";
 import { Domain } from "../../types.ts";
+import { useState } from "react";
+
+const PER_PAGE = 20;
 
 function DomainRow({ domain }: { domain: Domain }) {
   const project_name = useProjectWithId(domain.project_id)?.name;
@@ -59,6 +62,12 @@ function DomainRow({ domain }: { domain: Domain }) {
 export default function DomainsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
   const { domains } = useDomains();
+  const [activePage, setPage] = useState(1);
+
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
+    duration: 500,
+    offset: 100,
+  });
 
   if (domains === null) {
     return <Loader />;
@@ -73,15 +82,27 @@ export default function DomainsOverview() {
       </InfoAlert>
 
       <NewDomain opened={opened} close={close} />
-      <StyledTable headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
-        {domains.map((domain) => (
+      <StyledTable ref={targetRef} headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
+        {domains.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((domain) => (
           <DomainRow domain={domain} key={domain.id} />
         ))}
       </StyledTable>
       <Flex justify="center" mt="md">
-        <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
-          New Domain
-        </MaintainerButton>
+        <Stack>
+          {domains.length > PER_PAGE && (
+            <Pagination
+              value={activePage}
+              onChange={(p) => {
+                setPage(p);
+                scrollIntoView({ alignment: "start" });
+              }}
+              total={Math.ceil(domains.length / PER_PAGE)}
+            />
+          )}
+          <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
+            New Domain
+          </MaintainerButton>
+        </Stack>
       </Flex>
     </>
   );

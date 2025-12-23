@@ -1,23 +1,32 @@
-import { ActionIcon, Anchor, Button, Flex, Table } from "@mantine/core";
+import { ActionIcon, Anchor, Button, Flex, Pagination, Stack, Table } from "@mantine/core";
 import { formatDateTime } from "../../util";
 import { useRemails } from "../../hooks/useRemails.ts";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
 import { IconExternalLink, IconGavel, IconPlus, IconSquare, IconSquareCheck } from "@tabler/icons-react";
 import StyledTable from "../StyledTable.tsx";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { NewOrganization } from "../organizations/NewOrganization.tsx";
 import TableId from "../TableId.tsx";
+import { useState } from "react";
+
+const PER_PAGE = 20;
 
 export default function OrganizationsOverview() {
   const [opened, { open, close }] = useDisclosure(false);
   const { currentOrganization, organizations } = useOrganizations();
+  const [activePage, setPage] = useState(1);
 
   const {
     state: { config },
   } = useRemails();
   const { navigate } = useRemails();
 
-  const rows = organizations.map((organization) => (
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
+    duration: 500,
+    offset: 100,
+  });
+
+  const rows = organizations.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((organization) => (
     <Table.Tr
       key={organization.id}
       bg={currentOrganization?.id == organization.id ? "var(--mantine-color-blue-light)" : undefined}
@@ -74,12 +83,24 @@ export default function OrganizationsOverview() {
         close={close}
         done={(newOrg) => navigate("admin.organizations", { org_id: newOrg.id })}
       />
-      <StyledTable headers={["ID", "Name", "", "Moneybird contact ID", "Quota", "Updated", ""]}>{rows}</StyledTable>
+      <StyledTable ref={targetRef} headers={["ID", "Name", "", "Moneybird contact ID", "Quota", "Updated", ""]}>
+        {rows}
+      </StyledTable>
 
       <Flex justify="center" mt="md">
-        <Button onClick={() => open()} leftSection={<IconPlus />}>
-          New Organization
-        </Button>
+        <Stack>
+          <Pagination
+            value={activePage}
+            onChange={(p) => {
+              setPage(p);
+              scrollIntoView({ alignment: "start" });
+            }}
+            total={Math.ceil(organizations.length / PER_PAGE)}
+          />
+          <Button onClick={() => open()} leftSection={<IconPlus />}>
+            New Organization
+          </Button>
+        </Stack>
       </Flex>
     </>
   );
