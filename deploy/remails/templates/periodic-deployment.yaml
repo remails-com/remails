@@ -87,6 +87,10 @@ spec:
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN
               value: message-bus.{{ .Release.Namespace }}.svc.cluster.local
+            - name: DKIM_SELECTOR
+              value: {{ .Values.smtp.dkim_selector | quote }}
+            - name: SPF_INCLUDE
+              value: {{ .Values.smtp.spf_include }}
       volumes:
         - name: tmp-volume
           emptyDir: { }
