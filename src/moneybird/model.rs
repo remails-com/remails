@@ -197,6 +197,15 @@ pub struct Subscription<EndDate = Option<NaiveDate>> {
     pub(super) sales_invoices_url: Url,
 }
 
+impl Subscription {
+    pub fn id(&self) -> &SubscriptionId {
+        &self.subscription_id
+    }
+    pub fn product_id(&self) -> &ProductIdentifier {
+        &self.product
+    }
+}
+
 /// This models the content of a webhook we received from Moneybird
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct MoneybirdWebhookPayload {
@@ -266,18 +275,4 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
     #[error("Precondition failed: {0}")]
     PreconditionFailed(&'static str),
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{ProductIdentifier, Subscription, SubscriptionId};
-
-    impl Subscription {
-        pub fn id(&self) -> &SubscriptionId {
-            &self.subscription_id
-        }
-        pub fn product_id(&self) -> &ProductIdentifier {
-            &self.product
-        }
-    }
 }

@@ -20,6 +20,9 @@ use std::{cmp::Ordering, env, sync::Arc};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
+#[cfg(test)]
+pub use mock::mock_subscription;
+
 const MONEYBIRD_API_URL: &str = "https://moneybird.com/api/v2";
 
 impl PartialOrd for SubscriptionStatus {
