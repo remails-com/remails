@@ -1,5 +1,5 @@
 import { expect, test } from "../playwright/fixtures.ts";
-import { createProject, uuidRegex } from "./util.ts";
+import { createProject, deleteProject, uuidRegex } from "./util.ts";
 
 test("Project lifecycle", async ({ page }) => {
   await page.goto("/");
@@ -149,4 +149,6 @@ test("Credentials lifecycle", async ({ page }) => {
 
   // Ensure the credential is no longer listed
   await expect(page.getByLabel("Credentials")).not.toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
+
+  await deleteProject(page);
 });
