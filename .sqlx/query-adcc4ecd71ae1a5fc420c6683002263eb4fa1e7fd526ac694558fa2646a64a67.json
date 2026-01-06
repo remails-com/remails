@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT current_subscription,\n                   (SELECT COUNT(*) FROM projects WHERE organization_id = $1) AS \"project_count!\"\n            FROM organizations\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "current_subscription",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "adcc4ecd71ae1a5fc420c6683002263eb4fa1e7fd526ac694558fa2646a64a67"
+}
