@@ -180,7 +180,7 @@ impl From<models::Error> for AppError {
             Error::Serialization(_) => AppError::BadRequest(err.to_string()),
             Error::NotFound(_) => AppError::NotFound,
             Error::ForeignKeyViolation => AppError::BadRequest("Foreign key violation".to_string()),
-            Error::Conflict => AppError::Conflict("Conflict in database".to_string()),
+            Error::Conflict => AppError::Conflict("Conflict".to_string()),
             Error::BadRequest(err) => AppError::BadRequest(err.to_string()),
             Error::TooManyRequests => AppError::TooManyRequests,
             Error::OrgBlocked => AppError::Forbidden,

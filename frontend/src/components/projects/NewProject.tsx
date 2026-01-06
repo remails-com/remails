@@ -51,8 +51,13 @@ export function NewProject({ opened, close }: NewProjectProps) {
           });
         });
       } else if (res.status === 409) {
-        form.setFieldError("name", "Project with this name already exists");
-        return;
+        res.json().then((body) => {
+          // differentiate between database conflict and project limit conflicts
+          const description =
+            body.description == "Conflict" ? "A project with this name already exists." : body.description;
+
+          form.setFieldError("name", description);
+        });
       } else {
         errorNotification(`Project ${values.name} could not be created`);
         console.error(res);

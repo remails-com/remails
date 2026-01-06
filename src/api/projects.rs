@@ -105,7 +105,7 @@ pub async fn create_project(
 
     if !org_repo.can_create_new_project(org_id).await? {
         return Err(AppError::Conflict(
-            "Organization is not allowed to create more projects, upgrade your subscription to increase the limit".to_owned(),
+            "Organization is not allowed to create more projects, upgrade your subscription to increase the limit.".to_owned(),
         ));
     }
 
