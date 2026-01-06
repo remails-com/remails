@@ -12,7 +12,7 @@ type Tab = {
   notSoWide?: boolean;
 };
 
-export default function Tabs({ tabs }: { tabs: Tab[] }) {
+export default function Tabs({ tabs, keepMounted }: { tabs: Tab[]; keepMounted?: boolean }) {
   const {
     state: { routerState },
     navigate,
@@ -27,7 +27,7 @@ export default function Tabs({ tabs }: { tabs: Tab[] }) {
   };
 
   return (
-    <MTabs value={tab_route} onChange={setActiveTab}>
+    <MTabs value={tab_route} onChange={setActiveTab} keepMounted={keepMounted}>
       <MTabs.List mb="md" mx="-lg" px="lg" className={classes.header}>
         {tabs.map((t) => (
           <MTabs.Tab size="lg" value={t.route} leftSection={t.icon} key={t.route}>

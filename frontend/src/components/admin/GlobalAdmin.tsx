@@ -10,6 +10,7 @@ export default function GlobalAdmin() {
     <>
       <Header name="Settings" entityType="Admin" Icon={IconGavel} />
       <Tabs
+        keepMounted={false}
         tabs={[
           {
             route: "admin",
