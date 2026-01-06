@@ -21,12 +21,11 @@ pub type ApiResult<T> = Result<Json<T>, AppError>;
 pub enum AppError {
     BadRequest(String),
     NotFound,
-    Conflict,
+    Conflict(String),
     TooManyRequests,
     Internal,
     Forbidden,
     Unauthorized,
-    PreconditionFailed(String),
     BadGateway,
     PayloadTooLarge,
     RequestTimeout,
@@ -55,9 +54,6 @@ enum ApiError {
     /// Unauthorized
     #[response(status = UNAUTHORIZED)]
     Unauthorized(ApiErrorResponse),
-    /// Precondition Failed
-    #[response(status = PRECONDITION_FAILED)]
-    PreconditionFailed(ApiErrorResponse),
     /// Bad Gateway
     #[response(status = BAD_GATEWAY)]
     BadGateway(ApiErrorResponse),
@@ -93,12 +89,11 @@ impl From<AppError> for ApiError {
         match err {
             AppError::BadRequest(_) => ApiError::BadRequest(content),
             AppError::NotFound => ApiError::NotFound(content),
-            AppError::Conflict => ApiError::Conflict(content),
+            AppError::Conflict(_) => ApiError::Conflict(content),
             AppError::TooManyRequests => ApiError::TooManyRequests(content),
             AppError::Internal => ApiError::Internal(content),
             AppError::Forbidden => ApiError::Forbidden(content),
             AppError::Unauthorized => ApiError::Unauthorized(content),
-            AppError::PreconditionFailed(_) => ApiError::PreconditionFailed(content),
             AppError::BadGateway => ApiError::BadGateway(content),
             AppError::PayloadTooLarge => ApiError::PayloadTooLarge(content),
             AppError::RequestTimeout => ApiError::RequestTimeout(content),
@@ -120,7 +115,7 @@ impl From<oauth::Error> for AppError {
             oauth::Error::OauthToken(_)
             | oauth::Error::MissingCSRFCookie
             | oauth::Error::CSRFTokenMismatch => AppError::Unauthorized,
-            oauth::Error::PreconditionFailed(_) => AppError::PreconditionFailed(message),
+            oauth::Error::Conflict(_) => AppError::Conflict(message),
             oauth::Error::Forbidden => AppError::Forbidden,
         }
     }
@@ -185,7 +180,7 @@ impl From<models::Error> for AppError {
             Error::Serialization(_) => AppError::BadRequest(err.to_string()),
             Error::NotFound(_) => AppError::NotFound,
             Error::ForeignKeyViolation => AppError::BadRequest("Foreign key violation".to_string()),
-            Error::Conflict => AppError::Conflict,
+            Error::Conflict => AppError::Conflict("Conflict in database".to_string()),
             Error::BadRequest(err) => AppError::BadRequest(err.to_string()),
             Error::TooManyRequests => AppError::TooManyRequests,
             Error::OrgBlocked => AppError::Forbidden,
@@ -216,8 +211,7 @@ impl IntoResponse for ApiError {
             ApiError::Internal(body) => (StatusCode::INTERNAL_SERVER_ERROR, Json(body)),
             ApiError::Forbidden(body) => (StatusCode::FORBIDDEN, Json(body)),
             ApiError::Unauthorized(body) => (StatusCode::UNAUTHORIZED, Json(body)),
-            ApiError::PreconditionFailed(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
-            ApiError::BadGateway(body) => (StatusCode::PRECONDITION_FAILED, Json(body)),
+            ApiError::BadGateway(body) => (StatusCode::BAD_GATEWAY, Json(body)),
             ApiError::PayloadTooLarge(body) => (StatusCode::PAYLOAD_TOO_LARGE, Json(body)),
             ApiError::RequestTimeout(body) => (StatusCode::REQUEST_TIMEOUT, Json(body)),
         }
