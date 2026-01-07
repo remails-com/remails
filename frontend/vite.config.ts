@@ -26,4 +26,7 @@ export default defineConfig({
   css: {
     modules: {},
   },
+  build: {
+    chunkSizeWarningLimit: 2000,
+  },
 });
