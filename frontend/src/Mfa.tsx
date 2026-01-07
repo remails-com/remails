@@ -57,7 +57,7 @@ export default function Mfa({ setUser }: MfaProps) {
   return (
     <Center mih="100vh">
       <Paper radius="md" p="xl" withBorder>
-        <RemailsLogo style={{ height: 45 }} />
+        <RemailsLogo height={45} />
         <form onSubmit={form.onSubmit(submit)}>
           <Stack mb="md" mt="md">
             <Text size="lg" fw="bold">
