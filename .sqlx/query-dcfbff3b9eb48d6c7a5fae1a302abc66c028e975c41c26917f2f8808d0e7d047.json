@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                   d.domain,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der\n            FROM domains d\n            WHERE d.id = $2 AND d.organization_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "dkim_key_type: DkimKeyType",
+        "type_info": {
+          "Custom": {
+            "name": "dkim_key_type",
+            "kind": {
+              "Enum": [
+                "rsa_sha256",
+                "ed25519"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "dkim_pkcs8_der",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dcfbff3b9eb48d6c7a5fae1a302abc66c028e975c41c26917f2f8808d0e7d047"
+}

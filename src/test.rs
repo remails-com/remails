@@ -112,7 +112,6 @@ async fn setup(
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         environment: Environment::Development,
         retry: retry_config,
-        spf_include: "include:spf.remails.net".to_owned(),
     };
 
     let bus_port = Bus::spawn_random_port().await;

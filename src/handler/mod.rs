@@ -5,7 +5,7 @@ use crate::{
     dkim::PrivateKey,
     handler::{
         connection_log::LogLevel,
-        dns::{DnsResolver, ResolveError, VerifyResultStatus},
+        dns::{DnsResolver, DomainVerificationStatus, ResolveError, VerifyResultStatus},
     },
     kubernetes::Kubernetes,
     models::{
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use base64ct::{Base64, Encoding};
-use chrono::Duration;
+use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use futures::StreamExt;
 use mail_parser::MessageParser;
@@ -95,7 +95,6 @@ pub struct HandlerConfig {
     pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
     pub(crate) environment: Environment,
-    pub(crate) spf_include: String,
 }
 
 #[cfg(not(test))]
@@ -108,8 +107,6 @@ impl HandlerConfig {
             resolver: DnsResolver::new(),
             retry: Default::default(),
             environment: Environment::from_env(),
-            spf_include: std::env::var("SPF_INCLUDE")
-                .unwrap_or("include:spf.remails.net".to_owned()),
         }
     }
 }
@@ -147,9 +144,14 @@ impl Handler {
                 .expect("Failed to install crypto provider");
         }
 
+        #[cfg(test)]
+        let resolver = DnsResolver::mock("localhost", 1025);
+        #[cfg(not(test))]
+        let resolver = DnsResolver::default();
+
         Self {
             message_repository: MessageRepository::new(pool.clone()),
-            domain_repository: DomainRepository::new(pool.clone()),
+            domain_repository: DomainRepository::new(pool.clone(), resolver),
             organization_repository: OrganizationRepository::new(pool.clone()),
             message_parser: MessageParser::default(),
             k8s: Kubernetes::new(pool.clone())
@@ -260,17 +262,19 @@ impl Handler {
         };
 
         // check SPF record
-        let spf = self
-            .config
-            .resolver
-            .verify_spf(sender_domain, &self.config.spf_include)
-            .await;
+        let spf = self.config.resolver.verify_spf(sender_domain).await;
         if matches!(spf.status, VerifyResultStatus::Error) {
             return Ok(Err((
                 MessageStatus::Held,
                 format!("invalid SPF on {sender_domain}: {}", spf.reason),
             )));
         }
+
+        // check DMARC record
+        let dmarc = self.config.resolver.verify_dmarc(sender_domain).await;
+
+        // check the existence of an A record
+        let a = self.config.resolver.any_a_record(sender_domain).await;
 
         // check dkim key
         let dkim_key = match PrivateKey::new(&domain, &self.config.resolver.dkim_selector) {
@@ -288,12 +292,33 @@ impl Handler {
             domain.domain,
             Base64::encode_string(dkim_key.public_key())
         );
-        if let Err(reason) = self
+        let dkim = self
             .config
             .resolver
             .verify_dkim(sender_domain, dkim_key.public_key())
+            .await;
+
+        let domain_status = DomainVerificationStatus {
+            timestamp: Utc::now(),
+            dkim: dkim.into(),
+            spf,
+            dmarc,
+            a,
+        };
+
+        self.domain_repository
+            .store_verification_status(&domain.id, &domain_status)
             .await
-        {
+            .inspect_err(|err| {
+                warn!(
+                    "failed to store domain verification status while processing new message: {err}"
+                )
+            })
+            // Don't fail if we can't store this in the database for some reason.
+            // This is not a critical error for sending out the message.
+            .ok();
+
+        if let Err(reason) = dkim {
             return Ok(Err((
                 MessageStatus::Held,
                 format!("invalid DKIM on {sender_domain}: {reason}"),
@@ -851,7 +876,6 @@ mod test {
                     delay: Duration::minutes(5),
                     max_automatic_retries: 1,
                 },
-                spf_include: "include:spf.remails.net".to_owned(),
             };
             Handler::new(
                 pool,

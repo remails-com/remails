@@ -1,18 +1,23 @@
 use crate::{
-    handler::dns::DomainVerificationStatus,
+    handler::dns::{DnsResolver, DomainVerificationStatus},
     models::{Error, OrganizationId, ProjectId},
 };
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use futures::StreamExt;
 use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
-use sqlx::PgConnection;
-use std::fmt::{Debug, Formatter};
+use sqlx::{PgConnection, query};
+use std::{
+    fmt::{Debug, Formatter},
+    sync::atomic::{AtomicUsize, Ordering},
+};
 use tokio_rustls::rustls::pki_types::PrivatePkcs8KeyDer;
+use tracing::{error, info, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -69,6 +74,17 @@ impl DkimKey {
                 PrivatePkcs8KeyDer::from(k.as_der()?.as_ref().to_vec()).into(),
             )?)),
         }
+    }
+
+    pub fn try_from_db(kind: DkimKeyType, pkcs8_der: &[u8]) -> Result<Self, Error> {
+        Ok(match kind {
+            DkimKeyType::RsaSha256 => {
+                DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(pkcs8_der)?)
+            }
+            DkimKeyType::Ed25519 => {
+                DkimKey::Ed25519(aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(pkcs8_der)?)
+            }
+        })
     }
 }
 
@@ -147,6 +163,7 @@ pub struct Domain {
     project_id: Option<ProjectId>,
     pub(crate) domain: String,
     pub(crate) dkim_key: DkimKey,
+    verification_status: DomainVerificationStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -158,6 +175,7 @@ struct PgDomain {
     project_id: Option<Uuid>,
     dkim_key_type: DkimKeyType,
     dkim_pkcs8_der: Vec<u8>,
+    verification_status: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -166,14 +184,7 @@ impl TryFrom<PgDomain> for Domain {
     type Error = Error;
 
     fn try_from(pg: PgDomain) -> Result<Self, Self::Error> {
-        let dkim_key = match pg.dkim_key_type {
-            DkimKeyType::RsaSha256 => {
-                DkimKey::RsaSha256(aws_lc_rs::rsa::KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?)
-            }
-            DkimKeyType::Ed25519 => DkimKey::Ed25519(
-                aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(&pg.dkim_pkcs8_der)?,
-            ),
-        };
+        let dkim_key = DkimKey::try_from_db(pg.dkim_key_type, &pg.dkim_pkcs8_der)?;
 
         Ok(Self {
             id: pg.id,
@@ -181,14 +192,15 @@ impl TryFrom<PgDomain> for Domain {
             project_id: pg.project_id.map(Into::into),
             domain: pg.domain,
             dkim_key,
+            verification_status: serde_json::from_value(pg.verification_status)?,
             created_at: pg.created_at,
             updated_at: pg.updated_at,
         })
     }
 }
 
-impl ApiDomain {
-    pub fn verified(d: Domain, verification_status: DomainVerificationStatus) -> Self {
+impl From<Domain> for ApiDomain {
+    fn from(d: Domain) -> Self {
         let dkim_key_type = match d.dkim_key {
             DkimKey::Ed25519(_) => DkimKeyType::Ed25519,
             DkimKey::RsaSha256(_) => DkimKeyType::RsaSha256,
@@ -201,7 +213,7 @@ impl ApiDomain {
             domain: d.domain,
             dkim_key_type,
             dkim_public_key: Base64::encode_string(d.dkim_key.pub_key().expect("As we generate the keys ourselves, we should never run into a marshalling problem").as_ref()),
-            verification_status,
+            verification_status: d.verification_status,
             created_at: d.created_at,
             updated_at: d.updated_at,
         }
@@ -223,20 +235,27 @@ pub struct NewDomain {
 #[derive(Clone)]
 pub struct DomainRepository {
     pool: sqlx::PgPool,
+    resolver: DnsResolver,
 }
 
 impl DomainRepository {
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: sqlx::PgPool, resolver: DnsResolver) -> Self {
+        Self { pool, resolver }
     }
 
     pub async fn create(&self, new: NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
-        let key_bytes = match new.dkim_key_type {
+        let (sk_bytes, pk_bytes) = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
-                aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?.as_der()?
+                let key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?;
+                (key.as_der()?, key.public_key().as_ref().to_vec())
             }
-            DkimKeyType::Ed25519 => aws_lc_rs::signature::Ed25519KeyPair::generate()?.as_der()?,
+            DkimKeyType::Ed25519 => {
+                let key = aws_lc_rs::signature::Ed25519KeyPair::generate()?;
+                (key.as_der()?, key.public_key().as_ref().to_vec())
+            }
         };
+
+        let verification_status = self.resolver.verify_domain(&new.domain, &pk_bytes).await?;
 
         let mut tx = self.pool.begin().await?;
 
@@ -257,15 +276,17 @@ impl DomainRepository {
 
         let id = sqlx::query_scalar!(
             r#"
-            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
             RETURNING id
             "#,
             new.domain,
             *org_id,
             new.project_id.map(|p| p.as_uuid()),
             new.dkim_key_type as DkimKeyType,
-            key_bytes.as_ref(),
+            sk_bytes.as_ref(),
+            verification_status.timestamp(),
+            serde_json::to_value(verification_status)?,
         ).fetch_one(&mut *tx).await?;
 
         let domain = Self::get_one(&mut tx, id.into()).await?;
@@ -285,6 +306,7 @@ impl DomainRepository {
                    project_id,
                    dkim_key_type as "dkim_key_type: DkimKeyType",
                    dkim_pkcs8_der,
+                   verification_status,
                    created_at,
                    updated_at
             FROM domains
@@ -307,6 +329,7 @@ impl DomainRepository {
                    d.project_id,
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
+                   d.verification_status,
                    d.created_at,
                    d.updated_at
             FROM domains d
@@ -318,6 +341,153 @@ impl DomainRepository {
         .fetch_one(&self.pool)
         .await?
         .try_into()
+    }
+
+    pub async fn verify(
+        &self,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+    ) -> Result<DomainVerificationStatus, Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT
+                   d.domain,
+                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
+                   d.dkim_pkcs8_der
+            FROM domains d
+            WHERE d.id = $2 AND d.organization_id = $1
+            "#,
+            *org_id,
+            *domain_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let sk = DkimKey::try_from_db(row.dkim_key_type, &row.dkim_pkcs8_der)?;
+
+        let verification_status = self
+            .resolver
+            .verify_domain(&row.domain, sk.pub_key()?.as_ref())
+            .await?;
+
+        self.store_verification_status(&domain_id, &verification_status)
+            .await?;
+
+        Ok(verification_status)
+    }
+
+    pub async fn store_verification_status(
+        &self,
+        domain_id: &DomainId,
+        verification_status: &DomainVerificationStatus,
+    ) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE domains SET verification_status = $3, last_verification_time = $2 WHERE id = $1
+            "#,
+            **domain_id,
+            verification_status.timestamp(),
+            serde_json::to_value(verification_status)?,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn verify_all(&self) -> Result<(), Error> {
+        let domains = query!(
+            r#"
+            SELECT id, domain, dkim_key_type AS "kind:DkimKeyType", dkim_pkcs8_der
+            FROM domains
+            WHERE last_verification_time < now() - '20 hours'::interval
+            "#
+        )
+        .fetch(&self.pool);
+
+        let mut error_count = AtomicUsize::new(0);
+        let mut success_count = AtomicUsize::new(0);
+
+        domains
+            .for_each_concurrent(None, async |res| match res {
+                Ok(domain) => {
+                    let pk = match DkimKey::try_from_db(domain.kind, &domain.dkim_pkcs8_der) {
+                        Err(err) => {
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            return;
+                        }
+                        Ok(pk) => pk,
+                    };
+
+                    let verification = match self
+                        .resolver
+                        .verify_domain(
+                            &domain.domain,
+                            pk.pub_key()
+                                .expect("We only generate the key internally, so they should work")
+                                .as_ref(),
+                        )
+                        .await
+                    {
+                        Ok(v) => v,
+                        Err(err) => {
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            return;
+                        }
+                    };
+
+                    match self
+                        .store_verification_status(&domain.id.into(), &verification)
+                        .await
+                    {
+                        Ok(()) => {
+                            trace!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Updated verification status of domain"
+                            );
+                            success_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(err) => {
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!("Encountered error while updating domain verification status: {err}");
+                    error_count.fetch_add(1, Ordering::Relaxed);
+                }
+            })
+            .await;
+
+        info!(
+            "Updated {} DNS verifications ({} failed)",
+            success_count.get_mut(),
+            error_count.get_mut()
+        );
+
+        if error_count.get_mut() > &mut 0 {
+            Err(Error::Internal(
+                "Did not verify all DNS records".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn update(
@@ -334,7 +504,7 @@ impl DomainRepository {
             WHERE id = $2 AND organization_id = $1
             RETURNING id, domain, organization_id, project_id,
                 dkim_key_type as "dkim_key_type: DkimKeyType",
-                dkim_pkcs8_der, created_at, updated_at
+                dkim_pkcs8_der, verification_status, created_at, updated_at
             "#,
             *org_id,
             *domain_id,
@@ -359,6 +529,7 @@ impl DomainRepository {
                    d.project_id,
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
+                   d.verification_status,
                    d.created_at,
                    d.updated_at
             FROM domains d
@@ -383,6 +554,7 @@ impl DomainRepository {
                    project_id,
                    dkim_key_type as "dkim_key_type: DkimKeyType",
                    dkim_pkcs8_der,
+                   verification_status,
                    created_at,
                    updated_at
             FROM domains
@@ -439,6 +611,7 @@ impl DomainRepository {
                    d.project_id,
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
+                   d.verification_status,
                    d.created_at,
                    d.updated_at
             FROM projects p
@@ -450,8 +623,8 @@ impl DomainRepository {
             *project_id,
             domain
         )
-        .fetch_optional(&self.pool)
-        .await?
+            .fetch_optional(&self.pool)
+            .await?
         {
             Some(domain) => Ok(Some(domain.try_into()?)),
             None => Ok(None),
@@ -463,6 +636,7 @@ impl DomainRepository {
 mod test {
     use super::*;
     use sqlx::PgPool;
+    use std::{ops::Sub, str::FromStr};
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
@@ -475,7 +649,7 @@ mod test {
         )
     ))]
     async fn check_project_for_domain(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let org_1_domain_1 = "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap();
         let org_1_subdomain_1 = "db61e35e-fe1b-46ff-aae2-070d80079626".parse().unwrap();
@@ -593,7 +767,7 @@ mod test {
         )
     ))]
     async fn create_org_does_not_match_proj(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let bad_request = repo
             .create(
@@ -616,7 +790,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
 
@@ -656,7 +830,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_conflicting_domain(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let conflict = repo
             .create(
@@ -679,7 +853,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn get_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domain = repo
             .get(
@@ -711,7 +885,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn list_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domains = repo
             .list(
@@ -734,7 +908,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn remove_with_org_id_that_does_not_match(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domain1 = repo
             .get(
@@ -775,7 +949,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn remove_with_org_id_that_does_not_match_proj_id(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domain1 = repo
             .get(
@@ -817,7 +991,7 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn remove_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domain_proj = repo
             .get(
@@ -855,7 +1029,7 @@ mod test {
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "org_domains")))]
     async fn remove_happy_flow_without_project(db: PgPool) {
-        let repo = DomainRepository::new(db);
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
         let domain_org = repo
             .get(
@@ -889,5 +1063,49 @@ mod test {
             .unwrap_err();
 
         assert!(matches!(not_found, Error::NotFound(_)))
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "org_domains", "projects", "proj_domains")
+    ))]
+    async fn verify_all(db: PgPool) {
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+
+        repo.verify_all().await.unwrap();
+
+        let domains = sqlx::query!(
+            r#"
+            SELECT id,
+                   verification_status,
+                   last_verification_time
+            FROM domains
+            "#
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+
+        for domain in domains {
+            let json_timestamp: DateTime<Utc> = DateTime::from_str(
+                domain
+                    .verification_status
+                    .get("timestamp")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                json_timestamp > Utc::now().sub(chrono::Duration::seconds(100)),
+                "{}",
+                domain.id
+            );
+            assert!(
+                domain.last_verification_time > Utc::now().sub(chrono::Duration::seconds(100)),
+                "{}",
+                domain.id
+            );
+        }
     }
 }

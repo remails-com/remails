@@ -463,6 +463,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
         },
         bus::client::BusMessage,
+        handler::dns::DnsResolver,
         models::{MessageStatus, OrganizationRepository, Role, Statistics},
         periodically::Periodically,
         test::TestProjects,
@@ -1111,7 +1112,13 @@ mod tests {
 
         // expired message data will be removed eventually
         let bus_client = BusClient::new_from_env_var().unwrap();
-        let periodically = Periodically::new(pool.clone(), bus_client).await.unwrap();
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client,
+            DnsResolver::mock("localhost", 1025),
+        )
+        .await
+        .unwrap();
         periodically.clean_up().await.unwrap();
 
         // message data has been removed and can no longer be retrieved

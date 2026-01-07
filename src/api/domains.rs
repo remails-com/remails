@@ -1,11 +1,11 @@
 use crate::{
     api::{
-        ApiState, RemailsConfig,
+        ApiState,
         auth::Authenticated,
         error::{ApiResult, AppError},
         validation::ValidatedJson,
     },
-    handler::dns::{DnsResolver, DomainVerificationStatus},
+    handler::dns::DomainVerificationStatus,
     models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
 };
 use axum::{
@@ -36,19 +36,13 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub(crate) async fn create_domain(
     State(repo): State<DomainRepository>,
-    State(resolver): State<DnsResolver>,
-    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(org_id): Path<OrganizationId>,
     ValidatedJson(new): ValidatedJson<NewDomain>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.create(new, org_id).await?;
-
-    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
-
-    let domain = ApiDomain::verified(domain, status);
+    let domain: ApiDomain = repo.create(new, org_id).await?.into();
 
     info!(
         user_id = user.log_id(),
@@ -71,31 +65,26 @@ pub(crate) async fn create_domain(
 )]
 pub(crate) async fn list_domains(
     State(repo): State<DomainRepository>,
-    State(resolver): State<DnsResolver>,
-    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path(org_id): Path<OrganizationId>,
 ) -> ApiResult<Vec<ApiDomain>> {
     user.has_org_read_access(&org_id)?;
 
-    let domains = repo.list(org_id).await?;
-
-    let mut verified_domains = Vec::with_capacity(domains.len());
-
-    for domain in domains {
-        let status = resolver.verify_domain(&domain, &config.spf_include).await?;
-
-        verified_domains.push(ApiDomain::verified(domain, status));
-    }
+    let domains: Vec<ApiDomain> = repo
+        .list(org_id)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        "verified & listed {} domains",
-        verified_domains.len()
+        "listed {} domains",
+        domains.len()
     );
 
-    Ok(Json(verified_domains))
+    Ok(Json(domains))
 }
 
 /// Get domain by ID
@@ -109,18 +98,12 @@ pub(crate) async fn list_domains(
 )]
 pub async fn get_domain(
     State(repo): State<DomainRepository>,
-    State(resolver): State<DnsResolver>,
-    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<ApiDomain> {
     user.has_org_read_access(&org_id)?;
 
-    let domain = repo.get(org_id, domain_id).await?;
-
-    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
-
-    let domain = ApiDomain::verified(domain, status);
+    let domain: ApiDomain = repo.get(org_id, domain_id).await?.into();
 
     debug!(
         user_id = user.log_id(),
@@ -144,17 +127,13 @@ pub async fn get_domain(
 )]
 pub async fn update_domain(
     State(repo): State<DomainRepository>,
-    State(resolver): State<DnsResolver>,
-    State(config): State<RemailsConfig>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
     user: Box<dyn Authenticated>,
     Json(update): Json<Option<ProjectId>>,
 ) -> ApiResult<ApiDomain> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.update(org_id, domain_id, update).await?;
-    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
-    let domain = ApiDomain::verified(domain, status);
+    let domain = repo.update(org_id, domain_id, update).await?.into();
 
     debug!(
         user_id = user.log_id(),
@@ -208,16 +187,12 @@ pub async fn delete_domain(
 )]
 pub(super) async fn verify_domain(
     State(repo): State<DomainRepository>,
-    State(resolver): State<DnsResolver>,
-    State(config): State<RemailsConfig>,
     user: Box<dyn Authenticated>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<DomainVerificationStatus> {
     user.has_org_read_access(&org_id)?;
 
-    let domain = repo.get(org_id, domain_id).await?;
-
-    let status = resolver.verify_domain(&domain, &config.spf_include).await?;
+    let status = repo.verify(org_id, domain_id).await?;
 
     Ok(Json(status))
 }

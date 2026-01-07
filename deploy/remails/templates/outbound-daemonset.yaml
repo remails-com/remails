@@ -58,6 +58,8 @@ spec:
                 secretKeyRef:
                   name: secrets
                   key: database_url
+            - name: SPF_INCLUDE
+              value: {{ .Values.smtp.spf_include }}
             - name: DKIM_SELECTOR
               value: {{ .Values.smtp.dkim_selector | quote }}
             - name: MESSAGE_BUS_PORT
