@@ -18,7 +18,7 @@ use tokio_rustls::{
     rustls::{
         self, crypto,
         crypto::CryptoProvider,
-        pki_types::{CertificateDer, PrivateKeyDer},
+        pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
     },
 };
 use tokio_util::sync::CancellationToken;
@@ -27,11 +27,13 @@ use tracing::{debug, error, info, trace};
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
     #[error("failed to load private key: {0}")]
-    PrivateKey(io::Error),
+    PrivateKey(rustls::pki_types::pem::Error),
     #[error("no private key found in the key file")]
     PrivateKeyNotFound,
     #[error("failed to load certificate: {0}")]
-    Certificate(io::Error),
+    Certificate(rustls::pki_types::pem::Error),
+    #[error("failed perform IO operation: {0}")]
+    Io(io::Error),
     #[error("failed to listen on address: {0}")]
     Listen(io::Error),
     #[error("failed to configure TLS: {0}")]
@@ -71,19 +73,16 @@ impl SmtpServer {
     async fn load_tls_config(
         &self,
     ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), SmtpServerError> {
-        let mut cert_reader = io::BufReader::new(
-            File::open(&self.config.cert_file).map_err(SmtpServerError::Certificate)?,
-        );
-        let mut key_reader = io::BufReader::new(
-            File::open(&self.config.key_file).map_err(SmtpServerError::PrivateKey)?,
-        );
+        let mut cert_reader =
+            io::BufReader::new(File::open(&self.config.cert_file).map_err(SmtpServerError::Io)?);
+        let mut key_reader =
+            io::BufReader::new(File::open(&self.config.key_file).map_err(SmtpServerError::Io)?);
 
-        let certs = rustls_pemfile::certs(&mut cert_reader)
-            .collect::<Result<Vec<_>, io::Error>>()
+        let certs = CertificateDer::pem_reader_iter(&mut cert_reader)
+            .collect::<Result<Vec<_>, tokio_rustls::rustls::pki_types::pem::Error>>()
             .map_err(SmtpServerError::Certificate)?;
-        let key = rustls_pemfile::private_key(&mut key_reader)
-            .map_err(SmtpServerError::PrivateKey)?
-            .ok_or(SmtpServerError::PrivateKeyNotFound)?;
+        let key =
+            PrivateKeyDer::from_pem_reader(&mut key_reader).map_err(SmtpServerError::PrivateKey)?;
 
         Ok((certs, key))
     }
