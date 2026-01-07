@@ -67,7 +67,7 @@ export default function OrganizationsOverview() {
           size="30"
           variant="subtle"
           onClick={() => {
-            navigate("admin", { org_id: organization.id });
+            navigate("settings.admin", { org_id: organization.id });
           }}
         >
           <IconGavel />

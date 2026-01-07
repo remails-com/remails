@@ -73,7 +73,7 @@ pub async fn disconnect_github(
     api_user: ApiUser,
 ) -> Result<Json<WhoamiResponse>, Error> {
     if !api_user.password_enabled() {
-        Err(Error::PreconditionFailed(
+        Err(Error::Conflict(
             "Password-based login is not enabled".to_string(),
         ))?;
     };

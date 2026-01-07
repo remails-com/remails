@@ -11,6 +11,19 @@ use chrono::{Days, NaiveDate, Utc};
 use rand::Rng;
 use url::Url;
 
+pub fn mock_subscription<T>(product: ProductIdentifier, end_date: T) -> Subscription<T> {
+    Subscription {
+        subscription_id: SubscriptionId("mock_subscription_id".to_string()),
+        product,
+        title: "Mock testing subscription".to_string(),
+        description: "This is a mock subscription for testing only\nIt uses the same quota as the Remails Free subscription".to_string(),
+        recurring_sales_invoice_id: RecurringSalesInvoiceId("mock_invoice_id".to_string()),
+        start_date: Utc::now().date_naive().checked_sub_days(Days::new(5)).unwrap(),
+        end_date,
+        sales_invoices_url: "https://tweedegolf.com".parse().unwrap(),
+    }
+}
+
 pub(super) struct MockMoneybirdApi {}
 
 #[async_trait]
@@ -63,16 +76,10 @@ impl MoneybirdApi for MockMoneybirdApi {
         &self,
         _contact_id: &MoneybirdContactId,
     ) -> Result<SubscriptionStatus, Error> {
-        Ok(SubscriptionStatus::Active(Subscription {
-            subscription_id: SubscriptionId("mock_subscription_id".to_string()),
-            product: ProductIdentifier::RmlsFree,
-            title: "Mock testing subscription".to_string(),
-            description: "This is a mock subscription for testing only\nIt uses the same quota as the Remails Free subscription".to_string(),
-            recurring_sales_invoice_id: RecurringSalesInvoiceId("mock_invoice_id".to_string()),
-            start_date: Utc::now().date_naive().checked_sub_days(Days::new(5)).unwrap(),
-            end_date: None,
-            sales_invoices_url: "https://tweedegolf.com".parse()?,
-        }))
+        Ok(SubscriptionStatus::Active(mock_subscription(
+            ProductIdentifier::RmlsFree,
+            None,
+        )))
     }
 
     async fn create_sales_link(

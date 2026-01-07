@@ -381,7 +381,7 @@ pub async fn delete_password(
     has_write_access(user_id, &user)?;
 
     if user.github_user_id().is_none() {
-        Err(AppError::PreconditionFailed(
+        Err(AppError::Conflict(
             "You must enable an alternative login method before you can delete your password"
                 .to_string(),
         ))?
@@ -517,7 +517,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // can delete password with alternative login method
         users.add_github_id(&user_3_id, 37).await.unwrap();

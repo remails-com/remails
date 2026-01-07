@@ -4,7 +4,9 @@ use crate::{
         auth::Authenticated,
         error::{ApiResult, AppError},
     },
-    models::{NewProject, OrganizationId, Project, ProjectId, ProjectRepository},
+    models::{
+        NewProject, OrganizationId, OrganizationRepository, Project, ProjectId, ProjectRepository,
+    },
 };
 use axum::{
     Json,
@@ -94,11 +96,18 @@ pub async fn update_project(
 )]
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
+    State(org_repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id,)): Path<(OrganizationId,)>,
     Json(new): Json<NewProject>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
+
+    if !org_repo.can_create_new_project(org_id).await? {
+        return Err(AppError::Conflict(
+            "Organization is not allowed to create more projects, upgrade your subscription to increase the limit.".to_owned(),
+        ));
+    }
 
     let project = repo.create(new, org_id).await?;
 
@@ -142,9 +151,14 @@ pub async fn remove_project(
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use sqlx::PgPool;
 
-    use crate::api::tests::{TestServer, deserialize_body, serialize_body};
+    use crate::{
+        ProductIdentifier, SubscriptionStatus,
+        api::tests::{TestServer, deserialize_body, serialize_body},
+        mock_subscription,
+    };
 
     use super::*;
 
@@ -278,5 +292,130 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_project_creation_limit(pool: PgPool) {
+        let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
+
+        let set_subscription = async |sub: SubscriptionStatus| {
+            sqlx::query!(
+                r#"
+                UPDATE organizations
+                SET current_subscription = $2
+                WHERE id = $1
+                "#,
+                *org_1,
+                serde_json::to_value(&sub).unwrap()
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        };
+
+        // cannot create a project without subscription
+        set_subscription(SubscriptionStatus::None).await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        // cannot create a project without subscription
+        set_subscription(SubscriptionStatus::Active(mock_subscription(
+            ProductIdentifier::NotSubscribed,
+            None,
+        )))
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        // cannot create a project with an expired subscription
+        set_subscription(SubscriptionStatus::Expired(mock_subscription(
+            ProductIdentifier::RmlsLargeMonthly,
+            Utc::now().date_naive(),
+        )))
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        // can create 1 project with a free subscription
+        set_subscription(SubscriptionStatus::Active(mock_subscription(
+            ProductIdentifier::RmlsFree,
+            None,
+        )))
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 1".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // creating a second project with a free subscription fails
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 2".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        // other subscriptions can create multiple projects
+        for (i, product) in [
+            ProductIdentifier::RmlsTinyMonthly,
+            ProductIdentifier::RmlsSmallMonthly,
+            ProductIdentifier::RmlsMediumMonthly,
+            ProductIdentifier::RmlsLargeMonthly,
+            ProductIdentifier::RmlsTinyYearly,
+            ProductIdentifier::RmlsSmallYearly,
+            ProductIdentifier::RmlsMediumYearly,
+            ProductIdentifier::RmlsLargeYearly,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            set_subscription(SubscriptionStatus::Active(mock_subscription(product, None))).await;
+            let response = server
+                .post(
+                    format!("/api/organizations/{org_1}/projects"),
+                    serialize_body(&NewProject {
+                        name: format!("Test Project {}", i + 2),
+                    }),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
     }
 }

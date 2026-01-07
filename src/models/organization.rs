@@ -1,4 +1,5 @@
 use crate::{
+    ProductIdentifier,
     models::{ApiUserId, Error, Role},
     moneybird::{MoneybirdContactId, SubscriptionStatus},
 };
@@ -299,6 +300,40 @@ impl OrganizationRepository {
         .await?
         .map(TryInto::<Organization>::try_into)
         .transpose()?)
+    }
+
+    pub async fn can_create_new_project(&self, id: OrganizationId) -> Result<bool, Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT current_subscription,
+                   (SELECT COUNT(*) FROM projects WHERE organization_id = $1) AS "project_count!"
+            FROM organizations
+            WHERE id = $1
+            "#,
+            *id,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let subscription: SubscriptionStatus = serde_json::from_value(row.current_subscription)?;
+        let project_limit = match subscription {
+            SubscriptionStatus::Active(sub) => match sub.product_id() {
+                ProductIdentifier::NotSubscribed => Some(0i64),
+                ProductIdentifier::RmlsFree => Some(1),
+                ProductIdentifier::RmlsTinyMonthly => None,
+                ProductIdentifier::RmlsSmallMonthly => None,
+                ProductIdentifier::RmlsMediumMonthly => None,
+                ProductIdentifier::RmlsLargeMonthly => None,
+                ProductIdentifier::RmlsTinyYearly => None,
+                ProductIdentifier::RmlsSmallYearly => None,
+                ProductIdentifier::RmlsMediumYearly => None,
+                ProductIdentifier::RmlsLargeYearly => None,
+            },
+            SubscriptionStatus::Expired(_) => Some(0),
+            SubscriptionStatus::None => Some(0),
+        };
+
+        Ok(project_limit.is_none_or(|limit| limit > row.project_count))
     }
 
     pub async fn remove(&self, id: OrganizationId) -> Result<OrganizationId, Error> {

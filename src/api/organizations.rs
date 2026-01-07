@@ -255,11 +255,9 @@ async fn prevent_last_remaining_admin(
         .iter()
         .any(|m| *m.role() == Role::Admin && *m.user_id() != *user_id);
 
-    any_other_admins
-        .then_some(())
-        .ok_or(AppError::PreconditionFailed(
-            "At least one admin must remain in the organization".to_string(),
-        ))
+    any_other_admins.then_some(()).ok_or(AppError::Conflict(
+        "At least one admin must remain in the organization".to_string(),
+    ))
 }
 
 /// Delete organization member
@@ -736,7 +734,7 @@ mod tests {
             .delete(format!("/api/organizations/{org_1}/members/{user_1}"))
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // can't make themselves non-admin as they are the last remaining admin
         let response = server
@@ -746,7 +744,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // org 2 has 2 admins
         let response = server

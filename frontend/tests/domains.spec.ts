@@ -1,5 +1,5 @@
 import { expect, test } from "../playwright/fixtures.ts";
-import { createProject, uuidRegex } from "./util.ts";
+import { createProject, deleteProject, uuidRegex } from "./util.ts";
 import { Page } from "@playwright/test";
 import { v4 as uuid } from "uuid";
 
@@ -94,6 +94,8 @@ test("attach project afterward", async ({ page }) => {
   await expect(
     page.getByRole("table").getByRole("row").filter({ hasText: domain }).getByRole("cell", { name: project })
   ).toBeVisible();
+
+  await deleteProject(page);
 });
 
 test("create domain with project", async ({ page }) => {
@@ -121,6 +123,8 @@ test("create domain with project", async ({ page }) => {
   await expect(
     page.getByRole("table").getByRole("row").filter({ hasText: domain }).getByRole("cell", { name: project })
   ).toBeVisible();
+
+  await deleteProject(page);
 });
 
 test("domain must have TLD", async ({ page }) => {
