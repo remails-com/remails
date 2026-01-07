@@ -73,8 +73,10 @@ export default function PasswordReset() {
   return (
     <Center mih="100vh">
       <Paper radius="md" p="xl" withBorder w="450">
-        <RemailsLogo style={{ height: 45 }} />
-        <Text size="md">Welcome!</Text>
+        <RemailsLogo height={45} />
+        <Text size="md" mt="sm">
+          Welcome!
+        </Text>
         {state === "NotActive" ? (
           <>
             <Text mt="xl">

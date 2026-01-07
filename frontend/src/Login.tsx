@@ -136,8 +136,10 @@ export default function Login({ setUser }: LoginProps) {
   return (
     <Center mih="100vh">
       <Paper radius="md" p="xl" withBorder w="450">
-        <RemailsLogo style={{ height: 45 }} />
-        <Text size="md">Welcome! {type == "login" ? "Login" : "Register"} with:</Text>
+        <RemailsLogo height={45} />
+        <Text size="md" mt="sm">
+          Welcome! {type == "login" ? "Login" : "Register"} with:
+        </Text>
 
         <Group grow mb="md" mt="md">
           <Button
