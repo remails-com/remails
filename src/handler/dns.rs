@@ -92,11 +92,11 @@ impl From<Result<&'static str, &'static str>> for VerifyResult {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct DomainVerificationStatus {
-    timestamp: DateTime<Utc>,
-    dkim: VerifyResult,
-    spf: VerifyResult,
-    dmarc: VerifyResult,
-    a: VerifyResult,
+    pub timestamp: DateTime<Utc>,
+    pub dkim: VerifyResult,
+    pub spf: VerifyResult,
+    pub dmarc: VerifyResult,
+    pub a: VerifyResult,
 }
 
 impl DomainVerificationStatus {

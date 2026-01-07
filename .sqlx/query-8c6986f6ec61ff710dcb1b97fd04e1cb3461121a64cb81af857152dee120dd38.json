@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, domain, dkim_key_type AS \"kind:DkimKeyType\", dkim_pkcs8_der\n            FROM domains\n            WHERE last_verification_time < now() - '30 min'::interval\n            ",
+  "query": "\n            SELECT id, domain, dkim_key_type AS \"kind:DkimKeyType\", dkim_pkcs8_der\n            FROM domains\n            WHERE last_verification_time < now() - '20 hours'::interval\n            ",
   "describe": {
     "columns": [
       {
@@ -44,5 +44,5 @@
       false
     ]
   },
-  "hash": "4b29c960c7e816c23bd07802395eabd018cc8d0dcc665b6d6b03875d37007e33"
+  "hash": "8c6986f6ec61ff710dcb1b97fd04e1cb3461121a64cb81af857152dee120dd38"
 }

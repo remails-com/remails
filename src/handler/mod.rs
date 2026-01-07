@@ -5,7 +5,7 @@ use crate::{
     dkim::PrivateKey,
     handler::{
         connection_log::LogLevel,
-        dns::{DnsResolver, ResolveError, VerifyResultStatus},
+        dns::{DnsResolver, DomainVerificationStatus, ResolveError, VerifyResultStatus},
     },
     kubernetes::Kubernetes,
     models::{
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use base64ct::{Base64, Encoding};
-use chrono::Duration;
+use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use futures::StreamExt;
 use mail_parser::MessageParser;
@@ -270,6 +270,12 @@ impl Handler {
             )));
         }
 
+        // check DMARC record
+        let dmarc = self.config.resolver.verify_dmarc(sender_domain).await;
+
+        // check the existence of an A record
+        let a = self.config.resolver.any_a_record(sender_domain).await;
+
         // check dkim key
         let dkim_key = match PrivateKey::new(&domain, &self.config.resolver.dkim_selector) {
             Ok(key) => key,
@@ -286,12 +292,33 @@ impl Handler {
             domain.domain,
             Base64::encode_string(dkim_key.public_key())
         );
-        if let Err(reason) = self
+        let dkim = self
             .config
             .resolver
             .verify_dkim(sender_domain, dkim_key.public_key())
+            .await;
+
+        let domain_status = DomainVerificationStatus {
+            timestamp: Utc::now(),
+            dkim: dkim.into(),
+            spf,
+            dmarc,
+            a,
+        };
+
+        self.domain_repository
+            .store_verification_status(&domain.id, &domain_status)
             .await
-        {
+            .inspect_err(|err| {
+                warn!(
+                    "failed to store domain verification status while processing new message: {err}"
+                )
+            })
+            // Don't fail if we can't store this in the database for some reason.
+            // This is not a critical error for sending out the message.
+            .ok();
+
+        if let Err(reason) = dkim {
             return Ok(Err((
                 MessageStatus::Held,
                 format!("invalid DKIM on {sender_domain}: {reason}"),

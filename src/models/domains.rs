@@ -16,8 +16,8 @@ use std::{
     fmt::{Debug, Formatter},
     sync::atomic::{AtomicUsize, Ordering},
 };
-use tracing::{error, info, trace};
 use tokio_rustls::rustls::pki_types::PrivatePkcs8KeyDer;
+use tracing::{error, info, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -353,8 +353,7 @@ impl DomainRepository {
             SELECT
                    d.domain,
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
-                   d.dkim_pkcs8_der,
-                   d.verification_status
+                   d.dkim_pkcs8_der
             FROM domains d
             WHERE d.id = $2 AND d.organization_id = $1
             "#,
@@ -364,24 +363,36 @@ impl DomainRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        let pk = DkimKey::try_from_db(row.dkim_key_type, &row.dkim_pkcs8_der)?;
+        let sk = DkimKey::try_from_db(row.dkim_key_type, &row.dkim_pkcs8_der)?;
 
         let verification_status = self
             .resolver
-            .verify_domain(&row.domain, pk.pub_key()?.as_ref())
+            .verify_domain(&row.domain, sk.pub_key()?.as_ref())
             .await?;
 
-        sqlx::query!(
-            r#"
-                UPDATE domains SET verification_status = $3, last_verification_time = $2 WHERE id = $1
-                "#,
-            *domain_id,
-            verification_status.timestamp(),
-            serde_json::to_value(&verification_status)?,
-        )
-            .execute(&self.pool).await?;
+        self.store_verification_status(&domain_id, &verification_status)
+            .await?;
 
         Ok(verification_status)
+    }
+
+    pub async fn store_verification_status(
+        &self,
+        domain_id: &DomainId,
+        verification_status: &DomainVerificationStatus,
+    ) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            UPDATE domains SET verification_status = $3, last_verification_time = $2 WHERE id = $1
+            "#,
+            **domain_id,
+            verification_status.timestamp(),
+            serde_json::to_value(verification_status)?,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn verify_all(&self) -> Result<(), Error> {
@@ -389,7 +400,7 @@ impl DomainRepository {
             r#"
             SELECT id, domain, dkim_key_type AS "kind:DkimKeyType", dkim_pkcs8_der
             FROM domains
-            WHERE last_verification_time < now() - '30 min'::interval
+            WHERE last_verification_time < now() - '20 hours'::interval
             "#
         )
         .fetch(&self.pool);
@@ -397,41 +408,62 @@ impl DomainRepository {
         let mut error_count = AtomicUsize::new(0);
         let mut success_count = AtomicUsize::new(0);
 
-        domains.for_each_concurrent(None, async |res| {
-            match res {
+        domains
+            .for_each_concurrent(None, async |res| match res {
                 Ok(domain) => {
                     let pk = match DkimKey::try_from_db(domain.kind, &domain.dkim_pkcs8_der) {
                         Err(err) => {
-                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
                             error_count.fetch_add(1, Ordering::Relaxed);
                             return;
                         }
-                        Ok(pk) => pk
+                        Ok(pk) => pk,
                     };
 
-                    let verification = match self.resolver.verify_domain(&domain.domain, pk.pub_key().expect("We only generate the key internally, so they should work").as_ref()).await {
+                    let verification = match self
+                        .resolver
+                        .verify_domain(
+                            &domain.domain,
+                            pk.pub_key()
+                                .expect("We only generate the key internally, so they should work")
+                                .as_ref(),
+                        )
+                        .await
+                    {
                         Ok(v) => v,
                         Err(err) => {
-                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
                             error_count.fetch_add(1, Ordering::Relaxed);
                             return;
                         }
                     };
 
-                    match sqlx::query!(
-                        r#"
-                        UPDATE domains SET verification_status = $1, last_verification_time = $2 WHERE id = $3
-                        "#,
-                        serde_json::to_value(&verification).expect("Should serialize"),
-                        verification.timestamp(),
-                        domain.id
-                    ).execute(&self.pool).await {
-                        Ok(_) => {
-                            trace!(domain_id = domain.id.to_string(), domain = domain.domain, "Updated verification status of domain");
+                    match self
+                        .store_verification_status(&domain.id.into(), &verification)
+                        .await
+                    {
+                        Ok(()) => {
+                            trace!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Updated verification status of domain"
+                            );
                             success_count.fetch_add(1, Ordering::Relaxed);
                         }
                         Err(err) => {
-                            error!(domain_id = domain.id.to_string(), domain = domain.domain, "Encountered error while updating domain verification status: {err}");
+                            error!(
+                                domain_id = domain.id.to_string(),
+                                domain = domain.domain,
+                                "Encountered error while updating domain verification status: {err}"
+                            );
                             error_count.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -440,8 +472,8 @@ impl DomainRepository {
                     error!("Encountered error while updating domain verification status: {err}");
                     error_count.fetch_add(1, Ordering::Relaxed);
                 }
-            }
-        }).await;
+            })
+            .await;
 
         info!(
             "Updated {} DNS verifications ({} failed)",

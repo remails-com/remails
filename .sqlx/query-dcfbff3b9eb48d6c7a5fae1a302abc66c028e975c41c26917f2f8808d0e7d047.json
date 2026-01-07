@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                   d.domain,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.verification_status\n            FROM domains d\n            WHERE d.id = $2 AND d.organization_id = $1\n            ",
+  "query": "\n            SELECT\n                   d.domain,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der\n            FROM domains d\n            WHERE d.id = $2 AND d.organization_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -27,11 +27,6 @@
         "ordinal": 2,
         "name": "dkim_pkcs8_der",
         "type_info": "Bytea"
-      },
-      {
-        "ordinal": 3,
-        "name": "verification_status",
-        "type_info": "Jsonb"
       }
     ],
     "parameters": {
@@ -43,9 +38,8 @@
     "nullable": [
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "dd1524dfc9d3cdd393270e3bcaa90bda27b86f4f8c1dd3d2cf3b9ced24b8035d"
+  "hash": "dcfbff3b9eb48d6c7a5fae1a302abc66c028e975c41c26917f2f8808d0e7d047"
 }
