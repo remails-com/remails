@@ -96,7 +96,7 @@ askama = { version = "0.15.1", features = ["derive", "alloc", "config"], default
 
 [dev-dependencies]
 reqwest = { version = "0.12.26", features = ["json"] }
-mailcrab = "1.6.2"
+mailcrab = "1.6.4"
 tracing-test = "0.2.5"
 
 [build-dependencies]
