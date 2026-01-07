@@ -9,23 +9,21 @@ allow = [
     "BSL-1.0",
     "Zlib",
     "OpenSSL",
-    "NCSA",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "CDLA-Permissive-2.0",
+    "bzip2-1.0.6",
+    "CC0-1.0",
     # weak copyleft
     "MPL-2.0",
-    # strong copyleft
-    "GPL-2.0",
-    "GPL-3.0",
 ]
 
 confidence-threshold = 0.8
-
 private = { ignore = true }
+
+[bans]
+multiple-versions = "allow"
 
 [advisories]
 ignore = [
     { id = "RUSTSEC-2024-0436", reason = "utoipa-axum did not provide an updated version yet. Please take a look at https://github.com/juhaku/utoipa/pull/1483" },
-    { id = "RUSTSEC-2025-0134", reason = "https://github.com/stalwartlabs/mail-auth/issues/48" }
 ]
