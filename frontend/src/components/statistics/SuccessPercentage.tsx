@@ -14,10 +14,10 @@ export default function SuccessPercentage() {
 
   const now = new Date();
   const months = [
-    `${now.getUTCFullYear()}-${now.getMonth() + 1}-01`,
-    `${now.getUTCFullYear()}-${now.getMonth() + 0}-01`,
-    `${now.getUTCFullYear()}-${now.getMonth() - 1}-01`,
-  ];
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1)),
+  ].map((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`);
 
   let success = 0;
   let total = 0;
