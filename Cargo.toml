@@ -87,7 +87,7 @@ async-trait = "0.1.89"
 async-stream = "0.3.6"
 if-addrs = "0.14.0"
 kube = { version = "2.0.1", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs", "runtime"] }
-k8s-openapi = { version = "0.26.1", features = ["v1_32"] }
+k8s-openapi = { version = "0.27.0", features = ["v1_32"] }
 utoipa = { version = "5", features = ["chrono", "uuid", "axum_extras", "url"] }
 utoipa-axum = "0.2"
 regex = "1.12.2"
