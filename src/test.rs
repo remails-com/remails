@@ -100,8 +100,8 @@ async fn setup(
     let smtp_config = SmtpConfig {
         listen_addr: smtp_socket.into(),
         server_name: "localhost".to_string(),
-        cert_file: "cert.pem".into(),
-        key_file: "key.pem".into(),
+        cert_file: "dev-secrets/cert.pem".into(),
+        key_file: "dev-secrets/key.pem".into(),
         environment: Default::default(),
         retry: retry_config.clone(),
     };
