@@ -122,12 +122,14 @@ jobs:
           name: frontend
           path: frontend/dist
 
-      - name: mark backend as executable
+      - name: Mark backend as executable
         run: chmod +x target/debug/app
 
-      - name: run backend
-        run: NO_COLOR=true ./target/debug/app > logs-${{ matrix.shardIndex }}_of_${{ matrix.shardTotal }} &
+      - name: Load default non-secret environment variables
+        run: cp .env.example .env
 
+      - name: Run backend
+        run: NO_COLOR=true ./target/debug/app > logs-${{ matrix.shardIndex }}_of_${{ matrix.shardTotal }} &
 
       - name: Apply some DB fixtures
         run: |
@@ -193,6 +195,9 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+
+      - name: Load default non-secret environment variables
+        run: cp .env.example .env
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
