@@ -1,24 +1,24 @@
 images:
   inbound:
-    repository: ghcr.io/tweedegolf/remails/inbound
+    repository: ghcr.io/remails-com/remails/inbound
     pullPolicy: Always
   outbound:
-    repository: ghcr.io/tweedegolf/remails/outbound
+    repository: ghcr.io/remails-com/remails/outbound
     pullPolicy: Always
   management:
-    repository: ghcr.io/tweedegolf/remails/management
+    repository: ghcr.io/remails-com/remails/management
     pullPolicy: Always
   periodic:
-    repository: ghcr.io/tweedegolf/remails/periodic
+    repository: ghcr.io/remails-com/remails/periodic
     pullPolicy: Always
   migrate_db:
-    repository: ghcr.io/tweedegolf/remails/migrate_db
+    repository: ghcr.io/remails-com/remails/migrate_db
     pullPolicy: Always
   backup_db:
-    repository: ghcr.io/tweedegolf/remails/backup_db
+    repository: ghcr.io/remails-com/remails/backup_db
     pullPolicy: Always
   message_bus:
-    repository: ghcr.io/tweedegolf/remails/message_bus
+    repository: ghcr.io/remails-com/remails/message_bus
     pullPolicy: Always
 
 environment: development

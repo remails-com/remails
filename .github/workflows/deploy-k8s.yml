@@ -116,7 +116,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/inbound:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/inbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push outbound image
         uses: docker/build-push-action@v6
         with:
@@ -125,7 +125,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/outbound:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/outbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push management image
         uses: docker/build-push-action@v6
         with:
@@ -134,7 +134,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/management:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/management:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push periodic image
         uses: docker/build-push-action@v6
         with:
@@ -143,7 +143,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/periodic:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/periodic:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push migrate_db image
         uses: docker/build-push-action@v6
         with:
@@ -152,7 +152,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push message_bus image
         uses: docker/build-push-action@v6
         with:
@@ -161,7 +161,7 @@ jobs:
           push: true
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
           context: ./target/release
-          tags: "ghcr.io/tweedegolf/remails/message_bus:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/message_bus:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push backup_db image
         uses: docker/build-push-action@v6
         with:
@@ -169,7 +169,7 @@ jobs:
           push: true
           context: deploy
           build-args: "version=${{ needs.build-frontend.outputs.tag }}"
-          tags: "ghcr.io/tweedegolf/remails/backup_db:${{ needs.build-frontend.outputs.tag }}"
+          tags: "ghcr.io/remails-com/remails/backup_db:${{ needs.build-frontend.outputs.tag }}"
 
   helm-install:
     name: Helm install

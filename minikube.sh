@@ -14,12 +14,12 @@ minikube addons enable ingress
 
 cargo build --release
 
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/inbound:dev --target inbound
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/outbound:dev --target outbound
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/management:dev --target management
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/periodic:dev --target periodic
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/migrate_db:dev --target migrate-db
-docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/tweedegolf/remails/message_bus:dev --target message-bus
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/inbound:dev --target inbound
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/outbound:dev --target outbound
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/management:dev --target management
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/periodic:dev --target periodic
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/migrate_db:dev --target migrate-db
+docker build ./target/release -f deploy/ci.Dockerfile -t ghcr.io/remails-com/remails/message_bus:dev --target message-bus
 
 helm upgrade --install -f ./deploy/cert-manager-values.yaml -n cert-manager --create-namespace cert-manager jetstack/cert-manager
 
