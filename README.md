@@ -1,11 +1,16 @@
-# POC Rust MTA implementation
+<a href="https://remails.com">
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset="frontend/public/remails-logo-white.svg">
+		<img src="frontend/public/remails-logo-black.svg" alt="Remails" />
+	</picture>
+</a>
 
-- Tokio as async runtime, in particular tokio-rustls to handle secure network connections
-- The Stalwart `mail-parser`, `smtp-proto` and `mail-sender` crates for message and protocol parsing and mail sending.
-- Uses a postgres database as persistence via sqlx
-- Exposes an API with axum
+# Remails
 
-Run `cargo test` to run the tests.
+Remails is a transactional email platform built for developers.
+With a clean API, modern developer tooling, and full transparency under the hood, Remails makes it easy to send reliable transactional emails.
+Check it out at [remails.net](https://remails.net).
+
 
 
 ## Development
@@ -16,3 +21,5 @@ Run postgres using docker-compose:
 docker compose up -d
 cargo sqlx migrate run
 ````
+
+Run `cargo test` to run the tests.
