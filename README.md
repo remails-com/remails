@@ -15,6 +15,8 @@ Check it out at [remails.net](https://remails.net).
 
 ## Development
 
+Create a copy of the `.env.example` and rename it to `.env`. This file contains placeholders for the GitHub Oauth client (which are only necessary for logging in through GitHub).
+
 Run postgres using docker-compose:
 
 ```bash
