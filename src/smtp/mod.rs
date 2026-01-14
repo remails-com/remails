@@ -88,8 +88,8 @@ mod test {
         let config = Arc::new(SmtpConfig {
             listen_addr: socket.into(),
             server_name: "localhost".to_string(),
-            cert_file: "cert.pem".into(),
-            key_file: "key.pem".into(),
+            cert_file: "dev-secrets/cert.pem".into(),
+            key_file: "dev-secrets/key.pem".into(),
             ..Default::default()
         });
         let shutdown = CancellationToken::new();
