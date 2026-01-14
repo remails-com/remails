@@ -25,7 +25,7 @@ export default function MessageRetryButton({
     return null;
   }
 
-  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/messages/${message.id}`;
+  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${message.id}`;
 
   async function retry() {
     const res = await fetch(`${message_endpoint}/retry`, {
