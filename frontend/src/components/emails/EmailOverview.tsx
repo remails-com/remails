@@ -12,9 +12,9 @@ import {
   ThemeIcon,
   Tooltip,
 } from "@mantine/core";
-import { useMessages } from "../../hooks/useMessages.ts";
-import { Loader } from "../../Loader";
-import { formatDateTime } from "../../util";
+import { useEmails } from "../../hooks/useEmails.ts";
+import { Loader } from "../../Loader.tsx";
+import { formatDateTime } from "../../util.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import {
   IconArrowLeft,
@@ -26,18 +26,18 @@ import {
   IconRefresh,
   IconX,
 } from "@tabler/icons-react";
-import { getFullStatusDescription } from "./MessageDetails.tsx";
+import { getFullStatusDescription } from "./EmailDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { useState } from "react";
-import MessageDeleteButton from "./MessageDeleteButton.tsx";
-import MessageRetryButton from "./MessageRetryButton.tsx";
+import EmailDeleteButton from "./EmailDeleteButton.tsx";
+import EmailRetryButton from "./EmailRetryButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import Label from "./Label.tsx";
-import { MessageStatus } from "../../types.ts";
+import { EmailStatus } from "../../types.ts";
 
-function statusIcons(status: MessageStatus) {
+function statusIcons(status: EmailStatus) {
   if (status == "processing" || status == "accepted") {
     return <IconClock color="gray" />;
   } else if (status == "held" || status == "reattempt") {
@@ -52,8 +52,8 @@ function statusIcons(status: MessageStatus) {
 
 const LIMIT_DEFAULT = "10"; // should match MessageFilter's default in src/models/messages.rs
 
-export function MessageLog() {
-  const { messages, updateMessage, labels } = useMessages();
+export function EmailOverview() {
+  const { emails, updateEmail, labels } = useEmails();
   const [pages, setPages] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const {
@@ -63,7 +63,7 @@ export function MessageLog() {
 
   const currentParams = nextRouterState?.params || routerState.params;
 
-  if (!messages) {
+  if (!emails) {
     return <Loader />;
   }
 
@@ -96,49 +96,49 @@ export function MessageLog() {
   }
 
   function loadOlder() {
-    const lastDate = messages![messages!.length - 1].created_at;
+    const lastDate = emails![emails!.length - 1].created_at;
     setPages([...pages, lastDate]);
     setFilter("before", lastDate);
   }
 
-  const has_more_entries = messages.length > parseInt(currentParams.limit || LIMIT_DEFAULT);
+  const has_more_entries = emails.length > parseInt(currentParams.limit || LIMIT_DEFAULT);
 
-  const rows = messages.slice(0, has_more_entries ? -1 : undefined).map((message) => (
-    <Accordion.Item key={message.id} value={message.id}>
-      <Accordion.Control icon={statusIcons(message.status)}>
+  const rows = emails.slice(0, has_more_entries ? -1 : undefined).map((email) => (
+    <Accordion.Item key={email.id} value={email.id}>
+      <Accordion.Control icon={statusIcons(email.status)}>
         <Group gap={0} justify="space-between" align="center">
           <Box>
             Email from
             <Badge color="secondary" size="lg" variant="light" mx="xs" tt="none">
-              {message.from_email}
+              {email.from_email}
             </Badge>
             to
-            <Recipients message={message} ml="sm" />
+            <Recipients email={email} ml="sm" />
           </Box>
           <Group>
-            {message.label && <Label label={message.label} clickable />}
+            {email.label && <Label label={email.label} clickable />}
             <Text fz="xs" c="dimmed" mr="md">
-              {formatDateTime(message.created_at)}
+              {formatDateTime(email.created_at)}
             </Text>
           </Group>
         </Group>
       </Accordion.Control>
       <Accordion.Panel>
         <Text>
-          Status: <span style={{ fontStyle: "italic" }}>{getFullStatusDescription(message)}</span>
+          Status: <span style={{ fontStyle: "italic" }}>{getFullStatusDescription(email)}</span>
         </Text>
         <Group justify="space-between" align="end">
           <Text fz="sm" c="dimmed">
-            Message ID: {<Code>{message.message_id_header}</Code>}
+            Message ID: {<Code>{email.message_id_header}</Code>}
           </Text>
           <Group>
-            <MessageDeleteButton message={message} small />
-            <MessageRetryButton message={message} updateMessage={updateMessage} small />
+            <EmailDeleteButton email={email} small />
+            <EmailRetryButton email={email} updateEmail={updateEmail} small />
             <Button
               leftSection={<IconEye />}
               variant="light"
               size="xs"
-              onClick={() => navigate("projects.project.emails.email", { message_id: message.id })}
+              onClick={() => navigate("projects.project.emails.email", { email_id: email.id })}
             >
               View email
             </Button>
@@ -154,7 +154,7 @@ export function MessageLog() {
         variant="default"
         leftSection={<IconArrowLeft />}
         onClick={loadOlder}
-        disabled={!has_more_entries || messages.length == 0}
+        disabled={!has_more_entries || emails.length == 0}
       >
         older emails
       </Button>

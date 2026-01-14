@@ -1,20 +1,20 @@
 import { notifications } from "@mantine/notifications";
-import { Message, MessageMetadata } from "../../types";
+import { Email, EmailMetadata } from "../../types.ts";
 import { IconReload } from "@tabler/icons-react";
-import { useOrganizations } from "../../hooks/useOrganizations";
-import { useProjects } from "../../hooks/useProjects";
-import { is_in_the_future } from "../../util";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
+import { is_in_the_future } from "../../util.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 import { useState } from "react";
 
-export default function MessageRetryButton({
-  message,
-  updateMessage,
+export default function EmailRetryButton({
+  email,
+  updateEmail,
   small,
 }: {
-  message: MessageMetadata;
-  updateMessage: (message_id: string, update: Partial<Message>) => void;
+  email: EmailMetadata;
+  updateEmail: (email_id: string, update: Partial<Email>) => void;
   small?: boolean;
 }) {
   const { currentOrganization } = useOrganizations();
@@ -25,10 +25,10 @@ export default function MessageRetryButton({
     return null;
   }
 
-  const message_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${message.id}`;
+  const email_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${email.id}`;
 
   async function retry() {
-    const res = await fetch(`${message_endpoint}/retry`, {
+    const res = await fetch(`${email_endpoint}/retry`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -50,13 +50,13 @@ export default function MessageRetryButton({
 
     await new Promise((r) => setTimeout(r, 2000));
 
-    const update = await fetch(message_endpoint);
+    const update = await fetch(email_endpoint);
     if (update.status !== 200) {
       errorNotification("Email could not be found");
       console.error(update);
       return;
     }
-    updateMessage(message.id, await update.json());
+    updateEmail(email.id, await update.json());
   }
 
   const onClick = () => {
@@ -64,12 +64,8 @@ export default function MessageRetryButton({
     retry().finally(() => setLoading(false));
   };
 
-  const status_retryable = !(
-    message.status == "processing" ||
-    message.status == "accepted" ||
-    message.status == "delivered"
-  );
-  const already_scheduled = message.retry_after && !is_in_the_future(message.retry_after);
+  const status_retryable = !(email.status == "processing" || email.status == "accepted" || email.status == "delivered");
+  const already_scheduled = email.retry_after && !is_in_the_future(email.retry_after);
 
   const can_retry = status_retryable && !already_scheduled;
 
@@ -77,7 +73,7 @@ export default function MessageRetryButton({
     ? already_scheduled
       ? "Email is already scheduled to retry as soon as possible"
       : "(Re-)schedule retry"
-    : `Email is ${message.status}`;
+    : `Email is ${email.status}`;
 
   if (small) {
     return (

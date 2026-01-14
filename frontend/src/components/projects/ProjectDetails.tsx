@@ -3,7 +3,7 @@ import { IconKey, IconMessage, IconServer, IconSettings } from "@tabler/icons-re
 import Tabs from "../../layout/Tabs.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 import Header from "../Header.tsx";
-import { MessageLog } from "../messages/MessageLog.tsx";
+import { EmailOverview } from "../emails/EmailOverview.tsx";
 import { CredentialsOverview } from "../smtpCredentials/CredentialsOverview.tsx";
 
 export default function ProjectDetails() {
@@ -19,7 +19,7 @@ export default function ProjectDetails() {
             route: "projects.project.emails",
             name: "Emails",
             icon: <IconMessage size={14} />,
-            content: <MessageLog />,
+            content: <EmailOverview />,
           },
           {
             route: "projects.project.credentials",

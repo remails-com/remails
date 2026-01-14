@@ -12,12 +12,12 @@ const routes = [
         path: "/{proj_id}",
         children: [
           {
-            name: "messages",
-            path: "/messages",
+            name: "emails",
+            path: "/emails",
             children: [
               {
-                name: "message",
-                path: "/{message_id}",
+                name: "email",
+                path: "/{email_id}",
               },
             ],
           },
@@ -100,13 +100,13 @@ test("Match a path", () => {
     },
   });
   expect(
-    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=messages")
+    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=emails")
   ).toStrictEqual({
     name: "projects.project",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      tab: "messages",
+      tab: "emails",
     },
   });
   // Trailing slashes
@@ -117,13 +117,13 @@ test("Match a path", () => {
     },
   });
   expect(
-    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/?tab=messages")
+    router.match("/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458/?tab=emails")
   ).toStrictEqual({
     name: "projects.project",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      tab: "messages",
+      tab: "emails",
     },
   });
 });
@@ -159,15 +159,15 @@ test("createRouteState", () => {
     router.navigate("projects.project", {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      tab: "messages",
+      tab: "emails",
     })
   ).toStrictEqual({
     name: "projects.project",
-    fullPath: "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=messages",
+    fullPath: "/be90adce-695a-439b-84a2-62c8a0180f90/projects/9dc33958-00c0-4cf4-8219-9d522c076458?tab=emails",
     params: {
       org_id: "be90adce-695a-439b-84a2-62c8a0180f90",
       proj_id: "9dc33958-00c0-4cf4-8219-9d522c076458",
-      tab: "messages",
+      tab: "emails",
     },
   });
 });
@@ -183,12 +183,12 @@ test("flattenRoutes", () => {
       path: "/{org_id}/projects/{proj_id}",
     },
     {
-      name: "projects.project.messages",
-      path: "/{org_id}/projects/{proj_id}/messages",
+      name: "projects.project.emails",
+      path: "/{org_id}/projects/{proj_id}/emails",
     },
     {
-      name: "projects.project.messages.message",
-      path: "/{org_id}/projects/{proj_id}/messages/{message_id}",
+      name: "projects.project.emails.email",
+      path: "/{org_id}/projects/{proj_id}/emails/{email_id}",
     },
     {
       name: "projects.project.credentials",

@@ -121,17 +121,17 @@ export default async function apiMiddleware(
     });
   }
 
-  let messageFilterChanged = false;
-  const messageFilter = new URLSearchParams();
+  let emailFilterChanged = false;
+  const emailFilter = new URLSearchParams();
   for (const param of ["limit", "status", "before", "labels"]) {
     const value = navState.to.params[param];
-    if (value != navState.from.params[param]) messageFilterChanged = true;
-    if (value) messageFilter.append(param, value);
+    if (value != navState.from.params[param]) emailFilterChanged = true;
+    if (value) emailFilter.append(param, value);
   }
-  if ((projChanged || messageFilterChanged || navState.to.params.force == "reload") && newProjId) {
+  if ((projChanged || emailFilterChanged || navState.to.params.force == "reload") && newProjId) {
     dispatch({
-      type: "set_messages",
-      messages: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/emails?${messageFilter.toString()}`),
+      type: "set_emails",
+      emailMetadata: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/emails?${emailFilter.toString()}`),
     });
   }
 
