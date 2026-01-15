@@ -1,25 +1,25 @@
 import { Card, Group, MultiSelect, Stack, Text } from "@mantine/core";
 import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
 import { AreaChart } from "@mantine/charts";
-import { MessageStatus } from "../../types";
+import { EmailStatus } from "../../types";
 import { useState } from "react";
 import { useProjects } from "../../hooks/useProjects";
 import { formatMonth } from "../../util";
-import { ALL_MESSAGE_STATUSES, STATUS_SERIES } from "./statuses";
+import { ALL_EMAIL_STATUSES, STATUS_SERIES } from "./statuses";
 
 export default function PerMonthChart() {
   const { currentOrganization } = useOrganizations();
   const { projects } = useProjects();
   const { monthly_statistics } = useStatistics();
 
-  const [statusFilter, setStatusFilter] = useState<MessageStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<EmailStatus[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
 
   if (!currentOrganization) {
     return null;
   }
 
-  const data: Record<string, Record<MessageStatus, number> & { month: number }> = {};
+  const data: Record<string, Record<EmailStatus, number> & { month: number }> = {};
   for (const stat of monthly_statistics) {
     if (projectFilter.length == 0 || projectFilter.includes(stat.project_id)) {
       data[stat.date] ??= {
@@ -33,7 +33,7 @@ export default function PerMonthChart() {
         rejected: 0,
       };
 
-      for (const status of statusFilter.length > 0 ? statusFilter : ALL_MESSAGE_STATUSES) {
+      for (const status of statusFilter.length > 0 ? statusFilter : ALL_EMAIL_STATUSES) {
         data[stat.date][status] += stat.statistics[status] ?? 0;
       }
     }
@@ -63,7 +63,7 @@ export default function PerMonthChart() {
               searchable
             />
             <MultiSelect
-              label="Message status"
+              label="Email status"
               placeholder="Any status"
               value={statusFilter}
               data={[
@@ -81,7 +81,7 @@ export default function PerMonthChart() {
                   items: ["Rejected", "Failed"].map((i) => ({ value: i.toLowerCase(), label: i })),
                 },
               ]}
-              onChange={(status) => setStatusFilter(status.map((s) => s.toLowerCase() as MessageStatus))}
+              onChange={(status) => setStatusFilter(status.map((s) => s.toLowerCase() as EmailStatus))}
               maxDropdownHeight={400}
               clearable
               searchable

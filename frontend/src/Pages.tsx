@@ -1,6 +1,6 @@
 import { JSX } from "react";
 import DomainsOverview from "./components/domains/DomainsOverview.tsx";
-import MessageDetails from "./components/messages/MessageDetails.tsx";
+import EmailDetails from "./components/emails/EmailDetails.tsx";
 import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
 import OrganizationSettings from "./components/organizations/OrganizationSettings.tsx";
@@ -26,7 +26,7 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   projects: <ProjectsOverview />,
   "projects.project": <ProjectDetails />,
   "projects.project.emails": <ProjectDetails />,
-  "projects.project.emails.email": <MessageDetails />,
+  "projects.project.emails.email": <EmailDetails />,
   "projects.project.credentials": <ProjectDetails />,
   "projects.project.credentials.credential": <CredentialDetails />,
   "projects.project.settings": <ProjectDetails />,

@@ -1,5 +1,5 @@
 import { Badge, MantineSpacing, StyleProp, Tooltip } from "@mantine/core";
-import { DeliveryStatus, Log, MessageMetadata } from "../../types";
+import { DeliveryStatus, Log, EmailMetadata } from "../../types";
 import { formatDateTime } from "../../util.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { ReactElement, useState } from "react";
@@ -7,7 +7,7 @@ import { IconCheck, IconClock, IconX } from "@tabler/icons-react";
 import { ConnectionLog } from "./ConnectionLog.tsx";
 
 interface RecipientsProps {
-  message: MessageMetadata;
+  email: EmailMetadata;
   ml?: StyleProp<MantineSpacing>;
   mr?: StyleProp<MantineSpacing>;
 }
@@ -21,12 +21,12 @@ const deliveryStatus: {
   Failed: { color: "red", icon: <IconX size={16} /> },
 };
 
-export function Recipients({ message, mr, ml }: RecipientsProps): ReactElement {
+export function Recipients({ email, mr, ml }: RecipientsProps): ReactElement {
   const [opened, { open, close }] = useDisclosure(false);
   const [log, setLog] = useState<Log>({ lines: [] });
 
-  const badges = message.recipients.map((recipient: string) => {
-    const details = message.delivery_details[recipient];
+  const badges = email.recipients.map((recipient: string) => {
+    const details = email.delivery_details[recipient];
     const status = details?.status ?? { type: "NotSent" };
 
     let tooltip = "Email not (yet) sent";

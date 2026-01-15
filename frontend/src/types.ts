@@ -49,14 +49,14 @@ export interface Log {
   }>;
 }
 
-export type MessageStatus = "processing" | "held" | "accepted" | "rejected" | "delivered" | "reattempt" | "failed";
+export type EmailStatus = "processing" | "held" | "accepted" | "rejected" | "delivered" | "reattempt" | "failed";
 
-export interface MessageMetadata {
+export interface EmailMetadata {
   id: string;
   from_email: string;
   created_at: string;
   recipients: string[];
-  status: MessageStatus;
+  status: EmailStatus;
   reason: string | undefined;
   raw_size: string;
   message_id_header: string;
@@ -67,7 +67,7 @@ export interface MessageMetadata {
   label: string | undefined;
 }
 
-export interface Message extends MessageMetadata {
+export interface Email extends EmailMetadata {
   message_data: {
     subject: string | null;
     date: string | null;
@@ -109,7 +109,7 @@ export interface State {
   organizations: Organization[] | null;
   projects: Project[] | null;
   labels: string[] | null;
-  messages: MessageMetadata[] | null;
+  emails: EmailMetadata[] | null;
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
@@ -176,17 +176,17 @@ export type Action =
       labels: string[] | null;
     }
   | {
-      type: "set_messages";
-      messages: MessageMetadata[] | null;
+      type: "set_emails";
+      emailMetadata: EmailMetadata[] | null;
     }
   | {
-      type: "update_message";
-      messageId: string;
-      update: Partial<Message>;
+      type: "update_email";
+      emailId: string;
+      update: Partial<Email>;
     }
   | {
-      type: "remove_message";
-      messageId: string;
+      type: "remove_email";
+      emailId: string;
     }
   | {
       type: "set_domains";
@@ -401,7 +401,7 @@ export type StatisticsEntry = {
   organization_id: string;
   project_id: string;
   date: string;
-  statistics: Record<MessageStatus, number | undefined>;
+  statistics: Record<EmailStatus, number | undefined>;
 };
 
 export type Statistics = {

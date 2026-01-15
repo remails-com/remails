@@ -39,17 +39,17 @@ const actionHandler: {
   set_labels: function (state, action) {
     return { ...state, labels: action.labels };
   },
-  set_messages: function (state, action) {
-    return { ...state, messages: action.messages };
+  set_emails: function (state, action) {
+    return { ...state, emails: action.emailMetadata };
   },
-  update_message: function (state, action) {
+  update_email: function (state, action) {
     return {
       ...state,
-      messages: state.messages?.map((m) => (m.id == action.messageId ? { ...m, ...action.update } : m)) ?? null,
+      emails: state.emails?.map((m) => (m.id == action.emailId ? { ...m, ...action.update } : m)) ?? null,
     };
   },
-  remove_message: function (state, action) {
-    return { ...state, messages: state.messages?.filter((m) => m.id !== action.messageId) || [] };
+  remove_email: function (state, action) {
+    return { ...state, emails: state.emails?.filter((m) => m.id !== action.emailId) || [] };
   },
   set_domains: function (state, action) {
     return { ...state, domains: action.domains };

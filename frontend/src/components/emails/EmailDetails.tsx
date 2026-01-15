@@ -1,54 +1,54 @@
-import { useMessages } from "../../hooks/useMessages.ts";
+import { useEmails } from "../../hooks/useEmails.ts";
 import { Badge, Group, Paper, SegmentedControl, Table, Text, Tooltip } from "@mantine/core";
 import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { Message, MessageMetadata } from "../../types.ts";
+import { Email, EmailMetadata } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
 import { IconHelp, IconMessage, IconPaperclip } from "@tabler/icons-react";
-import MessageRetryButton from "./MessageRetryButton.tsx";
-import MessageDeleteButton from "./MessageDeleteButton.tsx";
+import EmailRetryButton from "./EmailRetryButton.tsx";
+import EmailDeleteButton from "./EmailDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import Header from "../Header.tsx";
 import Label from "./Label.tsx";
 
-export function getFullStatusDescription(message: MessageMetadata) {
-  if (message.status == "delivered") {
-    return `delivered ${message.reason}`;
+export function getFullStatusDescription(email: EmailMetadata) {
+  if (email.status == "delivered") {
+    return `delivered ${email.reason}`;
   } else {
-    let s = message.status;
+    let s = email.status;
 
-    if (message.reason) {
-      s += `: ${message.reason}`;
+    if (email.reason) {
+      s += `: ${email.reason}`;
     }
 
-    if (message.retry_after) {
-      const retry_after_formatted = is_in_the_future(message.retry_after)
-        ? "after " + formatDateTime(message.retry_after)
+    if (email.retry_after) {
+      const retry_after_formatted = is_in_the_future(email.retry_after)
+        ? "after " + formatDateTime(email.retry_after)
         : "soon";
       s += `, retrying ${retry_after_formatted}`;
     }
 
-    if (message.attempts > 1) {
-      s += ` (attempt ${message.attempts} of ${message.max_attempts})`;
+    if (email.attempts > 1) {
+      s += ` (attempt ${email.attempts} of ${email.max_attempts})`;
     }
 
     return s;
   }
 }
 
-export default function MessageDetails() {
-  const { currentMessage, updateMessage } = useMessages();
+export default function EmailDetails() {
+  const { currentEmail, updateEmail } = useEmails();
   const [displayMode, setDisplayMode] = useState("text");
 
-  if (!currentMessage || !("message_data" in currentMessage && "truncated_raw_data" in currentMessage)) {
+  if (!currentEmail || !("message_data" in currentEmail && "truncated_raw_data" in currentEmail)) {
     return <Loader />;
   }
 
-  const completeMessage = currentMessage as unknown as Message;
+  const fullEmail = currentEmail as unknown as Email;
 
-  const subject = completeMessage.message_data.subject;
-  const text_body = completeMessage.message_data.text_body;
-  const raw = completeMessage.truncated_raw_data;
+  const subject = fullEmail.message_data.subject;
+  const text_body = fullEmail.message_data.text_body;
+  const raw = fullEmail.truncated_raw_data;
 
   const table_data = [
     {
@@ -59,22 +59,22 @@ export default function MessageDetails() {
         </Text>
       ),
     },
-    { header: "From", value: completeMessage.from_email },
+    { header: "From", value: fullEmail.from_email },
     {
       header: "Recipients",
       info: 'The recipients who will receive this email based on the "RCPT TO" SMTP header',
-      value: <Recipients message={completeMessage} mr="sm" />,
+      value: <Recipients email={fullEmail} mr="sm" />,
     },
     {
       header: "Message ID",
       info: "The Message-ID email header is used to identify emails (e.g. used to send replies)",
-      value: completeMessage.message_id_header,
+      value: fullEmail.message_id_header,
     },
     {
       header: "Date",
       info: "The time mentioned in the Date header of the email",
-      value: completeMessage.message_data.date ? (
-        formatDateTime(completeMessage.message_data.date)
+      value: fullEmail.message_data.date ? (
+        formatDateTime(fullEmail.message_data.date)
       ) : (
         <Text c="dimmed" fs="italic" fz="sm">
           Message does not contain a Date header
@@ -84,26 +84,26 @@ export default function MessageDetails() {
     {
       header: "Created",
       info: "The time that remails received this email",
-      value: formatDateTime(completeMessage.created_at),
+      value: formatDateTime(fullEmail.created_at),
     },
     {
       header: "Total size",
       info: "The size of the whole email",
-      value: completeMessage.raw_size,
+      value: fullEmail.raw_size,
     },
     {
       header: "Status",
-      value: getFullStatusDescription(completeMessage),
+      value: getFullStatusDescription(fullEmail),
     },
     {
       header: "Attachments",
       value:
-        completeMessage.message_data.attachments.length === 0 ? (
+        fullEmail.message_data.attachments.length === 0 ? (
           <Text c="dimmed" fs="italic" fz="sm">
             Email has no attachments
           </Text>
         ) : (
-          completeMessage.message_data.attachments.map((attachment, index) => (
+          fullEmail.message_data.attachments.map((attachment, index) => (
             <Badge
               key={`${attachment.filename}-${index}`}
               radius="xs"
@@ -127,7 +127,7 @@ export default function MessageDetails() {
         entityType="Email"
         Icon={IconMessage}
         divider
-        addendum={currentMessage.label ? <Label label={currentMessage.label} clickable /> : null}
+        addendum={currentEmail.label ? <Label label={currentEmail.label} clickable /> : null}
       />
 
       <Table variant="vertical" layout="fixed" withTableBorder mt="sm">
@@ -153,8 +153,8 @@ export default function MessageDetails() {
       </Table>
 
       <Group my="sm" justify="right">
-        <MessageRetryButton message={currentMessage} updateMessage={updateMessage} />
-        <MessageDeleteButton message={currentMessage} />
+        <EmailRetryButton email={currentEmail} updateEmail={updateEmail} />
+        <EmailDeleteButton email={currentEmail} />
       </Group>
 
       <SegmentedControl
@@ -180,7 +180,7 @@ export default function MessageDetails() {
               <Text ff="monospace" fz="sm" style={{ whiteSpace: "pre-wrap" }}>
                 {raw}
               </Text>
-              {completeMessage.is_truncated && (
+              {fullEmail.is_truncated && (
                 <Text c="dimmed" fs="italic">
                   Email truncated
                 </Text>

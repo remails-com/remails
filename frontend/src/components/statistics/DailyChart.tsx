@@ -1,13 +1,13 @@
 import { Card, Group, MultiSelect, Stack, Text } from "@mantine/core";
 import { useOrganizations, useStatistics } from "../../hooks/useOrganizations";
 import { AreaChart } from "@mantine/charts";
-import { MessageStatus } from "../../types";
+import { EmailStatus } from "../../types";
 import { useState } from "react";
 import { useProjects } from "../../hooks/useProjects";
-import { ALL_MESSAGE_STATUSES, STATUS_SERIES } from "./statuses";
+import { ALL_EMAIL_STATUSES, STATUS_SERIES } from "./statuses";
 import { formatDate } from "../../util";
 
-type Stats = Record<MessageStatus, number> & { day: number };
+type Stats = Record<EmailStatus, number> & { day: number };
 
 // generates day keys, e.g. "2025-12-19"
 const dayFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -35,7 +35,7 @@ export default function DailyChart() {
   const { projects } = useProjects();
   const { daily_statistics } = useStatistics();
 
-  const [statusFilter, setStatusFilter] = useState<MessageStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<EmailStatus[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
 
   if (!currentOrganization) {
@@ -56,7 +56,7 @@ export default function DailyChart() {
 
   for (const stat of daily_statistics) {
     if (projectFilter.length == 0 || projectFilter.includes(stat.project_id)) {
-      for (const status of statusFilter.length > 0 ? statusFilter : ALL_MESSAGE_STATUSES) {
+      for (const status of statusFilter.length > 0 ? statusFilter : ALL_EMAIL_STATUSES) {
         data[stat.date][status] += stat.statistics[status] ?? 0;
       }
     }
@@ -86,7 +86,7 @@ export default function DailyChart() {
               searchable
             />
             <MultiSelect
-              label="Message status"
+              label="Email status"
               placeholder="Any status"
               value={statusFilter}
               data={[
@@ -104,7 +104,7 @@ export default function DailyChart() {
                   items: ["Rejected", "Failed"].map((i) => ({ value: i.toLowerCase(), label: i })),
                 },
               ]}
-              onChange={(status) => setStatusFilter(status.map((s) => s.toLowerCase() as MessageStatus))}
+              onChange={(status) => setStatusFilter(status.map((s) => s.toLowerCase() as EmailStatus))}
               maxDropdownHeight={400}
               clearable
               searchable

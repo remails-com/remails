@@ -1,6 +1,6 @@
-import { MessageStatus } from "../../types";
+import { EmailStatus } from "../../types";
 
-export const ALL_MESSAGE_STATUSES: MessageStatus[] = [
+export const ALL_EMAIL_STATUSES: EmailStatus[] = [
   "accepted",
   "delivered",
   "failed",
@@ -10,7 +10,7 @@ export const ALL_MESSAGE_STATUSES: MessageStatus[] = [
   "rejected",
 ];
 
-export const STATUS_SERIES: { name: MessageStatus; color: string }[] = [
+export const STATUS_SERIES: { name: EmailStatus; color: string }[] = [
   { name: "accepted", color: "gray.6" },
   { name: "delivered", color: "teal.6" },
   { name: "failed", color: "red.6" },
