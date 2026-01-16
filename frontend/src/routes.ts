@@ -15,7 +15,7 @@ export const routes = [
             children: [
               {
                 name: "email",
-                path: "/{message_id}",
+                path: "/{email_id}",
               },
             ],
           },

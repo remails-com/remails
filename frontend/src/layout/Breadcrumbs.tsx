@@ -1,7 +1,7 @@
 import { Breadcrumbs as MantineBreadcrumbs, Text, Button, Box } from "@mantine/core";
 import { useCredentials } from "../hooks/useCredentials.ts";
 import { useDomains } from "../hooks/useDomains.ts";
-import { useMessages } from "../hooks/useMessages.ts";
+import { useEmails } from "../hooks/useEmails.ts";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
@@ -33,7 +33,7 @@ export function Breadcrumbs() {
   const { currentProject } = useProjects();
   const { currentCredential } = useCredentials();
   const { currentDomain } = useDomains();
-  const { currentMessage } = useMessages();
+  const { currentEmail } = useEmails();
   const { currentOrganization } = useOrganizations();
   const {
     state: { routerState },
@@ -60,8 +60,8 @@ export function Breadcrumbs() {
       title = currentProject?.name;
     } else if (route == "projects.project.emails.email") {
       let subject: string | null = null;
-      if (currentMessage && "message_data" in currentMessage) {
-        subject = currentMessage?.message_data?.subject;
+      if (currentEmail && "message_data" in currentEmail) {
+        subject = currentEmail?.message_data?.subject;
       }
       title = subject ?? "No subject";
     } else if (route == "projects.project.credentials.credential") {

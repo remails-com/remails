@@ -1,15 +1,15 @@
 import { Text } from "@mantine/core";
 import { IconTrash } from "@tabler/icons-react";
-import { MessageMetadata } from "../../types";
+import { EmailMetadata } from "../../types.ts";
 import { modals } from "@mantine/modals";
-import { useOrganizations } from "../../hooks/useOrganizations";
-import { useProjects } from "../../hooks/useProjects";
+import { useOrganizations } from "../../hooks/useOrganizations.ts";
+import { useProjects } from "../../hooks/useProjects.ts";
 import { notifications } from "@mantine/notifications";
-import { useRemails } from "../../hooks/useRemails";
+import { useRemails } from "../../hooks/useRemails.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 
-export default function MessageDeleteButton({ message, small }: { message: MessageMetadata; small?: boolean }) {
+export default function EmailDeleteButton({ email, small }: { email: EmailMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
   const { currentProject } = useProjects();
   const { navigate, dispatch } = useRemails();
@@ -18,9 +18,9 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
     return null;
   }
 
-  const deleteMessage = async () => {
+  const deleteEmail = async () => {
     const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${message.id}`,
+      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${email.id}`,
       {
         method: "DELETE",
       }
@@ -32,7 +32,7 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
         color: "green",
       });
       navigate("projects.project.emails");
-      dispatch({ type: "remove_message", messageId: message.id });
+      dispatch({ type: "remove_email", emailId: email.id });
     } else {
       errorNotification("Email could not be deleted");
       console.error(res);
@@ -45,7 +45,7 @@ export default function MessageDeleteButton({ message, small }: { message: Messa
       children: <Text>Are you sure you want to delete this email?</Text>,
       labels: { confirm: "Confirm", cancel: "Cancel" },
       onCancel: () => {},
-      onConfirm: () => deleteMessage(),
+      onConfirm: () => deleteEmail(),
     });
   };
 
