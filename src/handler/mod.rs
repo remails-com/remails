@@ -183,7 +183,7 @@ impl Handler {
             return false;
         }
 
-        domain.ends_with(subdomain)
+        subdomain.ends_with(domain)
     }
 
     /// Check if we are able to send this message, i.e., we are permitted to use the sender's domain,
@@ -230,35 +230,45 @@ impl Handler {
         // check From domain (can be a different subdomain)
         if let Some(from) = parsed_msg.from() {
             for addr in from.iter() {
-                if let Some(Ok(addr)) = addr.address().map(|p| p.parse::<EmailAddress>())
-                    && !Self::is_subdomain(addr.domain(), &domain.domain)
-                {
-                    return Ok(Err((
-                        MessageStatus::Rejected,
-                        format!(
-                            "From domain ({}) is not a valid (sub-)domain of {}",
-                            addr.domain(),
-                            domain.domain
-                        ),
-                    )));
+                if let Some(addr) = addr.address() {
+                    let Ok(addr) = addr.parse::<EmailAddress>() else {
+                        return Ok(Err((
+                            MessageStatus::Rejected,
+                            format!("Invalid From address ({addr})"),
+                        )));
+                    };
+                    if !Self::is_subdomain(addr.domain(), &domain.domain) {
+                        return Ok(Err((
+                            MessageStatus::Rejected,
+                            format!(
+                                "From domain ({}) is not a valid (sub-)domain of {}",
+                                addr.domain(),
+                                domain.domain
+                            ),
+                        )));
+                    }
                 }
             }
         };
 
         // check Return-Path domain (can be a different subdomain)
-        if let Some(Ok(return_path)) = parsed_msg
-            .return_address()
-            .map(|p| p.parse::<EmailAddress>())
-            && !Self::is_subdomain(return_path.domain(), &domain.domain)
-        {
-            return Ok(Err((
-                MessageStatus::Rejected,
-                format!(
-                    "Return-Path domain ({}) is not a valid (sub-)domain of {}",
-                    return_path.domain(),
-                    domain.domain
-                ),
-            )));
+        if let Some(return_path) = parsed_msg.return_address() {
+            let Ok(return_path) = return_path.parse::<EmailAddress>() else {
+                return Ok(Err((
+                    MessageStatus::Rejected,
+                    format!("Invalid Return-Path address ({return_path})"),
+                )));
+            };
+            if !Self::is_subdomain(return_path.domain(), &domain.domain) {
+                return Ok(Err((
+                    MessageStatus::Rejected,
+                    format!(
+                        "Return-Path domain ({}) is not a valid (sub-)domain of {}",
+                        return_path.domain(),
+                        domain.domain
+                    ),
+                )));
+            }
         };
 
         // check SPF record
@@ -955,11 +965,6 @@ mod test {
         )
     ))]
     async fn test_handle_incorrect_dns_records(pool: PgPool) {
-        let mailcrab_port = random_port();
-        let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
-        let _drop_guard = token.drop_guard();
-
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_request = SmtpCredentialRequest {
             username: "user".to_string(),
@@ -1005,8 +1010,7 @@ mod test {
                 .unwrap();
 
             let message = NewMessage::from_builder_message(message, credential.id());
-            let handler =
-                Handler::test_handler(pool.clone(), mailcrab_port, Some(dns_records)).await;
+            let handler = Handler::test_handler(pool.clone(), 1, Some(dns_records)).await;
 
             let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
@@ -1014,7 +1018,10 @@ mod test {
                 .get_if_org_may_send(message_id)
                 .await
                 .unwrap();
-            assert!(handler.handle_message(&mut message).await.is_err());
+            assert!(matches!(
+                handler.handle_message(&mut message).await,
+                Err(HandlerError::MessageNotAccepted(MessageStatus::Held, _))
+            ));
         }
     }
 
@@ -1029,11 +1036,6 @@ mod test {
         )
     ))]
     async fn test_handle_invalid_mail_from(pool: PgPool) {
-        let mailcrab_port = random_port();
-        let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
-        let _drop_guard = token.drop_guard();
-
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_request = SmtpCredentialRequest {
             username: "user".to_string(),
@@ -1067,7 +1069,7 @@ mod test {
             // Message has invalid "MAIL FROM" and valid "From"
             let message =
                 NewMessage::from_builder_message_custom_from(message, credential.id(), from_email);
-            let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
+            let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
             let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
@@ -1075,7 +1077,10 @@ mod test {
                 .get_if_org_may_send(message_id)
                 .await
                 .unwrap();
-            assert!(handler.handle_message(&mut message).await.is_err());
+            assert!(matches!(
+                handler.handle_message(&mut message).await,
+                Err(HandlerError::MessageNotAccepted(MessageStatus::Held, _))
+            ));
         }
     }
 
@@ -1090,11 +1095,6 @@ mod test {
         )
     ))]
     async fn test_handle_invalid_from(pool: PgPool) {
-        let mailcrab_port = random_port();
-        let TestMailServerHandle { token, rx: _rx } =
-            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
-        let _drop_guard = token.drop_guard();
-
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_request = SmtpCredentialRequest {
             username: "user".to_string(),
@@ -1111,6 +1111,7 @@ mod test {
             "john@gmail.com/test-org-1-project-1.com",
             "john@gmail.com?q=test-org-1-project-1.com",
             "john@gmail.com#test-org-1-project-1.com",
+            "not_an_email",
         ];
         for from_email in we_cant_use_these_emails {
             let message: mail_send::smtp::message::Message = MessageBuilder::new()
@@ -1131,7 +1132,7 @@ mod test {
                 credential.id(),
                 "john@test-org-1-project-1.com",
             );
-            let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
+            let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
             let message_id = handler.message_repository.create(message, 1).await.unwrap();
             let mut message = handler
@@ -1139,7 +1140,66 @@ mod test {
                 .get_if_org_may_send(message_id)
                 .await
                 .unwrap();
-            assert!(handler.handle_message(&mut message).await.is_err());
+            assert!(matches!(
+                handler.handle_message(&mut message).await,
+                Err(HandlerError::MessageNotAccepted(MessageStatus::Rejected, _))
+            ));
         }
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn can_use_subdomain(pool: PgPool) {
+        let mailcrab_port = random_port();
+        let TestMailServerHandle { token, rx: _rx } =
+            mailcrab::development_mail_server(Ipv4Addr::new(127, 0, 0, 1), mailcrab_port).await;
+        let _drop_guard = token.drop_guard();
+
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(org_id, project_id, &credential_request)
+            .await
+            .unwrap();
+
+        let message: mail_send::smtp::message::Message = MessageBuilder::new()
+            .from(("John Doe", "john@subdomain.test-org-1-project-1.com"))
+            .to(vec![
+                ("Jane Doe", "jane@test-org-1-project-1.com"),
+                ("James Smith", "james@test.com"),
+            ])
+            .subject("Hi!")
+            .html_body("<h1>Hello, world!</h1>")
+            .text_body("Hello world!")
+            .into_message()
+            .unwrap();
+
+        // Message has valid "MAIL FROM" and valid "From"
+        let message = NewMessage::from_builder_message_custom_from(
+            message,
+            credential.id(),
+            "john@other-subdomain.test-org-1-project-1.com",
+        );
+        let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
+
+        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let mut message = handler
+            .message_repository
+            .get_if_org_may_send(message_id)
+            .await
+            .unwrap();
+        handler.handle_message(&mut message).await.unwrap();
     }
 }
