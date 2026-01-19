@@ -187,7 +187,7 @@ jobs:
       - name: Set the current version in the Helm chart
         uses: mikefarah/yq@master
         with:
-          cmd: yq -i '.version="${{ needs.build-frontend.outputs.tag }}" | .appVersion="${{ needs.build-frontend.outputs.tag }}"' deploy/remails/Chart.yaml
+          cmd: yq -i '.appVersion="${{ needs.build-frontend.outputs.tag }}"' deploy/remails/Chart.yaml
       - name: Fetch Helm dependencies
         working-directory: deploy/remails
         run: helm dependency build
