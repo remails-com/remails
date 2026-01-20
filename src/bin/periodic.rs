@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown = CancellationToken::new();
     let mut check_nodes_interval = time::interval(Duration::from_secs(10)); // Every 10 seconds
-    let mut message_retry_interval = time::interval(Duration::from_secs(60)); // Every minute
+    let mut message_retry_interval = time::interval(Duration::from_secs(10)); // Every 10 seconds
     let mut domain_verification_interval = time::interval(Duration::from_secs(5 * 60)); // Every 5 minutes
     let mut reset_all_quotas_interval = time::interval(Duration::from_secs(10 * 60)); // Every 10 minutes
     let mut clean_up_interval = time::interval(Duration::from_secs(4 * 60 * 60)); // Every 4 hours
