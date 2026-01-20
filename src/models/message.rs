@@ -12,6 +12,7 @@ use email_address::EmailAddress;
 use garde::Validate;
 use mail_builder::MessageBuilder;
 use mail_parser::{HeaderName, MessageParser, MimeHeaders};
+use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
@@ -197,6 +198,10 @@ impl Message {
             let timeout = config
                 .delay
                 .checked_mul(self.attempts)
+                .unwrap_or(chrono::TimeDelta::days(1))
+                .checked_add(&chrono::TimeDelta::seconds(
+                    rand::rng().random_range(0..300),
+                ))
                 .unwrap_or(chrono::TimeDelta::days(1));
             self.retry_after = Some(chrono::Utc::now() + timeout);
         } else {
