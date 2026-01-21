@@ -31,7 +31,7 @@ const actionHandler: {
     return { ...state, projects: action.projects };
   },
   add_project: function (state, action) {
-    return { ...state, projects: [...(state.projects || []), action.project] };
+    return { ...state, projects: [action.project, ...(state.projects || [])] };
   },
   remove_project: function (state, action) {
     return { ...state, projects: state.projects?.filter((p) => p.id !== action.projectId) || [] };
@@ -55,7 +55,7 @@ const actionHandler: {
     return { ...state, domains: action.domains };
   },
   add_domain: function (state, action) {
-    return { ...state, domains: [...(state.domains || []), action.domain] };
+    return { ...state, domains: [action.domain, ...(state.domains || [])] };
   },
   remove_domain: function (state, action) {
     return { ...state, domains: state.domains?.filter((d) => d.id !== action.domainId) || [] };
