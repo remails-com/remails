@@ -1,9 +1,42 @@
-import { NavLink } from "@mantine/core";
+import { BoxProps, NavLink as MantineNavLink } from "@mantine/core";
 import { IconChartBar, IconGavel, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
 import OrgDropDown from "./OrgDropDown.tsx";
+import { RouteName } from "../routes.ts";
+
+interface NavLinkProps {
+  label: string;
+  route: RouteName;
+  active: boolean;
+  close: () => void;
+  leftSection?: React.ReactNode;
+  style?: BoxProps;
+}
+
+function NavLink({ label, route, active, close, leftSection, style }: NavLinkProps) {
+  const { navigate, getRoute } = useRemails();
+
+  return (
+    <MantineNavLink
+      label={label}
+      active={active}
+      leftSection={leftSection}
+      href={getRoute(route).fullPath}
+      onClick={(e) => {
+        if (e.defaultPrevented || e.ctrlKey || e.metaKey) {
+          return;
+        }
+
+        e.preventDefault();
+        navigate(route);
+        close();
+      }}
+      {...style}
+    />
+  );
+}
 
 export function NavBar({ close }: { close: () => void }) {
   const {
@@ -20,14 +53,12 @@ export function NavBar({ close }: { close: () => void }) {
     <>
       {user.global_role === "admin" && (
         <NavLink
-          mb="md"
           label="Admin"
           active={routerState.name.startsWith("admin")}
+          route="admin"
+          close={close}
           leftSection={<IconGavel size={20} stroke={1.8} />}
-          onClick={() => {
-            navigate("admin");
-            close();
-          }}
+          style={{ mb: "md" }}
         />
       )}
 
@@ -42,41 +73,33 @@ export function NavBar({ close }: { close: () => void }) {
       <OrgDropDown openNewOrg={openNewOrg} />
 
       <NavLink
-        mt="md"
         label="Projects"
+        route="projects"
+        close={close}
         active={routerState.name.startsWith("projects")}
         leftSection={<IconServer size={20} stroke={1.8} />}
-        onClick={() => {
-          navigate("projects");
-          close();
-        }}
+        style={{ mt: "md" }}
       />
       <NavLink
         label="Domains"
+        route="domains"
+        close={close}
         active={routerState.name.startsWith("domains")}
         leftSection={<IconWorldWww size={20} stroke={1.8} />}
-        onClick={() => {
-          navigate("domains");
-          close();
-        }}
       />
       <NavLink
         label="Statistics"
+        route="statistics"
+        close={close}
         active={routerState.name === "statistics"}
         leftSection={<IconChartBar size={20} stroke={1.8} />}
-        onClick={() => {
-          navigate("statistics");
-          close();
-        }}
       />
       <NavLink
         label="Settings"
+        route="settings"
+        close={close}
         active={routerState.name.startsWith("settings")}
         leftSection={<IconSettings size={20} stroke={1.8} />}
-        onClick={() => {
-          navigate("settings");
-          close();
-        }}
       />
     </>
   );
