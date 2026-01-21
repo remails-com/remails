@@ -3,7 +3,7 @@ import { Loader } from "../../Loader";
 import { formatDateTime } from "../../util";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { IconPlus } from "@tabler/icons-react";
-import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
 import { NewProject } from "./NewProject.tsx";
 import { Link } from "../../Link.tsx";
 import EditButton from "../EditButton.tsx";
@@ -11,19 +11,19 @@ import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
-import { useState } from "react";
+import { useRemails } from "../../hooks/useRemails.ts";
 
 const PER_PAGE = 20;
 
 export default function ProjectsOverview() {
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
   const [opened, { open, close }] = useDisclosure(false);
   const { projects } = useProjects();
-  const [activePage, setPage] = useState(1);
 
-  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
-    duration: 500,
-    offset: 100,
-  });
+  const activePage = parseInt(routerState.params.p) || 1;
 
   if (projects === null) {
     return <Loader />;
@@ -56,9 +56,7 @@ export default function ProjectsOverview() {
       </InfoAlert>
       <NewProject opened={opened} close={close} />
 
-      <StyledTable ref={targetRef} headers={["Name", "Updated", ""]}>
-        {rows}
-      </StyledTable>
+      <StyledTable headers={["Name", "Updated", ""]}>{rows}</StyledTable>
 
       <Flex justify="center" mt="md">
         <Stack>
@@ -66,8 +64,10 @@ export default function ProjectsOverview() {
             <Pagination
               value={activePage}
               onChange={(p) => {
-                setPage(p);
-                scrollIntoView({ alignment: "start" });
+                navigate(routerState.name, {
+                  ...routerState.params,
+                  p: p.toString(),
+                });
               }}
               total={Math.ceil(projects.length / PER_PAGE)}
             />

@@ -3,7 +3,7 @@ import { Loader } from "../../Loader.tsx";
 import { Flex, Group, Pagination, Stack, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus, IconServer } from "@tabler/icons-react";
-import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
 import { Link } from "../../Link.tsx";
 import InfoAlert from "../InfoAlert.tsx";
@@ -14,7 +14,7 @@ import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
 import { useProjectWithId } from "../../hooks/useProjects.ts";
 import { Domain } from "../../types.ts";
-import { useState } from "react";
+import { useRemails } from "../../hooks/useRemails.ts";
 
 const PER_PAGE = 20;
 
@@ -60,14 +60,14 @@ function DomainRow({ domain }: { domain: Domain }) {
 }
 
 export default function DomainsOverview() {
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
   const [opened, { open, close }] = useDisclosure(false);
   const { domains } = useDomains();
-  const [activePage, setPage] = useState(1);
 
-  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
-    duration: 500,
-    offset: 100,
-  });
+  const activePage = parseInt(routerState.params.p) || 1;
 
   if (domains === null) {
     return <Loader />;
@@ -82,7 +82,7 @@ export default function DomainsOverview() {
       </InfoAlert>
 
       <NewDomain opened={opened} close={close} />
-      <StyledTable ref={targetRef} headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
+      <StyledTable headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>
         {domains.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((domain) => (
           <DomainRow domain={domain} key={domain.id} />
         ))}
@@ -93,8 +93,10 @@ export default function DomainsOverview() {
             <Pagination
               value={activePage}
               onChange={(p) => {
-                setPage(p);
-                scrollIntoView({ alignment: "start" });
+                navigate(routerState.name, {
+                  ...routerState.params,
+                  p: p.toString(),
+                });
               }}
               total={Math.ceil(domains.length / PER_PAGE)}
             />
