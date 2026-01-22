@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   domain,\n                   organization_id,\n                   project_id,\n                   dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   dkim_pkcs8_der,\n                   verification_status,\n                   created_at,\n                   updated_at\n            FROM domains\n            WHERE organization_id = $1\n            ",
+  "query": "\n            SELECT id,\n                   domain,\n                   organization_id,\n                   project_id,\n                   dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   dkim_pkcs8_der,\n                   verification_status,\n                   created_at,\n                   updated_at\n            FROM domains\n            WHERE organization_id = $1\n            ORDER BY updated_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -76,5 +76,5 @@
       false
     ]
   },
-  "hash": "745a59091e3c8c2f5357686c9fabe09d56569fecbf593002fa39baf2b52354e4"
+  "hash": "b249fb2f7fad351cd4d8d5af948a61062e550955539697d5c7194d21f6edcfd2"
 }

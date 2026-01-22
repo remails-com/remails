@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT * FROM projects WHERE organization_id = $1\n            ",
+  "query": "\n            SELECT * FROM projects WHERE organization_id = $1 ORDER BY updated_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "99fad94c9ebfde2c63b99cfb0be6fd87f7c6d4015e02628dc4654e0e2070214e"
+  "hash": "cd9959549607285fe70ab03520ff66ce50890249e4bfd823260b3bb6f04eaa17"
 }

@@ -87,7 +87,7 @@ impl ProjectRepository {
         Ok(sqlx::query_as!(
             Project,
             r#"
-            SELECT * FROM projects WHERE organization_id = $1
+            SELECT * FROM projects WHERE organization_id = $1 ORDER BY updated_at DESC
             "#,
             *organization_id,
         )

@@ -559,6 +559,7 @@ impl DomainRepository {
                    updated_at
             FROM domains
             WHERE organization_id = $1
+            ORDER BY updated_at DESC
             "#,
             *org_id,
         )
