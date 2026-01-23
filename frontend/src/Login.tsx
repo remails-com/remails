@@ -23,6 +23,14 @@ interface LoginProps {
   setUser: (user: User | null) => void;
 }
 
+type LoginType = "login" | "register" | "reset_password";
+
+const BUTTON_NAMES: { [type in LoginType]: string } = {
+  login: "Login",
+  register: "Register",
+  reset_password: "Reset password",
+};
+
 export default function Login({ setUser }: LoginProps) {
   const {
     state: { routerState },
@@ -30,23 +38,10 @@ export default function Login({ setUser }: LoginProps) {
     redirect,
   } = useRemails();
 
-  let type: "login" | "register" | "reset_password" = "login";
-  let buttonName = "Login";
-
-  switch (routerState.params.type) {
-    case "register":
-      type = "register";
-      buttonName = "Register";
-      break;
-    case "reset_password":
-      type = "reset_password";
-      buttonName = "Reset password";
-      break;
-  }
+  const type = routerState.params.type in BUTTON_NAMES ? (routerState.params.type as LoginType) : "login";
+  const buttonName = BUTTON_NAMES[type];
 
   const [globalError, setGlobalError] = useState<string | null>(null);
-
-  const xIcon = <IconX size={20} />;
 
   const form = useForm({
     initialValues: {
@@ -193,7 +188,7 @@ export default function Login({ setUser }: LoginProps) {
               />
             )}
 
-            {globalError && <Alert icon={xIcon}>{globalError}</Alert>}
+            {globalError && <Alert icon={<IconX size={20} />}>{globalError}</Alert>}
           </Stack>
 
           <Group justify="space-between" mt="xl">
