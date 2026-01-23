@@ -1,11 +1,11 @@
-import { expect, test } from "../playwright/fixtures.ts";
+import { expect, test } from "./fixtures.ts";
 import { createProject, deleteProject, uuidRegex } from "./util.ts";
 import { Page } from "@playwright/test";
 import { v4 as uuid } from "uuid";
 
 async function toDomains(page: Page) {
   // Navigate to domains page
-  await page.locator("a").filter({ hasText: "Domains" }).click();
+  await page.getByRole("link", { name: "Domains", exact: true }).click();
 
   // Check we are on the user domains page
   {
@@ -48,7 +48,13 @@ test("basic domain lifecycle", async ({ page }) => {
   const domain = await createDomain(page);
 
   // go to settings
-  await page.getByRole("table").getByRole("row").filter({ hasText: domain }).getByRole("button").click();
+  await page
+    .getByRole("table")
+    .getByRole("row")
+    .filter({ hasText: domain })
+    .getByRole("link")
+    .locator(".tabler-icon.tabler-icon-edit")
+    .click();
 
   // delete domain
   await page.getByRole("button", { name: "Delete" }).click();
@@ -75,7 +81,13 @@ test("attach project afterward", async ({ page }) => {
   const domain = await createDomain(page);
 
   // go to settings
-  await page.getByRole("table").getByRole("row").filter({ hasText: domain }).getByRole("button").click();
+  await page
+    .getByRole("table")
+    .getByRole("row")
+    .filter({ hasText: domain })
+    .getByRole("link")
+    .locator(".tabler-icon.tabler-icon-edit")
+    .click();
 
   // Click dropdown
   await page.getByRole("textbox", { name: "Usable by" }).click();
@@ -88,7 +100,7 @@ test("attach project afterward", async ({ page }) => {
   await expect(page.getByText("Domain updated")).toBeVisible();
 
   // go back using the breadcrumbs
-  await page.getByRole("button", { name: "domains" }).click();
+  await page.getByRole("link", { name: "domains", exact: true }).click();
 
   // check table row
   await expect(

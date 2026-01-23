@@ -1,4 +1,4 @@
-import { expect, test } from "../playwright/fixtures.ts";
+import { expect, test } from "./fixtures.ts";
 import { createProject, deleteProject, uuidRegex } from "./util.ts";
 
 test("Project lifecycle", async ({ page }) => {
@@ -17,17 +17,13 @@ test("Project lifecycle", async ({ page }) => {
   }
 
   // Back to projects list
-  await page.locator("a").filter({ hasText: "Projects" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
 
   // Check the new project is listed
   await expect(page.getByRole("cell", { name: projectUuid })).toBeVisible();
 
   // click edit button
-  await page
-    .getByRole("row", { name: projectUuid })
-    .getByRole("button")
-    .locator(".tabler-icon.tabler-icon-edit")
-    .click();
+  await page.getByRole("row", { name: projectUuid }).getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Check we are on the edit project page
   {
@@ -49,7 +45,7 @@ test("Project lifecycle", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "renamed project" })).toBeVisible();
 
   // Use breadcrumb to go back to projects list
-  await page.getByRole("button", { name: "projects" }).click();
+  await page.getByRole("link", { name: "projects", exact: true }).click();
 
   // Check the renamed project is listed
   await expect(page.getByRole("cell", { name: "renamed project" })).toBeVisible();
@@ -57,7 +53,7 @@ test("Project lifecycle", async ({ page }) => {
   // Back to edit project page
   await page
     .getByRole("row", { name: "renamed project" })
-    .getByRole("button")
+    .getByRole("link")
     .locator(".tabler-icon.tabler-icon-edit")
     .click();
 
@@ -109,7 +105,7 @@ test("Credentials lifecycle", async ({ page }) => {
   await expect(page.getByLabel("Credentials")).toContainText("This is created by Playwright");
 
   // Go to credential edit page
-  await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
+  await page.getByRole("table").getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Check we are on the credentials edit page
   {
@@ -125,13 +121,13 @@ test("Credentials lifecycle", async ({ page }) => {
   await expect(page.getByText("SMTP credential updated")).toBeVisible({ timeout: 10_000 });
 
   // Use breadcrumb to go back to the credentials list
-  await page.getByRole("button", { name: "credentials" }).click();
+  await page.getByRole("link", { name: "credentials", exact: true }).click();
 
   // Ensure updated description is visible
   await expect(page.getByLabel("Credentials")).toContainText("This is made by Playwright");
 
   // Back to credential edit page
-  await page.getByRole("table").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
+  await page.getByRole("table").getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Delete the credential
   await page.getByRole("button", { name: "Delete" }).click();

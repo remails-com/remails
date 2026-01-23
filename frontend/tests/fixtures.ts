@@ -3,7 +3,7 @@
 import { test as baseTest } from "@playwright/test";
 import fs from "fs";
 import path from "path";
-import { createAccount } from "../tests/util.ts";
+import { createAccount } from "./util.ts";
 
 export * from "@playwright/test";
 export const test = baseTest.extend<object, { workerStorageState: string }>({
