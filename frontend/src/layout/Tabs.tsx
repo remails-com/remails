@@ -16,7 +16,7 @@ export default function Tabs({ tabs, keepMounted }: { tabs: Tab[]; keepMounted?:
   const {
     state: { routerState },
     navigate,
-    getRoute,
+    routeToPath,
   } = useRemails();
 
   const default_route = tabs[0].route;
@@ -38,7 +38,7 @@ export default function Tabs({ tabs, keepMounted }: { tabs: Tab[]; keepMounted?:
             value={t.route}
             leftSection={t.icon}
             key={t.route}
-            {...{ href: getRoute(t.route).fullPath }}
+            {...{ href: routeToPath(t.route) }}
           >
             {t.name}
           </MTabs.Tab>

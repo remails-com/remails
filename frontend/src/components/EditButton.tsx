@@ -5,13 +5,13 @@ import { RouteName } from "../routes.ts";
 import { RouteParams } from "../router.ts";
 
 export default function EditButton({ route, params }: { route: RouteName; params: RouteParams }) {
-  const { navigate, getRoute } = useRemails();
+  const { navigate, routeToPath } = useRemails();
 
   return (
     <Button
       variant="subtle"
       component="a"
-      href={getRoute(route, params).fullPath}
+      href={routeToPath(route, params)}
       onClick={(e) => {
         e.preventDefault();
         navigate(route, params);

@@ -12,7 +12,7 @@ interface LinkProps {
 }
 
 export function Link({ to, params, underline, children, style }: LinkProps) {
-  const { navigate, getRoute } = useRemails();
+  const { navigate, routeToPath } = useRemails();
 
   const onClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey) {
@@ -23,10 +23,8 @@ export function Link({ to, params, underline, children, style }: LinkProps) {
     navigate(to, params);
   };
 
-  const route = getRoute(to ?? "default", params);
-
   return (
-    <Anchor href={route.fullPath} onClick={onClick} underline={underline || "always"} {...style}>
+    <Anchor href={routeToPath(to, params)} onClick={onClick} underline={underline || "always"} {...style}>
       {children}
     </Anchor>
   );

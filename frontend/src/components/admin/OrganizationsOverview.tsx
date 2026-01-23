@@ -18,7 +18,7 @@ export default function OrganizationsOverview() {
 
   const {
     state: { config },
-    getRoute,
+    routeToPath,
   } = useRemails();
   const { navigate } = useRemails();
 
@@ -68,7 +68,7 @@ export default function OrganizationsOverview() {
           size="30"
           variant="subtle"
           component="a"
-          href={getRoute("settings.admin", { org_id: organization.id }).fullPath}
+          href={routeToPath("settings.admin", { org_id: organization.id })}
           onClick={(e) => {
             e.preventDefault();
             navigate("settings.admin", { org_id: organization.id });

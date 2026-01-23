@@ -14,7 +14,7 @@ export const RemailsContext = createContext<{
   // Redirect to the page in the `redirect` query param. Used for navigating to the right page after logging in.
   redirect: () => void;
   match: Router["match"];
-  getRoute: Router["navigate"];
+  routeToPath: (name: RouteName, params?: RouteParams) => string | undefined;
 }>({
   state: {
     user: null,
@@ -50,7 +50,7 @@ export const RemailsContext = createContext<{
   redirect: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
-  getRoute: () => {
+  routeToPath: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
 });
@@ -96,12 +96,21 @@ export function useLoadRemails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const routeToPath = (name: RouteName, params?: RouteParams) => {
+    try {
+      return router.navigate(name, params, false).fullPath;
+    } catch (e) {
+      console.error("could not resolve route:", name, params, e);
+      return undefined;
+    }
+  };
+
   return {
     state,
     dispatch,
     navigate,
     redirect,
     match: router.match.bind(router),
-    getRoute: (name: RouteName, params?: RouteParams) => router.navigate(name, params, false),
+    routeToPath,
   };
 }

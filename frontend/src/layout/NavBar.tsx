@@ -16,14 +16,14 @@ interface NavLinkProps {
 }
 
 function NavLink({ label, route, active, close, leftSection, style }: NavLinkProps) {
-  const { navigate, getRoute } = useRemails();
+  const { navigate, routeToPath } = useRemails();
 
   return (
     <MantineNavLink
       label={label}
       active={active}
       leftSection={leftSection}
-      href={getRoute(route).fullPath}
+      href={routeToPath(route)}
       onClick={(e) => {
         if (e.defaultPrevented || e.ctrlKey || e.metaKey) {
           return;
