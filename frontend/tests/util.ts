@@ -18,7 +18,7 @@ export async function createProject(page: Page): Promise<string> {
 
 export async function deleteProject(page: Page) {
   await page.goto("/");
-  await page.getByRole("row").getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
+  await page.getByRole("row").getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
   await page.getByRole("button", { name: "Delete" }).click();
   await page.getByRole("button", { name: "Confirm" }).click();
 }

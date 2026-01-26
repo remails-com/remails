@@ -1,8 +1,8 @@
 import { ActionDispatch, createContext, useContext, useEffect, useReducer } from "react";
 import { Action, State } from "../types.ts";
 import { useRouter } from "./useRouter.ts";
-import { routes } from "../routes.ts";
-import { Navigate, Router } from "../router.ts";
+import { RouteName, routes } from "../routes.ts";
+import { Navigate, RouteParams, Router } from "../router.ts";
 import { reducer } from "../reducer.ts";
 import apiMiddleware from "../apiMiddleware.ts";
 import { RemailsError } from "../error/error.ts";
@@ -14,6 +14,7 @@ export const RemailsContext = createContext<{
   // Redirect to the page in the `redirect` query param. Used for navigating to the right page after logging in.
   redirect: () => void;
   match: Router["match"];
+  routeToPath: (name: RouteName, params?: RouteParams) => string | undefined;
 }>({
   state: {
     user: null,
@@ -47,6 +48,9 @@ export const RemailsContext = createContext<{
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
   redirect: () => {
+    throw new Error("RemailsContext must be used within RemailsProvider");
+  },
+  routeToPath: () => {
     throw new Error("RemailsContext must be used within RemailsProvider");
   },
 });
@@ -92,11 +96,21 @@ export function useLoadRemails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const routeToPath = (name: RouteName, params?: RouteParams) => {
+    try {
+      return router.navigate(name, params, false).fullPath;
+    } catch (e) {
+      console.error("could not resolve route:", name, params, e);
+      return undefined;
+    }
+  };
+
   return {
     state,
     dispatch,
     navigate,
     redirect,
     match: router.match.bind(router),
+    routeToPath,
   };
 }

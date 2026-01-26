@@ -151,7 +151,7 @@ export class Router {
     return null;
   }
 
-  navigate(name: RouteName, params: RouteParams): FullRouterState {
+  navigate(name: RouteName, params: RouteParams = {}, resetParamCache = true): FullRouterState {
     const route = this.routes.find((route) => route.name === name);
     if (!route) {
       throw new Error(`Route with name ${name} not found`);
@@ -162,7 +162,9 @@ export class Router {
     const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
     const pathParams = { ...this.pathParamCache, ...query };
 
-    this.pathParamCache = {};
+    if (resetParamCache) {
+      this.pathParamCache = {};
+    }
 
     path = path.replace(/{(\w+)}/g, (_match, key) => {
       const value = pathParams[key];

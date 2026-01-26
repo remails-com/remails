@@ -16,6 +16,7 @@ export default function Tabs({ tabs, keepMounted }: { tabs: Tab[]; keepMounted?:
   const {
     state: { routerState },
     navigate,
+    routeToPath,
   } = useRemails();
 
   const default_route = tabs[0].route;
@@ -30,7 +31,15 @@ export default function Tabs({ tabs, keepMounted }: { tabs: Tab[]; keepMounted?:
     <MTabs value={tab_route} onChange={setActiveTab} keepMounted={keepMounted}>
       <MTabs.List mb="md" mx="-lg" px="lg" className={classes.header}>
         {tabs.map((t) => (
-          <MTabs.Tab size="lg" value={t.route} leftSection={t.icon} key={t.route}>
+          <MTabs.Tab
+            component="a"
+            onClick={(e) => e.preventDefault()}
+            size="lg"
+            value={t.route}
+            leftSection={t.icon}
+            key={t.route}
+            {...{ href: routeToPath(t.route) }}
+          >
             {t.name}
           </MTabs.Tab>
         ))}

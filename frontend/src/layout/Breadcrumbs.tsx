@@ -1,4 +1,4 @@
-import { Breadcrumbs as MantineBreadcrumbs, Text, Button, Box } from "@mantine/core";
+import { Breadcrumbs as MantineBreadcrumbs, Text } from "@mantine/core";
 import { useCredentials } from "../hooks/useCredentials.ts";
 import { useDomains } from "../hooks/useDomains.ts";
 import { useEmails } from "../hooks/useEmails.ts";
@@ -7,6 +7,7 @@ import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 import { RouteName } from "../routes.ts";
 import { JSX } from "react";
+import { Link } from "../Link.tsx";
 
 interface SegmentProps {
   children: React.ReactNode;
@@ -15,17 +16,20 @@ interface SegmentProps {
 }
 
 function Segment({ children, last, route }: SegmentProps) {
-  const { navigate } = useRemails();
   const props = { fz: "xs", c: "dark.3", px: "xs" };
 
   if (last) {
-    return <Box {...props}>{children}</Box>;
+    return (
+      <Text span {...props}>
+        {children}
+      </Text>
+    );
   }
 
   return (
-    <Button {...props} td="underline" size="xs" h={20} variant="transparent" onClick={() => navigate(route)}>
+    <Link to={route} style={{ size: "xs", fw: "bold", ...props }}>
       {children}
-    </Button>
+    </Link>
   );
 }
 

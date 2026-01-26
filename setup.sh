@@ -18,5 +18,11 @@ popd
 cargo sqlx database reset -y
 cargo sqlx migrate run
 
-# run  the full application
-cargo run --bin app --features load-fixtures
+# load fixtures
+psql -h localhost -U remails -w remails < src/fixtures/organizations.sql
+psql -h localhost -U remails -w remails < src/fixtures/api_users.sql
+psql -h localhost -U remails -w remails < src/fixtures/projects.sql
+psql -h localhost -U remails -w remails < src/fixtures/runtime_config.sql
+
+# run the application
+cargo run --bin app

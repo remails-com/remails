@@ -1,4 +1,4 @@
-import { test, expect } from "../playwright/fixtures";
+import { test, expect } from "./fixtures.ts";
 import { test as baseTest } from "@playwright/test";
 import { createAccount, uuidRegex } from "./util.ts";
 import { Page } from "@playwright/test";
@@ -150,7 +150,7 @@ test("organization API key", async ({ page }) => {
   await expect(row.getByRole("cell", { name: "Playwright test API key", exact: true })).toBeVisible();
 
   // Open API key details
-  await row.getByRole("button").locator(".tabler-icon.tabler-icon-edit").click();
+  await row.getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
 
   // Check we are put on the API key details page
   {
