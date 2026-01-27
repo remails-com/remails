@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -55,7 +55,7 @@ jobs:
     env:
       SQLX_OFFLINE: true
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download frontend asset folder
         uses: actions/download-artifact@v7
@@ -108,7 +108,7 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download backend binary
         uses: actions/download-artifact@v7
@@ -192,7 +192,7 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -205,7 +205,7 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-llvm-cov & cargo-nextest
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@710817a1645ef40daad5bcde7431ceccf6cc3528 # v2.67.13
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
@@ -242,7 +242,7 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
       SQLX_OFFLINE: true
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
@@ -262,7 +262,7 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
       SQLX_OFFLINE: true
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5
@@ -285,5 +285,5 @@ jobs:
     name: Check dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979
