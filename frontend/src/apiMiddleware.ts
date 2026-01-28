@@ -104,6 +104,10 @@ export default async function apiMiddleware(
       type: "set_domains",
       domains: await get(`/api/organizations/${newOrgId}/domains`),
     });
+    dispatch({
+      type: "set_labels",
+      labels: await get(`/api/organizations/${newOrgId}/emails/labels`),
+    });
   }
 
   if (navState.to.name == "statistics") {
@@ -115,23 +119,23 @@ export default async function apiMiddleware(
       type: "set_credentials",
       credentials: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/smtp_credentials`),
     });
-    dispatch({
-      type: "set_labels",
-      labels: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/labels`),
-    });
   }
 
   let emailFilterChanged = false;
   const emailFilter = new URLSearchParams();
-  for (const param of ["limit", "status", "before", "labels"]) {
+  for (const param of ["limit", "status", "before", "labels", "project"]) {
     const value = navState.to.params[param];
     if (value != navState.from.params[param]) emailFilterChanged = true;
     if (value) emailFilter.append(param, value);
   }
+  if (navState.to.params.proj_id) {
+    // force project filter when path contains a project id (for viewing emails within a project)
+    emailFilter.set("project", navState.to.params.proj_id);
+  }
   if ((projChanged || emailFilterChanged || navState.to.params.force == "reload") && newProjId) {
     dispatch({
       type: "set_emails",
-      emailMetadata: await get(`/api/organizations/${newOrgId}/projects/${newProjId}/emails?${emailFilter.toString()}`),
+      emailMetadata: await get(`/api/organizations/${newOrgId}/emails?${emailFilter.toString()}`),
     });
   }
 
