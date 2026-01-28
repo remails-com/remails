@@ -400,10 +400,7 @@ mod test {
 
         let message_id = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
 
-        let message = message_repo
-            .find_by_id(org_id, project_id, message_id)
-            .await
-            .unwrap();
+        let message = message_repo.find_by_id(org_id, message_id).await.unwrap();
 
         // Making sure we are actually deleting a credential that has a message associated
         assert_eq!(message.smtp_credential_id(), Some(credential_id));
@@ -420,10 +417,7 @@ mod test {
         assert!(not_found.is_none());
 
         // Making sure the message is still there
-        let message = message_repo
-            .find_by_id(org_id, project_id, message_id)
-            .await
-            .unwrap();
+        let message = message_repo.find_by_id(org_id, message_id).await.unwrap();
 
         // And has no credential associated anymore
         assert_eq!(message.smtp_credential_id(), None);

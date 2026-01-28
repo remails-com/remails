@@ -1,5 +1,5 @@
 import { BoxProps, NavLink as MantineNavLink } from "@mantine/core";
-import { IconChartBar, IconGavel, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { IconChartBar, IconGavel, IconMail, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
@@ -86,6 +86,13 @@ export function NavBar({ close }: { close: () => void }) {
         close={close}
         active={routerState.name.startsWith("domains")}
         leftSection={<IconWorldWww size={20} stroke={1.8} />}
+      />
+      <NavLink
+        label="Emails"
+        route="emails"
+        close={close}
+        active={routerState.name.startsWith("emails")}
+        leftSection={<IconMail size={20} stroke={1.8} />}
       />
       <NavLink
         label="Statistics"

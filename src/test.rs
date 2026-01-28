@@ -277,7 +277,7 @@ async fn integration_test(pool: PgPool) {
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
+            "http://localhost:{http_port}/api/organizations/{jorg}/emails"
         ))
         .header("X-Test-Login", &jorg)
         .send()
@@ -291,7 +291,7 @@ async fn integration_test(pool: PgPool) {
     // cannot check someone else's messages
     let status = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
+            "http://localhost:{http_port}/api/organizations/{jorg}/emails"
         ))
         .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
         .send()
@@ -325,7 +325,7 @@ async fn integration_test(pool: PgPool) {
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}/emails"
+            "http://localhost:{http_port}/api/organizations/{jorg}/emails"
         ))
         .header("X-Test-Login", &jorg)
         .send()

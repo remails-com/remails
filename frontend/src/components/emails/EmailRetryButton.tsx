@@ -2,7 +2,6 @@ import { notifications } from "@mantine/notifications";
 import { Email, EmailMetadata } from "../../types.ts";
 import { IconReload } from "@tabler/icons-react";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
-import { useProjects } from "../../hooks/useProjects.ts";
 import { is_in_the_future } from "../../util.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
@@ -18,14 +17,13 @@ export default function EmailRetryButton({
   small?: boolean;
 }) {
   const { currentOrganization } = useOrganizations();
-  const { currentProject } = useProjects();
   const [loading, setLoading] = useState(false);
 
-  if (!currentOrganization || !currentProject) {
+  if (!currentOrganization) {
     return null;
   }
 
-  const email_endpoint = `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${email.id}`;
+  const email_endpoint = `/api/organizations/${currentOrganization.id}/emails/${email.id}`;
 
   async function retry() {
     const res = await fetch(`${email_endpoint}/retry`, {

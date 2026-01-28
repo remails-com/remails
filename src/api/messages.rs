@@ -273,13 +273,13 @@ pub async fn create_message(
 
 /// List all email messages
 ///
-/// By default, the 10 most recently created messages are returned. To retrieve more on a single request, please set
+/// By default, the 10 most recently created messages are returned. To retrieve more on a single request, set
 /// the query parameter `limit` between 1 and 100. Pagination is achieved via the `before` query
 /// parameter, i.e., to get older messages, please set the `before` param to the oldest `created_at`
 /// of the previous request.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/emails",
+    path = "/organizations/{org_id}/emails",
     params(MessageFilter),
     tags = ["Emails"],
     responses(
@@ -289,20 +289,17 @@ pub async fn create_message(
 )]
 pub async fn list_messages(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id)): Path<(OrganizationId, ProjectId)>,
+    Path(org_id): Path<OrganizationId>,
     ValidatedQuery(filter): ValidatedQuery<MessageFilter>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<ApiMessageMetadata>> {
     user.has_org_read_access(&org_id)?;
 
-    let messages = repo
-        .list_message_metadata(org_id, project_id, filter)
-        .await?;
+    let messages = repo.list_message_metadata(org_id, filter).await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
         "listed {} messages",
         messages.len()
     );
@@ -317,7 +314,7 @@ pub async fn list_messages(
 /// was actually truncated or did fit into the 10,000-character limit.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}",
+    path = "/organizations/{org_id}/emails/{message_id}",
     tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully fetched message", body = ApiMessage),
@@ -326,17 +323,16 @@ pub async fn list_messages(
 )]
 pub async fn get_message(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
+    Path((org_id, message_id)): Path<(OrganizationId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<ApiMessage> {
     user.has_org_read_access(&org_id)?;
 
-    let message = repo.find_by_id(org_id, project_id, message_id).await?;
+    let message = repo.find_by_id(org_id, message_id).await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
         message_id = message_id.to_string(),
         "retrieved message",
     );
@@ -347,7 +343,7 @@ pub async fn get_message(
 /// Delete email message
 #[utoipa::path(
     delete,
-    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}",
+    path = "/organizations/{org_id}/emails/{message_id}",
     tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully deleted message", body = MessageId),
@@ -356,17 +352,16 @@ pub async fn get_message(
 )]
 pub async fn remove_message(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
+    Path((org_id, message_id)): Path<(OrganizationId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<MessageId> {
     user.has_org_write_access(&org_id)?;
 
-    let id = repo.remove(org_id, project_id, message_id).await?;
+    let id = repo.remove(org_id, message_id).await?;
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
         message_id = message_id.to_string(),
         "removed message",
     );
@@ -381,7 +376,7 @@ pub async fn remove_message(
 /// who have not previously generated a permanent failure response.
 #[utoipa::path(
     put,
-    path = "/organizations/{org_id}/projects/{project_id}/emails/{message_id}/retry",
+    path = "/organizations/{org_id}/emails/{message_id}/retry",
     tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully initiated retry"),
@@ -391,12 +386,12 @@ pub async fn remove_message(
 pub async fn retry_now(
     State(repo): State<MessageRepository>,
     State(bus_client): State<Arc<BusClient>>,
-    Path((org_id, project_id, message_id)): Path<(OrganizationId, ProjectId, MessageId)>,
+    Path((org_id, message_id)): Path<(OrganizationId, MessageId)>,
     user: Box<dyn Authenticated>,
 ) -> Result<(), AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let status = repo.message_status(org_id, project_id, message_id).await?;
+    let status = repo.message_status(org_id, message_id).await?;
 
     if status == MessageStatus::Delivered {
         warn!(
@@ -421,7 +416,6 @@ pub async fn retry_now(
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
         message_id = message_id.to_string(),
         "requested message retry",
     );
@@ -434,7 +428,7 @@ pub async fn retry_now(
 /// Lists all labels that exist on at least one email message within that project.
 #[utoipa::path(
     get,
-    path = "/organizations/{org_id}/projects/{project_id}/labels",
+    path = "/organizations/{org_id}/emails/labels",
     tags = ["Emails"],
     responses(
         (status = 200, description = "Successfully fetched labels", body = [Label]),
@@ -443,11 +437,11 @@ pub async fn retry_now(
 )]
 pub async fn list_labels(
     State(repo): State<MessageRepository>,
-    Path((org_id, project_id)): Path<(OrganizationId, ProjectId)>,
+    Path(org_id): Path<OrganizationId>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<Vec<Label>> {
     user.has_org_read_access(&org_id)?;
-    let labels = repo.list_labels(org_id, project_id).await?;
+    let labels = repo.list_labels(org_id).await?;
 
     Ok(Json(labels))
 }
@@ -494,20 +488,29 @@ mod tests {
 
         // list messages
         let response = server
+            .get(format!("/api/organizations/{org_1}/emails"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
+        let messages_in_fixture = 8;
+        assert_eq!(messages.len(), messages_in_fixture);
+
+        // filter by project
+        let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
+                "/api/organizations/{org_1}/emails?project={proj_1}"
             ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
-        let messages_in_fixture = 5;
-        assert_eq!(messages.len(), messages_in_fixture);
+        assert_eq!(messages.len(), 5);
 
         // filter by single label
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails?labels=label-1"
+                "/api/organizations/{org_1}/emails?project={proj_1}&labels=label-1"
             ))
             .await
             .unwrap();
@@ -518,7 +521,7 @@ mod tests {
         // filter by multiple labels
         let response = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails?labels=label-1,label-2"
+                "/api/organizations/{org_1}/emails?project={proj_1}&labels=label-1,label-2"
             ))
             .await
             .unwrap();
@@ -526,37 +529,26 @@ mod tests {
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
         assert_eq!(messages.len(), 4);
 
-        // filter without labels
-        let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
-        assert_eq!(messages.len(), 5);
-
         // list labels
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/labels"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/labels"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<Label> = deserialize_body(response.into_body()).await;
         assert_eq!(
             messages.as_slice(),
-            &["label-1".parse().unwrap(), "label-2".parse().unwrap()]
+            &[
+                "label-1".parse().unwrap(),
+                "label-2".parse().unwrap(),
+                "temp".parse().unwrap()
+            ]
         );
 
         // get specific message
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -567,7 +559,7 @@ mod tests {
         // update message to retry asap
         let response = server
             .put(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}/retry"),
+                format!("/api/organizations/{org_1}/emails/{message_1}/retry"),
                 Body::empty(),
             )
             .await
@@ -603,18 +595,14 @@ mod tests {
 
         // remove message
         let response = server
-            .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .delete(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         // check if message is deleted
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -638,13 +626,11 @@ mod tests {
         read_status_code: StatusCode,
         write_status_code: StatusCode,
     ) {
-        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
+        let org_1 = TestProjects::Org1Project1.org_id();
 
         // can't list messages
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails"))
             .await
             .unwrap();
         assert_eq!(response.status(), read_status_code);
@@ -652,9 +638,7 @@ mod tests {
         // can't get specific message
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), read_status_code);
@@ -662,7 +646,7 @@ mod tests {
         // can't update message to retry asap
         let response = server
             .put(
-                format!("/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}/retry"),
+                format!("/api/organizations/{org_1}/emails/{message_1}/retry"),
                 Body::empty(),
             )
             .await
@@ -671,9 +655,7 @@ mod tests {
 
         // can't remove message
         let response = server
-            .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .delete(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
@@ -737,24 +719,20 @@ mod tests {
         )
     ))]
     async fn test_fetch_message_validation(pool: PgPool) {
-        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
+        let org_1 = TestProjects::Org1Project1.org_id();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
         let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
         server.use_api_key(org_1, Role::Maintainer).await;
 
         let too_low_limit = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails?limit=0"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails?limit=0"))
             .await
             .unwrap();
         assert_eq!(too_low_limit.status(), StatusCode::BAD_REQUEST);
         let _: ApiErrorResponse = deserialize_body(too_low_limit.into_body()).await;
 
         let too_high_limit = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails?limit=101"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails?limit=101"))
             .await
             .unwrap();
         assert_eq!(too_high_limit.status(), StatusCode::BAD_REQUEST);
@@ -762,7 +740,7 @@ mod tests {
 
         let invalid_timestamp = server
             .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails?before=invalid_time"
+                "/api/organizations/{org_1}/emails?before=invalid_time"
             ))
             .await
             .unwrap();
@@ -1088,14 +1066,12 @@ mod tests {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
 
-        let (org_1, proj_2) = TestProjects::Org1Project2.get_ids();
+        let org_1 = TestProjects::Org1Project2.org_id();
         let message_id = "120dd3eb-5239-4da0-9503-ed72d3850dcd".parse().unwrap(); // message out of retention period
 
         // message data has not yet been removed
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_2}/emails/{message_id}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_id}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1123,17 +1099,13 @@ mod tests {
 
         // message data has been removed and can no longer be retrieved
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_2}/emails/{message_id}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_id}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_2}/emails"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);

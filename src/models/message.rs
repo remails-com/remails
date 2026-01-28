@@ -100,6 +100,7 @@ pub struct ApiMessage {
 #[derive(Serialize, ToSchema)]
 pub struct ApiMessageMetadata {
     pub id: MessageId,
+    project_id: ProjectId,
     pub status: MessageStatus,
     reason: Option<String>,
     /// Delivery details for each recipient Remails tried to deliver to already.
@@ -275,6 +276,8 @@ pub struct MessageFilter {
     labels: Option<Vec<Label>>,
     #[garde(skip)]
     before: Option<DateTime<Utc>>,
+    #[garde(skip)]
+    pub project: Option<ProjectId>,
 }
 
 fn deserialize_comma_separated_list<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
@@ -303,6 +306,7 @@ impl Default for MessageFilter {
             status: None,
             labels: None,
             before: None,
+            project: None,
         }
     }
 }
@@ -419,6 +423,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
     fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
             id: m.id,
+            project_id: m.project_id,
             status: m.status,
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
@@ -778,7 +783,6 @@ impl MessageRepository {
     pub async fn list_message_metadata(
         &self,
         org_id: OrganizationId,
-        project_id: ProjectId,
         filter: MessageFilter,
     ) -> Result<Vec<ApiMessageMetadata>, Error> {
         sqlx::query_as!(
@@ -807,20 +811,20 @@ impl MessageRepository {
                 label AS "label:Label"
             FROM messages m
             WHERE organization_id = $1
-                AND project_id = $2
-                AND ($4::message_status[] IS NULL OR status = ANY($4))
-                AND ($5::timestamptz IS NULL OR created_at <= $5)
-                AND ($6::text[] IS NULL OR label = ANY($6))
+                AND ($2::uuid IS NULL OR project_id = $2)
+                AND ($3::message_status[] IS NULL OR status = ANY($3))
+                AND ($4::timestamptz IS NULL OR created_at <= $4)
+                AND ($5::text[] IS NULL OR label = ANY($5))
                 AND octet_length(raw_data) > 0 -- don't show deleted messages
             ORDER BY created_at DESC
-            LIMIT $3
+            LIMIT $6
             "#,
             *org_id,
-            *project_id,
-            std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
+            filter.project.map(|id| *id),
             filter.status as Option<Vec<MessageStatus>>,
             filter.before,
             filter.labels as Option<Vec<Label>>,
+            std::cmp::min(filter.limit, 100) + 1, // plus one to indicate there are more entries available
         )
         .fetch_all(&self.pool)
         .await?
@@ -873,7 +877,6 @@ impl MessageRepository {
     pub async fn find_by_id(
         &self,
         org_id: OrganizationId,
-        project_id: ProjectId,
         message_id: MessageId,
     ) -> Result<ApiMessage, Error> {
         sqlx::query_as!(
@@ -891,7 +894,7 @@ impl MessageRepository {
                 m.from_email,
                 m.recipients,
                 -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.
-                substring(m.raw_data FOR $4) as "raw_data!",
+                substring(m.raw_data FOR $3) as "raw_data!",
                 octet_length(m.raw_data) as "raw_size!",
                 m.message_data,
                 m.message_id_header,
@@ -904,12 +907,10 @@ impl MessageRepository {
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
-              AND m.project_id = $3
               AND octet_length(m.raw_data) > 0 -- don't show deleted messages
             "#,
             *message_id,
             *org_id,
-            *project_id,
             API_RAW_TRUNCATE_LENGTH,
         )
             .fetch_one(&self.pool)
@@ -925,7 +926,6 @@ impl MessageRepository {
     pub async fn remove(
         &self,
         org_id: OrganizationId,
-        project_id: ProjectId,
         message_id: MessageId,
     ) -> Result<MessageId, Error> {
         Ok(sqlx::query_scalar!(
@@ -935,14 +935,11 @@ impl MessageRepository {
                 message_data = NULL,
                 recipients = '{}',
                 delivery_details = '{}'
-            WHERE id = $1
-              AND organization_id = $2
-              AND project_id = $3
+            WHERE id = $1 AND organization_id = $2
             RETURNING id
             "#,
             *message_id,
             *org_id,
-            *project_id,
         )
         .fetch_one(&self.pool)
         .await?
@@ -1010,19 +1007,15 @@ impl MessageRepository {
     pub async fn message_status(
         &self,
         org_id: OrganizationId,
-        project_id: ProjectId,
         message_id: MessageId,
     ) -> Result<MessageStatus, Error> {
         Ok(sqlx::query_scalar!(
             r#"
             SELECT m.status AS "status:MessageStatus"
             FROM messages m
-            WHERE m.organization_id = $1
-              AND m.project_id = $2
-              AND m.id = $3
+            WHERE m.organization_id = $1 AND m.id = $2
             "#,
             *org_id,
-            *project_id,
             *message_id,
         )
         .fetch_one(&self.pool)
@@ -1068,23 +1061,16 @@ impl MessageRepository {
         Ok(result.remaining_rate_limit)
     }
 
-    /// Lists all labels within the project. It only shows labels for which at least one message exists
-    pub async fn list_labels(
-        &self,
-        organization_id: OrganizationId,
-        project_id: ProjectId,
-    ) -> Result<Vec<Label>, Error> {
+    /// Lists all labels within the organization. It only shows labels for which at least one message exists
+    pub async fn list_labels(&self, organization_id: OrganizationId) -> Result<Vec<Label>, Error> {
         Ok(sqlx::query_scalar!(
             r#"
             SELECT DISTINCT label AS "label!:Label"
             FROM messages
-            WHERE organization_id = $1
-              AND project_id = $2
-              AND label IS NOT NULL
+            WHERE organization_id = $1 AND label IS NOT NULL
             ORDER BY label
             "#,
             *organization_id,
-            *project_id
         )
         .fetch_all(&self.pool)
         .await?)
@@ -1156,9 +1142,9 @@ mod test {
     #[sqlx::test]
     async fn no_labels_does_not_err(pool: PgPool) {
         let repository = MessageRepository::new(pool.clone());
-        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let org_id = TestProjects::Org1Project1.org_id();
 
-        let labels = repository.list_labels(org_id, project_id).await.unwrap();
+        let labels = repository.list_labels(org_id).await.unwrap();
         assert_eq!(labels.len(), 0);
     }
 
@@ -1207,10 +1193,7 @@ mod test {
         let message_id = repository.create(new_message, 5).await.unwrap();
 
         // get message
-        let mut fetched_message = repository
-            .find_by_id(org_id, project_id, message_id)
-            .await
-            .unwrap();
+        let mut fetched_message = repository.find_by_id(org_id, message_id).await.unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), Some(credential.id()));
         assert_eq!(fetched_message.api_key_id(), None);
         assert_eq!(
@@ -1231,12 +1214,12 @@ mod test {
         let messages = repository
             .list_message_metadata(
                 org_id,
-                project_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
                     labels: None,
                     before: None,
+                    project: None,
                 },
             )
             .await
@@ -1245,21 +1228,18 @@ mod test {
         assert_eq!(messages[0].id, message_id);
 
         // remove message
-        repository
-            .remove(org_id, project_id, message_id)
-            .await
-            .unwrap();
+        repository.remove(org_id, message_id).await.unwrap();
 
         // check that message was removed
         let messages = repository
             .list_message_metadata(
                 org_id,
-                project_id,
                 MessageFilter {
                     limit: 5,
                     status: None,
                     labels: None,
                     before: None,
+                    project: None,
                 },
             )
             .await
@@ -1323,10 +1303,7 @@ mod test {
         assert_eq!(message.label, Some(Label::new("up-date")));
 
         // get message
-        let mut fetched_message = repository
-            .find_by_id(org_id, project_id, message.id)
-            .await
-            .unwrap();
+        let mut fetched_message = repository.find_by_id(org_id, message.id).await.unwrap();
         assert_eq!(fetched_message.smtp_credential_id(), None);
         assert_eq!(fetched_message.api_key_id(), Some(*api_key.id()));
         assert_eq!(
@@ -1357,12 +1334,11 @@ mod test {
         let repository = MessageRepository::new(pool.clone());
 
         let org_id = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let proj_id = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
         let message_just_fits = "525f7d40-cb6d-402b-9078-0275c22808d7".parse().unwrap();
         let message_just_too_log = "c1d2c3d6-1521-4f77-804a-2034d121c9b0".parse().unwrap();
 
         let message = repository
-            .find_by_id(org_id, proj_id, message_just_fits)
+            .find_by_id(org_id, message_just_fits)
             .await
             .unwrap();
         assert!(!message.is_truncated);
@@ -1372,7 +1348,7 @@ mod test {
         );
 
         let message = repository
-            .find_by_id(org_id, proj_id, message_just_too_log)
+            .find_by_id(org_id, message_just_too_log)
             .await
             .unwrap();
         assert!(message.is_truncated);
