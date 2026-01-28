@@ -39,7 +39,9 @@ use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
+use tower_http::{
+    compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer,
+};
 use tracing::{
     Instrument, Level, error, field, info,
     log::{trace, warn},
@@ -380,6 +382,8 @@ impl ApiServer {
             state.config.clone(),
             append_default_headers,
         ));
+
+        router = router.layer(CompressionLayer::new().br(true));
 
         router = router.layer(
             ServiceBuilder::new()
