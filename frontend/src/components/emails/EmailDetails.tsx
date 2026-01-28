@@ -4,12 +4,13 @@ import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
 import { Email, EmailMetadata } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
-import { IconHelp, IconMessage, IconPaperclip } from "@tabler/icons-react";
+import { IconHelp, IconMail, IconPaperclip } from "@tabler/icons-react";
 import EmailRetryButton from "./EmailRetryButton.tsx";
 import EmailDeleteButton from "./EmailDeleteButton.tsx";
 import { Recipients } from "./Recipients.tsx";
 import Header from "../Header.tsx";
 import Label from "./Label.tsx";
+import ProjectLink from "../ProjectLink.tsx";
 
 export function getFullStatusDescription(email: EmailMetadata) {
   if (email.status == "delivered") {
@@ -60,6 +61,7 @@ export default function EmailDetails() {
       ),
     },
     { header: "From", value: fullEmail.from_email },
+    { header: "Project", value: <ProjectLink project_id={fullEmail.project_id} size="sm" /> },
     {
       header: "Recipients",
       info: 'The recipients who will receive this email based on the "RCPT TO" SMTP header',
@@ -125,7 +127,7 @@ export default function EmailDetails() {
       <Header
         name={subject ?? "No subject"}
         entityType="Email"
-        Icon={IconMessage}
+        Icon={IconMail}
         divider
         addendum={currentEmail.label ? <Label label={currentEmail.label} clickable /> : null}
       />

@@ -1,5 +1,5 @@
 import ProjectSettings from "./ProjectSettings.tsx";
-import { IconKey, IconMessage, IconServer, IconSettings } from "@tabler/icons-react";
+import { IconKey, IconMail, IconServer, IconSettings } from "@tabler/icons-react";
 import Tabs from "../../layout/Tabs.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 import Header from "../Header.tsx";
@@ -18,7 +18,7 @@ export default function ProjectDetails() {
           {
             route: "projects.project.emails",
             name: "Emails",
-            icon: <IconMessage size={14} />,
+            icon: <IconMail size={14} />,
             content: <EmailOverview />,
           },
           {

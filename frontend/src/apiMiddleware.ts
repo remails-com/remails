@@ -132,7 +132,7 @@ export default async function apiMiddleware(
     // force project filter when path contains a project id (for viewing emails within a project)
     emailFilter.set("project", navState.to.params.proj_id);
   }
-  if ((projChanged || emailFilterChanged || navState.to.params.force == "reload") && newProjId) {
+  if (projChanged || emailFilterChanged || navState.to.name == "emails" || navState.to.params.force == "reload") {
     dispatch({
       type: "set_emails",
       emailMetadata: await get(`/api/organizations/${newOrgId}/emails?${emailFilter.toString()}`),

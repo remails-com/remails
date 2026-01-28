@@ -2,6 +2,16 @@ import { Route } from "./router.ts";
 
 export const routes = [
   {
+    name: "emails",
+    path: "/{org_id}/emails",
+    children: [
+      {
+        name: "email",
+        path: "/{email_id}",
+      },
+    ],
+  },
+  {
     name: "projects",
     path: "/{org_id}/projects",
     children: [

@@ -53,6 +53,7 @@ export type EmailStatus = "processing" | "held" | "accepted" | "rejected" | "del
 
 export interface EmailMetadata {
   id: string;
+  project_id: string;
   from_email: string;
   created_at: string;
   recipients: string[];

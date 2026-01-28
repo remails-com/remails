@@ -100,6 +100,7 @@ pub struct ApiMessage {
 #[derive(Serialize, ToSchema)]
 pub struct ApiMessageMetadata {
     pub id: MessageId,
+    project_id: ProjectId,
     pub status: MessageStatus,
     reason: Option<String>,
     /// Delivery details for each recipient Remails tried to deliver to already.
@@ -422,6 +423,7 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
     fn try_from(m: PgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
             id: m.id,
+            project_id: m.project_id,
             status: m.status,
             reason: m.reason,
             delivery_details: serde_json::from_value(m.delivery_details)?,
