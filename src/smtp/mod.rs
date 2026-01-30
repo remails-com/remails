@@ -151,10 +151,10 @@ mod test {
         server_handle.await.unwrap();
 
         // message should now be received and stored in the database
-        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let org_id = TestProjects::Org1Project1.org_id();
         let messages = MessageRepository::new(pool);
         let received_messages = messages
-            .list_message_metadata(org_id, project_id, Default::default())
+            .list_message_metadata(org_id, Default::default())
             .await
             .unwrap();
         assert_eq!(received_messages.len(), 1);
@@ -211,10 +211,10 @@ mod test {
         server_handle.await.unwrap();
 
         // message should now be received and stored in the database
-        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let org_id = TestProjects::Org1Project1.org_id();
         let messages = MessageRepository::new(pool);
         let received_messages = messages
-            .list_message_metadata(org_id, project_id, Default::default())
+            .list_message_metadata(org_id, Default::default())
             .await
             .unwrap();
         assert_eq!(received_messages.len(), 1);
@@ -235,7 +235,7 @@ mod test {
 
         // raw data should have the missing headers added
         let message = messages
-            .find_by_id(org_id, project_id, received_messages[0].id)
+            .find_by_id(org_id, received_messages[0].id)
             .await
             .unwrap();
         assert!(message.truncated_raw_data.contains("Date: "));

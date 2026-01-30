@@ -3,7 +3,6 @@ import { IconTrash } from "@tabler/icons-react";
 import { EmailMetadata } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
-import { useProjects } from "../../hooks/useProjects.ts";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { errorNotification } from "../../notify.tsx";
@@ -11,20 +10,16 @@ import { MaintainerActionIcon, MaintainerButton } from "../RoleButtons.tsx";
 
 export default function EmailDeleteButton({ email, small }: { email: EmailMetadata; small?: boolean }) {
   const { currentOrganization } = useOrganizations();
-  const { currentProject } = useProjects();
   const { navigate, dispatch } = useRemails();
 
-  if (!currentOrganization || !currentProject) {
+  if (!currentOrganization) {
     return null;
   }
 
   const deleteEmail = async () => {
-    const res = await fetch(
-      `/api/organizations/${currentOrganization.id}/projects/${currentProject.id}/emails/${email.id}`,
-      {
-        method: "DELETE",
-      }
-    );
+    const res = await fetch(`/api/organizations/${currentOrganization.id}/emails/${email.id}`, {
+      method: "DELETE",
+    });
     if (res.status === 200) {
       notifications.show({
         title: "Email deleted",

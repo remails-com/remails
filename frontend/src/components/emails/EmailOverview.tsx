@@ -36,6 +36,8 @@ import { Recipients } from "./Recipients.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import Label from "./Label.tsx";
 import { EmailStatus } from "../../types.ts";
+import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
+import ProjectLink from "../ProjectLink.tsx";
 
 function statusIcons(status: EmailStatus) {
   if (status == "processing" || status == "accepted") {
@@ -127,6 +129,11 @@ export function EmailOverview() {
         <Text>
           Status: <span style={{ fontStyle: "italic" }}>{getFullStatusDescription(email)}</span>
         </Text>
+        {routerState.name == "emails" && (
+          <Group gap="0.4em">
+            Project: <ProjectLink project_id={email.project_id} />
+          </Group>
+        )}
         <Group justify="space-between" align="end">
           <Text fz="sm" c="dimmed">
             Message ID: {<Code>{email.message_id_header}</Code>}
@@ -138,7 +145,11 @@ export function EmailOverview() {
               leftSection={<IconEye />}
               variant="light"
               size="xs"
-              onClick={() => navigate("projects.project.emails.email", { email_id: email.id })}
+              onClick={() =>
+                navigate(routerState.name == "emails" ? "emails.email" : "projects.project.emails.email", {
+                  email_id: email.id,
+                })
+              }
             >
               View email
             </Button>
@@ -171,10 +182,21 @@ export function EmailOverview() {
 
   return (
     <>
-      <InfoAlert stateName="messages">
-        This page shows a list of all emails sent in this project. Use it to check delivery status, inspect metadata,
-        and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
-      </InfoAlert>
+      {routerState.name == "emails" && <OrganizationHeader />}
+
+      {routerState.name == "emails" ? (
+        <InfoAlert stateName="messages">
+          This page shows a list of all emails sent in this organization. Use it to check delivery status, inspect
+          metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
+          message.
+        </InfoAlert>
+      ) : (
+        <InfoAlert stateName="messages">
+          This page shows a list of all emails sent in this project. Use it to check delivery status, inspect metadata,
+          and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
+        </InfoAlert>
+      )}
+
       <Group justify="space-between" align="flex-end">
         <Group>
           <MultiSelect

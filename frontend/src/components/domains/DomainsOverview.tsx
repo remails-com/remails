@@ -1,8 +1,8 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Group, Pagination, Stack, Table, Text } from "@mantine/core";
+import { Flex, Pagination, Stack, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
-import { IconPlus, IconServer } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { NewDomain } from "./NewDomain.tsx";
 import { Link } from "../../Link.tsx";
@@ -12,18 +12,16 @@ import VerificationBadge from "./VerificationBadge.tsx";
 import EditButton from "../EditButton.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
-import { useProjectWithId } from "../../hooks/useProjects.ts";
 import { Domain } from "../../types.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useState } from "react";
 import SearchInput from "../SearchInput.tsx";
+import ProjectLink from "../ProjectLink.tsx";
 
 const PER_PAGE = 20;
 const SHOW_SEARCH = 10;
 
 function DomainRow({ domain }: { domain: Domain }) {
-  const project_name = useProjectWithId(domain.project_id)?.name;
-
   return (
     <Table.Tr>
       <Table.Td>
@@ -38,11 +36,7 @@ function DomainRow({ domain }: { domain: Domain }) {
       </Table.Td>
       <Table.Td>
         {domain.project_id ? (
-          <Link to={"projects.project"} params={{ proj_id: domain.project_id }}>
-            <Group gap="0.4em">
-              <IconServer /> {project_name ?? domain.project_id}
-            </Group>
-          </Link>
+          <ProjectLink project_id={domain.project_id} />
         ) : (
           <Text fs="italic" c="dimmed">
             any project

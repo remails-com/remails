@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts,\n                label AS \"label:Label\"\n            FROM messages m\n            WHERE organization_id = $1\n                AND project_id = $2\n                AND ($4::message_status[] IS NULL OR status = ANY($4))\n                AND ($5::timestamptz IS NULL OR created_at <= $5)\n                AND ($6::text[] IS NULL OR label = ANY($6))\n                AND octet_length(raw_data) > 0 -- don't show deleted messages\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $3) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND octet_length(m.raw_data) > 0 -- don't show deleted messages\n            ",
   "describe": {
     "columns": [
       {
@@ -75,13 +75,13 @@
       },
       {
         "ordinal": 11,
-        "name": "message_data",
-        "type_info": "Jsonb"
+        "name": "raw_size!",
+        "type_info": "Int4"
       },
       {
         "ordinal": 12,
-        "name": "raw_size!",
-        "type_info": "Int4"
+        "name": "message_data",
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 13,
@@ -123,32 +123,7 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Int8",
-        {
-          "Custom": {
-            "name": "message_status[]",
-            "kind": {
-              "Array": {
-                "Custom": {
-                  "name": "message_status",
-                  "kind": {
-                    "Enum": [
-                      "processing",
-                      "held",
-                      "accepted",
-                      "rejected",
-                      "delivered",
-                      "reattempt",
-                      "failed"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "Timestamptz",
-        "TextArray"
+        "Int4"
       ]
     },
     "nullable": [
@@ -164,7 +139,7 @@
       false,
       null,
       null,
-      null,
+      true,
       false,
       false,
       false,
@@ -174,5 +149,5 @@
       true
     ]
   },
-  "hash": "627c5920d7e5416c50f4ec71a8ae6ec034612dca650e047d359d4ec7d1a9246c"
+  "hash": "61f1a536b2f384a880a1a80183eb495fd812a2d61331310c8a7f12fc7e1674d3"
 }

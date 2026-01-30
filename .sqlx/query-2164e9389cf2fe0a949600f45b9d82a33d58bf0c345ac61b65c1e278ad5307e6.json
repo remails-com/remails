@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT label AS \"label!:Label\"\n            FROM messages\n            WHERE organization_id = $1 AND label IS NOT NULL\n            ORDER BY label\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label!:Label",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2164e9389cf2fe0a949600f45b9d82a33d58bf0c345ac61b65c1e278ad5307e6"
+}

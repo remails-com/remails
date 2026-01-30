@@ -488,7 +488,7 @@ mod test {
     async fn domain_verification(pool: PgPool) {
         let domains = DomainRepository::new(pool, DnsResolver::mock("localhost", 1025));
         let domain = domains
-            .get_domain_by_id(
+            .get(
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
             )

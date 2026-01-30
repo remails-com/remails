@@ -21,8 +21,11 @@ import ApiKeyDetails from "./components/apiKeys/ApiKeyDetails.tsx";
 import DomainDetails from "./components/domains/DomainDetails.tsx";
 import GlobalAdmin from "./components/admin/GlobalAdmin.tsx";
 import PasswordReset from "./PasswordReset.tsx";
+import { EmailOverview } from "./components/emails/EmailOverview.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
+  emails: <EmailOverview />,
+  "emails.email": <EmailDetails />,
   projects: <ProjectsOverview />,
   "projects.project": <ProjectDetails />,
   "projects.project.emails": <ProjectDetails />,

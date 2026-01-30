@@ -191,11 +191,11 @@ mod test {
         let message_out_of_attempts = "458ed4ab-e0e0-4a18-8462-d98d038ad5ed".parse().unwrap();
         let message_on_timeout = "2b7ca359-18da-4d90-90c5-ed43f7944585".parse().unwrap();
 
-        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let org_id = TestProjects::Org1Project1.org_id();
 
         let get_message_status = async |id: MessageId| {
             message_repo
-                .find_by_id(org_id, project_id, id)
+                .find_by_id(org_id, id)
                 .await
                 .unwrap()
                 .status()

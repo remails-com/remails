@@ -515,35 +515,6 @@ impl DomainRepository {
         .try_into()
     }
 
-    pub async fn get_domain_by_id(
-        &self,
-        org_id: OrganizationId,
-        domain_id: DomainId,
-    ) -> Result<Domain, Error> {
-        sqlx::query_as!(
-            PgDomain,
-            r#"
-            SELECT d.id,
-                   d.domain,
-                   d.organization_id,
-                   d.project_id,
-                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
-                   d.dkim_pkcs8_der,
-                   d.verification_status,
-                   d.created_at,
-                   d.updated_at
-            FROM domains d
-                LEFT JOIN projects p ON d.project_id = p.id
-            WHERE d.id = $2 AND (d.organization_id = $1 OR p.organization_id = $1)
-            "#,
-            *org_id,
-            *domain_id
-        )
-        .fetch_one(&self.pool)
-        .await?
-        .try_into()
-    }
-
     pub async fn list(&self, org_id: OrganizationId) -> Result<Vec<Domain>, Error> {
         sqlx::query_as!(
             PgDomain,

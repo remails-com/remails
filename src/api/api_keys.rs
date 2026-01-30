@@ -418,21 +418,17 @@ mod tests {
 
         // list messages
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
-        assert_eq!(messages.len(), 5);
+        assert_eq!(messages.len(), 8);
 
         // get a specific message
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -441,18 +437,14 @@ mod tests {
 
         // delete a message
         let response = server
-            .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .delete(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         // check that is was removed
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -611,9 +603,7 @@ mod tests {
         // Read-only API keys should not be able to delete messages
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634";
         let response = server
-            .delete(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .delete(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -627,18 +617,14 @@ mod tests {
 
         // Read-only API keys are able to list messages
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         // Read-only API keys are able to view messages
         let response = server
-            .get(format!(
-                "/api/organizations/{org_1}/projects/{proj_1}/emails/{message_1}"
-            ))
+            .get(format!("/api/organizations/{org_1}/emails/{message_1}"))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
