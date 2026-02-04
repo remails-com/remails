@@ -1,31 +1,9 @@
-import {
-  Accordion,
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Code,
-  Group,
-  MultiSelect,
-  NativeSelect,
-  Text,
-  ThemeIcon,
-  Tooltip,
-} from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, MultiSelect, NativeSelect, Text } from "@mantine/core";
 import { useEmails } from "../../hooks/useEmails.ts";
 import { Loader } from "../../Loader.tsx";
 import { formatDateTime } from "../../util.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconCheck,
-  IconClock,
-  IconEye,
-  IconInfoCircle,
-  IconRefresh,
-  IconX,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
 import { getFullStatusDescription } from "./EmailDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
@@ -38,6 +16,7 @@ import Label from "./Label.tsx";
 import { EmailStatus } from "../../types.ts";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import ProjectLink from "../ProjectLink.tsx";
+import InfoTooltip from "../InfoTooltip.tsx";
 
 function statusIcons(status: EmailStatus) {
   if (status == "processing" || status == "accepted") {
@@ -203,11 +182,10 @@ export function EmailOverview() {
             label={
               <Group gap={4} align="center">
                 Label
-                <Tooltip label="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API.">
-                  <ThemeIcon variant="transparent" c="dimmed" size="xs">
-                    <IconInfoCircle />
-                  </ThemeIcon>
-                </Tooltip>
+                <InfoTooltip
+                  size="xs"
+                  text="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API."
+                />
               </Group>
             }
             placeholder="Pick labels"
