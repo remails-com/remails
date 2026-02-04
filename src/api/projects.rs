@@ -65,11 +65,19 @@ pub async fn list_projects(
 )]
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
+    State(org_repo): State<OrganizationRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     user: Box<dyn Authenticated>,
     Json(update): Json<NewProject>,
 ) -> ApiResult<Project> {
     user.has_org_write_access(&org_id)?;
+
+    let max_retention = org_repo.max_retention_period(org_id).await?;
+    if update.retention_period_days < 1 || update.retention_period_days > max_retention {
+        return Err(AppError::BadRequest(format!(
+            "Retention period must be between 1 and {max_retention}."
+        )));
+    }
 
     let project = repo.update(org_id, proj_id, update).await?;
 
@@ -107,6 +115,13 @@ pub async fn create_project(
         return Err(AppError::Conflict(
             "Organization is not allowed to create more projects, upgrade your subscription to increase the limit.".to_owned(),
         ));
+    }
+
+    let max_retention = org_repo.max_retention_period(org_id).await?;
+    if new.retention_period_days < 1 || new.retention_period_days > max_retention {
+        return Err(AppError::BadRequest(format!(
+            "Retention period must be between 1 and {max_retention}."
+        )));
     }
 
     let project = repo.create(new, org_id).await?;
@@ -183,6 +198,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -190,6 +206,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Test Project");
+        assert_eq!(project.retention_period_days, 1);
 
         // list projects
         let response = server
@@ -207,6 +224,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/projects/{}", project.id()),
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -214,6 +232,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Updated Project");
+        assert_eq!(project.retention_period_days, 1);
 
         // list projects
         let response = server
@@ -268,6 +287,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -280,6 +300,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/projects/{proj_1}"),
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -294,34 +315,35 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
+    async fn set_subscription(pool: &PgPool, org_id: OrganizationId, sub: SubscriptionStatus) {
+        sqlx::query!(
+            r#"
+            UPDATE organizations
+            SET current_subscription = $2
+            WHERE id = $1
+            "#,
+            *org_id,
+            serde_json::to_value(&sub).unwrap()
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_project_creation_limit(pool: PgPool) {
         let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let org_1: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
-        let set_subscription = async |sub: SubscriptionStatus| {
-            sqlx::query!(
-                r#"
-                UPDATE organizations
-                SET current_subscription = $2
-                WHERE id = $1
-                "#,
-                *org_1,
-                serde_json::to_value(&sub).unwrap()
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-        };
-
         // cannot create a project without subscription
-        set_subscription(SubscriptionStatus::None).await;
+        set_subscription(&pool, org_1, SubscriptionStatus::None).await;
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -329,16 +351,18 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // cannot create a project without subscription
-        set_subscription(SubscriptionStatus::Active(mock_subscription(
-            ProductIdentifier::NotSubscribed,
-            None,
-        )))
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::NotSubscribed, None)),
+        )
         .await;
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -346,16 +370,21 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // cannot create a project with an expired subscription
-        set_subscription(SubscriptionStatus::Expired(mock_subscription(
-            ProductIdentifier::RmlsLargeMonthly,
-            Utc::now().date_naive(),
-        )))
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Expired(mock_subscription(
+                ProductIdentifier::RmlsLargeMonthly,
+                Utc::now().date_naive(),
+            )),
+        )
         .await;
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -363,16 +392,18 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
 
         // can create 1 project with a free subscription
-        set_subscription(SubscriptionStatus::Active(mock_subscription(
-            ProductIdentifier::RmlsFree,
-            None,
-        )))
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::RmlsFree, None)),
+        )
         .await;
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -385,6 +416,7 @@ mod tests {
                 format!("/api/organizations/{org_1}/projects"),
                 serialize_body(&NewProject {
                     name: "Test Project 2".to_string(),
+                    retention_period_days: 1,
                 }),
             )
             .await
@@ -405,17 +437,134 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            set_subscription(SubscriptionStatus::Active(mock_subscription(product, None))).await;
+            set_subscription(
+                &pool,
+                org_1,
+                SubscriptionStatus::Active(mock_subscription(product, None)),
+            )
+            .await;
             let response = server
                 .post(
                     format!("/api/organizations/{org_1}/projects"),
                     serialize_body(&NewProject {
                         name: format!("Test Project {}", i + 2),
+                        retention_period_days: 3, // all paid subscriptions allow at least 3 day retention
                     }),
                 )
                 .await
                 .unwrap();
             assert_eq!(response.status(), StatusCode::CREATED);
         }
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_project_retention_limit(pool: PgPool) {
+        let user_a = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
+        let server = TestServer::new(pool.clone(), Some(user_a)).await;
+
+        // cannot create a project with a longer retention period with a free subscription
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::RmlsFree, None)),
+        )
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 1".to_string(),
+                    retention_period_days: 3,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // tiny subscription cannot use longest retention period
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::RmlsTinyMonthly, None)),
+        )
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 1".to_string(),
+                    retention_period_days: 30,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // large subscription can use longest retention period
+        set_subscription(
+            &pool,
+            org_1,
+            SubscriptionStatus::Active(mock_subscription(
+                ProductIdentifier::RmlsLargeMonthly,
+                None,
+            )),
+        )
+        .await;
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 1".to_string(),
+                    retention_period_days: 30,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let proj: Project = deserialize_body(response.into_body()).await;
+        assert_eq!(proj.retention_period_days, 30);
+        let proj_id = proj.id();
+
+        // large subscription can't create project with more than 30 day retention
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects"),
+                serialize_body(&NewProject {
+                    name: "Test Project 1".to_string(),
+                    retention_period_days: 31,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // large subscription can't update project to more than 30 day retention
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_id}"),
+                serialize_body(&NewProject {
+                    name: "Updated Project".to_string(),
+                    retention_period_days: 31,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // large subscription can update project to lower retention
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_id}"),
+                serialize_body(&NewProject {
+                    name: "Updated Project".to_string(),
+                    retention_period_days: 7,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let proj: Project = deserialize_body(response.into_body()).await;
+        assert_eq!(proj.retention_period_days, 7);
     }
 }

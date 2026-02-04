@@ -8,7 +8,15 @@ interface InfoTooltipProps {
 
 export default function InfoTooltip({ text, size }: InfoTooltipProps) {
   return (
-    <Tooltip label={text}>
+    <Tooltip
+      label={text}
+      styles={{
+        tooltip: {
+          maxWidth: "40em",
+          whiteSpace: "normal",
+        },
+      }}
+    >
       <ThemeIcon variant="transparent" c="dimmed" size={size ?? "sm"}>
         <IconInfoCircle />
       </ThemeIcon>

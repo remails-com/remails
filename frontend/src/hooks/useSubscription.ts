@@ -70,8 +70,12 @@ export function useSubscription() {
     navigate(routerState.name, { force: "reload-orgs" });
   };
 
+  const currentSubscription = currentOrganization?.current_subscription;
+  const currentProduct = currentSubscription?.status == "active" ? currentSubscription.product : null;
+
   return {
-    subscription: currentOrganization?.current_subscription,
+    currentSubscription,
+    currentProduct,
     navigateToSales,
     reloadSubscription,
     navigateToCustomerPortal,

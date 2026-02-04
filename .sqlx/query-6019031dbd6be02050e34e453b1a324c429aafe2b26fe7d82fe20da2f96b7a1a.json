@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE projects \n            SET name = $3 \n            WHERE id = $2\n              AND organization_id = $1\n            RETURNING *\n            ",
+  "query": "\n            UPDATE projects \n            SET name = $3,\n                retention_period_days = $4\n            WHERE id = $2\n              AND organization_id = $1\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -38,7 +38,8 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Varchar"
+        "Varchar",
+        "Int4"
       ]
     },
     "nullable": [
@@ -50,5 +51,5 @@
       false
     ]
   },
-  "hash": "d1a0a2eac92e8b211cbbefdd214c2142b6ebdf5171fbaab6b66185475fb1703c"
+  "hash": "6019031dbd6be02050e34e453b1a324c429aafe2b26fe7d82fe20da2f96b7a1a"
 }

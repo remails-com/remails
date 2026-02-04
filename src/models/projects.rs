@@ -37,9 +37,9 @@ pub struct Project {
     id: ProjectId,
     organization_id: OrganizationId,
     pub name: String,
+    pub retention_period_days: i32,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    retention_period_days: i32,
 }
 
 impl Project {
@@ -52,6 +52,7 @@ impl Project {
 #[cfg_attr(test, derive(Serialize))]
 pub struct NewProject {
     pub name: String,
+    pub retention_period_days: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -72,12 +73,13 @@ impl ProjectRepository {
         Ok(sqlx::query_as!(
             Project,
             r#"
-            INSERT INTO projects (id, organization_id, name)
-            VALUES (gen_random_uuid(), $1, $2)
+            INSERT INTO projects (id, organization_id, name, retention_period_days)
+            VALUES (gen_random_uuid(), $1, $2, $3)
             RETURNING *
             "#,
             *organization_id,
             new.name.trim(),
+            new.retention_period_days,
         )
         .fetch_one(&self.pool)
         .await?)
@@ -101,11 +103,19 @@ impl ProjectRepository {
         project_id: ProjectId,
         update: NewProject,
     ) -> Result<Project, Error> {
+        if update.retention_period_days < 1 || update.retention_period_days > 30 {
+            return Err(Error::Internal(format!(
+                "Invalid retention period ({})",
+                update.retention_period_days
+            )));
+        }
+
         Ok(sqlx::query_as!(
             Project,
             r#"
             UPDATE projects 
-            SET name = $3 
+            SET name = $3,
+                retention_period_days = $4
             WHERE id = $2
               AND organization_id = $1
             RETURNING *
@@ -113,6 +123,7 @@ impl ProjectRepository {
             *organization_id,
             *project_id,
             update.name.trim(),
+            update.retention_period_days,
         )
         .fetch_one(&self.pool)
         .await?)

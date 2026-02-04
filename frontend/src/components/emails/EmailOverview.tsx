@@ -163,18 +163,12 @@ export function EmailOverview() {
     <>
       {routerState.name == "emails" && <OrganizationHeader />}
 
-      {routerState.name == "emails" ? (
-        <InfoAlert stateName="messages">
-          This page shows a list of all emails sent in this organization. Use it to check delivery status, inspect
-          metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
-          message.
-        </InfoAlert>
-      ) : (
-        <InfoAlert stateName="messages">
-          This page shows a list of all emails sent in this project. Use it to check delivery status, inspect metadata,
-          and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
-        </InfoAlert>
-      )}
+      <InfoAlert stateName="messages">
+        This page shows a list of all emails sent in this {routerState.name == "emails" ? "organization" : "project"}.
+        Use it to check delivery status, inspect metadata, and troubleshoot issues. You’ll see timestamps, recipient
+        addresses, and SMTP-level details for each message. Messages are automatically deleted after the rentention
+        period set in the project settings.
+      </InfoAlert>
 
       <Group justify="space-between" align="flex-end">
         <Group>
