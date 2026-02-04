@@ -19,7 +19,7 @@ import UpdateRole from "./UpdateRole";
 export default function Members() {
   const { currentOrganization } = useOrganizations();
   const { isAdmin } = useOrgRole();
-  const { subscription } = useSubscription();
+  const { currentSubscription } = useSubscription();
   const { invites, setInvites } = useInvites();
   const { members, setMembers } = useMembers();
   const user = useSelector((state) => state.user);
@@ -27,7 +27,7 @@ export default function Members() {
 
   const [opened, { open, close }] = useDisclosure(false);
 
-  if (!currentOrganization || !subscription) {
+  if (!currentOrganization || !currentSubscription) {
     return null;
   }
 
@@ -217,7 +217,7 @@ export default function Members() {
       <Table.Td>
         <Tooltip
           label={"As soon as you choose a subscription, you'll become admin"}
-          disabled={subscription.status !== "none"}
+          disabled={currentSubscription.status !== "none"}
           events={{ hover: true, focus: false, touch: true }}
         >
           <Text size="sm">

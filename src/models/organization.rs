@@ -336,6 +336,38 @@ impl OrganizationRepository {
         Ok(project_limit.is_none_or(|limit| limit > row.project_count))
     }
 
+    pub async fn max_retention_period(&self, id: OrganizationId) -> Result<i32, Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT current_subscription
+            FROM organizations
+            WHERE id = $1
+            "#,
+            *id,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let subscription: SubscriptionStatus = serde_json::from_value(row.current_subscription)?;
+        Ok(match subscription {
+            // Values should match `MAX_RETENTION` in `frontend/src/components/projects/ProjectSettings.tsx`
+            SubscriptionStatus::Active(sub) => match sub.product_id() {
+                ProductIdentifier::NotSubscribed => 0,
+                ProductIdentifier::RmlsFree => 1,
+                ProductIdentifier::RmlsTinyMonthly => 3,
+                ProductIdentifier::RmlsSmallMonthly => 7,
+                ProductIdentifier::RmlsMediumMonthly => 14,
+                ProductIdentifier::RmlsLargeMonthly => 30,
+                ProductIdentifier::RmlsTinyYearly => 3,
+                ProductIdentifier::RmlsSmallYearly => 7,
+                ProductIdentifier::RmlsMediumYearly => 14,
+                ProductIdentifier::RmlsLargeYearly => 30,
+            },
+            SubscriptionStatus::Expired(_) => 0,
+            SubscriptionStatus::None => 0,
+        })
+    }
+
     pub async fn remove(&self, id: OrganizationId) -> Result<OrganizationId, Error> {
         Ok(sqlx::query_scalar!(
             r#"

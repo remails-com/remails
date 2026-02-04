@@ -5,10 +5,10 @@ import { IconReload } from "@tabler/icons-react";
 import { useOrganizations } from "../hooks/useOrganizations.ts";
 
 export default function SetupSubscription() {
-  const { subscription, reloadSubscription, navigateToSales } = useSubscription();
+  const { currentSubscription, reloadSubscription, navigateToSales } = useSubscription();
   const { currentOrganization } = useOrganizations();
 
-  if (!currentOrganization || !subscription) {
+  if (!currentOrganization || !currentSubscription) {
     return null;
   }
 
