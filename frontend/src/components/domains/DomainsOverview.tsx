@@ -70,7 +70,9 @@ export default function DomainsOverview() {
   }
 
   const filteredDomains =
-    searchQuery.length == 0 ? domains : domains.filter((domain) => domain.domain.includes(searchQuery));
+    searchQuery.length == 0
+      ? domains
+      : domains.filter((domain) => domain.domain.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const totalPages = Math.ceil(filteredDomains.length / PER_PAGE);
   const activePage = Math.min(Math.max(parseInt(routerState.params.p) || 1, 1), totalPages);

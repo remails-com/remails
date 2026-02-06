@@ -32,7 +32,9 @@ export default function ProjectsOverview() {
   }
 
   const filteredProjects =
-    searchQuery.length == 0 ? projects : projects.filter((project) => project.name.includes(searchQuery));
+    searchQuery.length == 0
+      ? projects
+      : projects.filter((project) => project.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const totalPages = Math.ceil(filteredProjects.length / PER_PAGE);
   const activePage = Math.min(Math.max(parseInt(routerState.params.p) || 1, 1), totalPages);
