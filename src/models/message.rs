@@ -12,7 +12,7 @@ use email_address::EmailAddress;
 use garde::Validate;
 use mail_builder::MessageBuilder;
 use mail_parser::{HeaderName, MessageParser, MimeHeaders};
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::postgres::types::PgInterval;
 use std::{collections::HashMap, mem, str::FromStr};
