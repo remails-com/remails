@@ -6,7 +6,7 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     use futures::StreamExt;
-    use rand::Rng;
+    use rand::RngExt;
     use tokio::sync::broadcast;
     use uuid::Uuid;
 

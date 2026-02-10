@@ -51,7 +51,7 @@ impl Bus {
     pub async fn spawn_random_port() -> u16 {
         let mut rng = rand::rng();
 
-        let bus_port = rand::Rng::random_range(&mut rng, 10_000..30_000);
+        let bus_port = rand::RngExt::random_range(&mut rng, 10_000..30_000);
         let bus_socket = SocketAddrV4::new(std::net::Ipv4Addr::new(127, 0, 0, 1), bus_port);
 
         let tx = broadcast::Sender::<String>::new(CAPACITY);

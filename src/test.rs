@@ -12,7 +12,7 @@ use crate::{
 use http::{HeaderMap, StatusCode, header, header::CONTENT_TYPE};
 use mail_send::{SmtpClientBuilder, mail_builder::MessageBuilder};
 use mailcrab::TestMailServerHandle;
-use rand::Rng;
+use rand::RngExt;
 use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{

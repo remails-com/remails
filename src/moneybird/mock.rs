@@ -8,7 +8,7 @@ use crate::moneybird::{
 };
 use async_trait::async_trait;
 use chrono::{Days, NaiveDate, Utc};
-use rand::Rng;
+use rand::RngExt;
 use url::Url;
 
 pub fn mock_subscription<T>(product: ProductIdentifier, end_date: T) -> Subscription<T> {

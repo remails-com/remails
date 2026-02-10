@@ -12,7 +12,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate, Utc};
 #[cfg(not(test))]
-use rand::Rng;
+use rand::RngExt;
 use sqlx::PgPool;
 #[cfg(not(test))]
 use std::time::Duration;
