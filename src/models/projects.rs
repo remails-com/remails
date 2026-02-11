@@ -70,6 +70,13 @@ impl ProjectRepository {
         new: NewProject,
         organization_id: OrganizationId,
     ) -> Result<Project, Error> {
+        if new.retention_period_days < 1 || new.retention_period_days > 30 {
+            return Err(Error::Internal(format!(
+                "Invalid retention period ({})",
+                new.retention_period_days
+            )));
+        }
+
         Ok(sqlx::query_as!(
             Project,
             r#"
@@ -143,5 +150,102 @@ impl ProjectRepository {
         .fetch_one(&self.pool)
         .await?
         .into())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::test::TestProjects;
+
+    use super::*;
+    use sqlx::PgPool;
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations")))]
+    async fn project_lifecycle(db: PgPool) {
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let repo = ProjectRepository::new(db);
+
+        // no projects
+        assert_eq!(repo.list(org_1).await.unwrap().len(), 0);
+
+        // create project
+        let project = repo
+            .create(
+                NewProject {
+                    name: "New Project".to_owned(),
+                    retention_period_days: 1,
+                },
+                org_1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(project.name, "New Project");
+        assert_eq!(project.retention_period_days, 1);
+        assert_eq!(project.organization_id, org_1);
+
+        // list projects
+        let projects = repo.list(org_1).await.unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].id(), project.id());
+
+        // update project
+        let project = repo
+            .update(
+                org_1,
+                project.id(),
+                NewProject {
+                    name: "Updated Project".to_owned(),
+                    retention_period_days: 3,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(project.name, "Updated Project");
+        assert_eq!(project.retention_period_days, 3);
+        assert_eq!(project.organization_id, org_1);
+        assert_eq!(projects[0].id(), project.id());
+
+        // remove project
+        assert_eq!(
+            repo.remove(project.id(), org_1).await.unwrap(),
+            project.id()
+        );
+
+        // no projects
+        assert_eq!(repo.list(org_1).await.unwrap().len(), 0);
+    }
+
+    /// Test that retention period is limitted to a reasonable amount
+    ///
+    /// Note that this does not enforce the subscription-based retention limits,
+    /// these are enforced within the API layer
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations")))]
+    async fn retention_period_limit(db: PgPool) {
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let repo = ProjectRepository::new(db);
+
+        let mut n = 0;
+        let mut new_project = |retention_period_days| {
+            n += 1;
+            NewProject {
+                name: format!("Project {n}"),
+                retention_period_days,
+            }
+        };
+
+        let project = repo.create(new_project(1), org_1).await.unwrap();
+        let id = project.id();
+
+        // 30 days is the maximum allowed retention period
+        repo.create(new_project(30), org_1).await.unwrap();
+        repo.update(org_1, id, new_project(30)).await.unwrap();
+
+        // >30 days is not allowed because it could cause issues with the statistics tracking message clean up system
+        repo.create(new_project(31), org_1).await.unwrap_err();
+        repo.update(org_1, id, new_project(31)).await.unwrap_err();
+
+        // 0 days is not allowed because it would risk deleting messages that haven't been attempted to send yet
+        repo.create(new_project(0), org_1).await.unwrap_err();
+        repo.update(org_1, id, new_project(0)).await.unwrap_err();
     }
 }

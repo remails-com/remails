@@ -458,7 +458,7 @@ mod tests {
         },
         bus::client::BusMessage,
         handler::dns::DnsResolver,
-        models::{MessageStatus, OrganizationRepository, Role, Statistics},
+        models::{MessageStatus, NewProject, OrganizationRepository, Role, Statistics},
         periodically::Periodically,
         test::TestProjects,
     };
@@ -493,7 +493,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
-        let messages_in_fixture = 8;
+        let messages_in_fixture = 9;
         assert_eq!(messages.len(), messages_in_fixture);
 
         // filter by project
@@ -1066,8 +1066,8 @@ mod tests {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
 
-        let org_1 = TestProjects::Org1Project2.org_id();
-        let message_id = "120dd3eb-5239-4da0-9503-ed72d3850dcd".parse().unwrap(); // message out of retention period
+        let (org_1, proj_2) = TestProjects::Org1Project2.get_ids();
+        let message_id = "54332c7c-fe0e-4b91-acf7-cf4e5f261488".parse().unwrap(); // message within project retention period
 
         // message data has not yet been removed
         let response = server
@@ -1086,7 +1086,7 @@ mod tests {
         let mut stats: Statistics = deserialize_body(response.into_body()).await;
         stats.sort();
 
-        // expired message data will be removed eventually
+        // clean up expired messages
         let bus_client = BusClient::new_from_env_var().unwrap();
         let periodically = Periodically::new(
             pool.clone(),
@@ -1095,6 +1095,31 @@ mod tests {
         )
         .await
         .unwrap();
+        periodically.clean_up().await.unwrap();
+
+        // message data has not yet been removed because project 2 has 3 day retention period
+        let response = server
+            .get(format!("/api/organizations/{org_1}/emails/{message_id}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let message: ApiMessage = deserialize_body(response.into_body()).await;
+        assert_eq!(message.id(), message_id);
+
+        // update project retention period to just 1 day
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/projects/{proj_2}"),
+                serialize_body(NewProject {
+                    name: "Project 2 Organization 1".to_owned(),
+                    retention_period_days: 1,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // clean up expired messages
         periodically.clean_up().await.unwrap();
 
         // message data has been removed and can no longer be retrieved
