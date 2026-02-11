@@ -172,6 +172,37 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsLargeYearly => 1_500_000,
         }
     }
+
+    pub fn max_retention_period(&self) -> i32 {
+        // Values should match `MAX_RETENTION` in `frontend/src/components/projects/ProjectSettings.tsx`
+        match self {
+            ProductIdentifier::NotSubscribed => 1,
+            ProductIdentifier::RmlsFree => 1,
+            ProductIdentifier::RmlsTinyMonthly => 3,
+            ProductIdentifier::RmlsSmallMonthly => 7,
+            ProductIdentifier::RmlsMediumMonthly => 14,
+            ProductIdentifier::RmlsLargeMonthly => 30,
+            ProductIdentifier::RmlsTinyYearly => 3,
+            ProductIdentifier::RmlsSmallYearly => 7,
+            ProductIdentifier::RmlsMediumYearly => 14,
+            ProductIdentifier::RmlsLargeYearly => 30,
+        }
+    }
+
+    pub fn project_limit(&self) -> Option<u32> {
+        match self {
+            ProductIdentifier::NotSubscribed => Some(0),
+            ProductIdentifier::RmlsFree => Some(1),
+            ProductIdentifier::RmlsTinyMonthly => None,
+            ProductIdentifier::RmlsSmallMonthly => None,
+            ProductIdentifier::RmlsMediumMonthly => None,
+            ProductIdentifier::RmlsLargeMonthly => None,
+            ProductIdentifier::RmlsTinyYearly => None,
+            ProductIdentifier::RmlsSmallYearly => None,
+            ProductIdentifier::RmlsMediumYearly => None,
+            ProductIdentifier::RmlsLargeYearly => None,
+        }
+    }
 }
 
 #[derive(Serialize, PartialEq, Debug, Deserialize, Clone, ToSchema)]
@@ -183,6 +214,20 @@ pub enum SubscriptionStatus {
     Expired(Subscription<NaiveDate>),
     #[schema(title = "None")]
     None,
+}
+
+impl SubscriptionStatus {
+    /// Get the active product of this subscription
+    ///
+    /// Expired subscriptions count as `NotSubscribed`
+    pub fn active_product(&self) -> &ProductIdentifier {
+        match self {
+            SubscriptionStatus::Active(sub) => sub.product_id(),
+            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
+                &ProductIdentifier::NotSubscribed
+            }
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone, ToSchema)]

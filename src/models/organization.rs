@@ -1,5 +1,4 @@
 use crate::{
-    ProductIdentifier,
     models::{ApiUserId, Error, Role},
     moneybird::{MoneybirdContactId, SubscriptionStatus},
 };
@@ -316,24 +315,9 @@ impl OrganizationRepository {
         .await?;
 
         let subscription: SubscriptionStatus = serde_json::from_value(row.current_subscription)?;
-        let project_limit = match subscription {
-            SubscriptionStatus::Active(sub) => match sub.product_id() {
-                ProductIdentifier::NotSubscribed => Some(0i64),
-                ProductIdentifier::RmlsFree => Some(1),
-                ProductIdentifier::RmlsTinyMonthly => None,
-                ProductIdentifier::RmlsSmallMonthly => None,
-                ProductIdentifier::RmlsMediumMonthly => None,
-                ProductIdentifier::RmlsLargeMonthly => None,
-                ProductIdentifier::RmlsTinyYearly => None,
-                ProductIdentifier::RmlsSmallYearly => None,
-                ProductIdentifier::RmlsMediumYearly => None,
-                ProductIdentifier::RmlsLargeYearly => None,
-            },
-            SubscriptionStatus::Expired(_) => Some(0),
-            SubscriptionStatus::None => Some(0),
-        };
+        let project_limit = subscription.active_product().project_limit();
 
-        Ok(project_limit.is_none_or(|limit| limit > row.project_count))
+        Ok(project_limit.is_none_or(|limit| i64::from(limit) > row.project_count))
     }
 
     pub async fn max_retention_period(&self, id: OrganizationId) -> Result<i32, Error> {
@@ -349,23 +333,7 @@ impl OrganizationRepository {
         .await?;
 
         let subscription: SubscriptionStatus = serde_json::from_value(row.current_subscription)?;
-        Ok(match subscription {
-            // Values should match `MAX_RETENTION` in `frontend/src/components/projects/ProjectSettings.tsx`
-            SubscriptionStatus::Active(sub) => match sub.product_id() {
-                ProductIdentifier::NotSubscribed => 0,
-                ProductIdentifier::RmlsFree => 1,
-                ProductIdentifier::RmlsTinyMonthly => 3,
-                ProductIdentifier::RmlsSmallMonthly => 7,
-                ProductIdentifier::RmlsMediumMonthly => 14,
-                ProductIdentifier::RmlsLargeMonthly => 30,
-                ProductIdentifier::RmlsTinyYearly => 3,
-                ProductIdentifier::RmlsSmallYearly => 7,
-                ProductIdentifier::RmlsMediumYearly => 14,
-                ProductIdentifier::RmlsLargeYearly => 30,
-            },
-            SubscriptionStatus::Expired(_) => 0,
-            SubscriptionStatus::None => 0,
-        })
+        Ok(subscription.active_product().max_retention_period())
     }
 
     pub async fn remove(&self, id: OrganizationId) -> Result<OrganizationId, Error> {
