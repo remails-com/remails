@@ -19,7 +19,7 @@ interface FormValues {
   retention_period_days: number;
 }
 
-// Values should match `max_retention_period` in `src/models/organizations.rs`
+// Values should match `max_retention_period` in `src/moneybird/model.rs`
 export const MAX_RETENTION: Record<ProductIdentifier, number> = {
   "RMLS-FREE": 1,
   "RMLS-TINY-MONTHLY": 3,
