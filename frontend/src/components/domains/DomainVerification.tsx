@@ -2,13 +2,13 @@ import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { useDomains } from "../../hooks/useDomains.ts";
 import { VerifyResult } from "../../types.ts";
-import { IconInfoCircle } from "@tabler/icons-react";
-import { Badge, Button, Code, Group, Loader, Paper, Popover, Table, Text, ThemeIcon, Tooltip } from "@mantine/core";
+import { Badge, Button, Code, Group, Loader, Paper, Popover, Table, Text } from "@mantine/core";
 import { dkimRecord, dmarcValue, spfRecord } from "./DnsRecords.tsx";
 import { useVerifyDomain } from "../../hooks/useVerifyDomain.ts";
 import { formatDateTime } from "../../util.ts";
 import { CopyableCode } from "../CopyableCode.tsx";
 import React, { useState } from "react";
+import InfoTooltip from "../InfoTooltip.tsx";
 
 const badgeColors: { [key in VerifyResult["status"]]: string } = {
   Success: "green",
@@ -157,11 +157,7 @@ export default function DomainVerification() {
             recordValue: (
               <Group gap="xs">
                 any
-                <Tooltip label="Some mail services may require an A record to be set for the sender domain">
-                  <ThemeIcon variant="transparent" c="dimmed" size="sm">
-                    <IconInfoCircle />
-                  </ThemeIcon>
-                </Tooltip>
+                <InfoTooltip text="Some mail services may require an A record to be set for the sender domain" />
               </Group>
             ),
             verifyResult: verificationResult?.a,

@@ -423,7 +423,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let messages: Vec<ApiMessageMetadata> = deserialize_body(response.into_body()).await;
-        assert_eq!(messages.len(), 8);
+        assert_eq!(messages.len(), 9);
 
         // get a specific message
         let message_1 = "e165562a-fb6d-423b-b318-fd26f4610634".parse().unwrap();

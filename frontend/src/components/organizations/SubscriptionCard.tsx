@@ -6,10 +6,10 @@ import { formatDate } from "../../util.ts";
 import { useOrgRole } from "../../hooks/useOrganizations.ts";
 
 export default function SubscriptionCard() {
-  const { subscription, navigateToSales, navigateToCustomerPortal } = useSubscription();
+  const { currentSubscription, navigateToSales, navigateToCustomerPortal } = useSubscription();
   const { isAdmin } = useOrgRole();
 
-  if (!subscription) {
+  if (!currentSubscription) {
     return null;
   }
 
@@ -77,7 +77,7 @@ export default function SubscriptionCard() {
         Your subscription
       </Title>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="md">{details(subscription)}</Stack>
+        <Stack gap="md">{details(currentSubscription)}</Stack>
       </Card>
     </Container>
   );

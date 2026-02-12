@@ -60,15 +60,6 @@ impl PartialOrd for SubscriptionStatus {
 }
 
 impl SubscriptionStatus {
-    pub fn quota(&self) -> u32 {
-        match self {
-            SubscriptionStatus::Active(Subscription { product, .. }) => product.monthly_quota(),
-            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
-                ProductIdentifier::NotSubscribed.monthly_quota()
-            }
-        }
-    }
-
     fn subscription_id(&self) -> Option<&SubscriptionId> {
         match self {
             SubscriptionStatus::Active(Subscription {
@@ -444,12 +435,7 @@ impl MoneyBird {
             .calculate_quota_reset_datetime(subscription_status)
             .await?;
 
-        let product = match subscription_status {
-            SubscriptionStatus::Active(Subscription { product, .. }) => product,
-            SubscriptionStatus::Expired(_) | SubscriptionStatus::None => {
-                &ProductIdentifier::NotSubscribed
-            }
-        };
+        let product = subscription_status.active_product();
 
         self.make_user_admin_on_first_subscription(subscription_status, organization_id)
             .await?;
@@ -477,6 +463,49 @@ impl MoneyBird {
             quota_reset = ?quota_reset,
             "Updated subscription information in database"
         );
+
+        // Lower the project retention based on active subscription
+        //
+        // We don't lower expired subscriptions because they might resubscribe and we don't want
+        // to make them reconfigure their retention limits
+        if matches!(subscription_status, SubscriptionStatus::Active(_)) {
+            self.enforce_retention_limits(organization_id, subscription_status)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn enforce_retention_limits(
+        &self,
+        organization_id: &OrganizationId,
+        subscription_status: &SubscriptionStatus,
+    ) -> Result<(), Error> {
+        let product = subscription_status.active_product();
+
+        let projects_updated = sqlx::query!(
+            r#"
+                UPDATE projects
+                SET retention_period_days = $2
+                WHERE organization_id = $1
+                  AND retention_period_days > $2;
+                "#,
+            **organization_id,
+            product.max_retention_period(),
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if projects_updated > 0 {
+            debug!(
+                organization_id = organization_id.to_string(),
+                subscription_id = ?subscription_status.subscription_id(),
+                product = product.to_string(),
+                "Lowered the retention period to {} for {projects_updated} projects",
+                product.max_retention_period()
+            );
+        }
 
         Ok(())
     }
@@ -655,7 +684,7 @@ impl MoneyBird {
         self.store_subscription_status(&subscription_status, &organization_id)
             .await?;
 
-        let quota = subscription_status.quota();
+        let quota = subscription_status.active_product().monthly_quota();
 
         sqlx::query!(
             r#"
@@ -803,7 +832,10 @@ impl MoneyBird {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::{OrganizationRepository, Role};
+    use crate::{
+        models::{OrganizationRepository, ProjectRepository, Role},
+        test::TestProjects,
+    };
     use chrono::{Months, NaiveTime};
     use std::ops::Add;
 
@@ -999,5 +1031,40 @@ mod test {
         .unwrap();
 
         assert_eq!(vec![Role::ReadOnly, Role::ReadOnly], roles);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn max_retention_period_enforcement(db: PgPool) {
+        let moneybird = MoneyBird::new(db.clone()).await.unwrap();
+        let organizations = OrganizationRepository::new(db.clone());
+        let projects = ProjectRepository::new(db.clone());
+
+        let (org_1, proj_2_id) = TestProjects::Org1Project2.get_ids();
+
+        // project 2 starts with 3 day retention period
+        let org_1_projects = projects.list(org_1).await.unwrap();
+        let proj_2 = org_1_projects.iter().find(|p| p.id() == proj_2_id).unwrap();
+        assert_eq!(proj_2.retention_period_days, 3);
+
+        // set Free subscription with max. 1 day retention period
+        moneybird
+            .store_subscription_status(
+                &SubscriptionStatus::Active(Subscription {
+                    end_date: None,
+                    product: ProductIdentifier::RmlsFree,
+                    ..Default::default()
+                }),
+                &org_1,
+            )
+            .await
+            .unwrap();
+
+        let max_retention = organizations.max_retention_period(org_1).await.unwrap();
+        assert_eq!(max_retention, 1);
+
+        // project 2 has been reduced to 1 day retention period
+        let org_1_projects = projects.list(org_1).await.unwrap();
+        let proj_2 = org_1_projects.iter().find(|p| p.id() == proj_2_id).unwrap();
+        assert_eq!(proj_2.retention_period_days, 1);
     }
 }

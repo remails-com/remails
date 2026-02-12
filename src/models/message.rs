@@ -955,13 +955,15 @@ impl MessageRepository {
         trace!("Clearing message data from old messages");
         let rows = sqlx::query!(
             r#"
-            UPDATE messages
+            UPDATE messages m
             SET raw_data = '',
                 message_data = NULL,
                 recipients = '{}',
                 delivery_details = '{}'
-            WHERE created_at < NOW() - INTERVAL '30 days'
-              AND octet_length(raw_data) > 0;
+            FROM projects p
+            WHERE m.project_id = p.id
+              AND m.created_at < NOW() - (p.retention_period_days * INTERVAL '1 day')
+              AND octet_length(m.raw_data) > 0;
             "#
         )
         .execute(&self.pool)

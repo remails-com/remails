@@ -1,6 +1,6 @@
-import { Card, Center, Group, Stack, Text, ThemeIcon, Tooltip } from "@mantine/core";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { Card, Center, Group, Stack, Text } from "@mantine/core";
 import { ReactNode } from "react";
+import InfoTooltip from "../InfoTooltip";
 
 type StatCardProps = {
   title: ReactNode;
@@ -15,13 +15,7 @@ export default function StatCard({ title, info, children, footer }: StatCardProp
       <Stack gap="sm" mih={120}>
         <Group gap="xs">
           <Text fw={700}>{title}</Text>
-          {info && (
-            <Tooltip label={info}>
-              <ThemeIcon variant="transparent" c="dimmed" size="sm">
-                <IconInfoCircle />
-              </ThemeIcon>
-            </Tooltip>
-          )}
+          {info && <InfoTooltip text={info} />}
         </Group>
         <Center flex={1}> {children}</Center>
         {footer && <Text>{footer}</Text>}

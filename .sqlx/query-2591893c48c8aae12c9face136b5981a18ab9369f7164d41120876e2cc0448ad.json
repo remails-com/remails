@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO projects (id, organization_id, name)\n            VALUES (gen_random_uuid(), $1, $2)\n            RETURNING *\n            ",
+  "query": "\n            INSERT INTO projects (id, organization_id, name, retention_period_days)\n            VALUES (gen_random_uuid(), $1, $2, $3)\n            RETURNING *\n            ",
   "describe": {
     "columns": [
       {
@@ -37,7 +37,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Varchar"
+        "Varchar",
+        "Int4"
       ]
     },
     "nullable": [
@@ -49,5 +50,5 @@
       false
     ]
   },
-  "hash": "57d9a1e644c9243ceab7d33cb983480e0b8701de3f83c79d4959fc6d70df9790"
+  "hash": "2591893c48c8aae12c9face136b5981a18ab9369f7164d41120876e2cc0448ad"
 }

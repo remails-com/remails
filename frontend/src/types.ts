@@ -275,6 +275,7 @@ export interface Organization {
 export interface Project {
   id: string;
   name: string;
+  retention_period_days: number;
   created_at: string;
   updated_at: string;
 }

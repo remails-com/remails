@@ -1,31 +1,9 @@
-import {
-  Accordion,
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Code,
-  Group,
-  MultiSelect,
-  NativeSelect,
-  Text,
-  ThemeIcon,
-  Tooltip,
-} from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Box, Button, Code, Group, MultiSelect, NativeSelect, Text } from "@mantine/core";
 import { useEmails } from "../../hooks/useEmails.ts";
 import { Loader } from "../../Loader.tsx";
 import { formatDateTime } from "../../util.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconCheck,
-  IconClock,
-  IconEye,
-  IconInfoCircle,
-  IconRefresh,
-  IconX,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconCheck, IconClock, IconEye, IconRefresh, IconX } from "@tabler/icons-react";
 import { getFullStatusDescription } from "./EmailDetails.tsx";
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
@@ -38,6 +16,7 @@ import Label from "./Label.tsx";
 import { EmailStatus } from "../../types.ts";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 import ProjectLink from "../ProjectLink.tsx";
+import InfoTooltip from "../InfoTooltip.tsx";
 
 function statusIcons(status: EmailStatus) {
   if (status == "processing" || status == "accepted") {
@@ -184,18 +163,12 @@ export function EmailOverview() {
     <>
       {routerState.name == "emails" && <OrganizationHeader />}
 
-      {routerState.name == "emails" ? (
-        <InfoAlert stateName="messages">
-          This page shows a list of all emails sent in this organization. Use it to check delivery status, inspect
-          metadata, and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each
-          message.
-        </InfoAlert>
-      ) : (
-        <InfoAlert stateName="messages">
-          This page shows a list of all emails sent in this project. Use it to check delivery status, inspect metadata,
-          and troubleshoot issues. You’ll see timestamps, recipient addresses, and SMTP-level details for each message.
-        </InfoAlert>
-      )}
+      <InfoAlert stateName="messages">
+        This page shows a list of all emails sent in this {routerState.name == "emails" ? "organization" : "project"}.
+        Use it to check delivery status, inspect metadata, and troubleshoot issues. You’ll see timestamps, recipient
+        addresses, and SMTP-level details for each message. Messages are automatically deleted after the rentention
+        period set in the project settings.
+      </InfoAlert>
 
       <Group justify="space-between" align="flex-end">
         <Group>
@@ -203,11 +176,10 @@ export function EmailOverview() {
             label={
               <Group gap={4} align="center">
                 Label
-                <Tooltip label="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API.">
-                  <ThemeIcon variant="transparent" c="dimmed" size="xs">
-                    <IconInfoCircle />
-                  </ThemeIcon>
-                </Tooltip>
+                <InfoTooltip
+                  size="xs"
+                  text="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API."
+                />
               </Group>
             }
             placeholder="Pick labels"

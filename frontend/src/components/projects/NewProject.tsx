@@ -1,12 +1,16 @@
-import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
+import { Button, Group, Modal, Slider, Stack, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
 import { notifications } from "@mantine/notifications";
 import { errorNotification } from "../../notify.tsx";
+import InfoTooltip from "../InfoTooltip.tsx";
+import { MAX_RETENTION } from "./ProjectSettings.tsx";
+import { useSubscription } from "../../hooks/useSubscription.ts";
 
 interface FormValues {
   name: string;
+  retention_period_days: number;
 }
 
 interface NewProjectProps {
@@ -16,11 +20,13 @@ interface NewProjectProps {
 
 export function NewProject({ opened, close }: NewProjectProps) {
   const { currentOrganization } = useOrganizations();
+  const { currentProduct } = useSubscription();
   const { navigate, dispatch } = useRemails();
 
   const form = useForm<FormValues>({
     initialValues: {
       name: "",
+      retention_period_days: 1,
     },
     validate: {
       name: (value) => (value.length < 3 ? "Name must have at least 3 letters" : null),
@@ -65,11 +71,13 @@ export function NewProject({ opened, close }: NewProjectProps) {
     });
   };
 
+  const max_retention = currentProduct ? MAX_RETENTION[currentProduct] : 1;
+
   return (
     <>
       <Modal opened={opened} onClose={close} title="Create New Project">
         <form onSubmit={form.onSubmit(save)}>
-          <Stack>
+          <Stack gap="md">
             <TextInput
               data-autofocus
               label="Name"
@@ -79,16 +87,41 @@ export function NewProject({ opened, close }: NewProjectProps) {
               error={form.errors.name}
               onChange={(event) => form.setFieldValue("name", event.currentTarget.value)}
             />
-          </Stack>
 
-          <Group justify="space-between" mt="xl">
-            <Button onClick={close} variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit" loading={form.submitting}>
-              Save
-            </Button>
-          </Group>
+            <Stack gap="xs">
+              <Group gap="xs" fz="sm" mb={0}>
+                Email retention period (max. {max_retention} day){" "}
+                <InfoTooltip
+                  text="Sets how long emails in this project should remain available for inspection in Remails before deletion. The maximum retention period is based on your organization's Remails subscription."
+                  size="xs"
+                />
+              </Group>
+              <Slider
+                px="xl"
+                label={(value) => (value == 1 ? "1 day" : `${value} days`)}
+                domain={[0, 30]}
+                min={1}
+                max={max_retention}
+                value={form.values.retention_period_days}
+                onChange={(value) => form.setFieldValue("retention_period_days", value)}
+                marks={[
+                  { value: 1, label: "1 day" },
+                  { value: 7, label: "7 days" },
+                  { value: 14, label: "14 days" },
+                  { value: 30, label: "30 days" },
+                ]}
+              />
+            </Stack>
+
+            <Group justify="space-between" mt="xl">
+              <Button onClick={close} variant="outline">
+                Cancel
+              </Button>
+              <Button type="submit" loading={form.submitting}>
+                Save
+              </Button>
+            </Group>
+          </Stack>
         </form>
       </Modal>
     </>

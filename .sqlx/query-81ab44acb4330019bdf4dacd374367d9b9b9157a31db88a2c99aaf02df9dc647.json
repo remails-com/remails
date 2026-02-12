@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE projects\n                SET retention_period_days = $2\n                WHERE organization_id = $1\n                  AND retention_period_days > $2;\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81ab44acb4330019bdf4dacd374367d9b9b9157a31db88a2c99aaf02df9dc647"
+}

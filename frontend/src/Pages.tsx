@@ -57,7 +57,7 @@ function Page() {
   const {
     state: { organizations, routerState },
   } = useRemails();
-  const { subscription } = useSubscription();
+  const { currentSubscription } = useSubscription();
 
   if (organizations?.length === 0 && routerState.name != "invite") {
     return <Setup />;
@@ -67,8 +67,8 @@ function Page() {
     !(routerState.name === "settings") &&
     !routerState.name.startsWith("organizations") &&
     !routerState.name.startsWith("admin") &&
-    subscription &&
-    subscription.status !== "active"
+    currentSubscription &&
+    currentSubscription.status !== "active"
   ) {
     return <SetupSubscription />;
   }

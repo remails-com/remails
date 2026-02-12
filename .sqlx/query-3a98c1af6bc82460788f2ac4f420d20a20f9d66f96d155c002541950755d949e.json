@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE messages m\n            SET raw_data = '',\n                message_data = NULL,\n                recipients = '{}',\n                delivery_details = '{}'\n            FROM projects p\n            WHERE m.project_id = p.id\n              AND m.created_at < NOW() - (p.retention_period_days * INTERVAL '1 day')\n              AND octet_length(m.raw_data) > 0;\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3a98c1af6bc82460788f2ac4f420d20a20f9d66f96d155c002541950755d949e"
+}
