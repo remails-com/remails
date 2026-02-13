@@ -14,13 +14,33 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
+use serde::Deserialize;
+#[cfg(test)]
+use serde::Serialize;
 use tracing::{debug, info};
+use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(list_projects, create_project,))
         .routes(routes!(update_project, remove_project))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct ApiNewProject {
+    pub name: String,
+    pub retention_period_days: Option<i32>,
+}
+
+impl ApiNewProject {
+    pub fn fill_defaults(self, max_retention_period: i32) -> NewProject {
+        NewProject {
+            name: self.name,
+            retention_period_days: self.retention_period_days.unwrap_or(max_retention_period),
+        }
+    }
 }
 
 /// List projects
@@ -57,7 +77,7 @@ pub async fn list_projects(
 /// Update details about that project
 #[utoipa::path(put, path = "/organizations/{org_id}/projects/{proj_id}",
     tags = ["Projects"],
-    request_body = NewProject,
+    request_body = ApiNewProject,
     responses(
         (status = 200, description = "Project successfully updated", body = Project),
         AppError,
@@ -96,7 +116,7 @@ pub async fn update_project(
 /// Create a new project under the specified organization
 #[utoipa::path(post, path = "/organizations/{org_id}/projects",
     tags = ["Projects"],
-    request_body = NewProject,
+    request_body = ApiNewProject,
     responses(
         (status = 201, description = "Project created successfully", body = Project),
         AppError,
@@ -107,7 +127,7 @@ pub async fn create_project(
     State(org_repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id,)): Path<(OrganizationId,)>,
-    Json(new): Json<NewProject>,
+    Json(new): Json<ApiNewProject>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
@@ -118,6 +138,8 @@ pub async fn create_project(
     }
 
     let max_retention = org_repo.max_retention_period(org_id).await?;
+    let new = new.fill_defaults(max_retention);
+
     if new.retention_period_days < 1 || new.retention_period_days > max_retention {
         return Err(AppError::BadRequest(format!(
             "Retention period must be between 1 and {max_retention}."
@@ -196,9 +218,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: None, // use default retention
                 }),
             )
             .await
@@ -206,7 +228,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Test Project");
-        assert_eq!(project.retention_period_days, 1);
+        assert_eq!(project.retention_period_days, 1); // organization has the free tier subscription
 
         // list projects
         let response = server
@@ -285,9 +307,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -341,9 +363,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -360,9 +382,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -382,9 +404,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -401,9 +423,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 1".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -414,9 +436,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 2".to_string(),
-                    retention_period_days: 1,
+                    retention_period_days: Some(1),
                 }),
             )
             .await
@@ -446,9 +468,9 @@ mod tests {
             let response = server
                 .post(
                     format!("/api/organizations/{org_1}/projects"),
-                    serialize_body(&NewProject {
+                    serialize_body(&ApiNewProject {
                         name: format!("Test Project {}", i + 2),
-                        retention_period_days: 3, // all paid subscriptions allow at least 3 day retention
+                        retention_period_days: Some(3), // all paid subscriptions allow at least 3 day retention
                     }),
                 )
                 .await
@@ -473,9 +495,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 1".to_string(),
-                    retention_period_days: 3,
+                    retention_period_days: Some(3),
                 }),
             )
             .await
@@ -492,9 +514,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 1".to_string(),
-                    retention_period_days: 30,
+                    retention_period_days: Some(30),
                 }),
             )
             .await
@@ -514,9 +536,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 1".to_string(),
-                    retention_period_days: 30,
+                    retention_period_days: Some(30),
                 }),
             )
             .await
@@ -530,9 +552,9 @@ mod tests {
         let response = server
             .post(
                 format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Test Project 1".to_string(),
-                    retention_period_days: 31,
+                    retention_period_days: Some(31),
                 }),
             )
             .await
@@ -556,9 +578,9 @@ mod tests {
         let response = server
             .put(
                 format!("/api/organizations/{org_1}/projects/{proj_id}"),
-                serialize_body(&NewProject {
+                serialize_body(&ApiNewProject {
                     name: "Updated Project".to_string(),
-                    retention_period_days: 7,
+                    retention_period_days: Some(7),
                 }),
             )
             .await
