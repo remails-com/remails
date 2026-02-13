@@ -1,6 +1,7 @@
 use crate::models::{Error, OrganizationId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use garde::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -48,10 +49,17 @@ impl Project {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct NewProject {
+    #[schema(min_length = 1, max_length = 256)]
+    #[garde(length(min = 1, max = 256))]
     pub name: String,
+    /// Set the retention period for emails within this project in days.
+    ///
+    /// This must be a value between 1 and the maximum retention period for your subscription.
+    #[schema(minimum = 1, maximum = 30)]
+    #[garde(range(min = 1, max = 30))]
     pub retention_period_days: i32,
 }
 

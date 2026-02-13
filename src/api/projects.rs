@@ -3,6 +3,7 @@ use crate::{
         ApiState,
         auth::Authenticated,
         error::{ApiResult, AppError},
+        validation::ValidatedJson,
     },
     models::{
         NewProject, OrganizationId, OrganizationRepository, Project, ProjectId, ProjectRepository,
@@ -68,7 +69,7 @@ pub async fn update_project(
     State(org_repo): State<OrganizationRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     user: Box<dyn Authenticated>,
-    Json(update): Json<NewProject>,
+    ValidatedJson(update): ValidatedJson<NewProject>,
 ) -> ApiResult<Project> {
     user.has_org_write_access(&org_id)?;
 
@@ -107,7 +108,7 @@ pub async fn create_project(
     State(org_repo): State<OrganizationRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id,)): Path<(OrganizationId,)>,
-    Json(new): Json<NewProject>,
+    ValidatedJson(new): ValidatedJson<NewProject>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
