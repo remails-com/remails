@@ -90,6 +90,7 @@ impl CreatedApiKeyWithPassword {
 #[cfg_attr(test, derive(Serialize))]
 pub struct ApiKeyRequest {
     #[serde(default)]
+    #[schema(max_length = 500)]
     #[garde(length(max = 500))]
     pub description: String,
     #[garde(skip)]
