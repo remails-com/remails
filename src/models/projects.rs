@@ -223,7 +223,7 @@ mod test {
         assert_eq!(repo.list(org_1).await.unwrap().len(), 0);
     }
 
-    /// Test that retention period is limitted to a reasonable amount
+    /// Test that retention period is limited to a reasonable amount
     ///
     /// Note that this does not enforce the subscription-based retention limits,
     /// these are enforced within the API layer

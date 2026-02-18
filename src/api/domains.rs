@@ -129,17 +129,17 @@ pub async fn update_domain(
     State(repo): State<DomainRepository>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
     user: Box<dyn Authenticated>,
-    Json(update): Json<Option<ProjectId>>,
+    Json(update): Json<Vec<ProjectId>>,
 ) -> ApiResult<ApiDomain> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.update(org_id, domain_id, update).await?.into();
+    let domain = repo.update(org_id, domain_id, &update).await?.into();
 
     debug!(
         user_id = user.log_id(),
         organization_id = org_id.to_string(),
         domain_id = domain_id.to_string(),
-        project_id = update.map(|p| p.to_string()),
+        project_ids_len = update.len(),
         "updated domain",
     );
 
@@ -208,7 +208,7 @@ mod tests {
 
     use super::*;
 
-    async fn test_domain_lifecycle(pool: PgPool, project_id: Option<ProjectId>) {
+    async fn test_domain_lifecycle(pool: PgPool, project_ids: Vec<ProjectId>) {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let endpoint = format!("/api/organizations/{org_1}");
 
@@ -228,7 +228,7 @@ mod tests {
                 serialize_body(NewDomain {
                     domain: "remails.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
-                    project_id,
+                    project_ids: project_ids.clone(),
                 }),
             )
             .await
@@ -245,14 +245,14 @@ mod tests {
         assert_eq!(domains[0].id(), created_domain.id());
         assert_eq!(domains[0].domain(), "remails.com");
         assert_eq!(domains[0].organization_id(), org_1.parse().unwrap());
-        assert_eq!(domains[0].project_id(), project_id);
+        assert_eq!(domains[0].project_ids(), project_ids);
 
         // update domain with new project ID
         let proj_2: ProjectId = "da12d059-d86e-4ac6-803d-d013045f68ff".parse().unwrap();
         let response = server
             .put(
                 format!("{endpoint}/domains/{}", created_domain.id()),
-                serialize_body(Some(proj_2)),
+                serialize_body(vec![proj_2]),
             )
             .await
             .unwrap();
@@ -260,7 +260,7 @@ mod tests {
         let domain: ApiDomain = deserialize_body(response.into_body()).await;
         assert_eq!(domain.id(), created_domain.id());
         assert_eq!(domain.domain(), "remails.com");
-        assert_eq!(domain.project_id(), Some(proj_2));
+        assert_eq!(domain.project_ids(), vec![proj_2]);
 
         // get domain
         let response = server
@@ -271,13 +271,13 @@ mod tests {
         let domain: ApiDomain = deserialize_body(response.into_body()).await;
         assert_eq!(domain.id(), created_domain.id());
         assert_eq!(domain.domain(), "remails.com");
-        assert_eq!(domain.project_id(), Some(proj_2));
+        assert_eq!(domain.project_ids(), vec![proj_2]);
 
         // update domain with removed project ID
         let response = server
             .put(
                 format!("{endpoint}/domains/{}", created_domain.id()),
-                serialize_body(None::<ProjectId>),
+                serialize_body(Vec::<DomainId>::new()),
             )
             .await
             .unwrap();
@@ -285,7 +285,7 @@ mod tests {
         let domain: ApiDomain = deserialize_body(response.into_body()).await;
         assert_eq!(domain.id(), created_domain.id());
         assert_eq!(domain.domain(), "remails.com");
-        assert_eq!(domain.project_id(), None);
+        assert_eq!(domain.project_ids(), vec![]);
 
         // verify domain
         let response = server
@@ -315,7 +315,7 @@ mod tests {
     ))]
     async fn test_project_domains_lifecycle(pool: PgPool) {
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
-        test_domain_lifecycle(pool, Some(proj_1.parse().unwrap())).await;
+        test_domain_lifecycle(pool, vec![proj_1.parse().unwrap()]).await;
     }
 
     #[sqlx::test(fixtures(
@@ -323,10 +323,10 @@ mod tests {
         scripts("organizations", "api_users", "projects")
     ))]
     async fn test_org_domains_lifecycle(pool: PgPool) {
-        test_domain_lifecycle(pool, None).await;
+        test_domain_lifecycle(pool, vec![]).await;
     }
 
-    async fn test_domains_no_access(pool: PgPool, domain_id: &str, project_id: Option<ProjectId>) {
+    async fn test_domains_no_access(pool: PgPool, domain_id: &str, project_ids: Vec<ProjectId>) {
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let endpoint = format!("/api/organizations/{org_1}");
 
@@ -344,7 +344,7 @@ mod tests {
                 serialize_body(NewDomain {
                     domain: "remails.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
-                    project_id,
+                    project_ids,
                 }),
             )
             .await
@@ -380,15 +380,15 @@ mod tests {
     async fn test_project_domains_no_access(pool: PgPool) {
         let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462"; // project 1 in org 1
         let proj_domain = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a"; // test-org-1-project-1.com
-        test_domains_no_access(pool, proj_domain, Some(proj_1.parse().unwrap())).await;
+        test_domains_no_access(pool, proj_domain, vec![proj_1.parse().unwrap()]).await;
     }
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "api_users", "org_domains")
+        scripts("organizations", "projects", "api_users", "org_domains")
     ))]
     async fn test_org_domains_no_access(pool: PgPool) {
         let org_domain = "ed28baa5-57f7-413f-8c77-7797ba6a8780"; // test-org-1.com
-        test_domains_no_access(pool, org_domain, None).await;
+        test_domains_no_access(pool, org_domain, vec![]).await;
     }
 }

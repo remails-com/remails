@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT (\n                EXISTS (SELECT 1 FROM domains WHERE organization_id = $1 AND id = $2)\n                AND (\n                    SELECT COUNT(*) = $4 -- all projects are valid\n                    FROM projects\n                    WHERE organization_id = $1 AND id = ANY($3)\n               )\n            ) as \"valid!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "valid!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "54e14c83c6ad3bd44c19f01cdb5242f7a8eb0c08e59999fec3b18c0509d9d18c"
+}

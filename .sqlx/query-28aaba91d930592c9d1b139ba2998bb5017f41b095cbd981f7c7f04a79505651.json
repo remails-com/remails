@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO domains_projects (domain_id, project_id)\n            SELECT $1, unnest($2::uuid[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "28aaba91d930592c9d1b139ba2998bb5017f41b095cbd981f7c7f04a79505651"
+}

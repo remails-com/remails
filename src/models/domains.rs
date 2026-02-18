@@ -129,7 +129,7 @@ impl Debug for DkimKey {
 pub struct ApiDomain {
     id: DomainId,
     organization_id: OrganizationId,
-    project_id: Option<ProjectId>,
+    project_ids: Vec<ProjectId>,
     domain: String,
     dkim_key_type: DkimKeyType,
     dkim_public_key: String,
@@ -147,8 +147,8 @@ impl ApiDomain {
         self.organization_id
     }
 
-    pub fn project_id(&self) -> Option<ProjectId> {
-        self.project_id
+    pub fn project_ids(&self) -> &[ProjectId] {
+        self.project_ids.as_slice()
     }
 
     pub fn domain(&self) -> &str {
@@ -160,7 +160,7 @@ impl ApiDomain {
 pub struct Domain {
     pub(crate) id: DomainId,
     organization_id: OrganizationId,
-    project_id: Option<ProjectId>,
+    project_ids: Vec<ProjectId>,
     pub(crate) domain: String,
     pub(crate) dkim_key: DkimKey,
     verification_status: DomainVerificationStatus,
@@ -172,7 +172,7 @@ struct PgDomain {
     id: DomainId,
     domain: String,
     organization_id: OrganizationId,
-    project_id: Option<Uuid>,
+    project_ids: Vec<Uuid>,
     dkim_key_type: DkimKeyType,
     dkim_pkcs8_der: Vec<u8>,
     verification_status: serde_json::Value,
@@ -189,7 +189,7 @@ impl TryFrom<PgDomain> for Domain {
         Ok(Self {
             id: pg.id,
             organization_id: pg.organization_id,
-            project_id: pg.project_id.map(Into::into),
+            project_ids: pg.project_ids.into_iter().map(Into::into).collect(),
             domain: pg.domain,
             dkim_key,
             verification_status: serde_json::from_value(pg.verification_status)?,
@@ -209,7 +209,7 @@ impl From<Domain> for ApiDomain {
         Self {
             id: d.id,
             organization_id: d.organization_id,
-            project_id: d.project_id,
+            project_ids: d.project_ids,
             domain: d.domain,
             dkim_key_type,
             dkim_public_key: Base64::encode_string(d.dkim_key.pub_key().expect("As we generate the keys ourselves, we should never run into a marshalling problem").as_ref()),
@@ -227,7 +227,7 @@ pub struct NewDomain {
     #[schema(min_length = 3, max_length = 253)]
     pub domain: String,
     #[garde(skip)]
-    pub project_id: Option<ProjectId>,
+    pub project_ids: Vec<ProjectId>,
     #[garde(skip)]
     pub dkim_key_type: DkimKeyType,
 }
@@ -259,60 +259,56 @@ impl DomainRepository {
 
         let mut tx = self.pool.begin().await?;
 
-        if let Some(project_id) = new.project_id {
-            let proj_org_id = sqlx::query_scalar!(
-                r#"SELECT organization_id FROM projects WHERE id = $1"#,
-                *project_id
-            )
-            .fetch_one(&mut *tx)
-            .await?;
-
-            if proj_org_id != *org_id {
-                return Err(Error::BadRequest(
-                    "Project ID does not match organization ID".to_string(),
-                ));
-            }
-        }
-
-        let id = sqlx::query_scalar!(
+        let id: DomainId = sqlx::query_scalar!(
             r#"
-            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO domains (id, domain, organization_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
             RETURNING id
             "#,
             new.domain,
             *org_id,
-            new.project_id.map(|p| p.as_uuid()),
             new.dkim_key_type as DkimKeyType,
             sk_bytes.as_ref(),
             verification_status.timestamp(),
             serde_json::to_value(verification_status)?,
-        ).fetch_one(&mut *tx).await?;
+        ).fetch_one(&mut *tx).await?.into();
 
-        let domain = Self::get_one(&mut tx, id.into()).await?;
+        Self::attach_projects(&mut tx, org_id, id, &new.project_ids).await?;
+
+        let domain = Self::get_one(&mut tx, org_id, id).await?;
 
         tx.commit().await?;
 
         Ok(domain)
     }
 
-    async fn get_one(tx: &mut PgConnection, id: DomainId) -> Result<Domain, Error> {
+    async fn get_one(
+        tx: &mut PgConnection,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+    ) -> Result<Domain, Error> {
         sqlx::query_as!(
             PgDomain,
             r#"
-            SELECT id,
-                   domain,
-                   organization_id,
-                   project_id,
-                   dkim_key_type as "dkim_key_type: DkimKeyType",
-                   dkim_pkcs8_der,
-                   verification_status,
-                   created_at,
-                   updated_at
-            FROM domains
-            WHERE id = $1
+            SELECT d.id,
+                   d.domain,
+                   d.organization_id,
+                   COALESCE(
+                       array_agg(dp.project_id) FILTER (WHERE dp.project_id IS NOT NULL),
+                       '{}'
+                   ) AS "project_ids!",
+                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
+                   d.dkim_pkcs8_der,
+                   d.verification_status,
+                   d.created_at,
+                   d.updated_at
+            FROM domains d
+            LEFT JOIN domains_projects dp ON d.id = dp.domain_id
+            WHERE d.id = $2 AND d.organization_id = $1
+            GROUP BY d.id
             "#,
-            *id
+            *org_id,
+            *domain_id,
         )
         .fetch_one(tx)
         .await?
@@ -320,27 +316,7 @@ impl DomainRepository {
     }
 
     pub async fn get(&self, org_id: OrganizationId, domain_id: DomainId) -> Result<Domain, Error> {
-        sqlx::query_as!(
-            PgDomain,
-            r#"
-            SELECT d.id,
-                   d.domain,
-                   d.organization_id,
-                   d.project_id,
-                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
-                   d.dkim_pkcs8_der,
-                   d.verification_status,
-                   d.created_at,
-                   d.updated_at
-            FROM domains d
-            WHERE d.id = $2 AND d.organization_id = $1
-            "#,
-            *org_id,
-            *domain_id
-        )
-        .fetch_one(&self.pool)
-        .await?
-        .try_into()
+        Self::get_one(&mut *self.pool.acquire().await?, org_id, domain_id).await
     }
 
     pub async fn verify(
@@ -490,47 +466,112 @@ impl DomainRepository {
         }
     }
 
+    /// Verify that an organization has access to the domain ID and the project IDs
+    async fn check_domain_and_projects(
+        tx: &mut PgConnection,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+        project_ids: &[Uuid],
+    ) -> Result<(), Error> {
+        let valid = sqlx::query_scalar!(
+            r#"
+            SELECT (
+                EXISTS (SELECT 1 FROM domains WHERE organization_id = $1 AND id = $2)
+                AND (
+                    SELECT COUNT(*) = $4 -- all projects are valid
+                    FROM projects
+                    WHERE organization_id = $1 AND id = ANY($3)
+               )
+            ) as "valid!"
+            "#,
+            *org_id,
+            *domain_id,
+            &project_ids,
+            project_ids.len() as i64
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if !valid {
+            return Err(Error::BadRequest(
+                "Organization has no access to the domain or one of the projects".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    async fn attach_projects(
+        tx: &mut PgConnection,
+        org_id: OrganizationId,
+        domain_id: DomainId,
+        attached_projects: &[ProjectId],
+    ) -> Result<Domain, Error> {
+        let project_ids = attached_projects.iter().map(|p| **p).collect::<Vec<_>>();
+
+        Self::check_domain_and_projects(tx, org_id, domain_id, &project_ids).await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO domains_projects (domain_id, project_id)
+            SELECT $1, unnest($2::uuid[])
+            "#,
+            *domain_id,
+            &project_ids
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        Self::get_one(tx, org_id, domain_id).await
+    }
+
     pub async fn update(
         &self,
         org_id: OrganizationId,
         domain_id: DomainId,
-        update: Option<ProjectId>,
+        attached_projects: &[ProjectId],
     ) -> Result<Domain, Error> {
-        sqlx::query_as!(
-            PgDomain,
+        let mut tx = self.pool.begin().await?;
+
+        // remove previously attached projects
+        sqlx::query!(
             r#"
-            UPDATE domains
-            SET project_id = $3
-            WHERE id = $2 AND organization_id = $1
-            RETURNING id, domain, organization_id, project_id,
-                dkim_key_type as "dkim_key_type: DkimKeyType",
-                dkim_pkcs8_der, verification_status, created_at, updated_at
+            DELETE FROM domains_projects
+            WHERE domain_id = $1
             "#,
-            *org_id,
-            *domain_id,
-            update.as_deref()
+            *domain_id
         )
-        .fetch_one(&self.pool)
-        .await?
-        .try_into()
+        .execute(&mut *tx)
+        .await?;
+
+        let domain = Self::attach_projects(&mut tx, org_id, domain_id, attached_projects).await?;
+
+        tx.commit().await?;
+
+        Ok(domain)
     }
 
     pub async fn list(&self, org_id: OrganizationId) -> Result<Vec<Domain>, Error> {
         sqlx::query_as!(
             PgDomain,
             r#"
-            SELECT id,
-                   domain,
-                   organization_id,
-                   project_id,
-                   dkim_key_type as "dkim_key_type: DkimKeyType",
-                   dkim_pkcs8_der,
-                   verification_status,
-                   created_at,
-                   updated_at
-            FROM domains
-            WHERE organization_id = $1
-            ORDER BY updated_at DESC
+            SELECT d.id,
+                   d.domain,
+                   d.organization_id,
+                   COALESCE(
+                       array_agg(dp.project_id) FILTER (WHERE dp.project_id IS NOT NULL),
+                       '{}'
+                   ) AS "project_ids!",
+                   d.dkim_key_type as "dkim_key_type: DkimKeyType",
+                   d.dkim_pkcs8_der,
+                   d.verification_status,
+                   d.created_at,
+                   d.updated_at
+            FROM domains d
+            LEFT JOIN domains_projects dp ON d.id = dp.domain_id
+            WHERE d.organization_id = $1
+            GROUP BY d.id
+            ORDER BY d.updated_at DESC
             "#,
             *org_id,
         )
@@ -562,9 +603,8 @@ impl DomainRepository {
         Ok(DomainId(id))
     }
 
-    /// Look up a domain name in the database for a specific project, returning either a project
-    /// domain or an organization domain that matches the domain name, or `None` if no matching
-    /// domain was found
+    /// Look up a domain name in the database for a specific project, returning a domain that is attached to that project,
+    /// or `None` if no matching domain was found
     ///
     /// The domain is allowed to be a sub-domain of the domain in the database
     ///
@@ -574,38 +614,42 @@ impl DomainRepository {
         domain: &str,
         project_id: ProjectId,
     ) -> Result<Option<Domain>, Error> {
-        match sqlx::query_as!(
+        sqlx::query_as!(
             PgDomain,
             r#"
             SELECT d.id,
                    d.domain,
                    d.organization_id,
-                   d.project_id,
+                   COALESCE(
+                       array_agg(dp.project_id) FILTER (WHERE dp.project_id IS NOT NULL),
+                       '{}'
+                   ) AS "project_ids!",
                    d.dkim_key_type as "dkim_key_type: DkimKeyType",
                    d.dkim_pkcs8_der,
                    d.verification_status,
                    d.created_at,
                    d.updated_at
-            FROM projects p
-                LEFT JOIN domains d ON p.id = d.project_id OR (p.organization_id = d.organization_id AND d.project_id IS NULL)
-            WHERE p.id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain
+            FROM domains_projects dp
+            LEFT JOIN domains d ON dp.domain_id = d.id
+            WHERE dp.project_id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain
+            GROUP BY d.id
             ORDER BY char_length(d.domain) DESC
             LIMIT 1
             "#,
             *project_id,
             domain
         )
-            .fetch_optional(&self.pool)
-            .await?
-        {
-            Some(domain) => Ok(Some(domain.try_into()?)),
-            None => Ok(None),
-        }
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|domain| domain.try_into())
+        .transpose()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::test::TestProjects;
+
     use super::*;
     use sqlx::PgPool;
     use std::{ops::Sub, str::FromStr};
@@ -740,21 +784,29 @@ mod test {
     ))]
     async fn create_org_does_not_match_proj(db: PgPool) {
         let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let proj_1_org_2 = TestProjects::Org2Project1.project_id();
+
+        let nr_of_domains = repo.list(org_1).await.unwrap().len();
 
         let bad_request = repo
             .create(
                 NewDomain {
                     domain: "test-domain.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
-                    // Project 1 Organization 2
-                    project_id: Some("70ded685-8633-46ef-9062-d9fbad24ae95".parse().unwrap()),
+                    project_ids: vec![proj_1_org_2],
                 },
-                // test org 1
-                "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                org_1,
             )
             .await
             .unwrap_err();
-        assert!(matches!(bad_request, Error::BadRequest(_)))
+        assert!(matches!(bad_request, Error::BadRequest(_)));
+
+        assert_eq!(
+            repo.list(org_1).await.unwrap().len(),
+            nr_of_domains,
+            "no new domain should be created"
+        );
     }
 
     #[sqlx::test(fixtures(
@@ -763,15 +815,15 @@ mod test {
     ))]
     async fn create_happy_flow(db: PgPool) {
         let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
-        let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
-        let proj_1 = "3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap();
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
+        let proj_2 = TestProjects::Org1Project2.project_id();
 
         let domain = repo
             .create(
                 NewDomain {
                     domain: "test-domain1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
-                    project_id: Some(proj_1),
+                    project_ids: vec![proj_1],
                 },
                 org_1,
             )
@@ -779,14 +831,14 @@ mod test {
             .unwrap();
         assert_eq!(domain.domain, "test-domain1.com");
         assert_eq!(domain.organization_id, org_1);
-        assert_eq!(domain.project_id, Some(proj_1));
+        assert_eq!(domain.project_ids, vec![proj_1]);
 
         let domain = repo
             .create(
                 NewDomain {
                     domain: "test-domain2.com".to_string(),
                     dkim_key_type: DkimKeyType::Ed25519,
-                    project_id: None,
+                    project_ids: vec![],
                 },
                 org_1,
             )
@@ -794,7 +846,22 @@ mod test {
             .unwrap();
         assert_eq!(domain.domain, "test-domain2.com");
         assert_eq!(domain.organization_id, org_1);
-        assert_eq!(domain.project_id, None);
+        assert!(domain.project_ids.is_empty());
+
+        let domain = repo
+            .create(
+                NewDomain {
+                    domain: "test-domain3.com".to_string(),
+                    dkim_key_type: DkimKeyType::RsaSha256,
+                    project_ids: vec![proj_1, proj_2],
+                },
+                org_1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(domain.domain, "test-domain3.com");
+        assert_eq!(domain.organization_id, org_1);
+        assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
     }
 
     #[sqlx::test(fixtures(
@@ -810,7 +877,7 @@ mod test {
                     domain: "test-org-2-project-1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     // Project 1 Organization 1
-                    project_id: Some("3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()),
+                    project_ids: vec!["3ba14adf-4de1-4fb6-8c20-50cc2ded5462".parse().unwrap()],
                 },
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
@@ -818,6 +885,62 @@ mod test {
             .await
             .unwrap_err();
         assert!(matches!(conflict, Error::Conflict))
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "proj_domains")
+    ))]
+    async fn update_happy_path(db: PgPool) {
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
+        let proj_2 = TestProjects::Org1Project2.project_id();
+        let domain_id = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap();
+
+        // attach an extra project
+        let domain = repo
+            .update(org_1, domain_id, &[proj_1, proj_2])
+            .await
+            .unwrap();
+        assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
+
+        // remove attached projects
+        let domain = repo.update(org_1, domain_id, &[]).await.unwrap();
+        assert!(domain.project_ids.is_empty());
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "proj_domains")
+    ))]
+    async fn update_wrong_org(db: PgPool) {
+        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
+        let proj_1_org_2 = TestProjects::Org2Project1.project_id();
+        let domain_org_1 = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap();
+        let domain_org_2 = "ae5ff990-d2c3-4368-a58f-003581705086".parse().unwrap();
+
+        // can't attach project from other organization
+        assert!(matches!(
+            repo.update(org_1, domain_org_1, &[proj_1_org_2])
+                .await
+                .unwrap_err(),
+            Error::BadRequest(_)
+        ));
+
+        // can't attach project to domain from other organization
+        assert!(matches!(
+            repo.update(org_1, domain_org_2, &[proj_1])
+                .await
+                .unwrap_err(),
+            Error::BadRequest(_)
+        ));
+
+        // can't remove projects from another organization's domain
+        assert!(matches!(
+            repo.update(org_1, domain_org_2, &[]).await.unwrap_err(),
+            Error::BadRequest(_)
+        ));
     }
 
     #[sqlx::test(fixtures(
@@ -999,7 +1122,10 @@ mod test {
         assert!(matches!(not_found, Error::NotFound(_)));
     }
 
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "org_domains")))]
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "projects", "org_domains")
+    ))]
     async fn remove_happy_flow_without_project(db: PgPool) {
         let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
 
@@ -1039,7 +1165,7 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
-        scripts("organizations", "org_domains", "projects", "proj_domains")
+        scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn verify_all(db: PgPool) {
         let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
