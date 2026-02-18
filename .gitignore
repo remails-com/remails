@@ -1,6 +1,7 @@
 /target
 frontend/node_modules/
 .idea
+.vscode
 frontend/playwright/.auth
 frontend/test-results
 .env
