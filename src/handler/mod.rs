@@ -595,6 +595,7 @@ impl Handler {
         fields(
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
+            project_id = message.project_id.to_string(),
             outbound_ip = outbound_ip.to_string(),
         ))]
     pub async fn send_message(
