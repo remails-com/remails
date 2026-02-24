@@ -518,7 +518,7 @@ impl Handler {
             .local_ip(outbound_ip)
             .say_ehlo(true)
             .helo_host(&self.config.domain)
-            .timeout(std::time::Duration::from_secs(60));
+            .timeout(std::time::Duration::from_secs(30));
 
         let result =
             match security {
@@ -595,6 +595,7 @@ impl Handler {
         fields(
             message_id = message.id().to_string(),
             organization_id = message.organization_id.to_string(),
+            project_id = message.project_id.to_string(),
             outbound_ip = outbound_ip.to_string(),
         ))]
     pub async fn send_message(
