@@ -995,7 +995,7 @@ impl MessageRepository {
                 AND now() > m.retry_after AND m.attempts < m.max_attempts
               ) OR (
                 (m.status = 'accepted' OR m.status = 'processing')
-                AND now() > m.updated_at + '2 minutes'
+                AND now() > m.updated_at + '5 minutes'
               )
             "#,
         )

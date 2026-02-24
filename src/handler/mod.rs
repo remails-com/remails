@@ -518,7 +518,7 @@ impl Handler {
             .local_ip(outbound_ip)
             .say_ehlo(true)
             .helo_host(&self.config.domain)
-            .timeout(std::time::Duration::from_secs(60));
+            .timeout(std::time::Duration::from_secs(30));
 
         let result =
             match security {
