@@ -22,7 +22,7 @@ use tokio_rustls::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, info_span, trace, trace_span};
 
 #[derive(Debug, Error)]
 pub enum SmtpServerError {
@@ -132,7 +132,6 @@ impl SmtpServer {
                 *a = self.build_tls_acceptor().await.unwrap();
             }
         });
-
         loop {
             select! {
                 _ = shutdown.cancelled() => {
@@ -158,21 +157,22 @@ impl SmtpServer {
                             }
                         }
 
-                        if let Some(connection_info) = connection_info{
-                            info!(
+                        let span = if let Some(connection_info) = connection_info {
+                            info_span!(
+                                "TCP connection",
                                 source_ip=connection_info.source_ip.to_string(),
                                 source_port=connection_info.source_port,
                                 destination_ip=connection_info.destination_ip.to_string(),
                                 destination_port=connection_info.destination_port,
-                                "new TCP connection"
                             )
                         } else {
-                            trace!(
+                            trace_span!(
+                                "TCP connection",
                                 source_ip=peer_addr.ip().to_string(),
                                 source_port=peer_addr.port(),
-                                "new TCP connection"
-                            );
-                        }
+                            )
+                        };
+                        trace!("new TCP connection");
                         let acceptor = acceptor.clone();
                         let server_name = server_name.clone();
                         let bus_client = bus_client.clone();
@@ -195,11 +195,11 @@ impl SmtpServer {
                                 max_automatic_retries,
                             )
                             .await?;
-
                             tls_stream.shutdown().await.map_err(ConnectionError::Write)
                         };
 
-                        tokio::spawn(async {
+                        tokio::spawn(async move {
+                            let _span_entered = span.enter();
                             if let Err(err) = task().await {
                                 let error_string = err.to_string();
                                 if let ConnectionError::Accept(e) = err
