@@ -1,4 +1,4 @@
-import { Button, Group, Modal, Select, Stack, Stepper, TextInput, Title } from "@mantine/core";
+import { Button, Group, Modal, MultiSelect, Stack, Stepper, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -12,7 +12,7 @@ import { useProjects } from "../../hooks/useProjects.ts";
 
 interface FormValues {
   domain: string;
-  project_id: string | null;
+  project_ids: string[];
 }
 
 interface NewDomainProps {
@@ -70,7 +70,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
   const form = useForm<FormValues>({
     initialValues: {
       domain: "",
-      project_id: null,
+      project_ids: [],
     },
     validate: {
       domain: validateDomain,
@@ -135,8 +135,8 @@ export function NewDomain({ opened, close }: NewDomainProps) {
         close();
       }}
       title={
-        <Title order={2} component="span">
-          Create New Domain
+        <Title order={3} component="span">
+          Add new domain
         </Title>
       }
       size="lg"
@@ -147,19 +147,19 @@ export function NewDomain({ opened, close }: NewDomainProps) {
           <form onSubmit={form.onSubmit(save)}>
             <Stack>
               <TextInput
-                label="Domain Name"
+                label="Domain name"
                 key={form.key("domain")}
                 value={form.values.domain}
                 placeholder="example.com"
                 error={form.errors.domain}
                 onChange={(event) => form.setFieldValue("domain", event.currentTarget.value)}
               />
-              <Select
+              <MultiSelect
                 label="Usable by"
-                placeholder="any project"
+                placeholder="Pick project(s)"
                 data={projects.map((p) => ({ value: p.id, label: p.name }))}
-                value={form.values.project_id}
-                onChange={(project_id) => form.setFieldValue("project_id", project_id)}
+                value={form.values.project_ids}
+                onChange={(project_ids) => form.setFieldValue("project_ids", project_ids)}
                 clearable
                 searchable
                 nothingFoundMessage="No project found..."

@@ -43,8 +43,11 @@ export default function ApiKeyDetails() {
           won't be able to use this key to access the Remails API anymore. This action cannot be undone.
         </Text>
       ),
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteApiKey(apiKey),
     });
   };

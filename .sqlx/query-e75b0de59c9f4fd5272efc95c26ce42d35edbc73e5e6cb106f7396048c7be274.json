@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   domain,\n                   organization_id,\n                   project_id,\n                   dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   dkim_pkcs8_der,\n                   verification_status,\n                   created_at,\n                   updated_at\n            FROM domains\n            WHERE organization_id = $1\n            ORDER BY updated_at DESC\n            ",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   COALESCE(\n                       array_agg(dp.project_id) FILTER (WHERE dp.project_id IS NOT NULL),\n                       '{}'\n                   ) AS \"project_ids!\",\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.verification_status,\n                   d.created_at,\n                   d.updated_at\n            FROM domains_projects dp\n            LEFT JOIN domains d ON dp.domain_id = d.id\n            WHERE dp.project_id = $1 AND $2 SIMILAR TO '(%.)?' || d.domain\n            GROUP BY d.id\n            ORDER BY char_length(d.domain) DESC\n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -20,8 +20,8 @@
       },
       {
         "ordinal": 3,
-        "name": "project_id",
-        "type_info": "Uuid"
+        "name": "project_ids!",
+        "type_info": "UuidArray"
       },
       {
         "ordinal": 4,
@@ -61,14 +61,15 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      true,
+      null,
       false,
       false,
       false,
@@ -76,5 +77,5 @@
       false
     ]
   },
-  "hash": "b249fb2f7fad351cd4d8d5af948a61062e550955539697d5c7194d21f6edcfd2"
+  "hash": "e75b0de59c9f4fd5272efc95c26ce42d35edbc73e5e6cb106f7396048c7be274"
 }

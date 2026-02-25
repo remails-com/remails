@@ -11,17 +11,17 @@ async function toDomains(page: Page) {
   {
     const expectedUrl = new RegExp(`${uuidRegex}/domains`);
     await expect(page).toHaveURL(expectedUrl);
-    await expect(page.getByRole("button", { name: "New Domain" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New domain" })).toBeVisible();
   }
 }
 
 async function createDomain(page: Page): Promise<string> {
   const domain = `${uuid()}.com`;
 
-  await page.getByRole("button", { name: "New Domain" }).click();
-  await expect(page.getByRole("dialog", { name: "Create New Domain" })).toBeVisible();
+  await page.getByRole("button", { name: "New domain" }).click();
+  await expect(page.getByRole("dialog", { name: "Add new domain" })).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Domain Name" }).fill(domain);
+  await page.getByRole("textbox", { name: "Domain name" }).fill(domain);
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "DKIM Public Key" })).toBeVisible();
   await page.getByRole("button", { name: "Verify", exact: true }).click();
@@ -33,8 +33,8 @@ async function createDomain(page: Page): Promise<string> {
   // Check new Domain is visible and has the right attributes in the table
   const rows = page.getByRole("table").getByRole("row");
   const targetRow = rows.filter({ hasText: domain });
-  // Associated project
-  await expect(targetRow.getByText("any project")).toBeVisible();
+  // No associated projects because we didn't add any
+  await expect(targetRow.getByText("no projects")).toBeVisible();
   // DNS status
   await expect(targetRow.getByText("error")).toBeVisible();
 
@@ -58,8 +58,9 @@ test("basic domain lifecycle", async ({ page }) => {
 
   // delete domain
   await page.getByRole("button", { name: "Delete" }).click();
-  await expect(page.getByRole("strong")).toContainText(domain);
-  await page.getByRole("button", { name: "Confirm" }).click();
+  const modal = page.getByLabel('Please confirm your action');
+  await expect(modal.getByRole("strong")).toContainText(domain);
+  await modal.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByText("Domain deleted")).toBeVisible();
 
   // Check we are back on the domains page
@@ -95,6 +96,7 @@ test("attach project afterward", async ({ page }) => {
 
   // select project
   await page.getByRole("option", { name: project }).click();
+  await page.getByRole("textbox", { name: "Usable by" }).blur();
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page.getByText("Domain updated")).toBeVisible();
@@ -118,16 +120,17 @@ test("create domain with project", async ({ page }) => {
 
   const domain = `${uuid()}.com`;
 
-  await page.getByRole("button", { name: "New Domain" }).click();
-  await expect(page.getByRole("dialog", { name: "Create New Domain" })).toBeVisible();
+  await page.getByRole("button", { name: "New domain" }).click();
+  await expect(page.getByRole("dialog", { name: "Add new domain" })).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Domain Name" }).fill(domain);
+  await page.getByRole("textbox", { name: "Domain name" }).fill(domain);
 
   // select project
   await page.getByRole("textbox", { name: "Usable by" }).click();
   await expect(page.getByRole("listbox", { name: "Usable by" })).toBeVisible();
   await page.getByRole("option", { name: project }).click();
 
+  await page.getByRole("textbox", { name: "Usable by" }).blur();
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Configure later" }).click();
 
@@ -146,10 +149,10 @@ test("domain must have TLD", async ({ page }) => {
 
   const domain = `${uuid()}`;
 
-  await page.getByRole("button", { name: "New Domain" }).click();
-  await expect(page.getByRole("dialog", { name: "Create New Domain" })).toBeVisible();
+  await page.getByRole("button", { name: "New domain" }).click();
+  await expect(page.getByRole("dialog", { name: "Add new domain" })).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Domain Name" }).fill(domain);
+  await page.getByRole("textbox", { name: "Domain name" }).fill(domain);
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByText("Domain must include a top")).toBeVisible();
 });
@@ -162,13 +165,13 @@ test("cancel button deletes temporary domain", async ({ page }) => {
   const domain = `${uuid()}.com`;
 
   // create new domain
-  await page.getByRole("button", { name: "New Domain" }).click();
-  await expect(page.getByRole("dialog", { name: "Create New Domain" })).toBeVisible();
-  await page.getByRole("textbox", { name: "Domain Name" }).fill(domain);
+  await page.getByRole("button", { name: "New domain" }).click();
+  await expect(page.getByRole("dialog", { name: "Add new domain" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Domain name" }).fill(domain);
   await page.getByRole("button", { name: "Next" }).click();
 
   // check domain gets added to table
-  await expect(page.getByRole("table").getByRole("row").filter({ hasText: domain })).not.toBeVisible();
+  await expect(page.getByRole("table").getByRole("row").filter({ hasText: domain })).toBeVisible();
 
   // cancel wizard
   await page.getByRole("button", { name: "Cancel" }).click();

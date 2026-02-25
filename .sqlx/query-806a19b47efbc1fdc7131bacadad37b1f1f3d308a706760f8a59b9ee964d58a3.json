@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO domains (id, domain, organization_id, project_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)\n            RETURNING id\n            ",
+  "query": "\n            INSERT INTO domains (id, domain, organization_id, dkim_key_type, dkim_pkcs8_der, last_verification_time, verification_status)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)\n            RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -12,7 +12,6 @@
     "parameters": {
       "Left": [
         "Varchar",
-        "Uuid",
         "Uuid",
         {
           "Custom": {
@@ -34,5 +33,5 @@
       false
     ]
   },
-  "hash": "29f2c8b673d16eaf5dbc8948c6b12523d2d39e59538468c00e053e75c6817f32"
+  "hash": "806a19b47efbc1fdc7131bacadad37b1f1f3d308a706760f8a59b9ee964d58a3"
 }

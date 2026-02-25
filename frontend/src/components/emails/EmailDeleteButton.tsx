@@ -38,8 +38,11 @@ export default function EmailDeleteButton({ email, small }: { email: EmailMetada
     modals.openConfirmModal({
       title: "Please confirm your action",
       children: <Text>Are you sure you want to delete this email?</Text>,
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteEmail(),
     });
   };

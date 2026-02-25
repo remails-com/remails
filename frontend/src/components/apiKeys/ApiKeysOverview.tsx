@@ -69,7 +69,7 @@ export default function ApiKeysOverview() {
       </StyledTable>
       <Flex justify="center" my="md">
         <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
-          New API Key
+          New API key
         </MaintainerButton>
         <Button
           ms="xl"

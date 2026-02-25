@@ -55,7 +55,7 @@ test("Password change", async ({ page }) => {
   {
     const expectedUrl = new RegExp(`${uuidRegex}/projects`);
     await expect(page).toHaveURL(expectedUrl);
-    await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New project" })).toBeVisible();
   }
 });
 
@@ -116,7 +116,7 @@ test("Email and name change", async ({ page }) => {
   {
     const expectedUrl = new RegExp(`${uuidRegex}/projects`);
     await expect(page).toHaveURL(expectedUrl);
-    await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New project" })).toBeVisible();
   }
 });
 

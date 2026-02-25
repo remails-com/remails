@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   d.project_id,\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.verification_status,\n                   d.created_at,\n                   d.updated_at\n            FROM domains d\n            WHERE d.id = $2 AND d.organization_id = $1\n            ",
+  "query": "\n            SELECT d.id,\n                   d.domain,\n                   d.organization_id,\n                   COALESCE(\n                       array_agg(dp.project_id) FILTER (WHERE dp.project_id IS NOT NULL),\n                       '{}'\n                   ) AS \"project_ids!\",\n                   d.dkim_key_type as \"dkim_key_type: DkimKeyType\",\n                   d.dkim_pkcs8_der,\n                   d.verification_status,\n                   d.created_at,\n                   d.updated_at\n            FROM domains d\n            LEFT JOIN domains_projects dp ON d.id = dp.domain_id\n            WHERE d.id = $2 AND d.organization_id = $1\n            GROUP BY d.id\n            ",
   "describe": {
     "columns": [
       {
@@ -20,8 +20,8 @@
       },
       {
         "ordinal": 3,
-        "name": "project_id",
-        "type_info": "Uuid"
+        "name": "project_ids!",
+        "type_info": "UuidArray"
       },
       {
         "ordinal": 4,
@@ -69,7 +69,7 @@
       false,
       false,
       false,
-      true,
+      null,
       false,
       false,
       false,
@@ -77,5 +77,5 @@
       false
     ]
   },
-  "hash": "3840c4fedb2ebae6100a44684e9abb524cc340a892a553cdef545cccc4dccd3d"
+  "hash": "b6e63a43786e52af313162025ff61bf5d13a59ddb4fc18883e6ff65e8d29e17c"
 }

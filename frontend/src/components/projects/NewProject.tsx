@@ -1,4 +1,4 @@
-import { Button, Group, Modal, Slider, Stack, TextInput } from "@mantine/core";
+import { Button, Group, Modal, Slider, Stack, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -75,7 +75,15 @@ export function NewProject({ opened, close }: NewProjectProps) {
 
   return (
     <>
-      <Modal opened={opened} onClose={close} title="Create New Project">
+      <Modal
+        opened={opened}
+        onClose={close}
+        title={
+          <Title order={3} component="span">Create new project</Title>
+        }
+        size="lg"
+        padding="xl"
+      >
         <form onSubmit={form.onSubmit(save)}>
           <Stack gap="md">
             <TextInput

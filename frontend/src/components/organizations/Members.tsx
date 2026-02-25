@@ -52,8 +52,11 @@ export default function Members() {
     modals.openConfirmModal({
       title: "Please confirm your action",
       children: <Text>Are you sure you want to delete this invite?</Text>,
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteInvite(id),
     });
   };
@@ -118,7 +121,7 @@ export default function Members() {
         </>
       ),
       labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      onCancel: () => { },
       onConfirm: () => removeFromOrganization(user.id),
     });
   };
@@ -141,7 +144,7 @@ export default function Members() {
         </>
       ),
       labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      onCancel: () => { },
       onConfirm: () => removeFromOrganization(member.user_id),
     });
   };

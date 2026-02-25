@@ -95,7 +95,7 @@ export default function ProjectsOverview() {
             />
           )}
           <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
-            New Project
+            New project
           </MaintainerButton>
         </Stack>
       </Flex>
