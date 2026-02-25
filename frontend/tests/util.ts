@@ -8,8 +8,8 @@ export async function createProject(page: Page): Promise<string> {
   const projectUuid = uuid();
 
   // Create a new project
-  await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
-  await page.getByRole("button", { name: "New Project" }).click();
+  await expect(page.getByRole("button", { name: "New project" })).toBeVisible();
+  await page.getByRole("button", { name: "New project" }).click();
   await page.getByRole("textbox", { name: "Name" }).fill(projectUuid);
   await page.getByRole("button", { name: "Save" }).click();
 
@@ -20,7 +20,7 @@ export async function deleteProject(page: Page) {
   await page.goto("/");
   await page.getByRole("row").getByRole("link").locator(".tabler-icon.tabler-icon-edit").click();
   await page.getByRole("button", { name: "Delete" }).click();
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await page.getByLabel('Please confirm your action').getByRole("button", { name: "Delete" }).click();
 }
 
 export async function createAccount(page: Page) {

@@ -13,7 +13,7 @@ test("Project lifecycle", async ({ page }) => {
   {
     const expectedUrl = new RegExp(`${uuidRegex}/projects/${uuidRegex}/credentials`);
     await expect(page).toHaveURL(expectedUrl);
-    await expect(page.getByRole("button", { name: "New Credential" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New credential" })).toBeVisible();
   }
 
   // Back to projects list
@@ -59,11 +59,13 @@ test("Project lifecycle", async ({ page }) => {
 
   // Delete the project
   await page.getByRole("button", { name: "Delete" }).click();
+
   // Confirm deletion dialog is visible and shows the correct project name
-  await expect(page.getByLabel("Please confirm your action").getByText("renamed project")).toBeVisible();
+  const modal = page.getByLabel("Please confirm your action");
+  await expect(modal.getByText("renamed project")).toBeVisible();
 
   // Click "confirm deletion"
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await modal.getByRole("button", { name: "Delete" }).click();
 
   // Confirm success message is visible
   await expect(page.getByText("Project deleted", { exact: true })).toBeVisible();
@@ -83,7 +85,7 @@ test("Credentials lifecycle", async ({ page }) => {
   await createProject(page);
 
   // Create new SMTP credential
-  await page.getByRole("button", { name: "New Credential" }).click();
+  await page.getByRole("button", { name: "New credential" }).click();
   await expect(page.getByRole("dialog", { name: "Create new SMTP credential" })).toBeVisible();
 
   // Fill in details
@@ -132,7 +134,7 @@ test("Credentials lifecycle", async ({ page }) => {
   // Delete the credential
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("strong")).toContainText(/[0-9a-f]{8}-playwright-smtp-user/);
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await page.getByLabel('Please confirm your action').getByRole('button', { name: 'Delete' }).click();
 
   // Ensure success message is visible
   await expect(page.getByText("Credential deleted")).toBeVisible();

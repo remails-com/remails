@@ -59,7 +59,7 @@ test("manage organization invite", async ({ page }) => {
   await page.locator(".tabler-icon.tabler-icon-trash").click();
   await expect(page.getByRole("dialog", { name: "Please confirm your action" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await page.getByLabel('Please confirm your action').getByRole("button", { name: "Delete" }).click();
 });
 
 // Create and accept an organization invite
@@ -99,9 +99,9 @@ baseTest("accept organization invite", async ({ browser }) => {
 
   // Check that the second user could join the organization of the first user
   await expect(page2).toHaveURL((url) => projectPage.startsWith(url.toString()));
-  await expect(page2.getByRole("button", { name: "New Project" })).toBeVisible();
+  await expect(page2.getByRole("button", { name: "New project" })).toBeVisible();
   // Check that it is allowed to create new projects
-  await expect(page2.getByRole("button", { name: "New Project" })).not.toBeDisabled();
+  await expect(page2.getByRole("button", { name: "New project" })).not.toBeDisabled();
 });
 
 test("organization API key", async ({ page }) => {
@@ -113,10 +113,10 @@ test("organization API key", async ({ page }) => {
 
   // Open API keys tab
   await page.getByRole("tab", { name: "API Keys" }).click();
-  await expect(page.getByRole("button", { name: "New API Key" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New API key" })).toBeVisible();
 
   // Create new API key
-  await page.getByRole("button", { name: "New API Key" }).click();
+  await page.getByRole("button", { name: "New API key" }).click();
   await expect(page.getByRole("dialog", { name: "Create new API key" })).toBeVisible();
 
   // Configure access level
@@ -141,7 +141,7 @@ test("organization API key", async ({ page }) => {
   {
     const expectedUrl = new RegExp(`${uuidRegex}/settings/api_keys`);
     await expect(page).toHaveURL(expectedUrl);
-    await expect(page.getByRole("button", { name: "New API Key" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New API key" })).toBeVisible();
   }
 
   // Confirm the new API key is listed with correct details
@@ -166,10 +166,11 @@ test("organization API key", async ({ page }) => {
   await page.getByRole("button", { name: "Delete" }).click();
 
   // Confirm deletion dialog is visible and shows the correct API key name
-  await expect(page.getByLabel("Please confirm your action").getByText("Playwright test API key")).toBeVisible();
+  const modal = page.getByLabel("Please confirm your action");
+  await expect(modal.getByText("Playwright test API key")).toBeVisible();
 
   // Confirm deletion
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await modal.getByRole("button", { name: "Delete" }).click();
 
   // confirm success message is visible
   await expect(page.getByText("API key deleted", { exact: true })).toBeVisible();
