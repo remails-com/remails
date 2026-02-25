@@ -42,8 +42,11 @@ export default function CredentialDetails() {
           You won't be able to sent emails with this credential anymore. This action cannot be undone.
         </Text>
       ),
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteCredential(credential),
     });
   };

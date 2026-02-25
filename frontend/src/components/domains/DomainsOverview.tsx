@@ -1,6 +1,6 @@
 import { useDomains } from "../../hooks/useDomains.ts";
 import { Loader } from "../../Loader.tsx";
-import { Flex, Pagination, Stack, Table, Text } from "@mantine/core";
+import { Anchor, Flex, Pagination, Popover, Stack, Table, Text } from "@mantine/core";
 import { formatDateTime } from "../../util.ts";
 import { IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
@@ -22,6 +22,34 @@ const PER_PAGE = 20;
 const SHOW_SEARCH = 10;
 
 function DomainRow({ domain }: { domain: Domain }) {
+  let projects;
+  if (domain.project_ids.length == 0) {
+    projects = (
+      <Text c="dimmed" >
+        no projects
+      </Text>
+    );
+  } else if (domain.project_ids.length == 1) {
+    projects = (
+      <Text fs="italic" c="dimmed">
+        <ProjectLink project_id={domain.project_ids[0]} />
+      </Text>
+    );
+  } else {
+    projects = (
+      <Popover position="bottom-start" withArrow>
+        <Popover.Target>
+          <Anchor underline="always">
+            {domain.project_ids.length} projects
+          </Anchor>
+        </Popover.Target>
+        <Popover.Dropdown>
+          {domain.project_ids.map(project_id => <ProjectLink project_id={project_id} />)}
+        </Popover.Dropdown>
+      </Popover>
+    );
+  }
+
   return (
     <Table.Tr>
       <Table.Td>
@@ -35,13 +63,7 @@ function DomainRow({ domain }: { domain: Domain }) {
         </Link>
       </Table.Td>
       <Table.Td>
-        {domain.project_id ? (
-          <ProjectLink project_id={domain.project_id} />
-        ) : (
-          <Text fs="italic" c="dimmed">
-            any project
-          </Text>
-        )}
+        {projects}
       </Table.Td>
       <Table.Td>{formatDateTime(domain.updated_at)}</Table.Td>
       <Table.Td align={"right"}>

@@ -29,12 +29,12 @@ export type WhoamiResponse =
 
 export type DeliveryStatus =
   | {
-      type: "Success";
-      delivered: string;
-    }
+    type: "Success";
+    delivered: string;
+  }
   | {
-      type: "NotSent" | "Reattempt" | "Failed";
-    };
+    type: "NotSent" | "Reattempt" | "Failed";
+  };
 
 export interface DeliveryDetails {
   status: DeliveryStatus;
@@ -124,136 +124,136 @@ export interface State {
 
 export type Action =
   | {
-      type: "set_user";
-      user: User | null;
-    }
+    type: "set_user";
+    user: User | null;
+  }
   | {
-      type: "set_api_users";
-      users: User[] | null;
-    }
+    type: "set_api_users";
+    users: User[] | null;
+  }
   | {
-      type: "set_api_user_role";
-      user_id: string;
-      role: Role | null;
-    }
+    type: "set_api_user_role";
+    user_id: string;
+    role: Role | null;
+  }
   | {
-      type: "set_totp_codes";
-      totpCodes: TotpCode[] | null;
-    }
+    type: "set_totp_codes";
+    totpCodes: TotpCode[] | null;
+  }
   | {
-      type: "remove_totp_code";
-      totpCodeId: string;
-    }
+    type: "remove_totp_code";
+    totpCodeId: string;
+  }
   | {
-      type: "add_totp_code";
-      totpCode: TotpCode;
-    }
+    type: "add_totp_code";
+    totpCode: TotpCode;
+  }
   | {
-      type: "set_organizations";
-      organizations: Organization[] | null;
-    }
+    type: "set_organizations";
+    organizations: Organization[] | null;
+  }
   | {
-      type: "add_organization";
-      organization: Organization;
-    }
+    type: "add_organization";
+    organization: Organization;
+  }
   | {
-      type: "remove_organization";
-      organizationId: string;
-    }
+    type: "remove_organization";
+    organizationId: string;
+  }
   | {
-      type: "set_projects";
-      projects: Project[] | null;
-    }
+    type: "set_projects";
+    projects: Project[] | null;
+  }
   | {
-      type: "add_project";
-      project: Project;
-    }
+    type: "add_project";
+    project: Project;
+  }
   | {
-      type: "remove_project";
-      projectId: string;
-    }
+    type: "remove_project";
+    projectId: string;
+  }
   | {
-      type: "set_labels";
-      labels: string[] | null;
-    }
+    type: "set_labels";
+    labels: string[] | null;
+  }
   | {
-      type: "set_emails";
-      emailMetadata: EmailMetadata[] | null;
-    }
+    type: "set_emails";
+    emailMetadata: EmailMetadata[] | null;
+  }
   | {
-      type: "update_email";
-      emailId: string;
-      update: Partial<Email>;
-    }
+    type: "update_email";
+    emailId: string;
+    update: Partial<Email>;
+  }
   | {
-      type: "remove_email";
-      emailId: string;
-    }
+    type: "remove_email";
+    emailId: string;
+  }
   | {
-      type: "set_domains";
-      domains: Domain[] | null;
-    }
+    type: "set_domains";
+    domains: Domain[] | null;
+  }
   | {
-      type: "add_domain";
-      domain: Domain;
-    }
+    type: "add_domain";
+    domain: Domain;
+  }
   | {
-      type: "remove_domain";
-      domainId: string;
-    }
+    type: "remove_domain";
+    domainId: string;
+  }
   | {
-      type: "set_credentials";
-      credentials: SmtpCredential[] | null;
-    }
+    type: "set_credentials";
+    credentials: SmtpCredential[] | null;
+  }
   | {
-      type: "add_credential";
-      credential: SmtpCredential;
-    }
+    type: "add_credential";
+    credential: SmtpCredential;
+  }
   | {
-      type: "remove_credential";
-      credentialId: string;
-    }
+    type: "remove_credential";
+    credentialId: string;
+  }
   | {
-      type: "set_api_keys";
-      apiKeys: ApiKey[] | null;
-    }
+    type: "set_api_keys";
+    apiKeys: ApiKey[] | null;
+  }
   | {
-      type: "add_api_key";
-      apiKey: ApiKey;
-    }
+    type: "add_api_key";
+    apiKey: ApiKey;
+  }
   | {
-      type: "remove_api_key";
-      apiKeyId: string;
-    }
+    type: "remove_api_key";
+    apiKeyId: string;
+  }
   | {
-      type: "set_next_router_state";
-      nextRouterState: RouterState | null;
-    }
+    type: "set_next_router_state";
+    nextRouterState: RouterState | null;
+  }
   | {
-      type: "set_route";
-      routerState: RouterState;
-    }
+    type: "set_route";
+    routerState: RouterState;
+  }
   | {
-      type: "set_config";
-      config: RemailsConfig;
-    }
+    type: "set_config";
+    config: RemailsConfig;
+  }
   | {
-      type: "set_runtime_config";
-      config: RuntimeConfig;
-    }
+    type: "set_runtime_config";
+    config: RuntimeConfig;
+  }
   | {
-      type: "set_subscription";
-      status: SubscriptionStatus;
-      organizationId: string;
-    }
+    type: "set_subscription";
+    status: SubscriptionStatus;
+    organizationId: string;
+  }
   | {
-      type: "set_statistics";
-      statistics: Statistics | null;
-    }
+    type: "set_statistics";
+    statistics: Statistics | null;
+  }
   | {
-      type: "set_error";
-      error: RemailsError;
-    };
+    type: "set_error";
+    error: RemailsError;
+  };
 
 export type OrgBlockStatus = "not_blocked" | "no_sending" | "no_sending_or_receiving";
 
@@ -299,7 +299,7 @@ export type DomainVerificationStatus = "verified" | "failed" | "loading";
 export interface Domain {
   id: string;
   organization_id: string;
-  project_id: string | null;
+  project_ids: string[];
   domain: string;
   dkim_key_type: "rsa_sha265" | "ed25519";
   dkim_public_key: string;

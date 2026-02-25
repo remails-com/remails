@@ -1,5 +1,5 @@
 import { useForm } from "@mantine/form";
-import { Group, List, Slider, Stack, Text, TextInput } from "@mantine/core";
+import { Group, Slider, Stack, Text, TextInput } from "@mantine/core";
 import { ProductIdentifier, Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -8,7 +8,6 @@ import { useRemails } from "../../hooks/useRemails.ts";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useProjects } from "../../hooks/useProjects.ts";
 import { Loader } from "../../Loader.tsx";
-import { useDomains } from "../../hooks/useDomains.ts";
 import { errorNotification } from "../../notify.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
 import InfoTooltip from "../InfoTooltip.tsx";
@@ -38,7 +37,6 @@ export default function ProjectSettings() {
   const { currentOrganization } = useOrganizations();
   const { currentProduct } = useSubscription();
   const { currentProject } = useProjects();
-  const { domains } = useDomains();
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -63,33 +61,21 @@ export default function ProjectSettings() {
   }
 
   const confirmDeleteProject = (project: Project) => {
-    const project_domains = domains.filter((domain) => domain.project_id == project.id);
-
     modals.openConfirmModal({
       title: "Please confirm your action",
       size: "lg",
       children: (
-        <>
-          <Text>
-            Are you sure you want to delete the <strong>{project.name}</strong> project?
-          </Text>
-          {project_domains.length > 0 && (
-            <>
-              <Text mt="sm">This will also delete the following domains linked to this project:</Text>
-              <List>
-                {project_domains.map((domain) => (
-                  <List.Item key={domain.id}>
-                    <Text fw="bold">{domain.domain}</Text>
-                  </List.Item>
-                ))}
-              </List>
-            </>
-          )}
-          <Text mt="sm">This action cannot be undone.</Text>
-        </>
+        <Text>
+          Are you sure you want to delete the <strong>{project.name}</strong> project?
+          This will also delete the SMTP credentials within this project.
+          This action cannot be undone.
+        </Text>
       ),
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteProject(project),
     });
   };

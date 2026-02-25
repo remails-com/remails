@@ -1,5 +1,5 @@
 import { useForm } from "@mantine/form";
-import { Group, Select, Stack, Text } from "@mantine/core";
+import { Group, MultiSelect, Stack, Text } from "@mantine/core";
 import { Domain } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -13,7 +13,7 @@ import { MaintainerButton } from "../RoleButtons.tsx";
 import { useProjects } from "../../hooks/useProjects.ts";
 
 interface FormValues {
-  project_id: string | null;
+  project_ids: string[];
 }
 
 export default function DomainSettings() {
@@ -25,7 +25,7 @@ export default function DomainSettings() {
 
   const form = useForm<FormValues>({
     initialValues: {
-      project_id: currentDomain?.project_id ?? null,
+      project_ids: currentDomain?.project_ids ?? [],
     },
   });
 
@@ -41,8 +41,11 @@ export default function DomainSettings() {
           Are you sure you want to delete the domain <strong>{domain.domain}</strong>? This action cannot be undone.
         </Text>
       ),
-      labels: { confirm: "Confirm", cancel: "Cancel" },
-      onCancel: () => {},
+      labels: { confirm: "Delete", cancel: "Cancel" },
+      confirmProps: {
+        leftSection: <IconTrash />,
+      },
+      onCancel: () => { },
       onConfirm: () => deleteDomain(domain),
     });
   };
@@ -71,7 +74,7 @@ export default function DomainSettings() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(values.project_id),
+      body: JSON.stringify(values.project_ids),
     });
     if (res.status !== 200) {
       errorNotification(`Project ${currentDomain.domain} could not be updated`);
@@ -95,12 +98,12 @@ export default function DomainSettings() {
       <h2>Domain Settings</h2>
       <form onSubmit={form.onSubmit(save)}>
         <Stack>
-          <Select
+          <MultiSelect
             label="Usable by"
             placeholder="any project"
             data={projects.map((p) => ({ value: p.id, label: p.name }))}
-            value={form.values.project_id}
-            onChange={(project_id) => form.setFieldValue("project_id", project_id)}
+            value={form.values.project_ids}
+            onChange={(project_ids) => form.setFieldValue("project_ids", project_ids)}
             clearable
             searchable
             nothingFoundMessage="No project found..."

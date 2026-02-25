@@ -1,4 +1,4 @@
-import { Button, Group, Modal, Select, Stack, Stepper, TextInput, Title } from "@mantine/core";
+import { Button, Group, Modal, MultiSelect, Stack, Stepper, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useOrganizations } from "../../hooks/useOrganizations.ts";
 import { useRemails } from "../../hooks/useRemails.ts";
@@ -12,7 +12,7 @@ import { useProjects } from "../../hooks/useProjects.ts";
 
 interface FormValues {
   domain: string;
-  project_id: string | null;
+  project_ids: string[];
 }
 
 interface NewDomainProps {
@@ -70,7 +70,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
   const form = useForm<FormValues>({
     initialValues: {
       domain: "",
-      project_id: null,
+      project_ids: [],
     },
     validate: {
       domain: validateDomain,
@@ -154,12 +154,12 @@ export function NewDomain({ opened, close }: NewDomainProps) {
                 error={form.errors.domain}
                 onChange={(event) => form.setFieldValue("domain", event.currentTarget.value)}
               />
-              <Select
+              <MultiSelect
                 label="Usable by"
                 placeholder="any project"
                 data={projects.map((p) => ({ value: p.id, label: p.name }))}
-                value={form.values.project_id}
-                onChange={(project_id) => form.setFieldValue("project_id", project_id)}
+                value={form.values.project_ids}
+                onChange={(project_ids) => form.setFieldValue("project_ids", project_ids)}
                 clearable
                 searchable
                 nothingFoundMessage="No project found..."
