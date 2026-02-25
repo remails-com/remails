@@ -135,8 +135,8 @@ export function NewDomain({ opened, close }: NewDomainProps) {
         close();
       }}
       title={
-        <Title order={2} component="span">
-          Create New Domain
+        <Title order={3} component="span">
+          Add new domain
         </Title>
       }
       size="lg"
@@ -147,7 +147,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
           <form onSubmit={form.onSubmit(save)}>
             <Stack>
               <TextInput
-                label="Domain Name"
+                label="Domain name"
                 key={form.key("domain")}
                 value={form.values.domain}
                 placeholder="example.com"

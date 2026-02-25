@@ -68,7 +68,7 @@ export function CredentialsOverview() {
       </StyledTable>
       <Flex justify="center" my="md">
         <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
-          New Credential
+          New credential
         </MaintainerButton>
       </Flex>
     </>

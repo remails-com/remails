@@ -166,7 +166,7 @@ export function EmailOverview() {
       <InfoAlert stateName="messages">
         This page shows a list of all emails sent in this {routerState.name == "emails" ? "organization" : "project"}.
         Use it to check delivery status, inspect metadata, and troubleshoot issues. You’ll see timestamps, recipient
-        addresses, and SMTP-level details for each message. Messages are automatically deleted after the rentention
+        addresses, and SMTP-level details for each message. Messages are automatically deleted after the retention
         period set in the project settings.
       </InfoAlert>
 
@@ -178,7 +178,7 @@ export function EmailOverview() {
                 Label
                 <InfoTooltip
                   size="xs"
-                  text="Labels can be used to catagorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API."
+                  text="Labels can be used to categorize emails. Specify the label by setting the X-REMAILS-LABEL header or using the REST API."
                 />
               </Group>
             }

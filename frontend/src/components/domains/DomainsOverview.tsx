@@ -124,7 +124,7 @@ export default function DomainsOverview() {
         </Text>
       )}
 
-      <StyledTable headers={["Domains", "DNS Status", "Usable by", "Updated", ""]}>{rows}</StyledTable>
+      <StyledTable headers={["Domains", "DNS status", "Usable by", "Updated", ""]}>{rows}</StyledTable>
 
       <Flex justify="center" mt="md">
         <Stack>
@@ -141,7 +141,7 @@ export default function DomainsOverview() {
             />
           )}
           <MaintainerButton onClick={() => open()} leftSection={<IconPlus />}>
-            New Domain
+            New domain
           </MaintainerButton>
         </Stack>
       </Flex>

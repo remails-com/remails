@@ -1,4 +1,4 @@
-import { Modal } from "@mantine/core";
+import { Modal, Title } from "@mantine/core";
 import { NewOrganizationForm } from "./NewOrganizationForm.tsx";
 import { Organization } from "../../types.ts";
 
@@ -11,7 +11,15 @@ interface NewOrganizationProps {
 export function NewOrganization({ opened, close, done }: NewOrganizationProps) {
   return (
     <>
-      <Modal opened={opened} onClose={close} title="Create New Organization">
+      <Modal
+        opened={opened}
+        onClose={close}
+        title={
+          <Title order={3} component="span">Create new organization</Title>
+        }
+        size="lg"
+        padding="xl"
+      >
         <NewOrganizationForm
           done={(newOrg: Organization) => {
             if (done) {
