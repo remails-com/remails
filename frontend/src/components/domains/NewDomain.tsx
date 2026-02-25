@@ -156,7 +156,7 @@ export function NewDomain({ opened, close }: NewDomainProps) {
               />
               <MultiSelect
                 label="Usable by"
-                placeholder="any project"
+                placeholder="Pick project(s)"
                 data={projects.map((p) => ({ value: p.id, label: p.name }))}
                 value={form.values.project_ids}
                 onChange={(project_ids) => form.setFieldValue("project_ids", project_ids)}
