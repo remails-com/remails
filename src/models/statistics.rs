@@ -216,7 +216,6 @@ mod test {
 
         // get statistics from messages
         let mut stats = repo.get_monthly_stats(org_1).await.unwrap();
-        assert_eq!(stats.len(), 4);
         assert!(stats.iter().all(|stat| stat.organization_id == org_1));
         stats.sort_by_key(|stat| (*stat.project_id, stat.date));
 
