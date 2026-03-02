@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE projects \n            SET name = $3,\n                retention_period_days = $4\n            WHERE id = $2\n              AND organization_id = $1\n            RETURNING *\n            ",
+  "query": "\n            SELECT * FROM projects WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -32,14 +32,16 @@
         "ordinal": 5,
         "name": "retention_period_days",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "plaintext_fallback",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Uuid",
-        "Varchar",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -48,8 +50,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "6019031dbd6be02050e34e453b1a324c429aafe2b26fe7d82fe20da2f96b7a1a"
+  "hash": "4f1cde8ac934cb53d2cdc73e13b6e2f7c353954ed3504170dc635a31db0663c9"
 }
