@@ -1,0 +1,2 @@
+ALTER TABLE projects
+ADD COLUMN plaintext_fallback BOOLEAN NOT NULL DEFAULT FALSE;

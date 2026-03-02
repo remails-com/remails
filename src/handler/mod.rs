@@ -10,7 +10,7 @@ use crate::{
     kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
-        OrganizationRepository, QuotaStatus,
+        OrganizationRepository, ProjectRepository, QuotaStatus,
     },
 };
 use base64ct::{Base64, Encoding};
@@ -92,7 +92,6 @@ impl Default for RetryConfig {
 pub struct HandlerConfig {
     pub(crate) resolver: DnsResolver,
     pub(crate) domain: String,
-    pub(crate) allow_plain: bool,
     pub(crate) retry: RetryConfig,
     pub(crate) environment: Environment,
 }
@@ -101,7 +100,6 @@ pub struct HandlerConfig {
 impl HandlerConfig {
     pub fn new() -> Self {
         Self {
-            allow_plain: false,
             domain: std::env::var("SMTP_EHLO_DOMAIN")
                 .expect("Missing SMTP_EHLO_DOMAIN environment variable"),
             resolver: DnsResolver::new(),
@@ -123,6 +121,7 @@ pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
+    project_repository: ProjectRepository,
     message_parser: MessageParser,
     k8s: Kubernetes,
     workers: Arc<Semaphore>,
@@ -153,6 +152,7 @@ impl Handler {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone(), resolver),
             organization_repository: OrganizationRepository::new(pool.clone()),
+            project_repository: ProjectRepository::new(pool.clone()),
             message_parser: MessageParser::default(),
             k8s: Kubernetes::new(pool.clone())
                 .await
@@ -607,7 +607,8 @@ impl Handler {
         let mut failures = 0u32;
         let mut should_reattempt = false;
 
-        let order: &[Protection] = if self.config.allow_plain {
+        let project = self.project_repository.get(message.project_id).await?;
+        let order: &[Protection] = if project.plaintext_fallback {
             &[Protection::Tls, Protection::Plaintext]
         } else {
             &[Protection::Tls]
@@ -875,7 +876,6 @@ mod test {
             records: Option<Vec<&'static str>>,
         ) -> Self {
             let config = HandlerConfig {
-                allow_plain: true,
                 domain: "test".to_string(),
                 resolver: if let Some(records) = records {
                     DnsResolver::mock_custom_records("localhost", mailcrab_port, records)

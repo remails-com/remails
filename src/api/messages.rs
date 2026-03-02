@@ -1113,6 +1113,7 @@ mod tests {
                 serialize_body(NewProject {
                     name: "Project 2 Organization 1".to_owned(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await

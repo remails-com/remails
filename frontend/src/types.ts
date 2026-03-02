@@ -276,6 +276,7 @@ export interface Project {
   id: string;
   name: string;
   retention_period_days: number;
+  plaintext_fallback: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -107,7 +107,6 @@ async fn setup(
     };
 
     let handler_config = HandlerConfig {
-        allow_plain: true,
         domain: "test".to_owned(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         environment: Environment::Development,

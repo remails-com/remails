@@ -1,5 +1,5 @@
 import { useForm } from "@mantine/form";
-import { Group, Slider, Stack, Text, TextInput } from "@mantine/core";
+import { Group, Slider, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { ProductIdentifier, Project } from "../../types.ts";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -16,6 +16,7 @@ import { useSubscription } from "../../hooks/useSubscription.ts";
 interface FormValues {
   name: string;
   retention_period_days: number;
+  plaintext_fallback: boolean;
 }
 
 // Values should match `max_retention_period` in `src/moneybird/model.rs`
@@ -42,6 +43,7 @@ export default function ProjectSettings() {
     initialValues: {
       name: currentProject?.name || "",
       retention_period_days: currentProject?.retention_period_days || 1,
+      plaintext_fallback: currentProject?.plaintext_fallback || false,
     },
     validate: {
       name: (value) => {
@@ -160,7 +162,16 @@ export default function ProjectSettings() {
                 { value: 14, label: "14 days" },
                 { value: 30, label: "30 days" },
               ]}
+              mb="xl"
             />
+            <Group mt="sm">
+              <Switch
+                checked={form.values.plaintext_fallback}
+                onChange={(ev) => form.setFieldValue("plaintext_fallback", ev.currentTarget.checked)}
+                label="Enable plaintext fallback"
+              />
+              <InfoTooltip text="If enabled, emails within this project will be attempted to be sent without TLS encryption if they fail to send with TLS." size="xs" />
+            </Group>
           </Stack>
 
           <Group mt="xl">

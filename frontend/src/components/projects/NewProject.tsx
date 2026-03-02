@@ -11,6 +11,7 @@ import { useSubscription } from "../../hooks/useSubscription.ts";
 interface FormValues {
   name: string;
   retention_period_days: number;
+  plaintext_fallback: boolean;
 }
 
 interface NewProjectProps {
@@ -27,6 +28,7 @@ export function NewProject({ opened, close }: NewProjectProps) {
     initialValues: {
       name: "",
       retention_period_days: 1,
+      plaintext_fallback: false,
     },
     validate: {
       name: (value) => (value.length < 3 ? "Name must have at least 3 letters" : null),
