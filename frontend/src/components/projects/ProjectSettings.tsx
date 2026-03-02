@@ -170,7 +170,7 @@ export default function ProjectSettings() {
                 onChange={(ev) => form.setFieldValue("plaintext_fallback", ev.currentTarget.checked)}
                 label="Enable plaintext fallback"
               />
-              <InfoTooltip text="If enabled, emails within this project will be attempted to be sent without TLS encryption if they fail to send with TLS." size="xs" />
+              <InfoTooltip text="If enabled, emails in the project will fall back to being sent without TLS encryption if delivery over TLS fails." size="xs" />
             </Group>
           </Stack>
 

@@ -62,8 +62,8 @@ pub struct NewProject {
     #[schema(minimum = 1, maximum = 30)]
     #[garde(range(min = 1, max = 30))]
     pub retention_period_days: i32,
-    /// If set true, emails within this project will be attempted to be sent without TLS encryption
-    /// if they fail to send with TLS.
+    /// If set true, emails in the project will fall back to being sent without TLS encryption
+    /// if delivery over TLS fails.
     #[garde(skip)]
     pub plaintext_fallback: bool,
 }
