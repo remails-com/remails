@@ -211,7 +211,7 @@ mod test {
         assert_eq!(project.name, "New Project");
         assert_eq!(project.retention_period_days, 1);
         assert_eq!(project.organization_id, org_1);
-        assert_eq!(project.plaintext_fallback, false);
+        assert!(!project.plaintext_fallback);
 
         // get project
         let proj = repo.get(project.id).await.unwrap();

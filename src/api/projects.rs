@@ -209,7 +209,7 @@ mod tests {
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Test Project");
         assert_eq!(project.retention_period_days, 1);
-        assert_eq!(project.plaintext_fallback, false);
+        assert!(!project.plaintext_fallback);
 
         // list projects
         let response = server
@@ -237,7 +237,7 @@ mod tests {
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Updated Project");
         assert_eq!(project.retention_period_days, 1);
-        assert_eq!(project.plaintext_fallback, true);
+        assert!(project.plaintext_fallback);
 
         // list projects
         let response = server
