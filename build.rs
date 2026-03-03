@@ -3,5 +3,9 @@ fn main() {
     println!("cargo:rerun-if-changed=migrations");
 
     // load frontend assets
-    memory_serve::load_directory("frontend/dist");
+    let embed = !cfg!(debug_assertions);
+    memory_serve::load_names_directories(
+        vec![("frontend", "frontend/dist"), ("openapi", "src/static")],
+        embed,
+    );
 }
