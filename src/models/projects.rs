@@ -39,6 +39,7 @@ pub struct Project {
     organization_id: OrganizationId,
     pub name: String,
     pub retention_period_days: i32,
+    pub plaintext_fallback: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -61,6 +62,10 @@ pub struct NewProject {
     #[schema(minimum = 1, maximum = 30)]
     #[garde(range(min = 1, max = 30))]
     pub retention_period_days: i32,
+    /// If set true, emails in the project will fall back to being sent without TLS encryption
+    /// if delivery over TLS fails.
+    #[garde(skip)]
+    pub plaintext_fallback: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -88,13 +93,26 @@ impl ProjectRepository {
         Ok(sqlx::query_as!(
             Project,
             r#"
-            INSERT INTO projects (id, organization_id, name, retention_period_days)
-            VALUES (gen_random_uuid(), $1, $2, $3)
+            INSERT INTO projects (id, organization_id, name, retention_period_days, plaintext_fallback)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
             RETURNING *
             "#,
             *organization_id,
             new.name.trim(),
             new.retention_period_days,
+            new.plaintext_fallback
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn get(&self, project_id: ProjectId) -> Result<Project, Error> {
+        Ok(sqlx::query_as!(
+            Project,
+            r#"
+            SELECT * FROM projects WHERE id = $1
+            "#,
+            *project_id,
         )
         .fetch_one(&self.pool)
         .await?)
@@ -130,7 +148,8 @@ impl ProjectRepository {
             r#"
             UPDATE projects 
             SET name = $3,
-                retention_period_days = $4
+                retention_period_days = $4,
+                plaintext_fallback = $5
             WHERE id = $2
               AND organization_id = $1
             RETURNING *
@@ -139,6 +158,7 @@ impl ProjectRepository {
             *project_id,
             update.name.trim(),
             update.retention_period_days,
+            update.plaintext_fallback,
         )
         .fetch_one(&self.pool)
         .await?)
@@ -182,6 +202,7 @@ mod test {
                 NewProject {
                     name: "New Project".to_owned(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 },
                 org_1,
             )
@@ -190,6 +211,14 @@ mod test {
         assert_eq!(project.name, "New Project");
         assert_eq!(project.retention_period_days, 1);
         assert_eq!(project.organization_id, org_1);
+        assert!(!project.plaintext_fallback);
+
+        // get project
+        let proj = repo.get(project.id).await.unwrap();
+        assert_eq!(proj.name, project.name);
+        assert_eq!(proj.retention_period_days, project.retention_period_days);
+        assert_eq!(proj.organization_id, project.organization_id);
+        assert_eq!(proj.plaintext_fallback, project.plaintext_fallback);
 
         // list projects
         let projects = repo.list(org_1).await.unwrap();
@@ -204,6 +233,7 @@ mod test {
                 NewProject {
                     name: "Updated Project".to_owned(),
                     retention_period_days: 3,
+                    plaintext_fallback: false,
                 },
             )
             .await
@@ -238,6 +268,7 @@ mod test {
             NewProject {
                 name: format!("Project {n}"),
                 retention_period_days,
+                plaintext_fallback: false,
             }
         };
 

@@ -3,8 +3,8 @@ use crate::{
     bus::{client::BusClient, server::Bus},
     handler::{HandlerConfig, RetryConfig, dns::DnsResolver},
     models::{
-        ApiKey, ApiMessageMetadata, CreatedApiKeyWithPassword, MessageStatus, OrgBlockStatus,
-        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialResponse,
+        ApiKey, ApiMessage, ApiMessageMetadata, CreatedApiKeyWithPassword, MessageStatus,
+        OrgBlockStatus, OrganizationId, Project, ProjectId, SmtpCredential, SmtpCredentialResponse,
     },
     run_api_server, run_mta,
     smtp::SmtpConfig,
@@ -107,7 +107,6 @@ async fn setup(
     };
 
     let handler_config = HandlerConfig {
-        allow_plain: true,
         domain: "test".to_owned(),
         resolver: DnsResolver::mock("localhost", mailcrab_random_port),
         environment: Environment::Development,
@@ -300,6 +299,77 @@ async fn integration_test(pool: PgPool) {
         .status();
     assert_eq!(status, StatusCode::FORBIDDEN);
 
+    // set John's project to no plaintext_fallback
+    let project: Project = client
+        .put(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/projects/{jproj}"
+        ))
+        .header("X-Test-Login", &jorg)
+        .json(&json!({
+            "name": "Project 1 Organization 1",
+            "retention_period_days": 1,
+            "plaintext_fallback": false
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(!project.plaintext_fallback);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // John sends another message
+    let message = MessageBuilder::new()
+        .from(("John", "john@test-org-1-project-1.com"))
+        .to(vec![("Eddy", "eddy@test-org-2-project-1.com")])
+        .subject("TPS reports")
+        .text_body("Have you finished the TPS reports yet? This is the 11th reminder!!!")
+        .message_id("tps-11@test-org-1-project-1.com");
+    john_smtp_client.send(message).await.unwrap();
+
+    // Retrieve messages
+    let messages: Vec<ApiMessageMetadata> = client
+        .get(format!(
+            "http://localhost:{http_port}/api/organizations/{jorg}/emails?limit=20"
+        ))
+        .header("X-Test-Login", &jorg)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 11);
+    let message_id = messages
+        .into_iter()
+        .find(|m| m.message_id_header == "tps-11@test-org-1-project-1.com")
+        .unwrap()
+        .id;
+
+    // Status should become Failed because we don't use TLS for mailcrab
+    let get_message = async || {
+        client
+            .get(format!(
+                "http://localhost:{http_port}/api/organizations/{jorg}/emails/{}",
+                message_id
+            ))
+            .header("X-Test-Login", &jorg)
+            .send()
+            .await
+            .unwrap()
+            .json::<ApiMessage>()
+            .await
+            .unwrap()
+    };
+    while matches!(
+        get_message().await.status(),
+        MessageStatus::Processing | MessageStatus::Accepted
+    ) {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    assert_eq!(*get_message().await.status(), MessageStatus::Failed);
+
     // super admin blocks John's organization from sending emails
     let status = client
         .put(format!(
@@ -325,7 +395,7 @@ async fn integration_test(pool: PgPool) {
     // check John's sent messages
     let messages: Vec<ApiMessageMetadata> = client
         .get(format!(
-            "http://localhost:{http_port}/api/organizations/{jorg}/emails"
+            "http://localhost:{http_port}/api/organizations/{jorg}/emails?limit=20"
         ))
         .header("X-Test-Login", &jorg)
         .send()
@@ -334,8 +404,7 @@ async fn integration_test(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    assert_eq!(messages.len(), 11);
+    assert_eq!(messages.len(), 12);
     let message = messages
         .into_iter()
         .find(|m| m.from_email.as_str() == "john2@test-org-1-project-1.com")

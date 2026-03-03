@@ -200,6 +200,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -208,6 +209,7 @@ mod tests {
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Test Project");
         assert_eq!(project.retention_period_days, 1);
+        assert!(!project.plaintext_fallback);
 
         // list projects
         let response = server
@@ -226,6 +228,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: true,
                 }),
             )
             .await
@@ -234,6 +237,7 @@ mod tests {
         let project: Project = deserialize_body(response.into_body()).await;
         assert_eq!(project.name, "Updated Project");
         assert_eq!(project.retention_period_days, 1);
+        assert!(project.plaintext_fallback);
 
         // list projects
         let response = server
@@ -289,6 +293,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -302,6 +307,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: true,
                 }),
             )
             .await
@@ -345,6 +351,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -364,6 +371,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -386,6 +394,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -405,6 +414,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -418,6 +428,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 2".to_string(),
                     retention_period_days: 1,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -450,6 +461,7 @@ mod tests {
                     serialize_body(&NewProject {
                         name: format!("Test Project {}", i + 2),
                         retention_period_days: 3, // all paid subscriptions allow at least 3 day retention
+                        plaintext_fallback: false,
                     }),
                 )
                 .await
@@ -477,6 +489,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
                     retention_period_days: 3,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -496,6 +509,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
                     retention_period_days: 30,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -518,6 +532,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
                     retention_period_days: 30,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -534,6 +549,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Test Project 1".to_string(),
                     retention_period_days: 31,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -547,6 +563,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
                     retention_period_days: 31,
+                    plaintext_fallback: false,
                 }),
             )
             .await
@@ -560,6 +577,7 @@ mod tests {
                 serialize_body(&NewProject {
                     name: "Updated Project".to_string(),
                     retention_period_days: 7,
+                    plaintext_fallback: false,
                 }),
             )
             .await

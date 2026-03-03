@@ -156,7 +156,6 @@ mod test {
         let bus_port = Bus::spawn_random_port().await;
         let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
-            allow_plain: true,
             domain: "test".to_owned(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             environment: Environment::Development,
@@ -300,7 +299,6 @@ mod test {
         let bus_port = Bus::spawn_random_port().await;
         let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
         let config = HandlerConfig {
-            allow_plain: true,
             domain: "test".to_owned(),
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry: RetryConfig {
