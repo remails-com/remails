@@ -5,7 +5,6 @@ use crate::api::{
 };
 use axum::{Json, Router, routing::get};
 use http::StatusCode;
-use memory_serve::{MemoryServe, load_assets};
 use std::{env, net::SocketAddr, time::Duration};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -106,7 +105,7 @@ pub fn openapi_router() -> OpenApiRouter<ApiState> {
 pub fn docs_router() -> Router {
     let openapi = openapi_router().to_openapi();
 
-    MemoryServe::new(load_assets!("src/static"))
+    memory_serve::load!("openapi")
         .index_file(Some("/scalar.html"))
         .fallback(Some("/scalar.html"))
         .into_router()

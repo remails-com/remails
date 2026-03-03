@@ -336,7 +336,7 @@ impl ApiServer {
             .with_state(state.clone());
 
         if with_frontend {
-            let memory_router = memory_serve::from_local_build!()
+            let memory_router = memory_serve::load!("frontend")
                 .index_file(Some("/index.html"))
                 .fallback(Some("/index.html"))
                 .fallback_status(StatusCode::OK)
