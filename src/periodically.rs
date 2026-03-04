@@ -4,11 +4,11 @@ use crate::{
     handler::dns::DnsResolver,
     models::{
         self, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        StatisticsRepository,
+        StatisticsRepository, SuppressedRepository,
     },
     moneybird,
 };
-use chrono::Duration;
+use chrono::{Duration, Utc};
 use sqlx::PgPool;
 use std::error::Error;
 use tokio::select;
@@ -21,6 +21,7 @@ pub struct Periodically {
     user_repository: ApiUserRepository,
     statistics_repository: StatisticsRepository,
     domain_repository: DomainRepository,
+    suppressed_repository: SuppressedRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
 }
@@ -58,6 +59,7 @@ impl Periodically {
             user_repository: ApiUserRepository::new(pool.clone()),
             statistics_repository: StatisticsRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone(), resolver),
+            suppressed_repository: SuppressedRepository::new(pool.clone()),
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
         })
@@ -88,14 +90,14 @@ impl Periodically {
 
     /// Clean up organization invites and password reset links which have been expired for more than
     /// a day, as well as messages that are out of their retention period and/or message that are
-    /// ready to be deleted
+    /// ready to be deleted, and suppressed email addresses which were not used for a while
     pub async fn clean_up(&self) -> Result<(), models::Error> {
         self.invite_repository
-            .remove_expired_before(chrono::Utc::now() - Duration::days(1))
+            .remove_expired_before(Utc::now() - Duration::days(1))
             .await?;
 
         self.user_repository
-            .remove_password_reset_expired_before(chrono::Utc::now() - Duration::days(1))
+            .remove_password_reset_expired_before(Utc::now() - Duration::days(1))
             .await?;
 
         self.message_repository
@@ -104,6 +106,10 @@ impl Periodically {
 
         self.statistics_repository
             .aggregate_and_archive_messages()
+            .await?;
+
+        self.suppressed_repository
+            .clean_up_before(Utc::now() - Duration::days(90))
             .await
     }
 
