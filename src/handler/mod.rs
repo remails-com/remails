@@ -64,6 +64,7 @@ enum SendError {
 #[derive(Clone, Copy)]
 enum Protection {
     Plaintext,
+    TlsAllowInvalidCerts,
     Tls,
 }
 
@@ -520,35 +521,53 @@ impl Handler {
             .helo_host(&self.config.domain)
             .timeout(std::time::Duration::from_secs(30));
 
-        let result =
-            match security {
-                Protection::Tls => match smtp.connect().await {
-                    Err(err) => Err(err),
-                    Ok(mut client) => {
-                        trace!(domain, port, "securely connected to upstream server");
-                        connection_log.log(LogLevel::Info, format!(
-                        "securely connected to '{hostname}' with port {port} over TLS",
-                    ));
-                        let result = client.send(message.clone()).await;
-                        Self::quit_smtp(client, &hostname).await;
-                        result
-                    }
-                },
-                Protection::Plaintext => {
-                    match smtp.connect_plain().await {
-                        Err(err) => Err(err),
-                        Ok(mut client) => {
-                            trace!(domain, port, "INSECURELY connected to upstream server");
-                            connection_log.log(LogLevel::Info, format!(
-                            "INSECURELY connected to '{hostname}' with port {port} without TLS",
-                        ));
-                            let result = client.send(message.clone()).await;
-                            Self::quit_smtp(client, &hostname).await;
-                            result
-                        }
-                    }
+        let result = match security {
+            Protection::Tls => match smtp.connect().await {
+                Err(err) => Err(err),
+                Ok(mut client) => {
+                    trace!(domain, port, "securely connected to upstream server");
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!("securely connected to '{hostname}' with port {port} over TLS",),
+                    );
+                    let result = client.send(message.clone()).await;
+                    Self::quit_smtp(client, &hostname).await;
+                    result
                 }
-            };
+            },
+            Protection::TlsAllowInvalidCerts => match smtp.allow_invalid_certs().connect().await {
+                Err(err) => Err(err),
+                Ok(mut client) => {
+                    trace!(
+                        domain,
+                        port,
+                        "insecurely connected to upstream server (allowing invalid certificates)"
+                    );
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!("insecurely connected to '{hostname}' with port {port} over TLS (allowing invalid certificates)"),
+                    );
+                    let result = client.send(message.clone()).await;
+                    Self::quit_smtp(client, &hostname).await;
+                    result
+                }
+            },
+            Protection::Plaintext => match smtp.connect_plain().await {
+                Err(err) => Err(err),
+                Ok(mut client) => {
+                    trace!(domain, port, "INSECURELY connected to upstream server");
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!(
+                            "INSECURELY connected to '{hostname}' with port {port} without TLS",
+                        ),
+                    );
+                    let result = client.send(message.clone()).await;
+                    Self::quit_smtp(client, &hostname).await;
+                    result
+                }
+            },
+        };
 
         let Err(err) = result else {
             debug!(domain, port, "successfully send email");
@@ -609,7 +628,11 @@ impl Handler {
 
         let project = self.project_repository.get(message.project_id).await?;
         let order: &[Protection] = if project.plaintext_fallback {
-            &[Protection::Tls, Protection::Plaintext]
+            &[
+                Protection::Tls,
+                Protection::TlsAllowInvalidCerts,
+                Protection::Plaintext,
+            ]
         } else {
             &[Protection::Tls]
         };

@@ -642,7 +642,7 @@ where
         // first check if they are using a valid API key
         if let Ok(api_key) = <ApiKey as FromRequestParts<S>>::from_request_parts(parts, state).await
         {
-            return Ok(Box::new(api_key));
+            return Ok(Box::new(api_key) as Box<dyn Authenticated>);
         }
 
         // otherwise, check if they are logged in as an ApiUser
