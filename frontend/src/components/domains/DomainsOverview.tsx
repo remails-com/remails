@@ -108,8 +108,8 @@ export default function DomainsOverview() {
       <OrganizationHeader />
 
       <InfoAlert stateName="project-domains">
-        Domains must be verified via DNS (SPF, DKIM, and DMARC) before emails can be sent from them. Optionally, domains
-        can be restricted to a single project.
+        Domains must be verified via DNS (SPF, DKIM, and DMARC) before they can be used to send email.
+        Projects may only use domains to which they are attached. A domain may be attached to one or more projects.
       </InfoAlert>
 
       <NewDomain opened={opened} close={close} />
