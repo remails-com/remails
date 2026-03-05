@@ -1,5 +1,5 @@
 use crate::models::Password;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
@@ -201,6 +201,40 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => None,
             ProductIdentifier::RmlsMediumYearly => None,
             ProductIdentifier::RmlsLargeYearly => None,
+        }
+    }
+
+    pub fn max_rate_limit_tokens(&self) -> i64 {
+        match self {
+            ProductIdentifier::NotSubscribed => 0,
+            ProductIdentifier::RmlsFree => 5,
+            ProductIdentifier::RmlsTinyMonthly => 20,
+            ProductIdentifier::RmlsSmallMonthly => 60,
+            ProductIdentifier::RmlsMediumMonthly => 150,
+            ProductIdentifier::RmlsLargeMonthly => 300,
+            ProductIdentifier::RmlsTinyYearly => 20,
+            ProductIdentifier::RmlsSmallYearly => 60,
+            ProductIdentifier::RmlsMediumYearly => 150,
+            ProductIdentifier::RmlsLargeYearly => 300,
+        }
+    }
+
+    /// The time elapsed between two tokens getting refilled.
+    ///
+    /// E.g., if the returned value is 500ms, we add one token every half-second up to the [`max_rate_limit_tokens`](Self::max_rate_limit_tokens).
+    pub fn token_refill_time(&self) -> Duration {
+        match self {
+            // pointless, as the max_rate_limit_tokens is 0 anyway
+            ProductIdentifier::NotSubscribed => Duration::seconds(60),
+            ProductIdentifier::RmlsFree => Duration::seconds(60),
+            ProductIdentifier::RmlsTinyMonthly => Duration::seconds(10),
+            ProductIdentifier::RmlsSmallMonthly => Duration::milliseconds(500),
+            ProductIdentifier::RmlsMediumMonthly => Duration::milliseconds(250),
+            ProductIdentifier::RmlsLargeMonthly => Duration::milliseconds(100),
+            ProductIdentifier::RmlsTinyYearly => Duration::seconds(10),
+            ProductIdentifier::RmlsSmallYearly => Duration::milliseconds(500),
+            ProductIdentifier::RmlsMediumYearly => Duration::milliseconds(250),
+            ProductIdentifier::RmlsLargeYearly => Duration::milliseconds(100),
         }
     }
 }

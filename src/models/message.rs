@@ -1,4 +1,5 @@
 use crate::{
+    SubscriptionStatus,
     bus::client::BusMessage,
     handler::{ConnectionLog, RetryConfig},
     models::{
@@ -14,9 +15,14 @@ use mail_builder::MessageBuilder;
 use mail_parser::{HeaderName, MessageParser, MimeHeaders};
 use rand::RngExt;
 use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::postgres::types::PgInterval;
-use std::{collections::HashMap, mem, str::FromStr};
-use tracing::trace;
+use std::{
+    borrow::Cow,
+    cmp::{max, min},
+    collections::HashMap,
+    mem,
+    str::FromStr,
+};
+use tracing::{debug, error, span, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -252,8 +258,6 @@ pub struct NewApiMessage {
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
     pool: sqlx::PgPool,
-    rate_limit_timespan: PgInterval,
-    rate_limit_max_messages: i64,
     message_parser: MessageParser,
 }
 
@@ -449,20 +453,8 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
 
 impl MessageRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        let rate_limit_minutes = std::env::var("RATE_LIMIT_MINUTES")
-            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MINUTES"))
-            .expect("RATE_LIMIT_MINUTES must be set");
-        let rate_limit_max_messages = std::env::var("RATE_LIMIT_MAX_MESSAGES")
-            .map(|s| s.parse().expect("Invalid RATE_LIMIT_MAX_MESSAGES"))
-            .expect("RATE_LIMIT_MAX_MESSAGES must be set");
-
         Self {
             pool,
-            rate_limit_timespan: PgInterval::try_from(chrono::Duration::minutes(
-                rate_limit_minutes,
-            ))
-            .expect("Could not set rate limit timespan"),
-            rate_limit_max_messages,
             message_parser: MessageParser::default(),
         }
     }
@@ -1024,43 +1016,130 @@ impl MessageRepository {
         .await?)
     }
 
-    /// Returns the number of emails that can still be created during the current rate limit time span
+    /// Returns true if the project has reached it's rate limit, false if it may still send emails
     ///
     /// Automatically resets when the time span has expired, if so, it starts a new time span
     ///
     /// Also checks if the organization is allowed to receive new emails (is not blocked)
-    pub async fn email_creation_rate_limit(&self, id: ProjectId) -> Result<i64, Error> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE organizations o
-            SET
-            remaining_rate_limit = CASE
-                WHEN rate_limit_reset < now()
-                THEN $2
-                ELSE GREATEST(remaining_rate_limit - 1, 0)
-            END,
-            rate_limit_reset = CASE
-                WHEN rate_limit_reset < now()
-                THEN now() + $3
-                ELSE rate_limit_reset
-            END
-            FROM projects p
-            WHERE p.organization_id = o.id
-              AND p.id = $1
-            RETURNING remaining_rate_limit, o.block_status as "block_status: OrgBlockStatus"
-            "#,
-            *id,
-            self.rate_limit_max_messages,
-            self.rate_limit_timespan
-        )
-        .fetch_one(&self.pool)
-        .await?;
+    pub async fn email_creation_rate_limit(&self, id: ProjectId) -> Result<(), Error> {
+        let mut tries_remaining = 10;
+        loop {
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .inspect_err(|err| error!("Failed to start transaction: {err}"))?;
 
-        if result.block_status == OrgBlockStatus::NoSendingOrReceiving {
-            return Err(Error::OrgBlocked);
+            sqlx::query!("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                .execute(&mut *tx)
+                .await
+                .inspect_err(|err| error!("Failed to set transaction isolation level: {err}"))?;
+
+            let now = Utc::now();
+
+            let org = sqlx::query!(
+                r#"
+                SELECT o.id, current_subscription, rate_limit_tokens, rate_limit_last_used, block_status AS "block_status:OrgBlockStatus"
+                FROM organizations o
+                         JOIN projects p ON o.id = p.organization_id
+                WHERE p.id = $1
+                FOR UPDATE
+                "#,
+                *id,
+            )
+                .fetch_one(&mut *tx)
+                .await;
+
+            let org = match org {
+                Ok(org) => org,
+                Err(err)
+                    if err.as_database_error().unwrap().code() == Some(Cow::Borrowed("40001")) =>
+                {
+                    debug!(
+                        project_id = %id,
+                        "DB transaction serialization failed while checking rate limit, remaining retries {tries_remaining}"
+                    );
+                    tries_remaining -= 1;
+                    tx.rollback().await?;
+                    if tries_remaining == 0 {
+                        return Err(Error::TooManyRequests);
+                    } else {
+                        continue;
+                    }
+                }
+                Err(err) => return Err(err.into()),
+            };
+
+            let span = span!(tracing::Level::DEBUG, "rate_limit_tokens",
+                organziation_id = %org.id,
+                project_id = %id,
+                %org.rate_limit_tokens,
+                %org.rate_limit_last_used,
+                %org.block_status
+            );
+            let _span = span.enter();
+
+            trace!("checking rate limit");
+
+            if org.block_status == OrgBlockStatus::NoSendingOrReceiving {
+                trace!(project_id = id.to_string(), "organization blocked");
+                return Err(Error::OrgBlocked);
+            }
+
+            let subscription: SubscriptionStatus =
+                serde_json::from_value(org.current_subscription)?;
+            let product = subscription.active_product();
+
+            let time_delta_size_last_use = now - org.rate_limit_last_used;
+            let tokens_to_add = time_delta_size_last_use.num_milliseconds()
+                / product.token_refill_time().num_milliseconds();
+
+            let mut available_tokens = min(
+                org.rate_limit_tokens + tokens_to_add,
+                product.max_rate_limit_tokens(),
+            );
+            if available_tokens <= 0 {
+                return Err(Error::TooManyRequests);
+            }
+            available_tokens -= 1;
+            available_tokens = max(available_tokens, 0);
+
+            let new_timestamp =
+                org.rate_limit_last_used + (product.token_refill_time() * tokens_to_add as i32);
+
+            trace!(
+                time_delta_size_last_use = time_delta_size_last_use.to_string(),
+                tokens_to_add,
+                project_id = id.to_string(),
+                available_tokens = available_tokens,
+                new_rate_limit_timestamp = new_timestamp.to_string(),
+                "updated rate limit"
+            );
+
+            sqlx::query!(
+                r#"
+                UPDATE organizations
+                SET rate_limit_tokens = $1,
+                    rate_limit_last_used = $2
+                WHERE id = $3
+                "#,
+                available_tokens,
+                new_timestamp,
+                org.id
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            tx.commit()
+                .await
+                .inspect_err(|err| error!("Failed to commit transaction: {err}"))?;
+
+            debug!(
+                "organization has still {} rate limit tokens",
+                available_tokens
+            );
+            return Ok(());
         }
-
-        Ok(result.remaining_rate_limit)
     }
 
     /// Lists all labels within the organization. It only shows labels for which at least one message exists

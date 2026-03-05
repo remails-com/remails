@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE organizations\n            SET name = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_reset,\n                remaining_rate_limit,\n                current_subscription,\n                block_status as \"block_status: OrgBlockStatus\"\n            ",
+  "query": "\n            UPDATE organizations\n            SET block_status = $2\n            WHERE id = $1\n            RETURNING\n                id,\n                name,\n                total_message_quota,\n                used_message_quota,\n                quota_reset,\n                created_at,\n                updated_at,\n                moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                rate_limit_last_used,\n                rate_limit_tokens,\n                current_subscription,\n                block_status as \"block_status: OrgBlockStatus\"\n            ",
   "describe": {
     "columns": [
       {
@@ -45,12 +45,12 @@
       },
       {
         "ordinal": 8,
-        "name": "rate_limit_reset",
+        "name": "rate_limit_last_used",
         "type_info": "Timestamptz"
       },
       {
         "ordinal": 9,
-        "name": "remaining_rate_limit",
+        "name": "rate_limit_tokens",
         "type_info": "Int8"
       },
       {
@@ -78,7 +78,18 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Varchar"
+        {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
       ]
     },
     "nullable": [
@@ -96,5 +107,5 @@
       false
     ]
   },
-  "hash": "aae48303660accde42380f42326db6cc4df7e80dedc4c008cb783fd076c9e028"
+  "hash": "0b83e92d7fec626834425579197f6f78f23effc58497b43673789bfc76012ea2"
 }

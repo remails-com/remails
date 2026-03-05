@@ -1,0 +1,57 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT o.id, current_subscription, rate_limit_tokens, rate_limit_last_used, block_status AS \"block_status:OrgBlockStatus\"\n                FROM organizations o\n                         JOIN projects p ON o.id = p.organization_id\n                WHERE p.id = $1\n                FOR UPDATE\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "current_subscription",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "rate_limit_tokens",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "rate_limit_last_used",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "block_status:OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5368e6c5acf2766086c18a97af530da1d300b116f874692f0d37db009b85d568"
+}

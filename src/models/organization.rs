@@ -68,8 +68,8 @@ pub struct Organization {
     used_message_quota: i64,
     quota_reset: Option<DateTime<Utc>>,
     moneybird_contact_id: Option<MoneybirdContactId>,
-    remaining_rate_limit: i64,
-    rate_limit_reset: DateTime<Utc>,
+    rate_limit_tokens: i64,
+    rate_limit_last_used: DateTime<Utc>,
     current_subscription: SubscriptionStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -121,8 +121,8 @@ struct PgOrganization {
     used_message_quota: i64,
     quota_reset: Option<DateTime<Utc>>,
     moneybird_contact_id: Option<MoneybirdContactId>,
-    remaining_rate_limit: i64,
-    rate_limit_reset: DateTime<Utc>,
+    rate_limit_tokens: i64,
+    rate_limit_last_used: DateTime<Utc>,
     current_subscription: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -140,8 +140,8 @@ impl TryFrom<PgOrganization> for Organization {
             used_message_quota: pg.used_message_quota,
             quota_reset: pg.quota_reset,
             moneybird_contact_id: pg.moneybird_contact_id,
-            remaining_rate_limit: pg.remaining_rate_limit,
-            rate_limit_reset: pg.rate_limit_reset,
+            rate_limit_tokens: pg.rate_limit_tokens,
+            rate_limit_last_used: pg.rate_limit_last_used,
             current_subscription: serde_json::from_value(pg.current_subscription)?,
             created_at: pg.created_at,
             updated_at: pg.updated_at,
@@ -190,7 +190,7 @@ impl OrganizationRepository {
         Ok(sqlx::query_as!(
             PgOrganization,
             r#"
-            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, remaining_rate_limit, rate_limit_reset)
+            INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, rate_limit_tokens, rate_limit_last_used)
             VALUES (gen_random_uuid(), $1, 0, 0, now(), 0, now())
             RETURNING id,
                       name,
@@ -200,8 +200,8 @@ impl OrganizationRepository {
                       created_at,
                       updated_at,
                       moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
-                      rate_limit_reset,
-                      remaining_rate_limit,
+                      rate_limit_tokens,
+                      rate_limit_last_used,
                       current_subscription,
                       block_status as "block_status: OrgBlockStatus"
             "#,
@@ -232,8 +232,8 @@ impl OrganizationRepository {
                 created_at,
                 updated_at,
                 moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
-                rate_limit_reset,
-                remaining_rate_limit,
+                rate_limit_last_used,
+                rate_limit_tokens,
                 current_subscription,
                 block_status as "block_status: OrgBlockStatus"
             "#,
@@ -257,8 +257,8 @@ impl OrganizationRepository {
                    created_at,
                    updated_at,
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
-                   rate_limit_reset,
-                   remaining_rate_limit,
+                   rate_limit_last_used,
+                   rate_limit_tokens,
                    current_subscription,
                    block_status as "block_status: OrgBlockStatus"
             FROM organizations
@@ -286,8 +286,8 @@ impl OrganizationRepository {
                    created_at,
                    updated_at,
                    moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
-                   rate_limit_reset,
-                   remaining_rate_limit,
+                   rate_limit_last_used,
+                   rate_limit_tokens,
                    current_subscription,
                    block_status as "block_status: OrgBlockStatus"
             FROM organizations
@@ -449,8 +449,8 @@ impl OrganizationRepository {
                 created_at,
                 updated_at,
                 moneybird_contact_id AS "moneybird_contact_id: MoneybirdContactId",
-                rate_limit_reset,
-                remaining_rate_limit,
+                rate_limit_last_used,
+                rate_limit_tokens,
                 current_subscription,
                 block_status as "block_status: OrgBlockStatus"
             "#,

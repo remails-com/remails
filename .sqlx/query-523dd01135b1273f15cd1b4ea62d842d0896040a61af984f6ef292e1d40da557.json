@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_reset,\n                   remaining_rate_limit,\n                   current_subscription,\n                   block_status as \"block_status: OrgBlockStatus\"\n            FROM organizations\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT id,\n                   name,\n                   total_message_quota,\n                   used_message_quota,\n                   quota_reset,\n                   created_at,\n                   updated_at,\n                   moneybird_contact_id AS \"moneybird_contact_id: MoneybirdContactId\",\n                   rate_limit_last_used,\n                   rate_limit_tokens,\n                   current_subscription,\n                   block_status as \"block_status: OrgBlockStatus\"\n            FROM organizations\n            WHERE ($1::uuid[] IS NULL OR id = ANY($1))\n            ORDER BY updated_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -45,12 +45,12 @@
       },
       {
         "ordinal": 8,
-        "name": "rate_limit_reset",
+        "name": "rate_limit_last_used",
         "type_info": "Timestamptz"
       },
       {
         "ordinal": 9,
-        "name": "remaining_rate_limit",
+        "name": "rate_limit_tokens",
         "type_info": "Int8"
       },
       {
@@ -77,7 +77,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -95,5 +95,5 @@
       false
     ]
   },
-  "hash": "71038906322677b31c5bddcab73017c9e0198d3230a2819d4839551f5cf1bfc6"
+  "hash": "523dd01135b1273f15cd1b4ea62d842d0896040a61af984f6ef292e1d40da557"
 }

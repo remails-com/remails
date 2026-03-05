@@ -17,7 +17,7 @@ use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{select, task::JoinSet};
 
@@ -575,7 +575,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    // Organization 2 has a rate limit of 0 that should be reset automatically to 120
+    // Organization 2 has a rate limit of 0 that should be reset automatically to 20
     let (org_id, project_id) = TestProjects::Org2Project1.get_stringified_ids();
 
     let john_cred = client
@@ -596,6 +596,8 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     let mut join_set = JoinSet::new();
 
+    let mut last_received = Instant::now();
+
     join_set.spawn(async move {
         for i in 1.. {
             select! {
@@ -603,12 +605,16 @@ async fn rate_limit_count_atomically(pool: PgPool) {
                     assert_eq!(recv.envelope_from.as_str(), "john@test-org-2-project-1.com");
                     assert_eq!(recv.envelope_recipients.len(), 1);
                     assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-1-project-1.com");
-                    if i > 120 {
-                        panic!("went over rate limit")
+                    if i > 80 {
+                        let elapsed = last_received.elapsed();
+                        if elapsed < Duration::from_millis(200) {
+                            panic!("went over rate limit, received {i} mails, last received {}ms ago", elapsed.as_millis())
+                        }
                     }
+                    last_received = Instant::now();
                 }
-                _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                    if i < 120 {
+                _ = tokio::time::sleep(Duration::from_secs(15)) => {
+                    if i < 60 {
                         panic!("timed out receiving {i}th email")
                     }
                     return
@@ -631,6 +637,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
             .unwrap();
 
         join_set.spawn(async move {
+            tokio::time::sleep(Duration::from_secs(i)).await;
             for j in 1..=15 {
                 let message = MessageBuilder::new()
                     .from(("John", "john@test-org-2-project-1.com"))
@@ -650,6 +657,9 @@ async fn rate_limit_count_atomically(pool: PgPool) {
                         return; // early exit because connection has been terminated
                     }
                     Err(e) => panic!("Error sending mail {e}"),
+                }
+                if j > 10 {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             }
             let _ = john_smtp_client.quit().await;
