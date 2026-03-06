@@ -217,7 +217,7 @@ impl ProductIdentifier {
     pub fn max_rate_limit_tokens(&self) -> i64 {
         match self {
             ProductIdentifier::NotSubscribed => 0,
-            ProductIdentifier::RmlsFree => 5,
+            ProductIdentifier::RmlsFree => 10,
             ProductIdentifier::RmlsTinyMonthly => 20,
             ProductIdentifier::RmlsSmallMonthly => 60,
             ProductIdentifier::RmlsMediumMonthly => 150,
@@ -237,14 +237,14 @@ impl ProductIdentifier {
     pub fn token_refill_time(&self) -> Duration {
         match self {
             // pointless, as the max_rate_limit_tokens is 0 anyway
-            ProductIdentifier::NotSubscribed => Duration::seconds(60),
-            ProductIdentifier::RmlsFree => Duration::seconds(60),
-            ProductIdentifier::RmlsTinyMonthly => Duration::seconds(10),
-            ProductIdentifier::RmlsSmallMonthly => Duration::milliseconds(500),
+            ProductIdentifier::NotSubscribed => Duration::minutes(5),
+            ProductIdentifier::RmlsFree => Duration::minutes(5),
+            ProductIdentifier::RmlsTinyMonthly => Duration::seconds(5),
+            ProductIdentifier::RmlsSmallMonthly => Duration::seconds(1),
             ProductIdentifier::RmlsMediumMonthly => Duration::milliseconds(250),
             ProductIdentifier::RmlsLargeMonthly => Duration::milliseconds(100),
-            ProductIdentifier::RmlsTinyYearly => Duration::seconds(10),
-            ProductIdentifier::RmlsSmallYearly => Duration::milliseconds(500),
+            ProductIdentifier::RmlsTinyYearly => Duration::seconds(5),
+            ProductIdentifier::RmlsSmallYearly => Duration::seconds(1),
             ProductIdentifier::RmlsMediumYearly => Duration::milliseconds(250),
             ProductIdentifier::RmlsLargeYearly => Duration::milliseconds(100),
             #[cfg(test)]

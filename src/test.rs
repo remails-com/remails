@@ -583,7 +583,6 @@ async fn quotas_count_atomically(pool: PgPool) {
     "k8s_nodes"
 ))]
 async fn rate_limit_count_atomically(pool: PgPool) {
-    tracing_subscriber::fmt::init();
     let pool = PgPoolOptions::new()
         .max_connections(70)
         .connect_with((*pool.connect_options()).clone())
@@ -592,7 +591,6 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
 
-    // Organization 2 has a rate limit of 0 that should be reset automatically to 20
     let (org_id, project_id) = TestProjects::Org2Project1.get_stringified_ids();
 
     let john_cred = client
