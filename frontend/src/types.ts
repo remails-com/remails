@@ -41,6 +41,10 @@ export interface DeliveryDetails {
   log: Log;
 }
 
+export interface DeliveryDetailsWithRecipient extends DeliveryDetails {
+  recipient: string;
+}
+
 export interface Log {
   lines: Array<{
     time: string;
