@@ -162,10 +162,7 @@ pub async fn create_message(
     key.has_org_write_access(&org_id)?;
 
     // check email rate limit
-    if repo.email_creation_rate_limit(project_id).await? <= 0 {
-        debug!("too many email requests for org {org_id}");
-        return Err(AppError::TooManyRequests);
-    }
+    repo.email_creation_rate_limit(project_id).await?;
 
     // parse from email
     let from_email = message.from.get_mail_address();

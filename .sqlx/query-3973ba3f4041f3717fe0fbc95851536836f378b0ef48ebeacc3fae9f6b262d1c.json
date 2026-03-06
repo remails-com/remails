@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE organizations\n        SET current_subscription = jsonb_set(current_subscription, '{product}', '\"UNLIMITED\"')\n        WHERE id = $1;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3973ba3f4041f3717fe0fbc95851536836f378b0ef48ebeacc3fae9f6b262d1c"
+}

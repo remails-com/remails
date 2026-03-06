@@ -9,7 +9,7 @@ use tracing::{debug, error, trace};
 
 use crate::{
     bus::client::BusClient,
-    models::{MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
+    models::{Error, MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
 };
 
 pub struct SmtpSession {
@@ -232,17 +232,22 @@ impl SmtpSession {
                     return SessionReply::ReplyAndContinue(SmtpResponse::NESTED_MAIL.into());
                 }
 
-                let Ok(ratelimit) = self
+                match self
                     .message_repository
                     .email_creation_rate_limit(credential.project_id())
                     .await
-                else {
-                    return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());
+                {
+                    Ok(()) => {}
+                    Err(Error::TooManyRequests) => {
+                        return SessionReply::ReplyAndStop(SmtpResponse::RATE_LIMIT.into());
+                    }
+                    Err(Error::OrgBlocked) => {
+                        return SessionReply::ReplyAndStop(SmtpResponse::MESSAGE_REJECTED.into());
+                    }
+                    Err(_) => {
+                        return SessionReply::ReplyAndStop(SmtpResponse::INTERNAL_ERROR.into());
+                    }
                 };
-
-                if ratelimit <= 0 {
-                    return SessionReply::ReplyAndStop(SmtpResponse::RATE_LIMIT.into());
-                }
 
                 self.current_message = Some(NewMessage::new(credential.id(), from_address));
 

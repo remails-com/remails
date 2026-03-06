@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE organizations\n                SET rate_limit_tokens = $1,\n                    rate_limit_last_used = $2\n                WHERE id = $3\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46073417a35091cefaaf570fbf88143d91174d62d86a81c0a04a9c3f59681e69"
+}

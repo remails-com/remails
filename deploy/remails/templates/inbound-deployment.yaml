@@ -91,10 +91,6 @@ spec:
               value: /etc/smtp-cert/tls.crt
             - name: SMTP_KEY_FILE
               value: /etc/smtp-cert/tls.key
-            - name: RATE_LIMIT_MINUTES
-              value: {{ .Values.smtp.rate_limit_minutes | quote }}
-            - name: RATE_LIMIT_MAX_MESSAGES
-              value: {{ .Values.smtp.rate_limit_max_messages | quote }}
             - name: MESSAGE_BUS_PORT
               value: {{ .Values.message_bus_port | quote }}
             - name: MESSAGE_BUS_FQDN

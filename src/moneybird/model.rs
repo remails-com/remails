@@ -1,5 +1,5 @@
 use crate::models::Password;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
@@ -133,6 +133,8 @@ pub enum ProductIdentifier {
     RmlsSmallYearly,
     RmlsMediumYearly,
     RmlsLargeYearly,
+    #[cfg(test)]
+    Unlimited,
 }
 
 impl FromStr for ProductIdentifier {
@@ -149,6 +151,8 @@ impl FromStr for ProductIdentifier {
             "RmlsSmallYearly" => Self::RmlsSmallYearly,
             "RmlsMediumYearly" => Self::RmlsMediumYearly,
             "RmlsLargeYearly" => Self::RmlsLargeYearly,
+            #[cfg(test)]
+            "Unlimited" => Self::Unlimited,
             unknown => {
                 warn!("Unknown product identifier: {}", unknown);
                 Self::NotSubscribed
@@ -170,6 +174,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 300_000,
             ProductIdentifier::RmlsMediumYearly => 700_000,
             ProductIdentifier::RmlsLargeYearly => 1_500_000,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => u32::MAX,
         }
     }
 
@@ -186,6 +192,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 7,
             ProductIdentifier::RmlsMediumYearly => 14,
             ProductIdentifier::RmlsLargeYearly => 30,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => 30,
         }
     }
 
@@ -201,6 +209,46 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => None,
             ProductIdentifier::RmlsMediumYearly => None,
             ProductIdentifier::RmlsLargeYearly => None,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => None,
+        }
+    }
+
+    pub fn max_rate_limit_tokens(&self) -> i64 {
+        match self {
+            ProductIdentifier::NotSubscribed => 0,
+            ProductIdentifier::RmlsFree => 10,
+            ProductIdentifier::RmlsTinyMonthly => 20,
+            ProductIdentifier::RmlsSmallMonthly => 60,
+            ProductIdentifier::RmlsMediumMonthly => 150,
+            ProductIdentifier::RmlsLargeMonthly => 300,
+            ProductIdentifier::RmlsTinyYearly => 20,
+            ProductIdentifier::RmlsSmallYearly => 60,
+            ProductIdentifier::RmlsMediumYearly => 150,
+            ProductIdentifier::RmlsLargeYearly => 300,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => i64::MAX,
+        }
+    }
+
+    /// The time elapsed between two tokens getting refilled.
+    ///
+    /// E.g., if the returned value is 500ms, we add one token every half-second up to the [`max_rate_limit_tokens`](Self::max_rate_limit_tokens).
+    pub fn token_refill_time(&self) -> Duration {
+        match self {
+            // pointless, as the max_rate_limit_tokens is 0 anyway
+            ProductIdentifier::NotSubscribed => Duration::minutes(5),
+            ProductIdentifier::RmlsFree => Duration::minutes(5),
+            ProductIdentifier::RmlsTinyMonthly => Duration::seconds(5),
+            ProductIdentifier::RmlsSmallMonthly => Duration::seconds(1),
+            ProductIdentifier::RmlsMediumMonthly => Duration::milliseconds(250),
+            ProductIdentifier::RmlsLargeMonthly => Duration::milliseconds(100),
+            ProductIdentifier::RmlsTinyYearly => Duration::seconds(5),
+            ProductIdentifier::RmlsSmallYearly => Duration::seconds(1),
+            ProductIdentifier::RmlsMediumYearly => Duration::milliseconds(250),
+            ProductIdentifier::RmlsLargeYearly => Duration::milliseconds(100),
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => Duration::milliseconds(1),
         }
     }
 }

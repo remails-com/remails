@@ -936,7 +936,7 @@ mod test {
                         (800, Utc::now().checked_add_months(Months::new(1)), "active")
                     }
                     "5d55aec5-136a-407c-952f-5348d4398204" => {
-                        (500, Utc::now().checked_add_months(Months::new(1)), "none")
+                        (500, Utc::now().checked_add_months(Months::new(1)), "active")
                     }
                     "533d9a19-16e8-4a1b-a824-ff50af8b428c" => (0, None, "none"),
                     "ee14cdb8-f62e-42ac-a0cd-294d708be994" => (0, None, "none"),
