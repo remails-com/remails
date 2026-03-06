@@ -3,14 +3,14 @@ INSERT INTO organizations (id, name, total_message_quota, used_message_quota, qu
 VALUES ('44729d9f-a7dc-4226-b412-36a7537f5176',
         'test org 1',
         800, 0, now() + INTERVAL '1 month',
-        0, now(),
+        0, now() - '1 day'::interval,
         '{
           "title": "Mock testing subscription",
           "status": "active",
-          "product": "RMLS-LARGE-MONTHLY",
+          "product": "RMLS-SMALL-MONTHLY",
           "end_date": null,
           "start_date": "2025-11-23",
-          "description": "This is a mock subscription for testing only\nIt uses the same quota as the Remails Free subscription",
+          "description": "This is a mock subscription for testing only",
           "subscription_id": "mock_subscription_id",
           "sales_invoices_url": "https://tweedegolf.com/",
           "recurring_sales_invoice_id": "mock_invoice_id"
@@ -18,14 +18,14 @@ VALUES ('44729d9f-a7dc-4226-b412-36a7537f5176',
        ('5d55aec5-136a-407c-952f-5348d4398204',
         'test org 2',
         500, 0, now() + INTERVAL '1 month',
-        0, now(), -- rate limit that should be reset
+        0, now() - '1 day'::interval, -- rate limit that should be reset
         '{
           "title": "Mock testing subscription",
           "status": "active",
           "product": "RMLS-SMALL-MONTHLY",
           "end_date": null,
           "start_date": "2025-11-23",
-          "description": "This is a mock subscription for testing only\nIt uses the same quota as the Remails Free subscription",
+          "description": "This is a mock subscription for testing only",
           "subscription_id": "mock_subscription_id",
           "sales_invoices_url": "https://tweedegolf.com/",
           "recurring_sales_invoice_id": "mock_invoice_id"

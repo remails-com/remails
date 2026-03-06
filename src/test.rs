@@ -17,6 +17,10 @@ use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::{select, task::JoinSet};
@@ -483,15 +487,27 @@ async fn quotas_count_atomically(pool: PgPool) {
         .await
         .unwrap();
 
-    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
+    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool.clone()).await;
 
-    let (org_id, project_id) = TestProjects::Org1Project1.get_stringified_ids();
+    let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+
+    sqlx::query!(
+        r#"
+        UPDATE organizations
+        SET current_subscription = jsonb_set(current_subscription, '{product}', '"UNLIMITED"')
+        WHERE id = $1;
+        "#,
+        *org_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let john_cred = client
         .post(format!(
             "http://localhost:{http_port}/api/organizations/{org_id}/projects/{project_id}/smtp_credentials"
         ))
-        .header("X-Test-Login", org_id)
+        .header("X-Test-Login", org_id.to_string())
         .json(&json!({
             "username": "john",
             "description": "John test credential"
@@ -526,7 +542,7 @@ async fn quotas_count_atomically(pool: PgPool) {
         }
     });
 
-    // Spawn 51 tasks to throw 100 messages each to remails
+    // Spawn 11 tasks to throw 100 messages each to remails
     for i in 0..11 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
             .implicit_tls(true)
@@ -567,6 +583,7 @@ async fn quotas_count_atomically(pool: PgPool) {
     "k8s_nodes"
 ))]
 async fn rate_limit_count_atomically(pool: PgPool) {
+    tracing_subscriber::fmt::init();
     let pool = PgPoolOptions::new()
         .max_connections(70)
         .connect_with((*pool.connect_options()).clone())
@@ -596,24 +613,23 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     let mut join_set = JoinSet::new();
 
-    let mut last_received = Instant::now();
+    let mut test_start = Instant::now();
 
     join_set.spawn(async move {
         for i in 1.. {
             select! {
                 Ok(recv) = mailcrab_rx.recv() => {
+                    if i == 1 {
+                        test_start = Instant::now();
+                    }
                     assert_eq!(recv.envelope_from.as_str(), "john@test-org-2-project-1.com");
                     assert_eq!(recv.envelope_recipients.len(), 1);
                     assert_eq!(recv.envelope_recipients[0].as_str(), "eddy@test-org-1-project-1.com");
-                    if i > 80 {
-                        let elapsed = last_received.elapsed();
-                        if elapsed < Duration::from_millis(200) {
-                            panic!("went over rate limit, received {i} mails, last received {}ms ago", elapsed.as_millis())
-                        }
+                    if i > 60 + test_start.elapsed().as_millis() / 500 + 3 {
+                        panic!("went over rate limit, received {i} mails {}ms after test start", test_start.elapsed().as_millis())
                     }
-                    last_received = Instant::now();
                 }
-                _ = tokio::time::sleep(Duration::from_secs(15)) => {
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {
                     if i < 60 {
                         panic!("timed out receiving {i}th email")
                     }
@@ -622,6 +638,8 @@ async fn rate_limit_count_atomically(pool: PgPool) {
             }
         }
     });
+
+    let count_rate_limits = Arc::new(AtomicUsize::new(0));
 
     // Spawn 10 tasks to send 15 messages each to remails, only 120 of these should be accepted
     for i in 0..10 {
@@ -636,6 +654,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
             .await
             .unwrap();
 
+        let count_rate_limits = count_rate_limits.clone();
         join_set.spawn(async move {
             tokio::time::sleep(Duration::from_secs(i)).await;
             for j in 1..=15 {
@@ -654,12 +673,10 @@ async fn rate_limit_count_atomically(pool: PgPool) {
                         assert_eq!(response.code, 450);
                         assert_eq!(response.esc, [4, 3, 2]);
                         assert_eq!(response.message, "Sent too many messages, try again later");
-                        return; // early exit because connection has been terminated
+                        count_rate_limits.fetch_add(1, Ordering::Relaxed);
+                        break;
                     }
                     Err(e) => panic!("Error sending mail {e}"),
-                }
-                if j > 10 {
-                    tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             }
             let _ = john_smtp_client.quit().await;
@@ -667,4 +684,9 @@ async fn rate_limit_count_atomically(pool: PgPool) {
     }
 
     join_set.join_all().await;
+
+    assert!(
+        count_rate_limits.load(Ordering::Relaxed) > 0,
+        "Expected at least one rate limit error, got none"
+    );
 }

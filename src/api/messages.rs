@@ -10,8 +10,8 @@ use crate::{
     bus::client::BusClient,
     handler::RetryConfig,
     models::{
-        ApiKey, ApiMessage, ApiMessageMetadata, Label, MessageFilter, MessageId,
-        MessageRepository, MessageStatus, NewApiMessage, OrganizationId, ProjectId,
+        ApiKey, ApiMessage, ApiMessageMetadata, Label, MessageFilter, MessageId, MessageRepository,
+        MessageStatus, NewApiMessage, OrganizationId, ProjectId,
     },
 };
 use axum::{

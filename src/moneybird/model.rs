@@ -133,6 +133,8 @@ pub enum ProductIdentifier {
     RmlsSmallYearly,
     RmlsMediumYearly,
     RmlsLargeYearly,
+    #[cfg(test)]
+    Unlimited,
 }
 
 impl FromStr for ProductIdentifier {
@@ -149,6 +151,8 @@ impl FromStr for ProductIdentifier {
             "RmlsSmallYearly" => Self::RmlsSmallYearly,
             "RmlsMediumYearly" => Self::RmlsMediumYearly,
             "RmlsLargeYearly" => Self::RmlsLargeYearly,
+            #[cfg(test)]
+            "Unlimited" => Self::Unlimited,
             unknown => {
                 warn!("Unknown product identifier: {}", unknown);
                 Self::NotSubscribed
@@ -170,6 +174,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 300_000,
             ProductIdentifier::RmlsMediumYearly => 700_000,
             ProductIdentifier::RmlsLargeYearly => 1_500_000,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => u32::MAX,
         }
     }
 
@@ -186,6 +192,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 7,
             ProductIdentifier::RmlsMediumYearly => 14,
             ProductIdentifier::RmlsLargeYearly => 30,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => 30,
         }
     }
 
@@ -201,6 +209,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => None,
             ProductIdentifier::RmlsMediumYearly => None,
             ProductIdentifier::RmlsLargeYearly => None,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => None,
         }
     }
 
@@ -216,6 +226,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => 60,
             ProductIdentifier::RmlsMediumYearly => 150,
             ProductIdentifier::RmlsLargeYearly => 300,
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => i64::MAX,
         }
     }
 
@@ -235,6 +247,8 @@ impl ProductIdentifier {
             ProductIdentifier::RmlsSmallYearly => Duration::milliseconds(500),
             ProductIdentifier::RmlsMediumYearly => Duration::milliseconds(250),
             ProductIdentifier::RmlsLargeYearly => Duration::milliseconds(100),
+            #[cfg(test)]
+            ProductIdentifier::Unlimited => Duration::milliseconds(1),
         }
     }
 }
