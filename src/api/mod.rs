@@ -11,7 +11,7 @@ use crate::{
     models::{
         ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
         OrganizationRepository, ProjectRepository, RuntimeConfigRepository,
-        SmtpCredentialRepository, StatisticsRepository,
+        SmtpCredentialRepository, StatisticsRepository, SuppressedRepository,
     },
     moneybird::MoneyBird,
 };
@@ -211,6 +211,12 @@ impl FromRef<ApiState> for StatisticsRepository {
 impl FromRef<ApiState> for RuntimeConfigRepository {
     fn from_ref(state: &ApiState) -> Self {
         RuntimeConfigRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for SuppressedRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        SuppressedRepository::new(state.pool.clone())
     }
 }
 

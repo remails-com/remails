@@ -11,7 +11,8 @@ use crate::{
     handler::RetryConfig,
     models::{
         ApiKey, ApiMessage, ApiMessageMetadata, Label, MessageFilter, MessageId, MessageRepository,
-        MessageStatus, NewApiMessage, OrganizationId, ProjectId,
+        MessageStatus, NewApiMessage, OrganizationId, ProjectId, SuppressedEmailAddress,
+        SuppressedRepository,
     },
 };
 use axum::{
@@ -21,6 +22,7 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
+use email_address::EmailAddress;
 use garde::Validate;
 use http::StatusCode;
 use mail_builder::MessageBuilder;
@@ -36,6 +38,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
         .routes(routes!(get_message, remove_message))
         .routes(routes!(retry_now))
         .routes(routes!(list_labels))
+        .routes(routes!(list_suppressed, unsuppress_email))
 }
 
 /// The 'create message' route is separated to allow setting a different request body size limit
@@ -443,6 +446,51 @@ pub async fn list_labels(
     Ok(Json(labels))
 }
 
+/// List suppressed email addresses
+///
+/// Email addresses are automatically suppressed when delivery fails repeatedly.
+/// Once an address is suppressed, Remails stops sending emails to it to prevent further failed deliveries.
+/// Occasionally, Remails may retry delivery to a suppressed address to check whether it has become reachable again.
+/// Alternatively, it is also possible to manually remove email addresses from the suppression list.
+#[utoipa::path(
+    get,
+    path = "/organizations/{org_id}/emails/suppressed",
+    tags = ["Emails"],
+    responses(
+        (status = 200, description = "Successfully fetched suppressed email addresses", body = [SuppressedEmailAddress]),
+        AppError
+    )
+)]
+pub async fn list_suppressed(
+    State(repo): State<SuppressedRepository>,
+    Path(org_id): Path<OrganizationId>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<Vec<SuppressedEmailAddress>> {
+    user.has_org_read_access(&org_id)?;
+    let suppressed = repo.list_suppressed(org_id).await?;
+
+    Ok(Json(suppressed))
+}
+
+/// Remove an email address from the suppression list
+#[utoipa::path(
+    delete,
+    path = "/organizations/{org_id}/emails/suppressed/{email}",
+    tags = ["Emails"],
+    responses(
+        (status = 200, description = "Successfully removed email address from suppression list", body = [SuppressedEmailAddress]),
+        AppError
+    )
+)]
+pub async fn unsuppress_email(
+    State(repo): State<SuppressedRepository>,
+    Path((org_id, email)): Path<(OrganizationId, EmailAddress)>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<()> {
+    user.has_org_write_access(&org_id)?;
+    Ok(Json(repo.unsuppress(&email, org_id).await?))
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -460,6 +508,7 @@ mod tests {
         test::TestProjects,
     };
     use axum::body::Body;
+    use chrono::Utc;
     use futures::StreamExt;
     use http::StatusCode;
     use ppp::v2::WriteToHeader;
@@ -653,6 +702,22 @@ mod tests {
         // can't remove message
         let response = server
             .delete(format!("/api/organizations/{org_1}/emails/{message_1}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), write_status_code);
+
+        // can't view suppressed email addresses
+        let response = server
+            .get(format!("/api/organizations/{org_1}/emails/suppressed"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), read_status_code);
+
+        // can't unsuppress email address
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/emails/suppressed/test%40example.com"
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
@@ -1144,5 +1209,56 @@ mod tests {
         let mut new_stats: Statistics = deserialize_body(response.into_body()).await;
         new_stats.sort();
         assert_eq!(stats, new_stats);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_suppressed_messages(pool: PgPool) {
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let server = TestServer::new(pool.clone(), Some(user_4)).await;
+        let repo = SuppressedRepository::new(pool);
+
+        // view suppressed email addresses
+        let response = server
+            .get(format!("/api/organizations/{org_1}/emails/suppressed"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suppressed: Vec<SuppressedEmailAddress> = deserialize_body(response.into_body()).await;
+        assert!(suppressed.is_empty());
+
+        // insert suppressed emails
+        let email = "test@example.com".parse().unwrap();
+        repo.insert_suppression(&email, org_1, Utc::now(), 0)
+            .await
+            .unwrap();
+
+        // view suppressed email addresses
+        let response = server
+            .get(format!("/api/organizations/{org_1}/emails/suppressed"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suppressed: Vec<SuppressedEmailAddress> = deserialize_body(response.into_body()).await;
+        assert_eq!(suppressed.len(), 1);
+        assert_eq!(suppressed[0].email_address, email);
+
+        // unsuppress email address
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/emails/suppressed/test%40example.com"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // view suppressed email addresses
+        let response = server
+            .get(format!("/api/organizations/{org_1}/emails/suppressed"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suppressed: Vec<SuppressedEmailAddress> = deserialize_body(response.into_body()).await;
+        assert!(suppressed.is_empty());
     }
 }

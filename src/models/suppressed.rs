@@ -1,13 +1,15 @@
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
+use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::models::{Error, OrganizationId};
 
+#[derive(Serialize, ToSchema)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct SuppressedEmailAddress {
-    email_address: EmailAddress,
-    organization_id: OrganizationId,
-    retry_after: Option<DateTime<Utc>>,
-    attempts_left: i32,
+    pub email_address: EmailAddress,
+    pub retry_after: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,9 +106,9 @@ impl SuppressedRepository {
     ) -> Result<Vec<SuppressedEmailAddress>, Error> {
         let rows = sqlx::query!(
             r#"
-            SELECT email_address, organization_id, retry_after, attempts_left
+            SELECT email_address, retry_after
             FROM suppressed_email_addresses
-            WHERE organization_id = $1
+            WHERE organization_id = $1 AND attempts_left <= 0
             "#,
             *org
         )
@@ -118,9 +120,7 @@ impl SuppressedRepository {
             .map(|r| {
                 Ok(SuppressedEmailAddress {
                     email_address: r.email_address.parse()?,
-                    organization_id: r.organization_id.into(),
                     retry_after: r.retry_after,
-                    attempts_left: r.attempts_left.unwrap_or(0),
                 })
             })
             .collect::<Result<Vec<_>, Error>>()?)
@@ -149,7 +149,7 @@ impl SuppressedRepository {
     }
 
     #[cfg(test)]
-    async fn insert_suppression(
+    pub async fn insert_suppression(
         &self,
         email: &EmailAddress,
         org: OrganizationId,
@@ -202,16 +202,10 @@ mod tests {
             repo.report_failure(&bad_email, org_1).await.unwrap();
         }
 
-        let suppressed = repo.list_suppressed(org_1).await.unwrap();
-        assert_eq!(suppressed.len(), 1);
-        assert_eq!(suppressed[0].attempts_left, 1);
-        assert_eq!(suppressed[0].email_address, bad_email);
-        assert_eq!(suppressed[0].organization_id, org_1);
-        assert!(suppressed[0].retry_after.unwrap() > Utc::now() + Duration::days(29));
-        assert!(repo.list_suppressed(org_2).await.unwrap().is_empty());
-
         // email is still not suppressed
         assert!(!repo.should_suppress(&bad_email, org_1).await.unwrap());
+        assert!(repo.list_suppressed(org_1).await.unwrap().is_empty());
+        assert!(repo.list_suppressed(org_2).await.unwrap().is_empty());
 
         // report one more failures
         repo.report_failure(&bad_email, org_1).await.unwrap();
@@ -219,7 +213,8 @@ mod tests {
         // email is suppressed
         let suppressed = repo.list_suppressed(org_1).await.unwrap();
         assert_eq!(suppressed.len(), 1);
-        assert_eq!(suppressed[0].attempts_left, 0);
+        assert_eq!(suppressed[0].email_address, bad_email);
+        assert!(suppressed[0].retry_after.unwrap() > Utc::now() + Duration::days(29));
         assert!(repo.should_suppress(&bad_email, org_1).await.unwrap());
 
         // unsuppress email
