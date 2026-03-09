@@ -36,7 +36,7 @@ export default function OrgPopover({ orgs }: { orgs: OrgRole[] }) {
                   <TableId id={org.org_id} />
                 </Table.Td>
                 <Table.Td>
-                  <Anchor onClick={() => navigate("settings.members", { org_id: org.org_id })}>
+                  <Anchor onClick={() => navigate("organization.members", { org_id: org.org_id })}>
                     {organizations.find((o) => o.id === org.org_id)?.name}
                   </Anchor>
                 </Table.Td>

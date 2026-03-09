@@ -62,7 +62,7 @@ export default function ApiKeyDetails() {
         message: `API key with description ${apiKey.description} deleted`,
         color: "green",
       });
-      navigate("settings.API keys", {});
+      navigate("organization.API keys", {});
       dispatch({ type: "remove_api_key", apiKeyId: apiKey.id });
     } else {
       errorNotification(`API key with description ${apiKey.description} could not be deleted`);

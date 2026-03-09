@@ -1,5 +1,5 @@
 import { BoxProps, NavLink as MantineNavLink } from "@mantine/core";
-import { IconChartBar, IconGavel, IconMail, IconServer, IconSettings, IconWorldWww } from "@tabler/icons-react";
+import { IconBuildings, IconChartBar, IconGavel, IconKey, IconMail, IconReceiptEuro, IconServer, IconUsers, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
@@ -44,6 +44,7 @@ export function NavBar({ close }: { close: () => void }) {
     navigate,
   } = useRemails();
   const [openedNewOrg, { open: openNewOrg, close: closeNewOrg }] = useDisclosure(false);
+  const globalRole = user?.global_role || null;
 
   if (!user) {
     return null;
@@ -66,7 +67,7 @@ export function NavBar({ close }: { close: () => void }) {
         opened={openedNewOrg}
         close={closeNewOrg}
         done={(newOrg) => {
-          navigate("settings", { org_id: newOrg.id });
+          navigate("organization.subscription", { org_id: newOrg.id });
         }}
       />
 
@@ -101,13 +102,44 @@ export function NavBar({ close }: { close: () => void }) {
         active={routerState.name === "statistics"}
         leftSection={<IconChartBar size={20} stroke={1.8} />}
       />
-      <NavLink
-        label="Settings"
-        route="settings"
-        close={close}
-        active={routerState.name.startsWith("settings")}
-        leftSection={<IconSettings size={20} stroke={1.8} />}
-      />
+      <MantineNavLink
+        label="Organization"
+        leftSection={<IconBuildings size={20} stroke={1.8} />}
+        href="#organization"
+        defaultOpened={routerState.name.startsWith("organization")}
+      >
+        <NavLink
+          label="Subscription"
+          route="organization.subscription"
+          close={close}
+          active={routerState.name.startsWith("organization.subscription")}
+          leftSection={<IconReceiptEuro size={18} stroke={1.8} />}
+        />
+        <NavLink
+          label="Members"
+          route="organization.members"
+          close={close}
+          active={routerState.name.startsWith("organization.members")}
+          leftSection={<IconUsers size={18} stroke={1.8} />}
+        />
+        <NavLink
+          label="API Keys"
+          route="organization.API keys"
+          close={close}
+          active={routerState.name.startsWith("organization.API keys")}
+          leftSection={<IconKey size={18} stroke={1.8} />}
+        />
+        {
+          globalRole == "admin" &&
+          <NavLink
+            label="Admin"
+            route="organization.admin"
+            close={close}
+            active={routerState.name.startsWith("organization.admin")}
+            leftSection={<IconGavel size={18} stroke={1.8} />}
+          />
+        }
+      </MantineNavLink>
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { AppShell, Box, Burger, Button, Flex, Group, Menu } from "@mantine/core";
+import { AppShell, Box, Burger, Button, Flex, Group, Menu, ScrollArea } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import ColorTheme from "./ColorTheme";
 import { IconChevronDown, IconLogout, IconSettings, IconUser, IconUserBolt } from "@tabler/icons-react";
@@ -75,11 +75,13 @@ export function Dashboard({ children }: DashboardProps) {
         </Flex>
       </AppShell.Header>
       <AppShell.Navbar p="md">
-        <Group hiddenFrom="sm" pb="md">
-          {user_dropdown}
-        </Group>
+        <ScrollArea h="100%">
+          <Group hiddenFrom="sm" pb="md">
+            {user_dropdown}
+          </Group>
 
-        <NavBar close={close} />
+          <NavBar close={close} />
+        </ScrollArea>
       </AppShell.Navbar>
       <AppShell.Main style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <Box style={{ position: "relative" }}>{children}</Box>

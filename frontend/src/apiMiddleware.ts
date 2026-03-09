@@ -140,8 +140,8 @@ export default async function apiMiddleware(
   }
 
   if (
-    navState.to.name == "settings.API keys" ||
-    (!navState.state.apiKeys && navState.to.name.startsWith("settings.API keys"))
+    navState.to.name == "organization.API keys" ||
+    (!navState.state.apiKeys && navState.to.name.startsWith("organization.API keys"))
   ) {
     dispatch({
       type: "set_api_keys",

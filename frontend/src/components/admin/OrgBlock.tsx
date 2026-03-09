@@ -6,6 +6,7 @@ import { MaintainerButton } from "../RoleButtons";
 import { errorNotification } from "../../notify";
 import { notifications } from "@mantine/notifications";
 import { useRemails } from "../../hooks/useRemails";
+import OrganizationHeader from "../organizations/OrganizationHeader";
 
 const ALL_BLOCK_STATUSES: OrgBlockStatus[] = ["not_blocked", "no_sending", "no_sending_or_receiving"];
 export function isValidBlockStatus(value: string): value is OrgBlockStatus {
@@ -65,21 +66,24 @@ export default function OrgBlock() {
   };
 
   return (
-    <Container size="sm" ml="0" pl="0">
-      <form onSubmit={form.onSubmit(save)}>
-        <Stack>
-          <Select
-            label="Organization block status"
-            data={blockSelectData}
-            value={form.values.block_status}
-            error={form.errors.block_status}
-            onChange={(value) => value && isValidBlockStatus(value) && form.setFieldValue("block_status", value)}
-          />
-          <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
-            Save
-          </MaintainerButton>
-        </Stack>
-      </form>
-    </Container>
+    <>
+      <OrganizationHeader />
+      <Container size="sm" ml="0" pl="0">
+        <form onSubmit={form.onSubmit(save)}>
+          <Stack>
+            <Select
+              label="Organization block status"
+              data={blockSelectData}
+              value={form.values.block_status}
+              error={form.errors.block_status}
+              onChange={(value) => value && isValidBlockStatus(value) && form.setFieldValue("block_status", value)}
+            />
+            <MaintainerButton type="submit" disabled={!form.isDirty()} loading={form.submitting}>
+              Save
+            </MaintainerButton>
+          </Stack>
+        </form>
+      </Container>
+    </>
   );
 }
