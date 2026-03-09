@@ -135,7 +135,7 @@ export default function RuntimeConfig() {
           <Switch
             checked={configForm.values.enable_account_creation}
             onChange={(ev) => configForm.setFieldValue("enable_account_creation", ev.currentTarget.checked)}
-            label="Enable new account creation"
+            label="Enable new account/organization creation"
           />
           <Button type="submit" disabled={!configForm.isDirty()}>
             Save
