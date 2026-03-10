@@ -723,7 +723,7 @@ impl Handler {
                             delivered: chrono::Utc::now(),
                         };
                         self.suppressed_repository
-                            .unsuppress(&recipient, message.organization_id)
+                            .unsuppress(recipient, message.organization_id)
                             .await?;
                         continue 'next_rcpt;
                     }
@@ -738,7 +738,7 @@ impl Handler {
                 delivery_details.status = DeliveryStatus::Reattempt;
             } else {
                 self.suppressed_repository
-                    .report_failure(&recipient, message.organization_id)
+                    .report_failure(recipient, message.organization_id)
                     .await?;
                 delivery_details.status = DeliveryStatus::Failed;
             }

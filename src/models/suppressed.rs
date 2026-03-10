@@ -96,7 +96,7 @@ impl SuppressedRepository {
         };
 
         Ok(record.attempts_left.unwrap_or(0) <= 0
-            && record.retry_after.map_or(true, |t| t > Utc::now()))
+            && record.retry_after.is_none_or(|t| t > Utc::now()))
     }
 
     /// List all suppressed email addresses within an organization
@@ -115,15 +115,14 @@ impl SuppressedRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
+        rows.into_iter()
             .map(|r| {
                 Ok(SuppressedEmailAddress {
                     email_address: r.email_address.parse()?,
                     retry_after: r.retry_after,
                 })
             })
-            .collect::<Result<Vec<_>, Error>>()?)
+            .collect::<Result<Vec<_>, Error>>()
     }
 
     /// Clean up all suppressed email addresses whose `retry_after` is before `before`,
