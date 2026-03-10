@@ -86,6 +86,10 @@ export const routes = [
         ],
       },
       {
+        name: "suppressed",
+        path: "/suppressed",
+      },
+      {
         name: "admin",
         path: "/admin",
       },

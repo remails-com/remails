@@ -1,5 +1,5 @@
 import { BoxProps, NavLink as MantineNavLink } from "@mantine/core";
-import { IconBuildings, IconChartBar, IconGavel, IconKey, IconMail, IconReceiptEuro, IconServer, IconUsers, IconWorldWww } from "@tabler/icons-react";
+import { IconBuildings, IconChartBar, IconGavel, IconMail, IconServer, IconWorldWww } from "@tabler/icons-react";
 import { useRemails } from "../hooks/useRemails.ts";
 import { useDisclosure } from "@mantine/hooks";
 import { NewOrganization } from "../components/organizations/NewOrganization.tsx";
@@ -113,21 +113,25 @@ export function NavBar({ close }: { close: () => void }) {
           route="organization.subscription"
           close={close}
           active={routerState.name.startsWith("organization.subscription")}
-          leftSection={<IconReceiptEuro size={18} stroke={1.8} />}
         />
         <NavLink
           label="Members"
           route="organization.members"
           close={close}
           active={routerState.name.startsWith("organization.members")}
-          leftSection={<IconUsers size={18} stroke={1.8} />}
         />
         <NavLink
-          label="API Keys"
+          label="API keys"
           route="organization.API keys"
           close={close}
           active={routerState.name.startsWith("organization.API keys")}
-          leftSection={<IconKey size={18} stroke={1.8} />}
+        />
+        <NavLink
+          label="Suppression list"
+          route="organization.suppressed"
+          close={close}
+          active={routerState.name.startsWith("organization.suppressed")}
+
         />
         {
           globalRole == "admin" &&
@@ -136,7 +140,6 @@ export function NavBar({ close }: { close: () => void }) {
             route="organization.admin"
             close={close}
             active={routerState.name.startsWith("organization.admin")}
-            leftSection={<IconGavel size={18} stroke={1.8} />}
           />
         }
       </MantineNavLink>

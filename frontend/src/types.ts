@@ -415,3 +415,8 @@ export type Statistics = {
   monthly: StatisticsEntry[];
   daily: StatisticsEntry[];
 };
+
+export type Suppressed = {
+  email_address: string;
+  retry_after: string;
+}
