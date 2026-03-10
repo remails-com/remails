@@ -31,7 +31,7 @@ impl SuppressedRepository {
         email: &EmailAddress,
         org: OrganizationId,
     ) -> Result<(), Error> {
-        const MAX_ATTEMPTS: i32 = 10;
+        const MAX_ATTEMPTS: i32 = 5;
         let retry_after = Utc::now() + Duration::days(30);
 
         sqlx::query!(
@@ -184,7 +184,7 @@ mod tests {
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_suppression_system(pool: PgPool) {
-        const MAX_ATTEMPTS: i32 = 10;
+        const MAX_ATTEMPTS: i32 = 5;
         let repo = SuppressedRepository::new(pool);
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let org_2 = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
