@@ -19,6 +19,7 @@ const DELIVERY_STATUS_STYLES: {
   Success: { color: "green", icon: <IconCheck size={16} /> },
   Reattempt: { color: "orange", icon: <IconClock size={16} /> },
   Failed: { color: "red", icon: <IconX size={16} /> },
+  Suppressed: { color: "grape", icon: <IconX size={16} /> },
 };
 
 export function Recipient({ details, recipient, props }: { details: DeliveryDetails, recipient: string, props: React.ComponentProps<typeof Badge> }): ReactElement {
@@ -27,6 +28,8 @@ export function Recipient({ details, recipient, props }: { details: DeliveryDeta
   let tooltip = "Email not (yet) sent";
   if (status.type == "Failed") {
     tooltip = "Permanent failure";
+  } else if (status.type == "Suppressed") {
+    tooltip = "Suppressed email address";
   } else if (status.type == "Reattempt") {
     tooltip = "Temporary failure";
   } else if (status.type == "Success") {

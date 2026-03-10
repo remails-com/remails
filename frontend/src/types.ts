@@ -33,7 +33,7 @@ export type DeliveryStatus =
     delivered: string;
   }
   | {
-    type: "NotSent" | "Reattempt" | "Failed";
+    type: "NotSent" | "Reattempt" | "Failed" | "Suppressed";
   };
 
 export interface DeliveryDetails {
