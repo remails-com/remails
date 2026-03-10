@@ -94,13 +94,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Download backend binaries
         uses: actions/download-artifact@v8
@@ -109,7 +109,7 @@ jobs:
           path: target/release/
 
       - name: Build and push inbound image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: inbound
@@ -118,7 +118,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/inbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push outbound image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: outbound
@@ -127,7 +127,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/outbound:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push management image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: management
@@ -136,7 +136,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/management:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push periodic image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: periodic
@@ -145,7 +145,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/periodic:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push migrate_db image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: migrate-db
@@ -154,7 +154,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/migrate_db:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push message_bus image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/ci.Dockerfile
           target: message-bus
@@ -163,7 +163,7 @@ jobs:
           context: ./target/release
           tags: "ghcr.io/remails-com/remails/message_bus:${{ needs.build-frontend.outputs.tag }}"
       - name: Build and push backup_db image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: deploy/backup.Dockerfile
           push: true
