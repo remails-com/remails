@@ -9,7 +9,7 @@ test("change global role", async ({ page }) => {
   await page.getByRole("textbox", { name: "Password" }).fill("unsecure123");
   await page.getByRole("button", { name: "Login" }).click();
 
-  await page.locator("a").filter({ hasText: "Admin" }).click();
+  await page.getByRole('link', { name: 'Admin' }).click();
   await expect(page.getByRole("tabpanel", { name: "Config" })).toBeVisible();
 
   await page.getByRole("tab", { name: "Users" }).click();

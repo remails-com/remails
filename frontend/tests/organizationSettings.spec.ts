@@ -7,8 +7,8 @@ test("rename organization", async ({ page }) => {
   await page.goto("/");
 
   // Navigate to organization settings
-  await page.locator("a").filter({ hasText: "Settings" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Subscription" })).toBeVisible();
+  await page.getByRole('link', { name: 'Organization', exact: true }).click();
+  await page.getByRole('link', { name: 'Subscription', exact: true }).click();
 
   // rename organization
   await page.getByRole("heading").filter({ hasNotText: "Your subscription" }).click();
@@ -22,11 +22,10 @@ async function toOrganizationMembers(page: Page) {
   await page.goto("/");
 
   // Navigate to organization settings
-  await page.locator("a").filter({ hasText: "Settings" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Subscription" })).toBeVisible();
+  await page.getByRole('link', { name: 'Organization', exact: true }).click();
 
   // Open members tab
-  await page.getByRole("tab", { name: "Members" }).click();
+  await page.getByRole('link', { name: 'Members', exact: true }).click();
   await expect(page.getByRole("heading", { name: "Organization members" })).toBeVisible();
 }
 
@@ -98,8 +97,9 @@ baseTest("accept organization invite", async ({ browser }) => {
   await page2.getByRole("button", { name: "Join organization" }).click();
 
   // Check that the second user could join the organization of the first user
-  await expect(page2).toHaveURL((url) => projectPage.startsWith(url.toString()));
+  await expect(page2).toHaveURL((url) => url.toString().startsWith(projectPage));
   await expect(page2.getByRole("button", { name: "New project" })).toBeVisible();
+
   // Check that it is allowed to create new projects
   await expect(page2.getByRole("button", { name: "New project" })).not.toBeDisabled();
 });
@@ -108,11 +108,10 @@ test("organization API key", async ({ page }) => {
   await page.goto("/");
 
   // Navigate to organization settings
-  await page.locator("a").filter({ hasText: "Settings" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Subscription" })).toBeVisible();
+  await page.getByRole('link', { name: 'Organization', exact: true }).click();
 
   // Open API keys tab
-  await page.getByRole("tab", { name: "API Keys" }).click();
+  await page.getByRole('link', { name: 'API keys', exact: true }).click();
   await expect(page.getByRole("button", { name: "New API key" })).toBeVisible();
 
   // Create new API key
@@ -139,7 +138,7 @@ test("organization API key", async ({ page }) => {
 
   // Check we are put on the API keys page
   {
-    const expectedUrl = new RegExp(`${uuidRegex}/settings/api_keys`);
+    const expectedUrl = new RegExp(`${uuidRegex}/organization/api-keys`);
     await expect(page).toHaveURL(expectedUrl);
     await expect(page.getByRole("button", { name: "New API key" })).toBeVisible();
   }
@@ -154,7 +153,7 @@ test("organization API key", async ({ page }) => {
 
   // Check we are put on the API key details page
   {
-    const expectedUrl = new RegExp(`${uuidRegex}/settings/api_keys/${uuidRegex}`);
+    const expectedUrl = new RegExp(`${uuidRegex}/organization/api-keys/${uuidRegex}`);
     await expect(page).toHaveURL(expectedUrl);
   }
 
