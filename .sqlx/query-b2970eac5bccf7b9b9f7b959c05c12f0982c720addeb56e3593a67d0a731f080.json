@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM suppressed_email_addresses\n            WHERE retry_after < $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b2970eac5bccf7b9b9f7b959c05c12f0982c720addeb56e3593a67d0a731f080"
+}

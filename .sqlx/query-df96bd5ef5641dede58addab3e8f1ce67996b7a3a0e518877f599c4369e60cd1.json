@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT attempts_left, retry_after\n            FROM suppressed_email_addresses\n            WHERE email_address = $1 AND organization_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempts_left",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "retry_after",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "df96bd5ef5641dede58addab3e8f1ce67996b7a3a0e518877f599c4369e60cd1"
+}

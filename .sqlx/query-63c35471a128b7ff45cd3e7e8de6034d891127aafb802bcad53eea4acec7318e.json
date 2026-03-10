@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO suppressed_email_addresses (email_address, organization_id, retry_after, attempts_left)\n            VALUES ($1, $2, $3, $4)\n            ON CONFLICT (email_address, organization_id)\n            DO UPDATE SET\n                retry_after = EXCLUDED.retry_after,\n                attempts_left = GREATEST(suppressed_email_addresses.attempts_left - 1, 0)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Uuid",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "63c35471a128b7ff45cd3e7e8de6034d891127aafb802bcad53eea4acec7318e"
+}
