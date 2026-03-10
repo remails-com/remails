@@ -154,6 +154,8 @@ pub enum DeliveryStatus {
     Reattempt,
     #[schema(title = "Failed")]
     Failed,
+    #[schema(title = "Suppressed")]
+    Suppressed,
 }
 
 /// Details of the email transmission for a specific recipient
@@ -1038,7 +1040,7 @@ impl MessageRepository {
                 .await?;
 
         let span = span!(tracing::Level::DEBUG, "rate_limit_tokens",
-            organziation_id = %org.id,
+            organization_id = %org.id,
             project_id = %id,
             %org.rate_limit_tokens,
             %org.rate_limit_last_used,

@@ -68,10 +68,10 @@ export default function OrganizationsOverview() {
           size="30"
           variant="subtle"
           component="a"
-          href={routeToPath("settings.admin", { org_id: organization.id })}
+          href={routeToPath("organization.admin", { org_id: organization.id })}
           onClick={(e) => {
             e.preventDefault();
-            navigate("settings.admin", { org_id: organization.id });
+            navigate("organization.admin", { org_id: organization.id });
           }}
         >
           <IconGavel />

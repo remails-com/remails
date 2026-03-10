@@ -15,6 +15,7 @@ import { AdminActionIcon, AdminButton } from "../RoleButtons";
 import { OrganizationMember, Role } from "../../types";
 import { useSubscription } from "../../hooks/useSubscription";
 import UpdateRole from "./UpdateRole";
+import OrganizationHeader from "./OrganizationHeader";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
@@ -267,14 +268,15 @@ export default function Members() {
 
   return (
     <>
+      <OrganizationHeader allowRename />
+      <Title order={3} mb="md">
+        Organization members
+      </Title>
       <InfoAlert stateName="organization-members">
         This section shows all Remails accounts that have access to this organization. Admins can invite new members to
         this organization by creating and sharing invite links.
       </InfoAlert>
 
-      <Title order={3} mb="md">
-        Organization members
-      </Title>
       <StyledTable headers={["Name", "Email", "Role", "Updated", ""]}>{member_rows}</StyledTable>
 
       {invite_rows && invite_rows.length > 0 && (

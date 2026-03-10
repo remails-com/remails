@@ -31,9 +31,7 @@ function DomainRow({ domain }: { domain: Domain }) {
     );
   } else if (domain.project_ids.length == 1) {
     projects = (
-      <Text fs="italic" c="dimmed">
-        <ProjectLink project_id={domain.project_ids[0]} />
-      </Text>
+      <ProjectLink project_id={domain.project_ids[0]} />
     );
   } else {
     projects = (

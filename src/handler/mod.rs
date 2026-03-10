@@ -10,7 +10,7 @@ use crate::{
     kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
-        OrganizationRepository, ProjectRepository, QuotaStatus,
+        OrganizationRepository, ProjectRepository, QuotaStatus, SuppressedRepository,
     },
 };
 use base64ct::{Base64, Encoding};
@@ -123,6 +123,7 @@ pub struct Handler {
     domain_repository: DomainRepository,
     organization_repository: OrganizationRepository,
     project_repository: ProjectRepository,
+    suppressed_repository: SuppressedRepository,
     message_parser: MessageParser,
     k8s: Kubernetes,
     workers: Arc<Semaphore>,
@@ -154,6 +155,7 @@ impl Handler {
             domain_repository: DomainRepository::new(pool.clone(), resolver),
             organization_repository: OrganizationRepository::new(pool.clone()),
             project_repository: ProjectRepository::new(pool.clone()),
+            suppressed_repository: SuppressedRepository::new(pool.clone()),
             message_parser: MessageParser::default(),
             k8s: Kubernetes::new(pool.clone())
                 .await
@@ -644,6 +646,14 @@ impl Handler {
                 .or_default();
             let connection_log = &mut delivery_details.log;
 
+            if self
+                .suppressed_repository
+                .should_suppress(recipient, message.organization_id)
+                .await?
+            {
+                delivery_details.status = DeliveryStatus::Suppressed;
+            }
+
             match delivery_details.status {
                 DeliveryStatus::None | DeliveryStatus::Reattempt => {
                     connection_log.log(
@@ -654,7 +664,7 @@ impl Handler {
                             message.attempts
                         ),
                     );
-                } // attempt to (re-)send
+                }
                 DeliveryStatus::Success { .. } => {
                     connection_log.log(
                         LogLevel::Info,
@@ -670,6 +680,17 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as remote reported a permanent failure (attempt {})",
+                            recipient.email(), message.attempts
+                        ),
+                    );
+                    failures += 1;
+                    continue;
+                }
+                DeliveryStatus::Suppressed => {
+                    connection_log.log(
+                        LogLevel::Info,
+                        format!(
+                            "skipping recipient {} as the email address has been suppressed due to repeated delivery failures (attempt {})",
                             recipient.email(), message.attempts
                         ),
                     );
@@ -701,6 +722,9 @@ impl Handler {
                         delivery_details.status = DeliveryStatus::Success {
                             delivered: chrono::Utc::now(),
                         };
+                        self.suppressed_repository
+                            .unsuppress(recipient, message.organization_id)
+                            .await?;
                         continue 'next_rcpt;
                     }
                     Err(SendError::TemporaryFailure) => is_temporary_failure = true,
@@ -713,6 +737,9 @@ impl Handler {
                 should_reattempt = true;
                 delivery_details.status = DeliveryStatus::Reattempt;
             } else {
+                self.suppressed_repository
+                    .report_failure(recipient, message.organization_id)
+                    .await?;
                 delivery_details.status = DeliveryStatus::Failed;
             }
         }

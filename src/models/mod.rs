@@ -10,6 +10,7 @@ mod projects;
 mod runtime_config;
 mod smtp_credential;
 mod statistics;
+mod suppressed;
 
 pub(crate) use api_keys::*;
 pub(crate) use api_user::*;
@@ -23,3 +24,4 @@ pub(crate) use projects::*;
 pub(crate) use runtime_config::*;
 pub(crate) use smtp_credential::*;
 pub(crate) use statistics::*;
+pub(crate) use suppressed::*;

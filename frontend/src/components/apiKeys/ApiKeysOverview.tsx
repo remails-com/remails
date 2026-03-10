@@ -1,6 +1,6 @@
 import { useApiKeys } from "../../hooks/useApiKeys.ts";
 import { Loader } from "../../Loader.tsx";
-import { Button, Flex, Table, Text } from "@mantine/core";
+import { Button, Flex, Table, Text, Title } from "@mantine/core";
 import { formatDateTime, KEY_ROLE_LABELS } from "../../util.ts";
 import { IconExternalLink, IconPlus } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
@@ -9,6 +9,7 @@ import EditButton from "../EditButton.tsx";
 import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
+import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
 
 export default function ApiKeysOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -38,7 +39,7 @@ export default function ApiKeysOverview() {
         <Table.Td>{formatDateTime(api_key.updated_at)}</Table.Td>
         <Table.Td align={"right"}>
           <EditButton
-            route="settings.API keys.API key"
+            route="organization.API keys.API key"
             params={{
               api_key_id: api_key.id,
             }}
@@ -50,6 +51,10 @@ export default function ApiKeysOverview() {
 
   return (
     <>
+      <OrganizationHeader allowRename />
+      <Title order={3} mb="md">
+        API keys
+      </Title>
       <InfoAlert stateName={"api-keys"}>
         Create API keys for this organization. API keys can be used to automate actions within this organization, such
         as sending email and seeing their delivery statuses, managing projects, and tracking your quota.

@@ -33,12 +33,16 @@ export type DeliveryStatus =
     delivered: string;
   }
   | {
-    type: "NotSent" | "Reattempt" | "Failed";
+    type: "NotSent" | "Reattempt" | "Failed" | "Suppressed";
   };
 
 export interface DeliveryDetails {
   status: DeliveryStatus;
   log: Log;
+}
+
+export interface DeliveryDetailsWithRecipient extends DeliveryDetails {
+  recipient: string;
 }
 
 export interface Log {
@@ -411,3 +415,8 @@ export type Statistics = {
   monthly: StatisticsEntry[];
   daily: StatisticsEntry[];
 };
+
+export type Suppressed = {
+  email_address: string;
+  retry_after: string;
+}

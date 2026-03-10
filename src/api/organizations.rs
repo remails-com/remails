@@ -7,7 +7,8 @@ use crate::{
     },
     models::{
         ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
-        OrganizationMember, OrganizationRepository, Role, Statistics, StatisticsRepository,
+        OrganizationMember, OrganizationRepository, Role, RuntimeConfigRepository, Statistics,
+        StatisticsRepository,
     },
 };
 use axum::{
@@ -101,9 +102,14 @@ async fn get_organization(
 )]
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
+    State(config_repo): State<RuntimeConfigRepository>,
     user: ApiUser, // only users are allowed to create organizations
     ValidatedJson(new): ValidatedJson<NewOrganization>,
 ) -> Result<impl IntoResponse, AppError> {
+    if !config_repo.account_creation_is_enabled().await? {
+        return Err(AppError::Forbidden);
+    }
+
     let org = repo.create(new).await?;
 
     info!(
@@ -375,7 +381,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
-        models::{OrgRole, Role},
+        models::{OrgRole, Role, RuntimeConfig},
     };
 
     use super::*;
@@ -834,6 +840,31 @@ mod tests {
         // can't remove users anymore
         let response = server
             .delete(format!("/api/organizations/{org_2}/members/{user_2}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn cannot_create_organizations_when_account_creation_disabled(pool: PgPool) {
+        let config_repo = RuntimeConfigRepository::new(pool.clone());
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let server = TestServer::new(pool, Some(user_1)).await;
+
+        // disable account creation
+        config_repo
+            .update(RuntimeConfig::new(None, None, false))
+            .await
+            .unwrap();
+
+        // try to create organization
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);

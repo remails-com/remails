@@ -1,9 +1,10 @@
 import { useRemails } from "./useRemails.ts";
 import { useEffect, useState } from "react";
 import { useOrganizations } from "./useOrganizations.ts";
-import { Email, EmailMetadata } from "../types.ts";
+import { Email, EmailMetadata, Suppressed } from "../types.ts";
 import { RemailsError } from "../error/error.ts";
 import { useSelector } from "./useSelector.ts";
+import { errorNotification } from "../notify.tsx";
 
 export function useEmails() {
   const { currentOrganization } = useOrganizations();
@@ -52,4 +53,27 @@ export function useEmails() {
   }
 
   return { emails, currentEmail, updateEmail, labels };
+}
+
+export function useSuppressed() {
+  const { currentOrganization } = useOrganizations();
+  const [suppressed, setSuppressed] = useState<Suppressed[] | null>(null);
+
+  useEffect(() => {
+    if (currentOrganization) {
+      fetch(`/api/organizations/${currentOrganization.id}/emails/suppressed`)
+        .then((res) => {
+          if (res.status === 200) {
+            return res.json();
+          } else {
+            errorNotification("Failed to load the suppressed email addresses");
+            console.error(res);
+            return null;
+          }
+        })
+        .then(setSuppressed);
+    }
+  }, [currentOrganization]);
+
+  return { suppressed, setSuppressed };
 }

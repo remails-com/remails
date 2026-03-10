@@ -64,22 +64,30 @@ export const routes = [
     ],
   },
   {
-    name: "settings",
-    path: "/{org_id}/settings",
+    name: "organization",
+    path: "/{org_id}/organization",
     children: [
+      {
+        name: "subscription",
+        path: "/subscription"
+      },
       {
         name: "members",
         path: "/members",
       },
       {
         name: "API keys",
-        path: "/api_keys",
+        path: "/api-keys",
         children: [
           {
             name: "API key",
             path: "/{api_key_id}",
           },
         ],
+      },
+      {
+        name: "suppressed",
+        path: "/suppressed",
       },
       {
         name: "admin",
@@ -136,12 +144,12 @@ export const routes = [
 // Recursive type to get all the route names from the Route[]
 type GetRouteNames<R extends readonly Route[], Prefix extends string = ""> = {
   [K in keyof R]: R[K] extends { name: infer Name extends string; children?: readonly Route[] }
-    ?
-        | (Prefix extends "" ? Name : `${Prefix}.${Name}`)
-        | (R[K]["children"] extends readonly Route[]
-            ? GetRouteNames<R[K]["children"], Prefix extends "" ? Name : `${Prefix}.${Name}`>
-            : never)
-    : never;
+  ?
+  | (Prefix extends "" ? Name : `${Prefix}.${Name}`)
+  | (R[K]["children"] extends readonly Route[]
+    ? GetRouteNames<R[K]["children"], Prefix extends "" ? Name : `${Prefix}.${Name}`>
+    : never)
+  : never;
 }[number];
 
 export type RouteName = GetRouteNames<typeof routes>;

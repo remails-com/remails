@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
-use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -215,7 +214,7 @@ impl InviteRepository {
     }
 
     pub async fn remove_expired_before(&self, before: DateTime<Utc>) -> Result<(), Error> {
-        trace!("Removing expired invites before {}", before);
+        tracing::trace!("Removing expired invites before {before}");
         let rows = sqlx::query!(
             r#"
             DELETE FROM organization_invites
@@ -228,7 +227,7 @@ impl InviteRepository {
         .rows_affected();
 
         if rows > 0 {
-            tracing::debug!("Removed {} expired invites", rows);
+            tracing::debug!("Removed {rows} expired invites");
         }
 
         Ok(())

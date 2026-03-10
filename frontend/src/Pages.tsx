@@ -3,7 +3,6 @@ import DomainsOverview from "./components/domains/DomainsOverview.tsx";
 import EmailDetails from "./components/emails/EmailDetails.tsx";
 import ProjectDetails from "./components/projects/ProjectDetails.tsx";
 import ProjectsOverview from "./components/projects/ProjectsOverview.tsx";
-import OrganizationSettings from "./components/organizations/OrganizationSettings.tsx";
 import { Setup } from "./components/Setup.tsx";
 import CredentialDetails from "./components/smtpCredentials/CredentialDetails.tsx";
 import { useRemails } from "./hooks/useRemails.ts";
@@ -22,6 +21,11 @@ import DomainDetails from "./components/domains/DomainDetails.tsx";
 import GlobalAdmin from "./components/admin/GlobalAdmin.tsx";
 import PasswordReset from "./PasswordReset.tsx";
 import { EmailOverview } from "./components/emails/EmailOverview.tsx";
+import Members from "./components/organizations/Members.tsx";
+import Subscription from "./components/organizations/Subscription.tsx";
+import ApiKeysOverview from "./components/apiKeys/ApiKeysOverview.tsx";
+import OrgBlock from "./components/admin/OrgBlock.tsx";
+import Suppressed from "./components/organizations/Suppressed.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
   emails: <EmailOverview />,
@@ -36,11 +40,13 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   domains: <DomainsOverview />,
   "domains.domain": <DomainDetails />,
   "domains.domain.settings": <DomainDetails />,
-  settings: <OrganizationSettings />,
-  "settings.members": <OrganizationSettings />,
-  "settings.API keys": <OrganizationSettings />,
-  "settings.API keys.API key": <ApiKeyDetails />,
-  "settings.admin": <OrganizationSettings />,
+  organization: null,
+  "organization.subscription": <Subscription />,
+  "organization.members": <Members />,
+  "organization.API keys": <ApiKeysOverview />,
+  "organization.API keys.API key": <ApiKeyDetails />,
+  "organization.suppressed": <Suppressed />,
+  "organization.admin": <OrgBlock />,
   admin: <GlobalAdmin />,
   "admin.organizations": <GlobalAdmin />,
   "admin.api_users": <GlobalAdmin />,
@@ -64,8 +70,7 @@ function Page() {
   }
 
   if (
-    !(routerState.name === "settings") &&
-    !routerState.name.startsWith("organizations") &&
+    !(routerState.name === "organization.subscription") &&
     !routerState.name.startsWith("admin") &&
     currentSubscription &&
     currentSubscription.status !== "active"

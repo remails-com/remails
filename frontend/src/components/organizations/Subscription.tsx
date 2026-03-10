@@ -4,8 +4,10 @@ import { SubscriptionStatus } from "../../types.ts";
 import React from "react";
 import { formatDate } from "../../util.ts";
 import { useOrgRole } from "../../hooks/useOrganizations.ts";
+import OrganizationHeader from "./OrganizationHeader.tsx";
+import InfoAlert from "../InfoAlert.tsx";
 
-export default function SubscriptionCard() {
+export default function Subscription() {
   const { currentSubscription, navigateToSales, navigateToCustomerPortal } = useSubscription();
   const { isAdmin } = useOrgRole();
 
@@ -72,13 +74,20 @@ export default function SubscriptionCard() {
   );
 
   return (
-    <Container size="xs" mt="md" pl="0" ml="0">
+    <>
+      <OrganizationHeader allowRename />
       <Title order={3} mb="md">
         Your subscription
       </Title>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="md">{details(currentSubscription)}</Stack>
-      </Card>
-    </Container>
+      <InfoAlert stateName="subscription">
+        Your organization's Remails subscription determines the email quota, maximum retention period, and project limits for your organization.
+      </InfoAlert>
+
+      <Container size="xs" pl="0" ml="0">
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">{details(currentSubscription)}</Stack>
+        </Card>
+      </Container>
+    </>
   );
 }
