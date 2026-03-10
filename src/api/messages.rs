@@ -478,7 +478,7 @@ pub async fn list_suppressed(
     path = "/organizations/{org_id}/emails/suppressed/{email}",
     tags = ["Emails"],
     responses(
-        (status = 200, description = "Successfully removed email address from suppression list", body = [SuppressedEmailAddress]),
+        (status = 200, description = "Successfully removed email address from suppression list"),
         AppError
     )
 )]
