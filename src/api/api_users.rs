@@ -39,10 +39,11 @@ fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
 }
 
 fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
-    if *user.id() == user_id {
-        return Ok(());
+    if *user.id() != user_id || user.blocked {
+        Err(AppError::Forbidden)
+    } else {
+        Ok(())
     }
-    Err(AppError::Forbidden)
 }
 
 /// Get all API users
@@ -630,6 +631,8 @@ mod tests {
         )
         .await;
     }
+
+    // TODO: add test case for no access for blocked accounts (block user 3 then try with correct password)
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_update_user_no_access_wrong_password(pool: PgPool) {

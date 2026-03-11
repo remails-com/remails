@@ -57,3 +57,11 @@ INSERT INTO api_users (id, email, name) -- Read-only member of the "First subscr
 VALUES ('9aa7656f-6f52-4a4c-b7cf-93600e613177', 'subscription2@test.com', 'subscription2 test');
 INSERT INTO api_users_organizations (api_user_id, organization_id, role)
 VALUES ('9aa7656f-6f52-4a4c-b7cf-93600e613177', 'e11df9da-56f5-433c-9d3a-dd338f262c66', 'read_only');
+
+
+INSERT INTO api_users (id, email, name, password_hash, blocked) -- blocked-user: admin in org 1, password is unsecure123
+VALUES ('b0c918e3-8183-430f-83eb-78b182ebef9e', 'test-api@blocked-user', 'Blocked User',
+        '$argon2id$v=19$m=16,t=2,p=1$VlZ0SUUzdXRBZVFldEZpbQ$rNhHR3o94Zw1B4YVqty6xQ', true);
+
+INSERT INTO api_users_organizations (api_user_id, organization_id, role)
+VALUES ('b0c918e3-8183-430f-83eb-78b182ebef9e', '44729d9f-a7dc-4226-b412-36a7537f5176', 'admin');
