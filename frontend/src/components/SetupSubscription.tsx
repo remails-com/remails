@@ -14,7 +14,7 @@ export default function SetupSubscription() {
 
   return (
     <Center>
-      <Box maw="25rem">
+      <Box maw="25rem" mt="xl">
         <Text size="xl" fw="bold">
           Welcome to
         </Text>
@@ -24,7 +24,7 @@ export default function SetupSubscription() {
         <Stack mt="lg">
           <Stack gap="5">
             <Text>Before getting started, please register a subscription with your company details.</Text>
-            <Text>Just testing things out? No worries, there is a free tier!</Text>
+            <Text>Starting small? Try the hobby tier!</Text>
           </Stack>
           <Group>
             <Button flex={1} onClick={navigateToSales}>

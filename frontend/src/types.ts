@@ -337,10 +337,12 @@ export interface SignUpRequest extends PasswordLoginRequest {
 
 export type ProductIdentifier =
   | "RMLS-FREE"
+  | "RMLS-HOBBY-MONTHLY"
   | "RMLS-TINY-MONTHLY"
   | "RMLS-SMALL-MONTHLY"
   | "RMLS-MEDIUM-MONTHLY"
   | "RMLS-LARGE-MONTHLY"
+  | "RMLS-HOBBY-YEARLY"
   | "RMLS-TINY-YEARLY"
   | "RMLS-SMALL-YEARLY"
   | "RMLS-MEDIUM-YEARLY"

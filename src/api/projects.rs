@@ -476,45 +476,52 @@ mod tests {
         let org_1: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap();
         let server = TestServer::new(pool.clone(), Some(user_a)).await;
 
-        // cannot create a project with a longer retention period with a free subscription
-        set_subscription(
-            &pool,
-            org_1,
-            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::RmlsFree, None)),
-        )
-        .await;
-        let response = server
-            .post(
-                format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
-                    name: "Test Project 1".to_string(),
-                    retention_period_days: 3,
-                    plaintext_fallback: false,
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        // cannot create a project with a longer retention period with a free/hobby subscription
+        for sub in [
+            ProductIdentifier::RmlsFree,
+            ProductIdentifier::RmlsHobbyMonthly,
+            ProductIdentifier::RmlsHobbyYearly,
+        ] {
+            let sub = SubscriptionStatus::Active(mock_subscription(sub, None));
+            set_subscription(&pool, org_1, sub).await;
+            let response = server
+                .post(
+                    format!("/api/organizations/{org_1}/projects"),
+                    serialize_body(&NewProject {
+                        name: "Test Project 1".to_string(),
+                        retention_period_days: 3,
+                        plaintext_fallback: false,
+                    }),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
 
-        // tiny subscription cannot use longest retention period
-        set_subscription(
-            &pool,
-            org_1,
-            SubscriptionStatus::Active(mock_subscription(ProductIdentifier::RmlsTinyMonthly, None)),
-        )
-        .await;
-        let response = server
-            .post(
-                format!("/api/organizations/{org_1}/projects"),
-                serialize_body(&NewProject {
-                    name: "Test Project 1".to_string(),
-                    retention_period_days: 30,
-                    plaintext_fallback: false,
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        // tiny/small/medium subscription cannot use longest retention period
+        for sub in [
+            ProductIdentifier::RmlsTinyMonthly,
+            ProductIdentifier::RmlsTinyYearly,
+            ProductIdentifier::RmlsSmallMonthly,
+            ProductIdentifier::RmlsSmallYearly,
+            ProductIdentifier::RmlsMediumMonthly,
+            ProductIdentifier::RmlsMediumYearly,
+        ] {
+            let sub = SubscriptionStatus::Active(mock_subscription(sub, None));
+            set_subscription(&pool, org_1, sub).await;
+            let response = server
+                .post(
+                    format!("/api/organizations/{org_1}/projects"),
+                    serialize_body(&NewProject {
+                        name: "Test Project 1".to_string(),
+                        retention_period_days: 30,
+                        plaintext_fallback: false,
+                    }),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
 
         // large subscription can use longest retention period
         set_subscription(

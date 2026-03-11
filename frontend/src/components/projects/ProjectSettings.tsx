@@ -22,10 +22,12 @@ interface FormValues {
 // Values should match `max_retention_period` in `src/moneybird/model.rs`
 export const MAX_RETENTION: Record<ProductIdentifier, number> = {
   "RMLS-FREE": 1,
+  "RMLS-HOBBY-MONTHLY": 1,
   "RMLS-TINY-MONTHLY": 3,
   "RMLS-SMALL-MONTHLY": 7,
   "RMLS-MEDIUM-MONTHLY": 14,
   "RMLS-LARGE-MONTHLY": 30,
+  "RMLS-HOBBY-YEARLY": 1,
   "RMLS-TINY-YEARLY": 3,
   "RMLS-SMALL-YEARLY": 7,
   "RMLS-MEDIUM-YEARLY": 14,
