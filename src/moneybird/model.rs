@@ -125,10 +125,12 @@ pub(super) struct RecurringSalesInvoice {
 pub enum ProductIdentifier {
     NotSubscribed,
     RmlsFree,
+    RmlsHobbyMonthly,
     RmlsTinyMonthly,
     RmlsSmallMonthly,
     RmlsMediumMonthly,
     RmlsLargeMonthly,
+    RmlsHobbyYearly,
     RmlsTinyYearly,
     RmlsSmallYearly,
     RmlsMediumYearly,
@@ -143,10 +145,12 @@ impl FromStr for ProductIdentifier {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "RmlsFree" => Self::RmlsFree,
+            "RmlsHobbyMonthly" => Self::RmlsHobbyMonthly,
             "RmlsTinyMonthly" => Self::RmlsTinyMonthly,
             "RmlsSmallMonthly" => Self::RmlsSmallMonthly,
             "RmlsMediumMonthly" => Self::RmlsMediumMonthly,
             "RmlsLargeMonthly" => Self::RmlsLargeMonthly,
+            "RmlsHobbyYearly" => Self::RmlsHobbyYearly,
             "RmlsTinyYearly" => Self::RmlsTinyYearly,
             "RmlsSmallYearly" => Self::RmlsSmallYearly,
             "RmlsMediumYearly" => Self::RmlsMediumYearly,
@@ -165,15 +169,13 @@ impl ProductIdentifier {
     pub fn monthly_quota(&self) -> u32 {
         match self {
             ProductIdentifier::NotSubscribed => 0,
-            ProductIdentifier::RmlsFree => 3_000,
-            ProductIdentifier::RmlsTinyMonthly => 100_000,
-            ProductIdentifier::RmlsSmallMonthly => 300_000,
-            ProductIdentifier::RmlsMediumMonthly => 700_000,
-            ProductIdentifier::RmlsLargeMonthly => 1_500_000,
-            ProductIdentifier::RmlsTinyYearly => 100_000,
-            ProductIdentifier::RmlsSmallYearly => 300_000,
-            ProductIdentifier::RmlsMediumYearly => 700_000,
-            ProductIdentifier::RmlsLargeYearly => 1_500_000,
+            ProductIdentifier::RmlsFree
+            | ProductIdentifier::RmlsHobbyMonthly
+            | ProductIdentifier::RmlsHobbyYearly => 3_000,
+            ProductIdentifier::RmlsTinyMonthly | ProductIdentifier::RmlsTinyYearly => 100_000,
+            ProductIdentifier::RmlsSmallMonthly | ProductIdentifier::RmlsSmallYearly => 300_000,
+            ProductIdentifier::RmlsMediumMonthly | ProductIdentifier::RmlsMediumYearly => 700_000,
+            ProductIdentifier::RmlsLargeMonthly | ProductIdentifier::RmlsLargeYearly => 1_500_000,
             #[cfg(test)]
             ProductIdentifier::Unlimited => u32::MAX,
         }
@@ -183,15 +185,13 @@ impl ProductIdentifier {
         // Values should match `MAX_RETENTION` in `frontend/src/components/projects/ProjectSettings.tsx`
         match self {
             ProductIdentifier::NotSubscribed => 1,
-            ProductIdentifier::RmlsFree => 1,
-            ProductIdentifier::RmlsTinyMonthly => 3,
-            ProductIdentifier::RmlsSmallMonthly => 7,
-            ProductIdentifier::RmlsMediumMonthly => 14,
-            ProductIdentifier::RmlsLargeMonthly => 30,
-            ProductIdentifier::RmlsTinyYearly => 3,
-            ProductIdentifier::RmlsSmallYearly => 7,
-            ProductIdentifier::RmlsMediumYearly => 14,
-            ProductIdentifier::RmlsLargeYearly => 30,
+            ProductIdentifier::RmlsFree
+            | ProductIdentifier::RmlsHobbyMonthly
+            | ProductIdentifier::RmlsHobbyYearly => 1,
+            ProductIdentifier::RmlsTinyMonthly | ProductIdentifier::RmlsTinyYearly => 3,
+            ProductIdentifier::RmlsSmallMonthly | ProductIdentifier::RmlsSmallYearly => 7,
+            ProductIdentifier::RmlsMediumMonthly | ProductIdentifier::RmlsMediumYearly => 14,
+            ProductIdentifier::RmlsLargeMonthly | ProductIdentifier::RmlsLargeYearly => 30,
             #[cfg(test)]
             ProductIdentifier::Unlimited => 30,
         }
@@ -200,15 +200,13 @@ impl ProductIdentifier {
     pub fn project_limit(&self) -> Option<u32> {
         match self {
             ProductIdentifier::NotSubscribed => Some(0),
-            ProductIdentifier::RmlsFree => Some(1),
-            ProductIdentifier::RmlsTinyMonthly => None,
-            ProductIdentifier::RmlsSmallMonthly => None,
-            ProductIdentifier::RmlsMediumMonthly => None,
-            ProductIdentifier::RmlsLargeMonthly => None,
-            ProductIdentifier::RmlsTinyYearly => None,
-            ProductIdentifier::RmlsSmallYearly => None,
-            ProductIdentifier::RmlsMediumYearly => None,
-            ProductIdentifier::RmlsLargeYearly => None,
+            ProductIdentifier::RmlsFree
+            | ProductIdentifier::RmlsHobbyMonthly
+            | ProductIdentifier::RmlsHobbyYearly => Some(1),
+            ProductIdentifier::RmlsTinyMonthly | ProductIdentifier::RmlsTinyYearly => None,
+            ProductIdentifier::RmlsSmallMonthly | ProductIdentifier::RmlsSmallYearly => None,
+            ProductIdentifier::RmlsMediumMonthly | ProductIdentifier::RmlsMediumYearly => None,
+            ProductIdentifier::RmlsLargeMonthly | ProductIdentifier::RmlsLargeYearly => None,
             #[cfg(test)]
             ProductIdentifier::Unlimited => None,
         }
@@ -217,15 +215,13 @@ impl ProductIdentifier {
     pub fn max_rate_limit_tokens(&self) -> i64 {
         match self {
             ProductIdentifier::NotSubscribed => 0,
-            ProductIdentifier::RmlsFree => 10,
-            ProductIdentifier::RmlsTinyMonthly => 20,
-            ProductIdentifier::RmlsSmallMonthly => 60,
-            ProductIdentifier::RmlsMediumMonthly => 150,
-            ProductIdentifier::RmlsLargeMonthly => 300,
-            ProductIdentifier::RmlsTinyYearly => 20,
-            ProductIdentifier::RmlsSmallYearly => 60,
-            ProductIdentifier::RmlsMediumYearly => 150,
-            ProductIdentifier::RmlsLargeYearly => 300,
+            ProductIdentifier::RmlsFree
+            | ProductIdentifier::RmlsHobbyMonthly
+            | ProductIdentifier::RmlsHobbyYearly => 10,
+            ProductIdentifier::RmlsTinyMonthly | ProductIdentifier::RmlsTinyYearly => 20,
+            ProductIdentifier::RmlsSmallMonthly | ProductIdentifier::RmlsSmallYearly => 60,
+            ProductIdentifier::RmlsMediumMonthly | ProductIdentifier::RmlsMediumYearly => 150,
+            ProductIdentifier::RmlsLargeMonthly | ProductIdentifier::RmlsLargeYearly => 300,
             #[cfg(test)]
             ProductIdentifier::Unlimited => i64::MAX,
         }
@@ -238,15 +234,21 @@ impl ProductIdentifier {
         match self {
             // pointless, as the max_rate_limit_tokens is 0 anyway
             ProductIdentifier::NotSubscribed => Duration::minutes(5),
-            ProductIdentifier::RmlsFree => Duration::minutes(5),
-            ProductIdentifier::RmlsTinyMonthly => Duration::seconds(5),
-            ProductIdentifier::RmlsSmallMonthly => Duration::seconds(1),
-            ProductIdentifier::RmlsMediumMonthly => Duration::milliseconds(250),
-            ProductIdentifier::RmlsLargeMonthly => Duration::milliseconds(100),
-            ProductIdentifier::RmlsTinyYearly => Duration::seconds(5),
-            ProductIdentifier::RmlsSmallYearly => Duration::seconds(1),
-            ProductIdentifier::RmlsMediumYearly => Duration::milliseconds(250),
-            ProductIdentifier::RmlsLargeYearly => Duration::milliseconds(100),
+            ProductIdentifier::RmlsFree
+            | ProductIdentifier::RmlsHobbyMonthly
+            | ProductIdentifier::RmlsHobbyYearly => Duration::minutes(5),
+            ProductIdentifier::RmlsTinyMonthly | ProductIdentifier::RmlsTinyYearly => {
+                Duration::seconds(5)
+            }
+            ProductIdentifier::RmlsSmallMonthly | ProductIdentifier::RmlsSmallYearly => {
+                Duration::seconds(1)
+            }
+            ProductIdentifier::RmlsMediumMonthly | ProductIdentifier::RmlsMediumYearly => {
+                Duration::milliseconds(250)
+            }
+            ProductIdentifier::RmlsLargeMonthly | ProductIdentifier::RmlsLargeYearly => {
+                Duration::milliseconds(100)
+            }
             #[cfg(test)]
             ProductIdentifier::Unlimited => Duration::milliseconds(1),
         }
