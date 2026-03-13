@@ -5,10 +5,21 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     cert-manager.io/cluster-issuer: {{ printf "letsencrypt-%s-http" .Values.management.certificate_type }}
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-remails-redirect-middleware@kubernetescrd"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - host: {{ .Values.management.server_name }}
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: management
+                port:
+                  name: http
+    - host: www.{{ .Values.management.server_name }}
       http:
         paths:
           - pathType: Prefix
@@ -22,30 +33,15 @@ spec:
     - hosts:
         - {{ .Values.management.server_name }}
         - www.{{ .Values.management.server_name }}
-      secretName: management-tls-cert
+      secretName: management-tls-cert-traefik
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
 metadata:
-  name: remails-{{ .Values.environment }}-redirect
+  name: remails-redirect-middleware
   namespace: {{ .Release.Namespace }}
-  annotations:
-    nginx.ingress.kubernetes.io/permanent-redirect: "https://{{ .Values.management.server_name }}"
 spec:
-  ingressClassName: nginx
-  rules:
-    - host: www.{{ .Values.management.server_name }}
-      http:
-        paths:
-          - backend:
-              service:
-                name: management
-                port:
-                  name: http
-            path: /
-            pathType: Prefix
-  tls:
-    - hosts:
-        - {{ .Values.management.server_name }}
-        - www.{{ .Values.management.server_name }}
-      secretName: management-tls-cert
+  redirectRegex:
+    regex: "^https?://www.{{ .Values.management.server_name }}/(.*)"
+    replacement: "https://{{ .Values.management.server_name }}/${1}"
+    permanent: true

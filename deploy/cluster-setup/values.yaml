@@ -18,6 +18,31 @@ docker:
     username: pohlm01
     password: personal-access-token-with-packages-read-access
 
+traefik:
+  ingressClass:
+    enabled: true
+    name: "traefik"
+    isDefaultClass: false
+  namespaceOverride: ingress
+  providers:
+    kubernetesCRD:
+      allowCrossNamespace: true
+    kubernetesIngress:
+      enabled: true
+  deployment:
+    replicas: 2
+  service:
+    enabled: false
+  ports:
+    web:
+      proxyProtocol:
+        trustedIPs: ["10.0.2.0/24"]
+    websecure:
+      proxyProtocol:
+        trustedIPs: ["10.0.2.0/24"]
+
+
+
 ingress-nginx:
   namespaceOverride: ingress
   controller:

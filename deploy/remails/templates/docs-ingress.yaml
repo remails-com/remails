@@ -6,7 +6,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: {{ printf "letsencrypt-%s-http" .Values.management.certificate_type }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - host: docs.{{ .Values.management.server_name }}
       http:
@@ -21,4 +21,4 @@ spec:
   tls:
     - hosts:
         - docs.{{ .Values.management.server_name }}
-      secretName: docs-tls-cert
+      secretName: docs-tls-cert-traefik
