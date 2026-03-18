@@ -9,13 +9,13 @@ const actionHandler: {
   set_api_users: function (state, action) {
     return { ...state, apiUsers: action.users };
   },
-  set_api_user_role: function (state, action) {
+  update_api_user: function (state, action) {
     return {
       ...state,
       apiUsers:
         state.apiUsers?.map((u) => {
           if (u.id === action.user_id) {
-            u.global_role = action.role;
+            return action.user;
           }
           return u;
         }) || [],

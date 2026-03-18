@@ -156,6 +156,15 @@ pub struct ApiUserUpdate {
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct ManageApiUser {
+    #[garde(skip)]
+    pub global_role: Option<Role>,
+    #[garde(skip)]
+    pub blocked: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct PasswordUpdate {
     #[garde(dive)]
     #[schema(min_length = 10, max_length = 256)]
@@ -595,21 +604,21 @@ impl ApiUserRepository {
         Ok(())
     }
 
-    pub async fn set_global_role(
-        &self,
-        id: ApiUserId,
-        role: Option<Role>,
-    ) -> Result<Option<Role>, Error> {
-        let old_role: Option<Role> = sqlx::query_scalar!(
+    pub async fn manage(&self, id: ApiUserId, settings: &ManageApiUser) -> Result<(), Error> {
+        sqlx::query_scalar!(
             r#"
-            UPDATE api_users SET global_role = $2 WHERE id = $1 RETURNING OLD.global_role AS "r:Role"
+            UPDATE api_users
+            SET global_role = $2, blocked = $3
+            WHERE id = $1
             "#,
             *id,
-            role as _
+            settings.global_role as _,
+            settings.blocked
         )
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(old_role)
+
+        Ok(())
     }
 
     pub async fn update_password(
@@ -963,7 +972,7 @@ impl ApiUserRepository {
         {
             if counter > 3 {
                 // TODO, we might want to send an email to the user telling their account got temporarily blocked (see #222)
-                // Note, we must not show any other behaviour to the outside world to avoid leaking if an account exists
+                // Note, we must not show any other behavior to the outside world to avoid leaking if an account exists
                 tracing::warn!(
                     attempts = counter,
                     "Too many failed password attempts for user {}",
@@ -979,23 +988,6 @@ impl ApiUserRepository {
             return Ok(());
         }
         Err(Error::NotFound("User not found or wrong password"))
-    }
-
-    pub async fn update_block_status(&self, id: &ApiUserId, blocked: bool) -> Result<(), Error> {
-        sqlx::query_as!(
-            PgApiUser,
-            r#"
-            UPDATE api_users
-            SET blocked = $2
-            WHERE id = $1
-            "#,
-            **id,
-            blocked
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
     }
 }
 

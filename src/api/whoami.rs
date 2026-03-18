@@ -45,6 +45,7 @@ pub struct Whoami {
     /// Unlike in `ApiUser`, here the GitHub ID is a string
     pub github_id: Option<String>,
     pub password_enabled: bool,
+    pub blocked: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -59,6 +60,7 @@ impl From<ApiUser> for Whoami {
             org_roles: user.org_roles,
             name: user.name,
             email: user.email,
+            blocked: user.blocked,
             created_at: user.created_at,
             updated_at: user.updated_at,
         }
