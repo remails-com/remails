@@ -142,6 +142,10 @@ export type Action =
     user: User;
   }
   | {
+    type: "remove_api_user";
+    user_id: string;
+  }
+  | {
     type: "set_totp_codes";
     totpCodes: TotpCode[] | null;
   }
