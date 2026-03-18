@@ -1,9 +1,9 @@
 dependencies:
-- name: ingress-nginx
-  repository: https://kubernetes.github.io/ingress-nginx
-  version: 4.13.0
+- name: traefik
+  repository: https://traefik.github.io/charts
+  version: 39.0.5
 - name: scaleway-certmanager-webhook
   repository: https://helm.scw.cloud/
-  version: 0.4.0
-digest: sha256:168ef74936258b8ffcef6490362d57b6900813c7f97595da212a0b36d0165a92
-generated: "2025-09-23T16:10:43.648783449+02:00"
+  version: 0.4.1
+digest: sha256:dc77378c4585720c05e867cffd523e05283686d674189d812145ee2a432aa3f8
+generated: "2026-03-13T12:30:09.815521084+01:00"
