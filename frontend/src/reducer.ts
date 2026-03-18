@@ -9,17 +9,11 @@ const actionHandler: {
   set_api_users: function (state, action) {
     return { ...state, apiUsers: action.users };
   },
-  set_api_user_role: function (state, action) {
-    return {
-      ...state,
-      apiUsers:
-        state.apiUsers?.map((u) => {
-          if (u.id === action.user_id) {
-            u.global_role = action.role;
-          }
-          return u;
-        }) || [],
-    };
+  update_api_user: function (state, action) {
+    return { ...state, apiUsers: state.apiUsers?.map((u) => u.id === action.user_id ? action.user : u) || [] };
+  },
+  remove_api_user: function (state, action) {
+    return { ...state, apiUsers: state.apiUsers?.filter((u) => u.id !== action.user_id) || [] };
   },
   add_organization: function (state, action) {
     return { ...state, organizations: [action.organization, ...(state.organizations || [])] };

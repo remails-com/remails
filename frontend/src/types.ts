@@ -12,6 +12,7 @@ export interface User {
   email: string;
   github_id: string | null;
   password_enabled: boolean;
+  blocked: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -136,9 +137,13 @@ export type Action =
     users: User[] | null;
   }
   | {
-    type: "set_api_user_role";
+    type: "update_api_user";
     user_id: string;
-    role: Role | null;
+    user: User;
+  }
+  | {
+    type: "remove_api_user";
+    user_id: string;
   }
   | {
     type: "set_totp_codes";

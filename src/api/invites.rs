@@ -433,6 +433,13 @@ mod tests {
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
+    async fn test_invites_no_access_blocked_user(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap(); // blocked admin of org 1
+        let mut server = TestServer::new(pool, Some(blocked_user)).await;
+        test_invites_no_access(&mut server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_cannot_use_removed_invite(pool: PgPool) {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // is not in any org

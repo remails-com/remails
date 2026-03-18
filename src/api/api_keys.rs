@@ -329,6 +329,16 @@ mod tests {
         test_api_key_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
     }
 
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects", "api_keys")
+    ))]
+    async fn test_api_key_no_access_blocked_user(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap(); // blocked admin of org 1
+        let server = TestServer::new(pool.clone(), Some(blocked_user)).await;
+        test_api_key_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
     impl TestServer {
         pub async fn use_api_key(&mut self, org_id: OrganizationId, role: Role) -> ApiKeyId {
             // request an API key using the currently logged-in user
