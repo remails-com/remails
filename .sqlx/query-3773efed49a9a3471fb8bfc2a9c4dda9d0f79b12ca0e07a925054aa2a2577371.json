@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   u.global_role AS \"global_role: Role\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\",\n                   u.updated_at,\n                   u.created_at\n            FROM api_users u\n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n            WHERE github_user_id = $1\n            GROUP BY u.id\n            ",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   u.global_role AS \"global_role: Role\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\",\n                   u.blocked,\n                   u.updated_at,\n                   u.created_at\n            FROM api_users u\n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n            GROUP BY u.id\n            ORDER BY u.updated_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -85,19 +85,22 @@
       },
       {
         "ordinal": 7,
+        "name": "blocked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
         "name": "updated_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "created_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": [
-        "Int8"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -108,8 +111,9 @@
       true,
       null,
       false,
+      false,
       false
     ]
   },
-  "hash": "5ee620ac3c21d2f897160ccbb1401c7b77c4d1f8f9af1be14ffa2653fafd20aa"
+  "hash": "3773efed49a9a3471fb8bfc2a9c4dda9d0f79b12ca0e07a925054aa2a2577371"
 }
