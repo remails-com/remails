@@ -141,6 +141,7 @@ pub struct ApiUser {
     pub org_roles: Vec<OrgRole>,
     pub github_user_id: Option<i64>,
     pub password_enabled: bool,
+    pub blocked: bool,
     pub updated_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
 }
@@ -235,6 +236,7 @@ struct PgApiUser {
     global_role: Option<Role>,
     github_user_id: Option<i64>,
     password_enabled: bool,
+    blocked: bool,
     updated_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
 }
@@ -256,6 +258,7 @@ impl TryFrom<PgApiUser> for ApiUser {
             org_roles,
             github_user_id: u.github_user_id,
             password_enabled: u.password_enabled,
+            blocked: u.blocked,
             updated_at: u.updated_at,
             created_at: u.created_at,
         })
@@ -535,6 +538,7 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
@@ -843,7 +847,6 @@ impl ApiUserRepository {
         Ok(())
     }
 
-    #[cfg_attr(test, allow(dead_code))]
     pub async fn find_by_id(&self, id: &ApiUserId) -> Result<Option<ApiUser>, Error> {
         sqlx::query_as!(
             PgApiUser,
@@ -855,6 +858,7 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
@@ -881,6 +885,7 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
@@ -907,6 +912,7 @@ impl ApiUserRepository {
                    array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
+                   u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
@@ -974,6 +980,23 @@ impl ApiUserRepository {
         }
         Err(Error::NotFound("User not found or wrong password"))
     }
+
+    pub async fn update_block_status(&self, id: &ApiUserId, blocked: bool) -> Result<(), Error> {
+        sqlx::query_as!(
+            PgApiUser,
+            r#"
+            UPDATE api_users
+            SET blocked = $2
+            WHERE id = $1
+            "#,
+            **id,
+            blocked
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -991,6 +1014,7 @@ mod test {
                 org_roles,
                 github_user_id: None,
                 password_enabled: false,
+                blocked: false,
                 updated_at: Utc::now(),
                 created_at: Utc::now(),
             }
@@ -1029,6 +1053,7 @@ mod test {
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations")))]
     async fn create_user(db: PgPool) {
         let repo = ApiUserRepository::new(db);
+        let users = repo.get_all().await.unwrap().len();
 
         let user = NewApiUser {
             email: "test@email.com".parse().unwrap(),
@@ -1041,10 +1066,9 @@ mod test {
             }],
             github_user_id: Some(123),
         };
-
         let created = repo.create(user.clone()).await.unwrap();
-
         assert_eq!(created, user);
+        assert_eq!(repo.get_all().await.unwrap().len(), users + 1);
 
         let user = NewApiUser {
             email: "test2@email.com".parse().unwrap(),
@@ -1054,17 +1078,8 @@ mod test {
             org_roles: vec![],
             github_user_id: None,
         };
-
         let created = repo.create(user.clone()).await.unwrap();
-
         assert_eq!(created, user);
-    }
-
-    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
-    async fn get_all(db: PgPool) {
-        let repo = ApiUserRepository::new(db);
-
-        let users = repo.get_all().await.unwrap();
-        assert_eq!(users.len(), 11);
+        assert_eq!(repo.get_all().await.unwrap().len(), users + 2);
     }
 }

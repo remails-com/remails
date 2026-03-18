@@ -86,19 +86,18 @@ pub trait Authenticated: Send + Sync {
 impl ApiUser {
     /// Check if user is super admin (has access to all organizations)
     pub fn is_super_admin(&self) -> bool {
-        self.global_role
-            .as_ref()
-            .is_some_and(|role| *role == Role::Admin)
+        !self.blocked && self.global_role.is_some_and(|role| role == Role::Admin)
     }
 }
 
 impl Authenticated for ApiUser {
     fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
-        self.is_super_admin()
-            || self
-                .org_roles
-                .iter()
-                .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role))
+        !self.blocked
+            && (self.is_super_admin()
+                || self
+                    .org_roles
+                    .iter()
+                    .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role)))
     }
 
     fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>> {
@@ -271,6 +270,13 @@ pub(super) async fn password_login(
         .find_by_email(&login_attempt.email)
         .await?
         .ok_or(AppError::NotFound)?;
+    if user.blocked {
+        tracing::info!(
+            user_id = user.id().to_string(),
+            "Blocked user attempted to log in via password"
+        );
+        return Err(AppError::Forbidden);
+    }
 
     let whoami;
     if repo.mfa_enabled(user.id()).await? {
@@ -758,6 +764,24 @@ pub mod tests {
             .insert("Cookie", "invalid_session".to_string());
         let response = server.get("/api/organizations").await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_cannot_login_when_blocked(pool: PgPool) {
+        let server = TestServer::new(pool.clone(), None).await;
+
+        // try to login with a blocked user
+        let response = server
+            .post(
+                "/api/login/password",
+                serialize_body(json!({
+                    "email": "test-api@blocked-user",
+                    "password": "unsecure123"
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
