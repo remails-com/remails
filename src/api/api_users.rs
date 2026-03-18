@@ -25,8 +25,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
-        .routes(routes!(update_user, manage_user))
-        .routes(routes!(get_all))
+        .routes(routes!(update_user))
+        .routes(routes!(manage_user))
+        .routes(routes!(get_all, delete_user))
         .routes(routes!(is_password_reset_active))
         .routes(routes!(password_reset))
         .routes(routes!(update_password, delete_password))
@@ -102,6 +103,34 @@ pub async fn manage_user(
     );
 
     Ok(())
+}
+
+/// Delete an API user
+#[utoipa::path(delete, path = "/api_user/{user_id}",
+    tags = ["internal", "API users"],
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "Successfully deleted user", body = ApiUserId),
+        AppError,
+))]
+pub async fn delete_user(
+    State(repo): State<ApiUserRepository>,
+    Path((user_id,)): Path<(ApiUserId,)>,
+    user: ApiUser,
+) -> ApiResult<ApiUserId> {
+    if !user.is_super_admin() {
+        return Err(AppError::Forbidden);
+    }
+
+    let deleted = repo.delete(user_id).await?;
+
+    info!(
+        user_id = user_id.to_string(),
+        executing_user_id = user.id().to_string(),
+        "admin deleted user"
+    );
+
+    Ok(Json(deleted))
 }
 
 /// Update API user details
@@ -1027,5 +1056,48 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_deleting_users(pool: PgPool) {
+        let admin: ApiUserId = "deadbeef-4e43-4a66-bbb9-fbcd4a933a34".parse().unwrap();
+        let user1: ApiUserId = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap();
+        let user2: ApiUserId = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap();
+
+        // not logged in
+        let mut server = TestServer::new(pool.clone(), None).await;
+        let res = server
+            .delete(format!("/api/api_user/{user1}"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // normal user
+        server.set_user(Some(user2));
+        let res = server
+            .delete(format!("/api/api_user/{user1}"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+        // Remails admin
+        server.set_user(Some(admin));
+
+        let res = server.get("/api/api_user").await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let users: Vec<Whoami> = deserialize_body(res.into_body()).await;
+        let num = users.len();
+
+        let res = server
+            .delete(format!("/api/api_user/{user1}"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // check user was deleted
+        let res = server.get("/api/api_user").await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let users: Vec<Whoami> = deserialize_body(res.into_body()).await;
+        assert_eq!(users.len(), num - 1);
     }
 }

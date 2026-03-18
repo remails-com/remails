@@ -10,16 +10,10 @@ const actionHandler: {
     return { ...state, apiUsers: action.users };
   },
   update_api_user: function (state, action) {
-    return {
-      ...state,
-      apiUsers:
-        state.apiUsers?.map((u) => {
-          if (u.id === action.user_id) {
-            return action.user;
-          }
-          return u;
-        }) || [],
-    };
+    return { ...state, apiUsers: state.apiUsers?.map((u) => u.id === action.user_id ? action.user : u) || [] };
+  },
+  remove_api_user: function (state, action) {
+    return { ...state, apiUsers: state.apiUsers?.filter((u) => u.id !== action.user_id) || [] };
   },
   add_organization: function (state, action) {
     return { ...state, organizations: [action.organization, ...(state.organizations || [])] };

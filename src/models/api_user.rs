@@ -621,6 +621,18 @@ impl ApiUserRepository {
         Ok(())
     }
 
+    pub async fn delete(&self, id: ApiUserId) -> Result<ApiUserId, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            DELETE FROM api_users WHERE id = $1 RETURNING id
+            "#,
+            *id
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .into())
+    }
+
     pub async fn update_password(
         &self,
         update: PasswordUpdate,
