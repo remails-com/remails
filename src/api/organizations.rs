@@ -106,7 +106,7 @@ pub async fn create_organization(
     user: ApiUser, // only users are allowed to create organizations
     ValidatedJson(new): ValidatedJson<NewOrganization>,
 ) -> Result<impl IntoResponse, AppError> {
-    if !config_repo.account_creation_is_enabled().await? {
+    if !config_repo.account_creation_is_enabled().await? || user.blocked {
         return Err(AppError::Forbidden);
     }
 
@@ -714,6 +714,7 @@ mod tests {
         let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let user_5 = "703bf1cb-7a3e-4640-83bf-1b07ce18cd2e"; // is read-only in org 1
+        let blocked_admin = "b0c918e3-8183-430f-83eb-78b182ebef9e"; // is blocked admin in org 1
         let org_1 = "44729d9f-a7dc-4226-b412-36a7537f5176";
         let org_2 = "5d55aec5-136a-407c-952f-5348d4398204";
         let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
@@ -721,6 +722,15 @@ mod tests {
         // remove user 5 from org 1
         let response = server
             .delete(format!("/api/organizations/{org_1}/members/{user_5}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // remove blocked admin from org 1
+        let response = server
+            .delete(format!(
+                "/api/organizations/{org_1}/members/{blocked_admin}"
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -858,6 +868,23 @@ mod tests {
             .unwrap();
 
         // try to create organization
+        let response = server
+            .post(
+                "/api/organizations",
+                serialize_body(&NewOrganization {
+                    name: "Test Org".to_string(),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn cannot_create_organizations_when_blocked(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap();
+        let server = TestServer::new(pool, Some(blocked_user)).await;
+
         let response = server
             .post(
                 "/api/organizations",

@@ -780,6 +780,22 @@ mod tests {
             "messages"
         )
     ))]
+    async fn test_messages_no_access_blocked_user(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap(); // blocked admin of org 1
+        let server = TestServer::new(pool.clone(), Some(blocked_user)).await;
+        test_messages_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
     async fn test_fetch_message_validation(pool: PgPool) {
         let org_1 = TestProjects::Org1Project1.org_id();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1

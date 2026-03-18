@@ -39,10 +39,11 @@ fn has_read_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
 }
 
 fn has_write_access(user_id: ApiUserId, user: &ApiUser) -> Result<(), AppError> {
-    if *user.id() == user_id {
-        return Ok(());
+    if *user.id() != user_id || user.blocked {
+        Err(AppError::Forbidden)
+    } else {
+        Ok(())
     }
-    Err(AppError::Forbidden)
 }
 
 /// Get all API users
@@ -632,6 +633,21 @@ mod tests {
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_update_user_no_access_blocked(pool: PgPool) {
+        let repo = ApiUserRepository::new(pool.clone());
+        let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap();
+        repo.update_block_status(&user_3, true).await.unwrap();
+        test_update_user_no_access(
+            pool,
+            Some(user_3),
+            "unsecure123",
+            StatusCode::FORBIDDEN,
+            StatusCode::FORBIDDEN,
+        )
+        .await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn test_update_user_no_access_wrong_password(pool: PgPool) {
         test_update_user_no_access(
             pool,
@@ -872,7 +888,7 @@ mod tests {
         let res = server.get("/api/api_user").await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         let users: Vec<Whoami> = deserialize_body(res.into_body()).await;
-        assert_eq!(users.len(), 11);
+        assert_eq!(users.len(), 12);
 
         let user1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap();
         server.set_user(Some(user1));
