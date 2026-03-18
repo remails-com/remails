@@ -186,7 +186,7 @@ export default function Members() {
 
   const updateRole = (member: OrganizationMember) => {
     modals.open({
-      title: `Edit role of ${member.name}`,
+      title: <Title order={3} component="span">Edit role of {member.name}</Title>,
       children: (
         <UpdateRole
           cancel={() => modals.closeAll()}

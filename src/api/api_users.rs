@@ -6,8 +6,9 @@ use crate::{
         whoami::{Whoami, WhoamiResponse},
     },
     models::{
-        ApiUser, ApiUserId, ApiUserRepository, ApiUserUpdate, Error, Password, PasswordUpdate,
-        PwResetId, ResetLinkCheck, Role, TotpCode, TotpCodeDetails, TotpFinishEnroll, TotpId,
+        ApiUser, ApiUserId, ApiUserRepository, ApiUserUpdate, Error, ManageApiUser, Password,
+        PasswordUpdate, PwResetId, ResetLinkCheck, TotpCode, TotpCodeDetails, TotpFinishEnroll,
+        TotpId,
     },
 };
 use axum::{
@@ -24,9 +25,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
-        .routes(routes!(update_user))
+        .routes(routes!(update_user, manage_user))
         .routes(routes!(get_all))
-        .routes(routes!(set_global_role))
         .routes(routes!(is_password_reset_active))
         .routes(routes!(password_reset))
         .routes(routes!(update_password, delete_password))
@@ -73,32 +73,32 @@ pub async fn get_all(
 }
 
 /// Set the global role of an API user
-#[utoipa::path(put, path = "/api_user/{user_id}/role",
+#[utoipa::path(put, path = "/api_user/{user_id}/manage",
     tags = ["internal", "API users"],
-    request_body = Role,
+    request_body = ManageApiUser,
     security(("cookieAuth" = [])),
     responses(
-        (status = 200, description = "Successfully updated user role"),
+        (status = 200, description = "Successfully updated user"),
         AppError,
 ))]
-pub async fn set_global_role(
+pub async fn manage_user(
     State(repo): State<ApiUserRepository>,
     Path((user_id,)): Path<(ApiUserId,)>,
     user: ApiUser,
-    Json(role): Json<Option<Role>>,
+    Json(settings): Json<ManageApiUser>,
 ) -> Result<(), AppError> {
     if !user.is_super_admin() {
         return Err(AppError::Forbidden);
     }
 
-    let old_role = repo.set_global_role(user_id, role).await?;
+    repo.manage(user_id, &settings).await?;
 
     info!(
         user_id = user_id.to_string(),
         executing_user_id = user.id().to_string(),
-        ?old_role,
-        new_role = ?role,
-        "updated global user role"
+        new_role = ?settings.global_role,
+        blocked = settings.blocked,
+        "admin updated user"
     );
 
     Ok(())
@@ -403,10 +403,14 @@ pub async fn delete_password(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::{
-        auth::tests::get_session_cookie,
-        tests::{TestServer, deserialize_body, serialize_body},
-        whoami::Whoami,
+    use crate::{
+        api::{
+            auth::tests::get_session_cookie,
+            tests::{TestServer, deserialize_body, serialize_body},
+            whoami::Whoami,
+        },
+        models::Role,
+        test::TestProjects,
     };
     use http::StatusCode;
     use mail_parser::MessageParser;
@@ -636,7 +640,15 @@ mod tests {
     async fn test_update_user_no_access_blocked(pool: PgPool) {
         let repo = ApiUserRepository::new(pool.clone());
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap();
-        repo.update_block_status(&user_3, true).await.unwrap();
+        repo.manage(
+            user_3,
+            &ManageApiUser {
+                global_role: None,
+                blocked: true,
+            },
+        )
+        .await
+        .unwrap();
         test_update_user_no_access(
             pool,
             Some(user_3),
@@ -909,8 +921,11 @@ mod tests {
 
         let res = server
             .put(
-                format!("/api/api_user/{}/role", user1),
-                serialize_body(json!("admin")),
+                format!("/api/api_user/{user1}/manage"),
+                serialize_body(ManageApiUser {
+                    global_role: Some(Role::Admin),
+                    blocked: false,
+                }),
             )
             .await
             .unwrap();
@@ -933,8 +948,11 @@ mod tests {
         // Remove global role again
         let res = server
             .put(
-                format!("/api/api_user/{}/role", user1),
-                serialize_body(json!(None::<String>)),
+                format!("/api/api_user/{user1}/manage"),
+                serialize_body(ManageApiUser {
+                    global_role: None,
+                    blocked: false,
+                }),
             )
             .await
             .unwrap();
@@ -949,11 +967,65 @@ mod tests {
         server.set_user(Some(user1));
         let res = server
             .put(
-                format!("/api/api_user/{}/role", user1),
-                serialize_body(json!("admin")),
+                format!("/api/api_user/{user1}/manage"),
+                serialize_body(ManageApiUser {
+                    global_role: Some(Role::Admin),
+                    blocked: false,
+                }),
             )
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn test_blocking_users(pool: PgPool) {
+        let admin: ApiUserId = "deadbeef-4e43-4a66-bbb9-fbcd4a933a34".parse().unwrap();
+        let user1: ApiUserId = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap();
+        let org_1 = TestProjects::Org1Project1.org_id();
+
+        let mut server = TestServer::new(pool.clone(), Some(admin)).await;
+
+        let res = server
+            .put(
+                format!("/api/api_user/{user1}/manage"),
+                serialize_body(ManageApiUser {
+                    global_role: None,
+                    blocked: true,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Check user1 actually got blocked
+        server.set_user(Some(user1));
+        let res = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+        // Unblock user1 again
+        server.set_user(Some(admin));
+        let res = server
+            .put(
+                format!("/api/api_user/{user1}/manage"),
+                serialize_body(ManageApiUser {
+                    global_role: None,
+                    blocked: false,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Check user1 is unblocked
+        server.set_user(Some(user1));
+        let res = server
+            .get(format!("/api/organizations/{org_1}/projects"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 }
