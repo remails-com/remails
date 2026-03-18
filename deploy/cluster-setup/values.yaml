@@ -8,7 +8,6 @@ scaleway-certmanager-webhook:
 nginxLoadBalancer:
   upcloudLoadBalancerPlan: "production-small" # available are "essentials", "development", "production-small", "production-medium"
 
-
 namespaces:
   - name: remails-production
   - name: remails-staging
@@ -40,39 +39,3 @@ traefik:
     websecure:
       proxyProtocol:
         trustedIPs: ["10.0.2.0/24"]
-
-
-
-ingress-nginx:
-  namespaceOverride: ingress
-  controller:
-    config:
-      use-proxy-protocol: "true"
-    metrics:
-      enabled: true
-      service:
-        annotations:
-          k8s.grafana.com/scrape: 'true'
-          k8s.grafana.com/metrics.portNumber: "10254"
-    kind: DaemonSet
-    service:
-      enabled: false
-    livenessProbe:
-      httpGet:
-        path: "/healthz"
-        port: 10254
-        scheme: HTTP
-
-    readinessProbe:
-      httpGet:
-        path: "/healthz"
-        port: 10254
-        scheme: HTTP
-    resources:
-      ##  limits:
-      ##    cpu: 100m
-      ##    memory: 90Mi
-      requests:
-        cpu: 100m
-        memory: 90Mi
-
