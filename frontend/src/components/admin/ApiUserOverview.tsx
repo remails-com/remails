@@ -18,14 +18,14 @@ export default function ApiUserOverview() {
   const [activePage, setPage] = useState(1);
   const { apiUsers } = useApiUsers();
 
-  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLDivElement>({
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
     duration: 500,
     offset: 100,
   });
 
   const rows = apiUsers.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((user) => (
     <Table.Tr key={user.id}>
-      <Table.Td>
+      <Table.Td w={80}>
         <TableId id={user.id} />
       </Table.Td>
       <Table.Td>
@@ -40,7 +40,7 @@ export default function ApiUserOverview() {
             </Badge>
           )}
           {user.blocked && (
-            <Badge variant="light">
+            <Badge variant="light" color="red">
               Blocked
             </Badge>
           )}
@@ -52,9 +52,9 @@ export default function ApiUserOverview() {
           <OrgPopover orgs={user.org_roles} />
         </Group>
       </Table.Td>
-      <Table.Td w={150} visibleFrom="lg">{formatDateTime(user.updated_at)}</Table.Td>
-      <Table.Td w={150} visibleFrom="xl">{formatDateTime(user.created_at)}</Table.Td>
-      <Table.Td align={"right"}>
+      <Table.Td w={150} visibleFrom="md">{formatDateTime(user.updated_at)}</Table.Td>
+      <Table.Td w={150} visibleFrom="lg">{formatDateTime(user.created_at)}</Table.Td>
+      <Table.Td align="right" pl="0">
         <Button variant="subtle" onClick={() => {
           setManagingUser(user);
           open();
@@ -66,16 +66,17 @@ export default function ApiUserOverview() {
   ));
 
   return (
-    <div ref={targetRef}>
+    <>
       <ManageApiUser opened={opened} close={close} user={managingUser} key={managingUser?.id} />
-      <StyledTable headers={[
+      <StyledTable ref={targetRef} headers={[
         "ID", "Name", "Orgs",
-        { visibleFrom: "lg", children: "Updated" },
-        { visibleFrom: "xl", children: "Created" },
+        { visibleFrom: "md", children: "Updated" },
+        { visibleFrom: "lg", children: "Created" },
         ""
       ]}>
         {rows}
       </StyledTable>
+
       <Flex justify="center" mt="md">
         <Pagination
           value={activePage}
@@ -86,6 +87,6 @@ export default function ApiUserOverview() {
           total={Math.ceil(apiUsers.length / PER_PAGE)}
         />
       </Flex>
-    </div>
+    </>
   );
 }
