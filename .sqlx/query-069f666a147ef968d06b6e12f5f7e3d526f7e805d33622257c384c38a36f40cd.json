@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   u.global_role AS \"global_role: Role\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\",\n                   u.blocked,\n                   u.updated_at,\n                   u.created_at\n            FROM api_users u\n                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id\n            WHERE github_user_id = $1\n            GROUP BY u.id\n            ",
+  "query": "\n            SELECT u.id,\n                   u.email,\n                   u.name,\n                   u.github_user_id,\n                   array_agg(\n                    (r.organization_id, r.role, o.block_status)::org_role\n                   )::org_role[] AS \"organization_roles!: Vec<PgOrgRole>\",\n                   u.global_role AS \"global_role: Role\",\n                   u.password_hash IS NOT NULL AS \"password_enabled!\",\n                   u.blocked,\n                   u.updated_at,\n                   u.created_at\n            FROM api_users u\n                LEFT JOIN api_users_organizations r ON u.id = r.api_user_id\n                LEFT JOIN organizations o ON r.organization_id = o.id\n            WHERE u.email = $1\n            GROUP BY u.id\n            ",
   "describe": {
     "columns": [
       {
@@ -53,6 +53,22 @@
                             }
                           }
                         }
+                      ],
+                      [
+                        "org_block_status",
+                        {
+                          "Custom": {
+                            "name": "org_block_status",
+                            "kind": {
+                              "Enum": [
+                                "not_blocked",
+                                "no_sending",
+                                "no_sending_or_receiving",
+                                "full_freeze"
+                              ]
+                            }
+                          }
+                        }
                       ]
                     ]
                   }
@@ -101,7 +117,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
@@ -117,5 +133,5 @@
       false
     ]
   },
-  "hash": "0531daf7468e9201fabcc22bc8a50d1b5d408cdae2f88f795ca283f926ff40a3"
+  "hash": "069f666a147ef968d06b6e12f5f7e3d526f7e805d33622257c384c38a36f40cd"
 }

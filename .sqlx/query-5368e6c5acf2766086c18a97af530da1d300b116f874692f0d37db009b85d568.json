@@ -33,7 +33,8 @@
               "Enum": [
                 "not_blocked",
                 "no_sending",
-                "no_sending_or_receiving"
+                "no_sending_or_receiving",
+                "full_freeze"
               ]
             }
           }

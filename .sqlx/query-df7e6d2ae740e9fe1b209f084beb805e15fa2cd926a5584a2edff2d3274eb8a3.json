@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, description, password_hash, organization_id, role as \"role: Role\", created_at, updated_at\n            FROM api_keys\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT a.id, description, password_hash, organization_id,\n                o.block_status as \"org_block_status: OrgBlockStatus\",\n                role as \"role: Role\",\n                a.created_at, a.updated_at\n            FROM api_keys a\n                LEFT JOIN organizations o ON o.id = a.organization_id\n            WHERE a.organization_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,23 @@
       },
       {
         "ordinal": 4,
+        "name": "org_block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving",
+                "full_freeze"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "role: Role",
         "type_info": {
           "Custom": {
@@ -40,12 +57,12 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -62,8 +79,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "2d54476fcbbdf73a5e8d7fd0779bd5f4b671c7a984727770e49cda84e24a7ffe"
+  "hash": "df7e6d2ae740e9fe1b209f084beb805e15fa2cd926a5584a2edff2d3274eb8a3"
 }
