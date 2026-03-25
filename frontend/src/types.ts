@@ -264,7 +264,7 @@ export type Action =
     error: RemailsError;
   };
 
-export type OrgBlockStatus = "not_blocked" | "no_sending" | "no_sending_or_receiving";
+export type OrgBlockStatus = "not_blocked" | "no_sending" | "no_sending_or_receiving" | "full_freeze";
 
 export type PasswordResetState = "NotActive" | "ActiveWithout2Fa" | "ActiveWith2Fa";
 

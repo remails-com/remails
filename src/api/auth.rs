@@ -2,7 +2,8 @@ use crate::{
     api::{ApiState, error::AppError, validation::ValidatedJson, whoami::WhoamiResponse},
     models::{
         ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
-        OrganizationId, Password, Role, RuntimeConfigRepository, TotpCode,
+        OrgBlockStatus, OrganizationId, OrganizationRepository, Password, Role,
+        RuntimeConfigRepository, TotpCode,
     },
     system_emails::send_password_reset_email,
 };
@@ -92,12 +93,20 @@ impl ApiUser {
 
 impl Authenticated for ApiUser {
     fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
-        !self.blocked
-            && (self.is_super_admin()
-                || self
-                    .org_roles
-                    .iter()
-                    .any(|org_role| org_role.org_id == *org_id && org_role.role.is_at_least(role)))
+        if self.blocked {
+            return false;
+        }
+
+        if self.is_super_admin() {
+            return true;
+        }
+
+        self.org_roles.iter().any(|org_role| {
+            org_role.org_id == *org_id
+                && org_role.role.is_at_least(role)
+                && (org_role.org_block_status != OrgBlockStatus::FullFreeze
+                    || role == Role::ReadOnly)
+        })
     }
 
     fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>> {
@@ -120,7 +129,9 @@ impl Authenticated for ApiUser {
 
 impl Authenticated for ApiKey {
     fn is_at_least(&self, org_id: &OrganizationId, role: Role) -> bool {
-        org_id == self.organization_id() && self.role().is_at_least(role)
+        org_id == self.organization_id()
+            && self.role().is_at_least(role)
+            && (*self.org_block_status() != OrgBlockStatus::FullFreeze || role == Role::ReadOnly)
     }
 
     fn viewable_organizations_filter(&self) -> Option<Vec<uuid::Uuid>> {
@@ -369,8 +380,6 @@ pub(super) async fn password_register(
         email: register_attempt.email,
         name: register_attempt.name.trim().to_string(),
         password: Some(register_attempt.password),
-        global_role: None,
-        org_roles: vec![],
         github_user_id: None,
     };
 
@@ -490,6 +499,7 @@ where
     S: Send + Sync,
     ApiState: FromRef<S>,
     ApiUserRepository: FromRef<S>,
+    OrganizationRepository: FromRef<S>,
 {
     type Rejection = AppError;
 
@@ -513,13 +523,21 @@ where
                 trace!("Test log in based on `X-Test-Login` header");
                 return match header.to_str().unwrap() {
                     "admin" => Ok(ApiUser::new(Some(Role::Admin), vec![])),
-                    token => Ok(ApiUser::new(
-                        None,
-                        vec![crate::models::OrgRole {
-                            role: Role::Admin,
-                            org_id: token.parse().unwrap(),
-                        }],
-                    )),
+                    token => {
+                        let org_id = token.parse().unwrap();
+                        Ok(ApiUser::new(
+                            None,
+                            vec![crate::models::OrgRole {
+                                role: Role::Admin,
+                                org_id,
+                                org_block_status: OrganizationRepository::from_ref(state)
+                                    .get_by_id(org_id)
+                                    .await?
+                                    .ok_or(AppError::Unauthorized)?
+                                    .block_status(),
+                            }],
+                        ))
+                    }
                 };
             } else if let Some(header) = parts.headers.get("X-Test-Login-ID") {
                 trace!("Test log in based on `X-Test-Login-ID` header");
@@ -576,6 +594,7 @@ where
     S: Send + Sync,
     ApiState: FromRef<S>,
     ApiUserRepository: FromRef<S>,
+    OrganizationRepository: FromRef<S>,
 {
     type Rejection = (StatusCode, &'static str);
 
@@ -641,6 +660,7 @@ where
     ApiState: FromRef<S>,
     ApiUserRepository: FromRef<S>,
     ApiKeyRepository: FromRef<S>,
+    OrganizationRepository: FromRef<S>,
 {
     type Rejection = AppError;
 

@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::models::{Error, OrganizationId, Password, Role};
+use crate::models::{Error, OrgBlockStatus, OrganizationId, Password, Role};
 
 #[derive(
     Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
@@ -22,6 +22,7 @@ pub struct ApiKey {
     #[serde(skip)]
     password_hash: String,
     organization_id: OrganizationId,
+    org_block_status: OrgBlockStatus,
     role: Role,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -38,6 +39,10 @@ impl ApiKey {
 
     pub fn organization_id(&self) -> &OrganizationId {
         &self.organization_id
+    }
+
+    pub fn org_block_status(&self) -> &OrgBlockStatus {
+        &self.org_block_status
     }
 
     pub fn role(&self) -> &Role {
@@ -125,9 +130,17 @@ impl ApiKeyRepository {
         let api_key = sqlx::query_as!(
             ApiKey,
             r#"
-            INSERT INTO api_keys (id, description, password_hash, organization_id, role)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4)
-            RETURNING id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
+            WITH inserted AS (
+                INSERT INTO api_keys (id, description, password_hash, organization_id, role)
+                VALUES (gen_random_uuid(), $1, $2, $3, $4)
+                RETURNING *
+            )
+            SELECT i.id, i.description, i.password_hash, i.organization_id,
+                o.block_status as "org_block_status!: OrgBlockStatus",
+                i.role as "role: Role",
+                i.created_at, i.updated_at
+            FROM inserted i
+                LEFT JOIN organizations o ON o.id = i.organization_id
             "#,
             key.description,
             password_hash,
@@ -152,9 +165,13 @@ impl ApiKeyRepository {
         Ok(sqlx::query_as!(
             ApiKey,
             r#"
-            SELECT id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
-            FROM api_keys
-            WHERE id = $1
+            SELECT a.id, description, password_hash, organization_id,
+                o.block_status as "org_block_status: OrgBlockStatus",
+                role as "role: Role",
+                a.created_at, a.updated_at
+            FROM api_keys a
+                LEFT JOIN organizations o ON o.id = a.organization_id
+            WHERE a.id = $1
             "#,
             *key_id
         )
@@ -166,9 +183,13 @@ impl ApiKeyRepository {
         Ok(sqlx::query_as!(
             ApiKey,
             r#"
-            SELECT id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
-            FROM api_keys
-            WHERE organization_id = $1
+            SELECT a.id, description, password_hash, organization_id,
+                o.block_status as "org_block_status: OrgBlockStatus",
+                role as "role: Role",
+                a.created_at, a.updated_at
+            FROM api_keys a
+                LEFT JOIN organizations o ON o.id = a.organization_id
+            WHERE a.organization_id = $1
             "#,
             *org_id
         )
@@ -192,10 +213,14 @@ impl ApiKeyRepository {
         Ok(sqlx::query_as!(
             ApiKey,
             r#"
-            UPDATE api_keys
+            UPDATE api_keys a
             SET description = $1, role = $2
-            WHERE organization_id = $3 AND id = $4
-            RETURNING id, description, password_hash, organization_id, role as "role: Role", created_at, updated_at
+            FROM organizations o
+            WHERE a.organization_id = $3 AND a.id = $4 AND o.id = a.organization_id
+            RETURNING a.id, description, password_hash, organization_id,
+                o.block_status as "org_block_status: OrgBlockStatus",
+                role as "role: Role",
+                a.created_at, a.updated_at
             "#,
             changes.description,
             changes.role as Role,

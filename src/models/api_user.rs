@@ -1,4 +1,4 @@
-use crate::models::{Error, OrganizationId};
+use crate::models::{Error, OrgBlockStatus, OrganizationId};
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use email_address::EmailAddress;
@@ -119,6 +119,7 @@ impl Role {
 pub struct OrgRole {
     pub role: Role,
     pub org_id: OrganizationId,
+    pub org_block_status: OrgBlockStatus,
 }
 
 #[derive(Debug)]
@@ -126,8 +127,6 @@ pub struct NewApiUser {
     pub email: EmailAddress,
     pub name: String,
     pub password: Option<Password>,
-    pub global_role: Option<Role>,
-    pub org_roles: Vec<OrgRole>,
     pub github_user_id: Option<i64>,
 }
 
@@ -226,6 +225,7 @@ impl ApiUser {
 struct PgOrgRole {
     org_id: Option<OrganizationId>,
     role: Option<Role>,
+    org_block_status: Option<OrgBlockStatus>,
 }
 
 impl From<PgOrgRole> for Option<OrgRole> {
@@ -233,6 +233,7 @@ impl From<PgOrgRole> for Option<OrgRole> {
         Some(OrgRole {
             org_id: role.org_id?,
             role: role.role?,
+            org_block_status: role.org_block_status?,
         })
     }
 }
@@ -304,38 +305,19 @@ impl ApiUserRepository {
     pub async fn create(&self, user: NewApiUser) -> Result<ApiUser, Error> {
         let password_hash = user.password.map(|pw| pw.generate_hash());
 
-        let mut tx = self.pool.begin().await?;
-
         let user_id = sqlx::query_scalar!(
             r#"
-            INSERT INTO api_users (id, email, name, password_hash, github_user_id, global_role)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            INSERT INTO api_users (id, email, name, password_hash, github_user_id)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
             RETURNING id
             "#,
             user.email.as_str(),
             user.name,
             password_hash,
             user.github_user_id,
-            user.global_role as Option<Role>
         )
-        .fetch_one(&mut *tx)
+        .fetch_one(&self.pool)
         .await?;
-
-        for OrgRole { role, org_id } in user.org_roles {
-            sqlx::query!(
-                r#"
-                INSERT INTO api_users_organizations (api_user_id, organization_id, role)
-                VALUES ($1, $2, $3)
-                "#,
-                user_id,
-                *org_id,
-                role as Role
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
-
-        tx.commit().await?;
 
         Ok(self.find_by_id(&user_id.into()).await?.unwrap())
     }
@@ -544,23 +526,26 @@ impl ApiUserRepository {
                    u.email,
                    u.name,
                    u.github_user_id,
-                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   array_agg(
+                    (r.organization_id, r.role, o.block_status)::org_role
+                   )::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
                    u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
-                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+                LEFT JOIN api_users_organizations r ON u.id = r.api_user_id
+                LEFT JOIN organizations o ON r.organization_id = o.id
             WHERE github_user_id = $1
             GROUP BY u.id
             "#,
             github_id
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn add_github_id(&self, user_id: &ApiUserId, github_id: i64) -> Result<(), Error> {
@@ -876,23 +861,26 @@ impl ApiUserRepository {
                    u.email,
                    u.name,
                    u.github_user_id,
-                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   array_agg(
+                    (r.organization_id, r.role, o.block_status)::org_role
+                   )::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
                    u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
-                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+                LEFT JOIN api_users_organizations r ON u.id = r.api_user_id
+                LEFT JOIN organizations o ON r.organization_id = o.id
             WHERE u.id = $1
             GROUP BY u.id
             "#,
             **id
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn get_all(&self) -> Result<Vec<ApiUser>, Error> {
@@ -903,23 +891,26 @@ impl ApiUserRepository {
                    u.email,
                    u.name,
                    u.github_user_id,
-                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   array_agg(
+                    (r.organization_id, r.role, o.block_status)::org_role
+                   )::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
                    u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
-                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+                LEFT JOIN api_users_organizations r ON u.id = r.api_user_id
+                LEFT JOIN organizations o ON r.organization_id = o.id
             GROUP BY u.id
             ORDER BY u.updated_at DESC
             "#
         )
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect()
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect()
     }
 
     pub async fn find_by_email(&self, email: &EmailAddress) -> Result<Option<ApiUser>, Error> {
@@ -930,23 +921,26 @@ impl ApiUserRepository {
                    u.email,
                    u.name,
                    u.github_user_id,
-                   array_agg((o.organization_id,o.role)::org_role)::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
+                   array_agg(
+                    (r.organization_id, r.role, o.block_status)::org_role
+                   )::org_role[] AS "organization_roles!: Vec<PgOrgRole>",
                    u.global_role AS "global_role: Role",
                    u.password_hash IS NOT NULL AS "password_enabled!",
                    u.blocked,
                    u.updated_at,
                    u.created_at
             FROM api_users u
-                LEFT JOIN api_users_organizations o ON u.id = o.api_user_id
+                LEFT JOIN api_users_organizations r ON u.id = r.api_user_id
+                LEFT JOIN organizations o ON r.organization_id = o.id
             WHERE u.email = $1
             GROUP BY u.id
             "#,
             email.as_str()
         )
-            .fetch_optional(&self.pool)
-            .await?
-            .map(TryInto::try_into)
-            .transpose()
+        .fetch_optional(&self.pool)
+        .await?
+        .map(TryInto::try_into)
+        .transpose()
     }
 
     pub async fn check_password(
@@ -1027,17 +1021,9 @@ mod test {
 
     impl PartialEq<NewApiUser> for ApiUser {
         fn eq(&self, other: &NewApiUser) -> bool {
-            let mut other_org_roles = other.org_roles.clone();
-            other_org_roles.sort();
-
-            let mut self_org_roles = self.org_roles.clone();
-            self_org_roles.sort();
-
             self.github_user_id == other.github_user_id
                 && self.email.as_ref() == Some(&other.email)
                 && self.name == other.name
-                && self.global_role == other.global_role
-                && self_org_roles == other_org_roles
         }
     }
 
@@ -1047,8 +1033,6 @@ mod test {
                 email: self.email.clone(),
                 name: self.name.clone(),
                 password: None,
-                global_role: self.global_role,
-                org_roles: self.org_roles.clone(),
                 github_user_id: self.github_user_id,
             }
         }
@@ -1060,30 +1044,13 @@ mod test {
         let users = repo.get_all().await.unwrap().len();
 
         let user = NewApiUser {
-            email: "test@email.com".parse().unwrap(),
-            name: "Test User".to_string(),
-            password: None,
-            global_role: Some(Role::Admin),
-            org_roles: vec![OrgRole {
-                role: Role::Admin,
-                org_id: "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
-            }],
-            github_user_id: Some(123),
-        };
-        let created = repo.create(user.clone()).await.unwrap();
-        assert_eq!(created, user);
-        assert_eq!(repo.get_all().await.unwrap().len(), users + 1);
-
-        let user = NewApiUser {
             email: "test2@email.com".parse().unwrap(),
             name: "Test User 2".to_string(),
             password: None,
-            global_role: None,
-            org_roles: vec![],
             github_user_id: None,
         };
         let created = repo.create(user.clone()).await.unwrap();
         assert_eq!(created, user);
-        assert_eq!(repo.get_all().await.unwrap().len(), users + 2);
+        assert_eq!(repo.get_all().await.unwrap().len(), users + 1);
     }
 }

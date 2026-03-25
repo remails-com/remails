@@ -7,7 +7,10 @@ import { Button, Group, Modal, Select, Stack, Title } from "@mantine/core";
 import { AdminButton } from "../RoleButtons";
 import { IconTrash } from "@tabler/icons-react";
 
-const ALL_BLOCK_STATUSES: OrgBlockStatus[] = ["not_blocked", "no_sending", "no_sending_or_receiving"];
+const ALL_BLOCK_STATUSES: OrgBlockStatus[] = [
+  "not_blocked", "no_sending", "no_sending_or_receiving", "full_freeze"
+];
+
 export function isValidBlockStatus(value: string): value is OrgBlockStatus {
   return ALL_BLOCK_STATUSES.includes(value as OrgBlockStatus);
 }
