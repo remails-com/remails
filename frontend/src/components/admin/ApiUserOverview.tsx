@@ -1,20 +1,24 @@
 import { useApiUsers } from "../../hooks/useApiUsers.ts";
 import StyledTable from "../StyledTable.tsx";
-import { Anchor, Flex, Group, Pagination, Table } from "@mantine/core";
+import { Badge, Button, Flex, Group, Pagination, Table } from "@mantine/core";
 import TableId from "../TableId.tsx";
-import RoleSelect from "./RoleSelect.tsx";
 import OrgPopover from "./OrgPopover.tsx";
 import { formatDateTime } from "../../util.ts";
 import { useState } from "react";
-import { useScrollIntoView } from "@mantine/hooks";
+import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
+import { IconEdit } from "@tabler/icons-react";
+import ManageApiUser from "./ManageApiUser.tsx";
+import { User } from "../../types.ts";
 
 const PER_PAGE = 20;
 
 export default function ApiUserOverview() {
+  const [opened, { open, close }] = useDisclosure(false);
+  const [managingUser, setManagingUser] = useState<User | null>(null);
   const [activePage, setPage] = useState(1);
   const { apiUsers } = useApiUsers();
 
-  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLDivElement>({
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
     duration: 500,
     offset: 100,
   });
@@ -24,31 +28,55 @@ export default function ApiUserOverview() {
       <Table.Td w={80}>
         <TableId id={user.id} />
       </Table.Td>
-      <Table.Td>{user.name}</Table.Td>
       <Table.Td>
-        <Anchor component="a" href={`mailto:${user.email}`}>
-          {user.email}
-        </Anchor>
+        <Group>
+          {user.name}
+          <Badge variant="light" color="secondary" tt="none" component="a" href={`mailto:${user.email}`} style={{ cursor: "pointer" }}>
+            {user.email}
+          </Badge>
+          {user.global_role == "admin" && (
+            <Badge variant="light">
+              Admin
+            </Badge>
+          )}
+          {user.blocked && (
+            <Badge variant="light" color="red">
+              Blocked
+            </Badge>
+          )}
+        </Group>
       </Table.Td>
-      <Table.Td w={120}>
-        <RoleSelect id={user.id} role={user.global_role} />
-      </Table.Td>
-      <Table.Td align="center" w={120}>
-        <Group justify="center">
+      <Table.Td w={80}>
+        <Group justify="left">
           {user.org_roles.length.toString()}
           <OrgPopover orgs={user.org_roles} />
         </Group>
       </Table.Td>
-      <Table.Td w={150}>{formatDateTime(user.created_at)}</Table.Td>
-      <Table.Td w={150}>{formatDateTime(user.updated_at)}</Table.Td>
-    </Table.Tr>
+      <Table.Td w={150} visibleFrom="md">{formatDateTime(user.updated_at)}</Table.Td>
+      <Table.Td w={150} visibleFrom="lg">{formatDateTime(user.created_at)}</Table.Td>
+      <Table.Td align="right" pl="0">
+        <Button variant="subtle" onClick={() => {
+          setManagingUser(user);
+          open();
+        }}>
+          <IconEdit />
+        </Button>
+      </Table.Td>
+    </Table.Tr >
   ));
 
   return (
-    <div ref={targetRef}>
-      <StyledTable headers={["ID", "Name", "Email", "Global Role", "Organizations", "Created", "Updated"]}>
+    <>
+      <ManageApiUser opened={opened} close={close} user={managingUser} key={managingUser?.id} />
+      <StyledTable ref={targetRef} headers={[
+        "ID", "Name", "Orgs",
+        { visibleFrom: "md", children: "Updated" },
+        { visibleFrom: "lg", children: "Created" },
+        ""
+      ]}>
         {rows}
       </StyledTable>
+
       <Flex justify="center" mt="md">
         <Pagination
           value={activePage}
@@ -59,6 +87,6 @@ export default function ApiUserOverview() {
           total={Math.ceil(apiUsers.length / PER_PAGE)}
         />
       </Flex>
-    </div>
+    </>
   );
 }

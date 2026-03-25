@@ -169,6 +169,13 @@ where
     let api_user = service
         .fetch_user(token.access_token(), logged_in_api_user)
         .await?;
+    if api_user.blocked {
+        tracing::info!(
+            user_id = api_user.id().to_string(),
+            "Blocked user attempted to log in via oauth"
+        );
+        return Err(Error::Forbidden);
+    }
 
     cookie_storage = login(&api_user, LoginState::LoggedIn, cookie_storage)?;
 
@@ -180,7 +187,6 @@ where
         set_cookie_attributes(&mut redirect_cookie);
         let redirect = redirect_cookie.value().to_owned();
         cookie_storage = cookie_storage.remove(redirect_cookie);
-        tracing::info!("Redirecting to {}", redirect);
         Ok((cookie_storage, Redirect::to(&redirect)).into_response())
     } else {
         Ok((cookie_storage, Redirect::to("/")).into_response())

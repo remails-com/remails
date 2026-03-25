@@ -149,7 +149,7 @@ mod test {
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
-        models::{OrgRole, Organization, Role},
+        models::{OrgBlockStatus, OrgRole, Organization, Role},
     };
     use chrono::Utc;
     use http::StatusCode;
@@ -247,6 +247,7 @@ mod test {
             OrgRole {
                 role: Role::Admin,
                 org_id: "ad76a517-3ff2-4d84-8299-742847782d4d".parse().unwrap(),
+                org_block_status: OrgBlockStatus::NotBlocked,
             }
         );
     }

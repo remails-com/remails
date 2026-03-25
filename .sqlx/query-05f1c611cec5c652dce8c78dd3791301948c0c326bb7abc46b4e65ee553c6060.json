@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE api_keys\n            SET description = $1, role = $2\n            WHERE organization_id = $3 AND id = $4\n            RETURNING id, description, password_hash, organization_id, role as \"role: Role\", created_at, updated_at\n            ",
+  "query": "\n            WITH inserted AS (\n                INSERT INTO api_keys (id, description, password_hash, organization_id, role)\n                VALUES (gen_random_uuid(), $1, $2, $3, $4)\n                RETURNING *\n            )\n            SELECT i.id, i.description, i.password_hash, i.organization_id,\n                o.block_status as \"org_block_status!: OrgBlockStatus\",\n                i.role as \"role: Role\",\n                i.created_at, i.updated_at\n            FROM inserted i\n                LEFT JOIN organizations o ON o.id = i.organization_id\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,23 @@
       },
       {
         "ordinal": 4,
+        "name": "org_block_status!: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving",
+                "full_freeze"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "role: Role",
         "type_info": {
           "Custom": {
@@ -40,12 +57,12 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -53,6 +70,8 @@
     "parameters": {
       "Left": [
         "Varchar",
+        "Varchar",
+        "Uuid",
         {
           "Custom": {
             "name": "role",
@@ -64,9 +83,7 @@
               ]
             }
           }
-        },
-        "Uuid",
-        "Uuid"
+        }
       ]
     },
     "nullable": [
@@ -74,10 +91,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "10d0da63de04975330348be009f00fa87da9e949d27fb41f693af7f3b2a35eb8"
+  "hash": "05f1c611cec5c652dce8c78dd3791301948c0c326bb7abc46b4e65ee553c6060"
 }

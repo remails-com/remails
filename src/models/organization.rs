@@ -46,6 +46,8 @@ impl OrganizationId {
     Display,
     PartialEq,
     PartialOrd,
+    Eq,
+    Ord,
     sqlx::Type,
     ToSchema,
     Validate,
@@ -56,6 +58,7 @@ pub enum OrgBlockStatus {
     NotBlocked = 0,
     NoSending = 1,
     NoSendingOrReceiving = 2,
+    FullFreeze = 3,
 }
 
 #[derive(Debug, Serialize, PartialEq, ToSchema)]
@@ -73,7 +76,7 @@ pub struct Organization {
     current_subscription: SubscriptionStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    block_status: Option<OrgBlockStatus>,
+    block_status: OrgBlockStatus,
 }
 
 impl Organization {
@@ -83,6 +86,10 @@ impl Organization {
 
     pub fn current_subscription(&self) -> &SubscriptionStatus {
         &self.current_subscription
+    }
+
+    pub fn block_status(&self) -> OrgBlockStatus {
+        self.block_status
     }
 }
 
@@ -126,7 +133,7 @@ struct PgOrganization {
     current_subscription: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    block_status: Option<OrgBlockStatus>,
+    block_status: OrgBlockStatus,
 }
 
 impl TryFrom<PgOrganization> for Organization {

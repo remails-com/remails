@@ -44,7 +44,6 @@ export function NavBar({ close }: { close: () => void }) {
     navigate,
   } = useRemails();
   const [openedNewOrg, { open: openNewOrg, close: closeNewOrg }] = useDisclosure(false);
-  const globalRole = user?.global_role || null;
 
   if (!user) {
     return null;
@@ -133,15 +132,6 @@ export function NavBar({ close }: { close: () => void }) {
           active={routerState.name.startsWith("organization.suppressed")}
 
         />
-        {
-          globalRole == "admin" &&
-          <NavLink
-            label="Admin"
-            route="organization.admin"
-            close={close}
-            active={routerState.name.startsWith("organization.admin")}
-          />
-        }
       </MantineNavLink>
     </>
   );

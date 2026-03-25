@@ -780,6 +780,51 @@ mod tests {
             "messages"
         )
     ))]
+    async fn test_messages_no_access_blocked_user(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap(); // blocked admin of org 1
+        let server = TestServer::new(pool.clone(), Some(blocked_user)).await;
+        test_messages_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
+    async fn test_messages_no_access_frozen_org(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = TestProjects::Org1Project1.org_id();
+
+        // with API key
+        let mut server = TestServer::new(pool.clone(), Some(user_1)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+        let organizations = OrganizationRepository::new(pool.clone());
+        organizations
+            .update_block_status(org_1, crate::models::OrgBlockStatus::FullFreeze)
+            .await
+            .unwrap();
+        test_messages_no_access(server, StatusCode::OK, StatusCode::FORBIDDEN).await;
+
+        // without API key
+        let server = TestServer::new(pool.clone(), Some(user_1)).await;
+        test_messages_no_access(server, StatusCode::OK, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "smtp_credentials",
+            "messages"
+        )
+    ))]
     async fn test_fetch_message_validation(pool: PgPool) {
         let org_1 = TestProjects::Org1Project1.org_id();
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
@@ -1112,6 +1157,13 @@ mod tests {
             .unwrap();
         let response = try_post(&server).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN); // blocked
+
+        organizations
+            .update_block_status(org_1, crate::models::OrgBlockStatus::FullFreeze)
+            .await
+            .unwrap();
+        let response = try_post(&server).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN); // also blocked
     }
 
     #[sqlx::test(fixtures(
