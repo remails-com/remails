@@ -48,10 +48,13 @@ impl Project {
     pub fn id(&self) -> ProjectId {
         self.id
     }
+
+    pub fn org_id(&self) -> OrganizationId {
+        self.organization_id
+    }
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, Validate, ToSchema)]
 pub struct NewProject {
     #[schema(min_length = 1, max_length = 256)]
     #[garde(length(min = 1, max = 256))]
@@ -80,7 +83,7 @@ impl ProjectRepository {
 
     pub async fn create(
         &self,
-        new: NewProject,
+        new: &NewProject,
         organization_id: OrganizationId,
     ) -> Result<Project, Error> {
         if new.retention_period_days < 1 || new.retention_period_days > 30 {
@@ -134,7 +137,7 @@ impl ProjectRepository {
         &self,
         organization_id: OrganizationId,
         project_id: ProjectId,
-        update: NewProject,
+        update: &NewProject,
     ) -> Result<Project, Error> {
         if update.retention_period_days < 1 || update.retention_period_days > 30 {
             return Err(Error::Internal(format!(
@@ -199,7 +202,7 @@ mod test {
         // create project
         let project = repo
             .create(
-                NewProject {
+                &NewProject {
                     name: "New Project".to_owned(),
                     retention_period_days: 1,
                     plaintext_fallback: false,
@@ -230,7 +233,7 @@ mod test {
             .update(
                 org_1,
                 project.id(),
-                NewProject {
+                &NewProject {
                     name: "Updated Project".to_owned(),
                     retention_period_days: 3,
                     plaintext_fallback: false,
@@ -272,19 +275,19 @@ mod test {
             }
         };
 
-        let project = repo.create(new_project(1), org_1).await.unwrap();
+        let project = repo.create(&new_project(1), org_1).await.unwrap();
         let id = project.id();
 
         // 30 days is the maximum allowed retention period
-        repo.create(new_project(30), org_1).await.unwrap();
-        repo.update(org_1, id, new_project(30)).await.unwrap();
+        repo.create(&new_project(30), org_1).await.unwrap();
+        repo.update(org_1, id, &new_project(30)).await.unwrap();
 
         // >30 days is not allowed because it could cause issues with the statistics tracking message clean up system
-        repo.create(new_project(31), org_1).await.unwrap_err();
-        repo.update(org_1, id, new_project(31)).await.unwrap_err();
+        repo.create(&new_project(31), org_1).await.unwrap_err();
+        repo.update(org_1, id, &new_project(31)).await.unwrap_err();
 
         // 0 days is not allowed because it would risk deleting messages that haven't been attempted to send yet
-        repo.create(new_project(0), org_1).await.unwrap_err();
-        repo.update(org_1, id, new_project(0)).await.unwrap_err();
+        repo.create(&new_project(0), org_1).await.unwrap_err();
+        repo.update(org_1, id, &new_project(0)).await.unwrap_err();
     }
 }

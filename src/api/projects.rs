@@ -6,7 +6,8 @@ use crate::{
         validation::ValidatedJson,
     },
     models::{
-        NewProject, OrganizationId, OrganizationRepository, Project, ProjectId, ProjectRepository,
+        AuditLogRepository, NewProject, OrganizationId, OrganizationRepository, Project, ProjectId,
+        ProjectRepository,
     },
 };
 use axum::{
@@ -15,7 +16,8 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use serde_json::json;
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -67,6 +69,7 @@ pub async fn list_projects(
 pub async fn update_project(
     State(repo): State<ProjectRepository>,
     State(org_repo): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     user: Box<dyn Authenticated>,
     ValidatedJson(update): ValidatedJson<NewProject>,
@@ -80,14 +83,11 @@ pub async fn update_project(
         )));
     }
 
-    let project = repo.update(org_id, proj_id, update).await?;
+    let project = repo.update(org_id, proj_id, &update).await?;
 
-    debug!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        "updated project",
-    );
+    audit_log
+        .log(&user, &project, "Updated project", Some(json!(&update)))
+        .await?;
 
     Ok(Json(project))
 }
@@ -106,6 +106,7 @@ pub async fn update_project(
 pub async fn create_project(
     State(repo): State<ProjectRepository>,
     State(org_repo): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id,)): Path<(OrganizationId,)>,
     ValidatedJson(new): ValidatedJson<NewProject>,
@@ -125,15 +126,11 @@ pub async fn create_project(
         )));
     }
 
-    let project = repo.create(new, org_id).await?;
+    let project = repo.create(&new, org_id).await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = project.id().to_string(),
-        project_name = project.name,
-        "created project"
-    );
+    audit_log
+        .log(&user, &project, "Created project", Some(json!(&new)))
+        .await?;
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -148,6 +145,7 @@ pub async fn create_project(
 )]
 pub async fn remove_project(
     State(repo): State<ProjectRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
 ) -> ApiResult<ProjectId> {
@@ -155,12 +153,9 @@ pub async fn remove_project(
 
     let project_id = repo.remove(proj_id, org_id).await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
-        "deleted project",
-    );
+    audit_log
+        .log(&user, (project_id, org_id), "Deleted project", None)
+        .await?;
 
     Ok(Json(project_id))
 }

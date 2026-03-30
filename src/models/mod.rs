@@ -1,5 +1,6 @@
 mod api_keys;
 mod api_user;
+mod audit_log;
 mod domains;
 mod error;
 mod invites;
@@ -14,6 +15,7 @@ mod suppressed;
 
 pub(crate) use api_keys::*;
 pub(crate) use api_user::*;
+pub(crate) use audit_log::*;
 pub(crate) use domains::*;
 pub(crate) use error::Error;
 pub(crate) use invites::*;
