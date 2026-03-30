@@ -367,6 +367,32 @@ impl SmtpSession {
         SmtpResponse::AUTH_SUCCESS.into()
     }
 
+    /// Remove duplicate periods at start of lines (RFC5321, 4.5.2)
+    fn unstuff_periods(buffer: &mut Vec<u8>) {
+        let mut read = 0;
+        let mut write = 0;
+        let mut at_line_start = true;
+
+        while read < buffer.len() {
+            // if line starts with a period, skip it.
+            if at_line_start && buffer[read] == b'.' {
+                read += 1;
+                if read >= buffer.len() {
+                    break;
+                }
+            }
+
+            let c = buffer[read];
+            buffer[write] = c;
+            write += 1;
+            read += 1;
+
+            at_line_start = c == b'\n';
+        }
+
+        buffer.truncate(write);
+    }
+
     pub async fn handle_data(&mut self, data: &[u8]) -> DataReply {
         let Some(NewMessage {
             raw_data: buffer, ..
@@ -387,6 +413,8 @@ impl SmtpSession {
 
         if buffer.ends_with(DATA_END) || buffer == &DATA_END[2..] {
             buffer.truncate(buffer.len() - DATA_END.len());
+
+            Self::unstuff_periods(buffer);
 
             let Some(message) = self.current_message.take() else {
                 return DataReply::ReplyAndContinue(SmtpResponse::BAD_SEQUENCE.into());
@@ -420,5 +448,33 @@ impl SmtpSession {
         }
 
         DataReply::ContinueIngest
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::smtp::session::SmtpSession;
+
+    #[test]
+    fn test_unstuff_periods() {
+        let mut buffer = b"..hello\r\n..test..hello\r\n.\r\n...com..\r\n..\r\n.hi".to_vec();
+        SmtpSession::unstuff_periods(&mut buffer);
+        assert_eq!(buffer, b".hello\r\n.test..hello\r\n\r\n..com..\r\n.\r\nhi");
+
+        let mut buffer = b".hello\r\n..test".to_vec();
+        SmtpSession::unstuff_periods(&mut buffer);
+        assert_eq!(buffer, b"hello\r\n.test");
+
+        let mut buffer = b"hello\r\n..test".to_vec();
+        SmtpSession::unstuff_periods(&mut buffer);
+        assert_eq!(buffer, b"hello\r\n.test");
+
+        let mut buffer = b"..".to_vec();
+        SmtpSession::unstuff_periods(&mut buffer);
+        assert_eq!(buffer, b".");
+
+        let mut buffer = b".".to_vec();
+        SmtpSession::unstuff_periods(&mut buffer);
+        assert_eq!(buffer, b"");
     }
 }
