@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO api_keys (id, description, password_hash, organization_id, role)\n            VALUES (gen_random_uuid(), $1, $2, $3, $4)\n            RETURNING id, description, password_hash, organization_id, role as \"role: Role\", created_at, updated_at\n            ",
+  "query": "\n            SELECT a.id, description, password_hash, organization_id,\n                o.block_status as \"org_block_status: OrgBlockStatus\",\n                role as \"role: Role\",\n                a.created_at, a.updated_at\n            FROM api_keys a\n                LEFT JOIN organizations o ON o.id = a.organization_id\n            WHERE a.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,23 @@
       },
       {
         "ordinal": 4,
+        "name": "org_block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving",
+                "full_freeze"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "role: Role",
         "type_info": {
           "Custom": {
@@ -40,33 +57,19 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Uuid",
-        {
-          "Custom": {
-            "name": "role",
-            "kind": {
-              "Enum": [
-                "admin",
-                "maintainer",
-                "read_only"
-              ]
-            }
-          }
-        }
+        "Uuid"
       ]
     },
     "nullable": [
@@ -76,8 +79,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "f5bf1f3c33751d74671538938f777a52d2a94fe4129b28658c24edddd09f6b58"
+  "hash": "41e89cff27c833c5b033cd428abb3bc83762463a19fa024dc285371874b1ec62"
 }

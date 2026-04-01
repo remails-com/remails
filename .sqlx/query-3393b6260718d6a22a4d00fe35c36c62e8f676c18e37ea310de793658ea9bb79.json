@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE api_keys a\n            SET description = $1, role = $2\n            FROM organizations o\n            WHERE a.organization_id = $3 AND a.id = $4 AND o.id = a.organization_id\n            RETURNING a.id, description, password_hash, organization_id,\n                o.block_status as \"org_block_status: OrgBlockStatus\",\n                role as \"role: Role\",\n                a.created_at, a.updated_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "description",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "password_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "org_block_status: OrgBlockStatus",
+        "type_info": {
+          "Custom": {
+            "name": "org_block_status",
+            "kind": {
+              "Enum": [
+                "not_blocked",
+                "no_sending",
+                "no_sending_or_receiving",
+                "full_freeze"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role: Role",
+        "type_info": {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "maintainer",
+                "read_only"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3393b6260718d6a22a4d00fe35c36c62e8f676c18e37ea310de793658ea9bb79"
+}

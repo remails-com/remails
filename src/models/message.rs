@@ -1050,7 +1050,7 @@ impl MessageRepository {
 
         trace!("checking rate limit");
 
-        if org.block_status == OrgBlockStatus::NoSendingOrReceiving {
+        if org.block_status >= OrgBlockStatus::NoSendingOrReceiving {
             trace!(project_id = id.to_string(), "organization blocked");
             return Err(Error::OrgBlocked);
         }
@@ -1448,6 +1448,21 @@ mod test {
         // set org 1 to No Sending Or Receiving
         organizations
             .update_block_status(org_id, OrgBlockStatus::NoSendingOrReceiving)
+            .await
+            .unwrap();
+
+        let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
+        assert!(matches!(err, Error::NotFound(_)));
+
+        let err = messages
+            .email_creation_rate_limit(proj_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::OrgBlocked)); // can't receive
+
+        // set org 1 to Full Freeze
+        organizations
+            .update_block_status(org_id, OrgBlockStatus::FullFreeze)
             .await
             .unwrap();
 

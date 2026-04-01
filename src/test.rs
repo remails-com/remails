@@ -296,7 +296,7 @@ async fn integration_test(pool: PgPool) {
         .get(format!(
             "http://localhost:{http_port}/api/organizations/{jorg}/emails"
         ))
-        .header("X-Test-Login", "00000000-0000-4000-0000-000000000000") // non-existent organization
+        .header("X-Test-Login", &eorg)
         .send()
         .await
         .unwrap()

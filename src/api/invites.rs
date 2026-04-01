@@ -193,8 +193,9 @@ mod tests {
         },
         bus::client::BusClient,
         handler::dns::DnsResolver,
-        models::{CreatedInviteWithPassword, OrgRole, Organization, Role},
+        models::{CreatedInviteWithPassword, OrgBlockStatus, OrgRole, Organization, Role},
         periodically::Periodically,
+        test::TestProjects,
     };
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -262,7 +263,8 @@ mod tests {
         assert_eq!(whoami.id, user_2);
         assert!(whoami.org_roles.contains(&OrgRole {
             role: Role::Admin,
-            org_id: org_1.parse().unwrap()
+            org_id: org_1.parse().unwrap(),
+            org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
         // now user_2 can see the invites of org_1
@@ -307,6 +309,7 @@ mod tests {
         assert!(whoami.org_roles.contains(&OrgRole {
             role: Role::Admin,
             org_id: org_1,
+            org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
         org_repo.remove_member(org_1, user_3).await.unwrap();
@@ -332,6 +335,7 @@ mod tests {
         assert!(whoami.org_roles.contains(&OrgRole {
             role: Role::Maintainer,
             org_id: org_1,
+            org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
         org_repo.remove_member(org_1, user_3).await.unwrap();
@@ -357,13 +361,14 @@ mod tests {
         assert!(whoami.org_roles.contains(&OrgRole {
             role: Role::ReadOnly,
             org_id: org_1,
+            org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
         org_repo.remove_member(org_1, user_3).await.unwrap();
     }
 
     async fn test_invites_no_access(
-        server: &mut TestServer,
+        server: TestServer,
         read_status_code: StatusCode,
         write_status_code: StatusCode,
     ) {
@@ -410,26 +415,43 @@ mod tests {
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_invites_no_access_wrong_user(pool: PgPool) {
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // is not in any org
-        let mut server = TestServer::new(pool, Some(user_3)).await;
-        test_invites_no_access(&mut server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+        let server = TestServer::new(pool, Some(user_3)).await;
+        test_invites_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_invites_no_access_non_admin(pool: PgPool) {
         let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // maintainer of org 1
-        let mut server = TestServer::new(pool, Some(user_4)).await;
-        test_invites_no_access(&mut server, StatusCode::OK, StatusCode::FORBIDDEN).await;
+        let server = TestServer::new(pool, Some(user_4)).await;
+        test_invites_no_access(server, StatusCode::OK, StatusCode::FORBIDDEN).await;
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
     async fn test_invites_no_access_not_logged_in(pool: PgPool) {
-        let mut server = TestServer::new(pool, None).await;
-        test_invites_no_access(
-            &mut server,
-            StatusCode::UNAUTHORIZED,
-            StatusCode::UNAUTHORIZED,
-        )
-        .await;
+        let server = TestServer::new(pool, None).await;
+        test_invites_no_access(server, StatusCode::UNAUTHORIZED, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
+    async fn test_invites_no_access_blocked_user(pool: PgPool) {
+        let blocked_user = "b0c918e3-8183-430f-83eb-78b182ebef9e".parse().unwrap(); // blocked admin of org 1
+        let server = TestServer::new(pool, Some(blocked_user)).await;
+        test_invites_no_access(server, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN).await;
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]
+    async fn test_invites_no_access_frozen_org(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let server = TestServer::new(pool.clone(), Some(user_1)).await;
+
+        let organizations = OrganizationRepository::new(pool);
+        organizations
+            .update_block_status(org_1, crate::models::OrgBlockStatus::FullFreeze)
+            .await
+            .unwrap();
+
+        test_invites_no_access(server, StatusCode::OK, StatusCode::FORBIDDEN).await;
     }
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users", "invites")))]

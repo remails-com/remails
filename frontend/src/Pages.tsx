@@ -24,7 +24,6 @@ import { EmailOverview } from "./components/emails/EmailOverview.tsx";
 import Members from "./components/organizations/Members.tsx";
 import Subscription from "./components/organizations/Subscription.tsx";
 import ApiKeysOverview from "./components/apiKeys/ApiKeysOverview.tsx";
-import OrgBlock from "./components/admin/OrgBlock.tsx";
 import Suppressed from "./components/organizations/Suppressed.tsx";
 
 const PageContent: { [key in RouteName]: JSX.Element | null } = {
@@ -46,7 +45,6 @@ const PageContent: { [key in RouteName]: JSX.Element | null } = {
   "organization.API keys": <ApiKeysOverview />,
   "organization.API keys.API key": <ApiKeyDetails />,
   "organization.suppressed": <Suppressed />,
-  "organization.admin": <OrgBlock />,
   admin: <GlobalAdmin />,
   "admin.organizations": <GlobalAdmin />,
   "admin.api_users": <GlobalAdmin />,
