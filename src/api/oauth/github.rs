@@ -186,8 +186,6 @@ impl GithubOauthService {
                 email,
                 name: github_user.name.unwrap_or(github_user.login),
                 password: None,
-                global_role: None,
-                org_roles: vec![],
                 github_user_id: Some(github_user.id),
             })
             .await?)
