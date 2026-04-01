@@ -244,6 +244,79 @@ mod test {
 
     #[sqlx::test(fixtures(
         path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_line_period_stuffing(pool: PgPool) {
+        let (shutdown, server_handle, port, username, pwd) = setup_server(pool.clone()).await;
+
+        // message with body that tests period stuffing
+        //
+        // periods at the start of lines are doubled by the send method,
+        // and we should remove the duplicate on the receiving side
+        let message = "From: \"John Doe\" <john@test-org-1-project-1.com>\r\n\
+            To: \"Jane Doe\" <jane@test-org-1-project-1.com>\r\n\
+            Subject: Hi!\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: text/plain; charset=\"utf-8\"\r\n\
+            Content-Transfer-Encoding: 7bit\r\n\
+            \r\n\
+            The following link hab been wrapped using a soft line break: https://remails=\r\n\
+            .net/login - this shouldn't create a double dot!\r\n\
+            \r\n\
+            I can also send a line with just a single dot, without terminating the message:\r\n\
+            \r\n\
+            .\r\n\
+            \r\n\
+            Cool right?";
+
+        let message = MessageParser::default().parse(message).unwrap();
+
+        SmtpClientBuilder::new("localhost", port)
+            .implicit_tls(true)
+            .allow_invalid_certs()
+            .credentials((username.as_str(), pwd.as_str()))
+            .connect()
+            .await
+            .unwrap()
+            .send(message)
+            .await
+            .unwrap();
+
+        shutdown.cancel();
+        server_handle.await.unwrap();
+
+        // message should now be received and stored in the database
+        let org_id = TestProjects::Org1Project1.org_id();
+        let messages = MessageRepository::new(pool);
+        let received_messages = messages
+            .list_message_metadata(org_id, Default::default())
+            .await
+            .unwrap();
+        assert_eq!(received_messages.len(), 1);
+        let message = messages
+            .find_by_id(org_id, received_messages[0].id)
+            .await
+            .unwrap();
+
+        // no double period at start of line
+        assert!(message.truncated_raw_data.contains("\r\n.net"));
+
+        // no early termination due to sending a line with a singular period
+        assert!(
+            message
+                .truncated_raw_data
+                .contains("\r\n.\r\n\r\nCool right?")
+        );
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn test_smtp_wrong_credentials(pool: PgPool) {
