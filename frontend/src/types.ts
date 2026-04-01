@@ -427,3 +427,15 @@ export type Suppressed = {
   email_address: string;
   retry_after: string;
 }
+
+export type AuditLogEntry = {
+  id: string;
+  organization_id: string;
+  target_id: string;
+  target_type: string;
+  actor_id: string;
+  actor_type: string;
+  action: string;
+  details: unknown;
+  occurred_at: string;
+};

@@ -21,6 +21,7 @@ CREATE TABLE audit_log
     actor_id        uuid,
     actor_type      audit_log_actor_type  NOT NULL,
     action          text                  NOT NULL,
+    details         jsonb,
     occurred_at     timestamptz           NOT NULL DEFAULT now()
 );
 

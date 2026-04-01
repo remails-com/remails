@@ -86,8 +86,12 @@ export const routes = [
         ],
       },
       {
-        name: "suppressed",
+        name: "Suppression list",
         path: "/suppressed",
+      },
+      {
+        name: "Audit log",
+        path: "/audit-log",
       },
     ],
   },

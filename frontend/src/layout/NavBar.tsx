@@ -127,10 +127,15 @@ export function NavBar({ close }: { close: () => void }) {
         />
         <NavLink
           label="Suppression list"
-          route="organization.suppressed"
+          route="organization.Suppression list"
           close={close}
-          active={routerState.name.startsWith("organization.suppressed")}
-
+          active={routerState.name.startsWith("organization.Suppression list")}
+        />
+        <NavLink
+          label="Audit log"
+          route="organization.Audit log"
+          close={close}
+          active={routerState.name.startsWith("organization.Audit log")}
         />
       </MantineNavLink>
     </>

@@ -2,17 +2,31 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{ApiKey, ApiUser, Error, OrganizationId, Project, ProjectId};
 
 #[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, sqlx::Type, FromStr,
+    Debug,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    From,
+    Display,
+    Deref,
+    sqlx::Type,
+    FromStr,
+    ToSchema,
 )]
 #[sqlx(transparent)]
 pub struct AuditLogId(Uuid);
 
-#[derive(Debug, Display, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, sqlx::Type)]
+#[derive(
+    Debug, Display, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, sqlx::Type, ToSchema,
+)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "audit_log_target_type", rename_all = "snake_case")]
 pub enum TargetType {
@@ -23,7 +37,9 @@ pub enum TargetType {
     ApiKey,
 }
 
-#[derive(Debug, Display, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, sqlx::Type)]
+#[derive(
+    Debug, Display, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, sqlx::Type, ToSchema,
+)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "audit_log_actor_type", rename_all = "snake_case")]
 pub enum ActorType {
@@ -32,7 +48,7 @@ pub enum ActorType {
     System,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuditLogEntry {
     id: AuditLogId,
     organization_id: OrganizationId,

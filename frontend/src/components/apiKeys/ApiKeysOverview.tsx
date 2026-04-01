@@ -10,6 +10,7 @@ import StyledTable from "../StyledTable.tsx";
 import InfoAlert from "../InfoAlert.tsx";
 import { MaintainerButton } from "../RoleButtons.tsx";
 import OrganizationHeader from "../organizations/OrganizationHeader.tsx";
+import TableId from "../TableId.tsx";
 
 export default function ApiKeysOverview() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -29,7 +30,7 @@ export default function ApiKeysOverview() {
   const rows = apiKeys.map((api_key) => {
     return (
       <Table.Tr key={api_key.id}>
-        <Table.Td>{api_key.id}</Table.Td>
+        <Table.Td><TableId id={api_key.id} /></Table.Td>
         <Table.Td>
           <Text size="sm" lineClamp={2}>
             {api_key.description}
@@ -63,7 +64,7 @@ export default function ApiKeysOverview() {
       <NewApiKey opened={opened} close={close} />
       <StyledTable
         headers={[
-          { miw: "10rem", children: "ID" },
+          "ID",
           "Description",
           "Access level",
           { miw: "10rem", children: "Updated" },

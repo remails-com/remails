@@ -6,9 +6,9 @@ use crate::{
         validation::ValidatedJson,
     },
     models::{
-        ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
-        OrganizationMember, OrganizationRepository, Role, RuntimeConfigRepository, Statistics,
-        StatisticsRepository,
+        ApiUser, ApiUserId, AuditLogEntry, AuditLogRepository, NewOrganization, OrgBlockStatus,
+        Organization, OrganizationId, OrganizationMember, OrganizationRepository, Role,
+        RuntimeConfigRepository, Statistics, StatisticsRepository,
     },
 };
 use axum::{
@@ -32,6 +32,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
         .routes(routes!(list_members))
         .routes(routes!(remove_member, update_member_role))
         .routes(routes!(update_block_status))
+        .routes(routes!(get_audit_log))
 }
 
 /// List organizations
@@ -346,6 +347,26 @@ pub async fn update_member_role(
     );
 
     Ok(Json(()))
+}
+
+/// Get organization audit log entries
+#[utoipa::path(get, path = "/organizations/{org_id}/audit-log",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched audit log entries", body = [AuditLogEntry]),
+        AppError,
+    )
+)]
+pub async fn get_audit_log(
+    Path((org_id,)): Path<(OrganizationId,)>,
+    State(repo): State<AuditLogRepository>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<Vec<AuditLogEntry>> {
+    user.has_org_read_access(&org_id)?;
+
+    let audit_log = repo.list(org_id).await?;
+
+    Ok(Json(audit_log))
 }
 
 /// Update organization admin details

@@ -1,5 +1,5 @@
 import { useSelector } from "./useSelector";
-import { Invite, OrganizationMember } from "../types.ts";
+import { AuditLogEntry, Invite, OrganizationMember } from "../types.ts";
 import { useEffect, useState } from "react";
 import { errorNotification } from "../notify.tsx";
 
@@ -74,4 +74,27 @@ export function useOrgRole() {
     isAdmin || user.org_roles.some((o) => o.org_id == currentOrganization?.id && o.role == "maintainer");
 
   return { isAdmin, isMaintainer };
+}
+
+export function useAuditLogEntries() {
+  const { currentOrganization } = useOrganizations();
+  const [auditLogEntries, setAuditLogEntries] = useState<AuditLogEntry[] | null>(null);
+
+  useEffect(() => {
+    if (currentOrganization) {
+      fetch(`/api/organizations/${currentOrganization.id}/audit-log`)
+        .then((res) => {
+          if (res.status === 200) {
+            return res.json();
+          } else {
+            errorNotification("Failed to load the audit log entries");
+            console.error(res);
+            return null;
+          }
+        })
+        .then(setAuditLogEntries);
+    }
+  }, [currentOrganization]);
+
+  return { auditLogEntries, setAuditLogEntries };
 }

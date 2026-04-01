@@ -16,6 +16,7 @@ import { OrganizationMember, Role } from "../../types";
 import { useSubscription } from "../../hooks/useSubscription";
 import UpdateRole from "./UpdateRole";
 import OrganizationHeader from "./OrganizationHeader";
+import TableId from "../TableId";
 
 export default function Members() {
   const { currentOrganization } = useOrganizations();
@@ -208,6 +209,7 @@ export default function Members() {
 
   const member_rows = members?.map((member) => (
     <Table.Tr key={member.user_id}>
+      <Table.Td><TableId id={member.user_id} /></Table.Td>
       <Table.Td>
         {member.user_id == user.id ? (
           <Text size="sm" span fw="bold">
@@ -277,7 +279,7 @@ export default function Members() {
         this organization by creating and sharing invite links.
       </InfoAlert>
 
-      <StyledTable headers={["Name", "Email", "Role", "Updated", ""]}>{member_rows}</StyledTable>
+      <StyledTable headers={["ID", "Name", "Email", "Role", "Updated", ""]}>{member_rows}</StyledTable>
 
       {invite_rows && invite_rows.length > 0 && (
         <Title order={3} mb="md" mt="xl">
