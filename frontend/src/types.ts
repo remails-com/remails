@@ -431,9 +431,9 @@ export type Suppressed = {
 export type AuditLogEntry = {
   id: string;
   organization_id: string;
-  target_id: string;
-  target_type: "project" | "domain" | "message" | "smtp_credential" | "api_key";
-  actor_id: string;
+  target_id: string | null;
+  target_type: "project" | "domain" | "message" | "smtp_credential" | "api_key" | "invite_link" | "member" | null;
+  actor_id: string | null;
   actor_type: "api_user" | "api_key" | "system";
   action: string;
   details: unknown;

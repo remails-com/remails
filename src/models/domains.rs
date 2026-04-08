@@ -26,7 +26,7 @@ id!(
     DomainId
 );
 
-#[derive(sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
+#[derive(Clone, Copy, sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum DkimKeyType {
@@ -129,7 +129,7 @@ impl ApiDomain {
         self.id
     }
 
-    pub fn organization_id(&self) -> OrganizationId {
+    pub fn org_id(&self) -> OrganizationId {
         self.organization_id
     }
 
@@ -206,8 +206,7 @@ impl From<Domain> for ApiDomain {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct NewDomain {
     #[garde(length(min = 3, max = 253))]
     #[schema(min_length = 3, max_length = 253)]
@@ -229,7 +228,7 @@ impl DomainRepository {
         Self { pool, resolver }
     }
 
-    pub async fn create(&self, new: NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
+    pub async fn create(&self, new: &NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
         let (sk_bytes, pk_bytes) = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
                 let key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?;
@@ -777,7 +776,7 @@ mod test {
 
         let bad_request = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1_org_2],
@@ -806,7 +805,7 @@ mod test {
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1],
@@ -821,7 +820,7 @@ mod test {
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain2.com".to_string(),
                     dkim_key_type: DkimKeyType::Ed25519,
                     project_ids: vec![],
@@ -836,7 +835,7 @@ mod test {
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain3.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1, proj_2],
@@ -859,7 +858,7 @@ mod test {
 
         let conflict = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-org-2-project-1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     // Project 1 Organization 1

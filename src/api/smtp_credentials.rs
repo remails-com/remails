@@ -2,8 +2,9 @@ use super::error::{ApiResult, AppError};
 use crate::{
     api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{
-        OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId, SmtpCredentialRepository,
-        SmtpCredentialRequest, SmtpCredentialResponse, SmtpCredentialUpdateRequest,
+        AuditLogRepository, OrganizationId, ProjectId, SmtpCredential, SmtpCredentialId,
+        SmtpCredentialRepository, SmtpCredentialRequest, SmtpCredentialResponse,
+        SmtpCredentialUpdateRequest,
     },
 };
 use axum::{
@@ -12,7 +13,8 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use serde_json::json;
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -32,6 +34,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub async fn create_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id)): Path<(OrganizationId, ProjectId)>,
     ValidatedJson(request): ValidatedJson<SmtpCredentialRequest>,
@@ -40,14 +43,14 @@ pub async fn create_smtp_credential(
 
     let new_credential = repo.generate(org_id, proj_id, &request).await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = new_credential.id().to_string(),
-        credential_username = new_credential.username(),
-        "created SMTP credential"
-    );
+    audit_log
+        .log(
+            &user,
+            (new_credential.id(), org_id),
+            "Created SMTP credential",
+            Some(json!({ "request": &request, "project_id": proj_id })),
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(new_credential)))
 }
@@ -63,6 +66,7 @@ pub async fn create_smtp_credential(
 )]
 pub async fn update_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, proj_id, credential_id)): Path<(OrganizationId, ProjectId, SmtpCredentialId)>,
     ValidatedJson(request): ValidatedJson<SmtpCredentialUpdateRequest>,
@@ -73,14 +77,14 @@ pub async fn update_smtp_credential(
         .update(org_id, proj_id, credential_id, &request)
         .await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = update.id().to_string(),
-        credential_username = update.username(),
-        "updated SMTP credential"
-    );
+    audit_log
+        .log(
+            &user,
+            (update.id(), org_id),
+            "Updated SMTP credential",
+            Some(json!({ "request": &request, "project_id": proj_id })),
+        )
+        .await?;
 
     Ok(Json(update))
 }
@@ -123,6 +127,7 @@ pub async fn list_smtp_credential(
 )]
 pub async fn remove_smtp_credential(
     State(repo): State<SmtpCredentialRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id, proj_id, credential_id)): Path<(OrganizationId, ProjectId, SmtpCredentialId)>,
     user: Box<dyn Authenticated>,
 ) -> ApiResult<SmtpCredentialId> {
@@ -130,13 +135,14 @@ pub async fn remove_smtp_credential(
 
     let credential_id = repo.remove(org_id, proj_id, credential_id).await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = credential_id.to_string(),
-        "deleted SMTP credential",
-    );
+    audit_log
+        .log(
+            &user,
+            (credential_id, org_id),
+            "Deleted SMTP credential",
+            Some(json!({ "project_id": proj_id })),
+        )
+        .await?;
 
     Ok(Json(credential_id))
 }

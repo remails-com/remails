@@ -2,8 +2,8 @@ use super::error::{ApiResult, AppError};
 use crate::{
     api::{ApiState, auth::Authenticated, validation::ValidatedJson},
     models::{
-        ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, CreatedApiKeyWithPassword,
-        OrganizationId,
+        ApiKey, ApiKeyId, ApiKeyRepository, ApiKeyRequest, ApiUser, AuditLogRepository,
+        CreatedApiKeyWithPassword, OrganizationId,
     },
 };
 use axum::{
@@ -12,7 +12,8 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use serde_json::json;
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -32,6 +33,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub async fn create_api_key(
     State(repo): State<ApiKeyRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser,
     Path((org_id,)): Path<(OrganizationId,)>,
     ValidatedJson(request): ValidatedJson<ApiKeyRequest>,
@@ -40,13 +42,14 @@ pub async fn create_api_key(
 
     let new_api_key = repo.create(org_id, &request).await?;
 
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        api_key_id = new_api_key.id().to_string(),
-        description = new_api_key.description(),
-        "created API key"
-    );
+    audit_log
+        .log(
+            &user,
+            (*new_api_key.id(), org_id),
+            "Created API key",
+            Some(json!(&request)),
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(new_api_key)))
 }
@@ -62,6 +65,7 @@ pub async fn create_api_key(
 )]
 pub async fn update_api_key(
     State(repo): State<ApiKeyRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser,
     Path((org_id, api_key_id)): Path<(OrganizationId, ApiKeyId)>,
     ValidatedJson(request): ValidatedJson<ApiKeyRequest>,
@@ -70,13 +74,14 @@ pub async fn update_api_key(
 
     let update = repo.update(org_id, api_key_id, &request).await?;
 
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        api_key_id = update.id().to_string(),
-        api_key_description = update.description(),
-        "updated API key"
-    );
+    audit_log
+        .log(
+            &user,
+            (*update.id(), org_id),
+            "Updated API key",
+            Some(json!(&request)),
+        )
+        .await?;
 
     Ok(Json(update))
 }
@@ -118,6 +123,7 @@ pub async fn list_api_keys(
 )]
 pub async fn remove_api_key(
     State(repo): State<ApiKeyRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser,
     Path((org_id, api_key_id)): Path<(OrganizationId, ApiKeyId)>,
 ) -> ApiResult<ApiKeyId> {
@@ -125,12 +131,9 @@ pub async fn remove_api_key(
 
     let api_key_id = repo.remove(org_id, api_key_id).await?;
 
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        credential_id = api_key_id.to_string(),
-        "deleted API key",
-    );
+    audit_log
+        .log(&user, (api_key_id, org_id), "Deleted API key", None)
+        .await?;
 
     Ok(Json(api_key_id))
 }

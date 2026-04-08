@@ -21,8 +21,7 @@ pub struct SmtpCredential {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct SmtpCredentialRequest {
     #[serde(default)]
     #[garde(length(max = 500))]
@@ -33,8 +32,7 @@ pub struct SmtpCredentialRequest {
     pub(crate) username: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct SmtpCredentialUpdateRequest {
     #[serde(default)]
     #[garde(length(max = 500))]
@@ -62,6 +60,7 @@ impl SmtpCredentialResponse {
         self.id
     }
 
+    #[cfg(test)]
     pub fn username(&self) -> String {
         self.username.clone()
     }
@@ -83,10 +82,6 @@ impl SmtpCredential {
 
     pub fn project_id(&self) -> ProjectId {
         self.project_id
-    }
-
-    pub fn username(&self) -> &str {
-        &self.username
     }
 
     #[cfg(test)]

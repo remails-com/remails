@@ -8,7 +8,7 @@ import StyledTable from "../StyledTable";
 import { formatDateTime } from "../../util";
 import TableId from "../TableId";
 import { AuditLogEntry } from "../../types";
-import { IconAt, IconEye, IconKey, IconMail, IconServer, IconServer2, IconUser, IconWorldWww } from "@tabler/icons-react";
+import { IconEye, IconKey, IconMail, IconServer, IconServer2, IconUser, IconUserPlus, IconWorldWww } from "@tabler/icons-react";
 
 const ACTOR_ICONS: Record<AuditLogEntry["actor_type"], ReactNode> = {
   api_key: <IconKey size={20} />,
@@ -16,12 +16,14 @@ const ACTOR_ICONS: Record<AuditLogEntry["actor_type"], ReactNode> = {
   system: <IconServer2 size={20} />,
 };
 
-const TARGET_ICONS: Record<AuditLogEntry["target_type"], ReactNode> = {
+const TARGET_ICONS: Record<NonNullable<AuditLogEntry["target_type"]>, ReactNode> = {
   api_key: <IconKey size={20} />,
   domain: <IconWorldWww size={20} />,
   message: <IconMail size={20} />,
   project: <IconServer size={20} />,
-  smtp_credential: <IconAt size={20} />,
+  smtp_credential: <IconKey size={20} />,
+  invite_link: <IconUserPlus size={20} />,
+  member: <IconUser size={20} />
 };
 
 function Actor({ entry }: { entry: AuditLogEntry }) {
@@ -36,6 +38,8 @@ function Actor({ entry }: { entry: AuditLogEntry }) {
 }
 
 function Target({ entry }: { entry: AuditLogEntry }) {
+  if (!entry.target_type || !entry.target_id) return;
+
   return (
     <Group gap="xs" wrap="nowrap">
       <Tooltip label={entry.target_type.replaceAll("_", " ")}>

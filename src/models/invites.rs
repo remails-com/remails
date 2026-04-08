@@ -26,8 +26,8 @@ pub struct CreatedInviteWithPassword {
     expires_at: DateTime<Utc>,
 }
 
-#[cfg(test)]
 impl CreatedInviteWithPassword {
+    #[cfg(test)]
     pub fn password(&self) -> &String {
         &self.password
     }
@@ -36,10 +36,12 @@ impl CreatedInviteWithPassword {
         &self.id
     }
 
+    #[cfg(test)]
     pub fn organization_id(&self) -> &OrganizationId {
         &self.organization_id
     }
 
+    #[cfg(test)]
     pub fn created_by(&self) -> &ApiUserId {
         &self.created_by
     }
@@ -73,7 +75,6 @@ impl ApiInvite {
         self.role
     }
 
-    #[cfg(test)]
     pub fn id(&self) -> &InviteId {
         &self.id
     }

@@ -17,6 +17,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
+use serde_json::json;
 use tracing::{debug, info};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -104,6 +105,7 @@ async fn get_organization(
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     State(config_repo): State<RuntimeConfigRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to create organizations
     ValidatedJson(new): ValidatedJson<NewOrganization>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -111,14 +113,11 @@ pub async fn create_organization(
         return Err(AppError::Forbidden);
     }
 
-    let org = repo.create(new).await?;
+    let org = repo.create(&new).await?;
 
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org.id().to_string(),
-        organization_name = org.name,
-        "created organization"
-    );
+    audit_log
+        .log(&user, org.id(), "Created organization", Some(json!(&new)))
+        .await?;
 
     let role = Role::ReadOnly;
     repo.add_member(org.id(), *user.id(), role).await?;
@@ -128,7 +127,7 @@ pub async fn create_organization(
         organization_id = org.id().to_string(),
         organization_name = org.name,
         role = role.to_string(),
-        "added user to organization"
+        "added initial user to organization"
     );
 
     Ok((StatusCode::CREATED, Json(org)))
@@ -152,6 +151,7 @@ pub async fn remove_organization(
 
     let organization_id = repo.remove(org_id).await?;
 
+    // TODO: if this becomes a "soft delete" before full deletion, make this an audit log
     info!(
         user_id = user.id().to_string(),
         organization_id = organization_id.to_string(),
@@ -174,18 +174,17 @@ pub async fn remove_organization(
 pub async fn update_organization(
     Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to update organizations
     ValidatedJson(update): ValidatedJson<NewOrganization>,
 ) -> ApiResult<Organization> {
     user.has_org_admin_access(&org_id)?;
 
-    let organization = repo.update(org_id, update).await?;
+    let organization = repo.update(org_id, &update).await?;
 
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = organization.id().to_string(),
-        "updated organization",
-    );
+    audit_log
+        .log(&user, org_id, "Updated organization", Some(json!(&update)))
+        .await?;
 
     Ok(Json(organization))
 }
@@ -279,6 +278,7 @@ async fn prevent_last_remaining_admin(
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to remove members
 ) -> ApiResult<()> {
     // admins can remove any member, non-admin users can remove themselves
@@ -305,12 +305,14 @@ pub async fn remove_member(
 
     repo.remove_member(org_id, user_id).await?;
 
-    info!(
-        removed_user_id = user_id.to_string(),
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "removed user from organization",
-    );
+    audit_log
+        .log(
+            &user,
+            (user_id, org_id),
+            "Removed organization member",
+            None,
+        )
+        .await?;
 
     Ok(Json(()))
 }
@@ -328,6 +330,7 @@ pub async fn remove_member(
 pub async fn update_member_role(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to update member roles
     ValidatedJson(role): ValidatedJson<Role>,
 ) -> ApiResult<()> {
@@ -339,12 +342,14 @@ pub async fn update_member_role(
 
     repo.update_member_role(org_id, user_id, role).await?;
 
-    info!(
-        updated_user_id = user_id.to_string(),
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "updated organization member",
-    );
+    audit_log
+        .log(
+            &user,
+            (user_id, org_id),
+            "Updated organization member",
+            Some(json!(role)),
+        )
+        .await?;
 
     Ok(Json(()))
 }

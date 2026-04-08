@@ -6,7 +6,10 @@ use crate::{
         validation::ValidatedJson,
     },
     handler::dns::DomainVerificationStatus,
-    models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
+    models::{
+        ApiDomain, AuditLogRepository, DomainId, DomainRepository, NewDomain, OrganizationId,
+        ProjectId,
+    },
 };
 use axum::{
     Json,
@@ -14,7 +17,8 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use serde_json::json;
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -36,20 +40,18 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub(crate) async fn create_domain(
     State(repo): State<DomainRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path(org_id): Path<OrganizationId>,
     ValidatedJson(new): ValidatedJson<NewDomain>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let domain: ApiDomain = repo.create(new, org_id).await?.into();
+    let domain: ApiDomain = repo.create(&new, org_id).await?.into();
 
-    info!(
-        user_id = user.log_id(),
-        domain_id = domain.id().to_string(),
-        organization_id = ?domain.organization_id(),
-        domain = domain.domain(),
-        "created domain");
+    audit_log
+        .log(&user, &domain, "Created domain", Some(json!(&new)))
+        .await?;
 
     Ok((StatusCode::CREATED, Json(domain)))
 }
@@ -127,6 +129,7 @@ pub async fn get_domain(
 )]
 pub async fn update_domain(
     State(repo): State<DomainRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
     user: Box<dyn Authenticated>,
     Json(update): Json<Vec<ProjectId>>,
@@ -135,13 +138,9 @@ pub async fn update_domain(
 
     let domain = repo.update(org_id, domain_id, &update).await?.into();
 
-    debug!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        domain_id = domain_id.to_string(),
-        project_ids_len = update.len(),
-        "updated domain",
-    );
+    audit_log
+        .log(&user, &domain, "Updated domain", Some(json!(&update)))
+        .await?;
 
     Ok(Json(domain))
 }
@@ -157,6 +156,7 @@ pub async fn update_domain(
 )]
 pub async fn delete_domain(
     State(repo): State<DomainRepository>,
+    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<DomainId> {
@@ -164,12 +164,9 @@ pub async fn delete_domain(
 
     let domain_id = repo.remove(org_id, domain_id).await?;
 
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        domain_id = domain_id.to_string(),
-        "deleted domain",
-    );
+    audit_log
+        .log(&user, (domain_id, org_id), "Deleted domain", None)
+        .await?;
 
     Ok(Json(domain_id))
 }
@@ -244,7 +241,7 @@ mod tests {
         assert_eq!(domains.len(), 1);
         assert_eq!(domains[0].id(), created_domain.id());
         assert_eq!(domains[0].domain(), "remails.com");
-        assert_eq!(domains[0].organization_id(), org_1.parse().unwrap());
+        assert_eq!(domains[0].org_id(), org_1.parse().unwrap());
         assert_eq!(domains[0].project_ids(), project_ids);
 
         // update domain with new project ID

@@ -6,8 +6,8 @@ use crate::{
         validation::ValidatedJson,
     },
     models::{
-        ApiInvite, ApiUser, CreatedInviteWithPassword, InviteId, InviteRepository, Organization,
-        OrganizationId, OrganizationRepository, Password, Role,
+        ApiInvite, ApiUser, AuditLogRepository, CreatedInviteWithPassword, InviteId,
+        InviteRepository, Organization, OrganizationId, OrganizationRepository, Password, Role,
     },
 };
 use axum::{
@@ -17,6 +17,7 @@ use axum::{
 };
 use chrono::{TimeDelta, Utc};
 use http::StatusCode;
+use serde_json::json;
 use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -37,6 +38,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub async fn create_invite(
     State(repo): State<InviteRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id,)): Path<(OrganizationId,)>,
     user: ApiUser,
     ValidatedJson(role): ValidatedJson<Role>,
@@ -46,12 +48,14 @@ pub async fn create_invite(
     let expires = Utc::now() + TimeDelta::days(7);
     let invite = repo.create(org_id, role, *user.id(), expires).await?;
 
-    debug!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        role = role.to_string(),
-        "created invite"
-    );
+    audit_log
+        .log(
+            &user,
+            (*invite.id(), org_id),
+            "Created invite link",
+            Some(json!(&role)),
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(invite)))
 }
@@ -118,18 +122,17 @@ pub async fn get_invite(
 )]
 pub async fn remove_invite(
     State(repo): State<InviteRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id, invite_id)): Path<(OrganizationId, InviteId)>,
     user: ApiUser,
 ) -> ApiResult<InviteId> {
     user.has_org_admin_access(&org_id)?;
 
-    debug!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "remove invite"
-    );
-
     let id = repo.remove_by_id(invite_id, org_id).await?;
+
+    audit_log
+        .log(&user, (id, org_id), "Deleted invite link", None)
+        .await?;
 
     Ok(Json(id))
 }
@@ -145,6 +148,7 @@ pub async fn remove_invite(
 pub async fn accept_invite(
     State(invites): State<InviteRepository>,
     State(organizations): State<OrganizationRepository>,
+    State(audit_log): State<AuditLogRepository>,
     Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, AppError> {
@@ -175,6 +179,15 @@ pub async fn accept_invite(
         tracing::error!("organization not found after accepting invite: {}", org_id);
         return Err(AppError::NotFound); // this shouldn't happen
     };
+
+    audit_log
+        .log(
+            &user,
+            (*invite.id(), org_id),
+            "Accepted invite link",
+            Some(json!(invite.role())),
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(organization)))
 }

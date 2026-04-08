@@ -3,7 +3,9 @@ CREATE TYPE audit_log_target_type AS ENUM (
     'domain',
     'message',
     'smtp_credential',
-    'api_key'
+    'api_key',
+    'invite_link',
+    'member'
 );
 
 CREATE TYPE audit_log_actor_type AS ENUM (
@@ -16,8 +18,8 @@ CREATE TABLE audit_log
 (
     id              uuid                  PRIMARY KEY,
     organization_id uuid                  NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    target_id       uuid                  NOT NULL,
-    target_type     audit_log_target_type NOT NULL,
+    target_id       uuid,
+    target_type     audit_log_target_type,
     actor_id        uuid,
     actor_type      audit_log_actor_type  NOT NULL,
     action          text                  NOT NULL,

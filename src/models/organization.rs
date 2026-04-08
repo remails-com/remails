@@ -170,7 +170,7 @@ impl OrganizationRepository {
         }
     }
 
-    pub async fn create(&self, organization: NewOrganization) -> Result<Organization, Error> {
+    pub async fn create(&self, organization: &NewOrganization) -> Result<Organization, Error> {
         Ok(sqlx::query_as!(
             PgOrganization,
             r#"
@@ -199,7 +199,7 @@ impl OrganizationRepository {
     pub async fn update(
         &self,
         id: OrganizationId,
-        organization: NewOrganization,
+        organization: &NewOrganization,
     ) -> Result<Organization, Error> {
         Ok(sqlx::query_as!(
             PgOrganization,
@@ -467,14 +467,14 @@ mod test {
         let repo = OrganizationRepository::new(db);
 
         let org1 = repo
-            .create(NewOrganization {
+            .create(&NewOrganization {
                 name: "TestOrg1".to_string(),
             })
             .await
             .unwrap();
         assert_eq!(org1.name, "TestOrg1");
         let org2 = repo
-            .create(NewOrganization {
+            .create(&NewOrganization {
                 name: "TestOrg2".to_string(),
             })
             .await

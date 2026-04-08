@@ -86,8 +86,7 @@ impl CreatedApiKeyWithPassword {
     }
 }
 
-#[derive(Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Serialize, Deserialize, ToSchema, Validate)]
 pub struct ApiKeyRequest {
     #[serde(default)]
     #[schema(max_length = 500)]

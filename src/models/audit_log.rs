@@ -5,7 +5,10 @@ use serde_json::Value;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::models::{ApiKey, ApiUser, Error, OrganizationId, Project, ProjectId};
+use crate::models::{
+    ApiDomain, ApiKey, ApiKeyId, ApiUser, ApiUserId, DomainId, Error, InviteId, MessageId,
+    OrganizationId, Project, ProjectId, SmtpCredentialId,
+};
 
 #[derive(
     Debug,
@@ -35,6 +38,8 @@ pub enum TargetType {
     Message,
     SmtpCredential,
     ApiKey,
+    InviteLink,
+    Member,
 }
 
 #[derive(
@@ -52,8 +57,8 @@ pub enum ActorType {
 pub struct AuditLogEntry {
     id: AuditLogId,
     organization_id: OrganizationId,
-    target_id: Uuid,
-    target_type: TargetType,
+    target_id: Option<Uuid>,
+    target_type: Option<TargetType>,
     actor_id: Option<Uuid>,
     actor_type: ActorType,
     action: String,
@@ -77,17 +82,40 @@ impl From<&ApiKey> for Actor {
     }
 }
 
-pub struct Target(TargetType, Uuid, OrganizationId);
+pub struct Target(Option<TargetType>, Option<Uuid>, OrganizationId);
 
-impl From<&Project> for Target {
-    fn from(project: &Project) -> Self {
-        Target(TargetType::Project, *project.id(), project.org_id())
-    }
+macro_rules! object_to_target {
+    ($obj:ty => $kind:expr) => {
+        impl From<&$obj> for Target {
+            fn from(object: &$obj) -> Self {
+                Target(Some($kind), Some(*object.id()), object.org_id())
+            }
+        }
+    };
 }
+object_to_target!(Project => TargetType::Project);
+object_to_target!(ApiDomain => TargetType::Domain);
 
-impl From<(ProjectId, OrganizationId)> for Target {
-    fn from((proj_id, org_id): (ProjectId, OrganizationId)) -> Self {
-        Target(TargetType::Project, *proj_id, org_id)
+macro_rules! id_to_target {
+    ($id:ty => $kind:expr) => {
+        impl From<($id, OrganizationId)> for Target {
+            fn from((id, org_id): ($id, OrganizationId)) -> Self {
+                Target(Some($kind), Some(*id), org_id)
+            }
+        }
+    };
+}
+id_to_target!(ProjectId => TargetType::Project);
+id_to_target!(DomainId => TargetType::Domain);
+id_to_target!(MessageId => TargetType::Message);
+id_to_target!(SmtpCredentialId => TargetType::SmtpCredential);
+id_to_target!(ApiKeyId => TargetType::ApiKey);
+id_to_target!(InviteId => TargetType::InviteLink);
+id_to_target!(ApiUserId => TargetType::Member);
+
+impl From<OrganizationId> for Target {
+    fn from(org_id: OrganizationId) -> Self {
+        Target(None, None, org_id)
     }
 }
 
@@ -142,11 +170,11 @@ impl AuditLogRepository {
         let actor = actor.into();
         let target = target.into();
         tracing::info!(
-            actor_type = %actor.0,
+            actor_type = actor.0.to_string(),
             actor_id = actor.1.map(|id| id.to_string()),
-            target_type = %target.0,
-            target_id = %target.1,
-            org_id = %target.2,
+            target_type = target.0.map(|t| t.to_string()),
+            target_id = target.1.map(|id| id.to_string()),
+            org_id = target.2.to_string(),
             details = details.as_ref().map(|v| v.to_string()),
             "{}",
             action
@@ -179,7 +207,7 @@ impl AuditLogRepository {
             *event.id,
             *event.organization_id,
             event.target_id,
-            event.target_type as TargetType,
+            event.target_type as Option<TargetType>,
             event.actor_id,
             event.actor_type as ActorType,
             event.action,
@@ -246,7 +274,7 @@ mod tests {
 
         let logs = repository.list(org_id).await.unwrap();
         assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].target_id, *project_id);
+        assert_eq!(logs[0].target_id, Some(*project_id));
         assert_eq!(logs[0].action, "test log");
         assert_eq!(
             logs[0].details.as_ref().unwrap().get("key").unwrap(),
