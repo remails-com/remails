@@ -1,18 +1,13 @@
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use crate::models::{Error, OrgBlockStatus, OrganizationId, Password, Role};
 
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
-)]
-pub struct ApiKeyId(Uuid);
+id!(ApiKeyId);
 
 #[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize, Debug))]

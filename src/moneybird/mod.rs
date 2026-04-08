@@ -706,7 +706,7 @@ impl MoneyBird {
 
     async fn create_contact(&self, org_id: OrganizationId) -> Result<Contact, Error> {
         info!(
-            organization_id = org_id.as_uuid().to_string(),
+            organization_id = %org_id,
             "Creating new moneybird contact for organization"
         );
 
@@ -747,7 +747,7 @@ impl MoneyBird {
 
         if let Some(contact_id) = contact_id {
             trace!(
-                organization_id = org_id.as_uuid().to_string(),
+                organization_id = %org_id,
                 contact_id = contact_id.as_str(),
                 "Found existing moneybird contact"
             );
@@ -784,7 +784,7 @@ impl MoneyBird {
                 .await
                 .inspect_err(|err| {
                     warn!(
-                        organization_id = org_id.as_uuid().to_string(),
+                        organization_id = %org_id,
                         contact_id = contact_id.as_str(),
                         "Cloud not fetch subscription status from moneybird: {}",
                         err
@@ -792,7 +792,7 @@ impl MoneyBird {
                 })?,
             None => {
                 trace!(
-                    organization_id = org_id.as_uuid().to_string(),
+                    organization_id = %org_id,
                     "No moneybird contact found"
                 );
                 SubscriptionStatus::None
@@ -817,7 +817,7 @@ impl MoneyBird {
 
         let Some(contact_id) = contact_id else {
             error!(
-                organization_id = org_id.as_uuid().to_string(),
+                organization_id = %org_id,
                 "No moneybird contact found"
             );
             return Err(Error::PreconditionFailed(
@@ -931,7 +931,7 @@ mod test {
         assert_eq!(orgs.len(), 8);
         for org in orgs {
             let (exp_total, reset, exp_subscription_status) =
-                match org.id().as_uuid().to_string().as_str() {
+                match org.id().to_string().as_str() {
                     "44729d9f-a7dc-4226-b412-36a7537f5176" => {
                         (800, Utc::now().checked_add_months(Months::new(1)), "active")
                     }

@@ -5,7 +5,6 @@ use crate::{
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use futures::StreamExt;
 use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
@@ -21,24 +20,11 @@ use tracing::{error, info, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[sqlx(transparent)]
-#[into_params(names("domain_id"))]
-pub struct DomainId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("domain_id"))]
+    DomainId
+);
 
 #[derive(sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]

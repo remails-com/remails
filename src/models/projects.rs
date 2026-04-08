@@ -1,30 +1,15 @@
 use crate::models::{Error, OrganizationId};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    Eq,
-    IntoParams,
-    ToSchema,
-)]
-#[sqlx(transparent)]
-#[into_params(names("proj_id"))]
-pub struct ProjectId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("proj_id"))]
+    ProjectId
+);
 
 impl ProjectId {
     pub fn as_uuid(&self) -> Uuid {

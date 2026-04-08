@@ -1,36 +1,21 @@
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use rand::distr::{Alphanumeric, SampleString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
 
 use crate::models::{ApiUserId, Error, OrganizationId, Password, Role};
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[sqlx(transparent)]
-#[into_params(names("invite_id"))]
-pub struct InviteId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("invite_id"))]
+    InviteId
+);
 
 /// Newly created invitation
 ///
 /// Contains the password in plain text, which is only available at creation time
 #[derive(Serialize, ToSchema)]
-#[cfg_attr(test, derive(Deserialize))]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct CreatedInviteWithPassword {
     id: InviteId,
     password: String,
@@ -61,7 +46,7 @@ impl CreatedInviteWithPassword {
 }
 
 #[derive(Serialize, ToSchema)]
-#[cfg_attr(test, derive(Deserialize))]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct ApiInvite {
     id: InviteId,
     organization_id: OrganizationId,

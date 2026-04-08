@@ -1,6 +1,6 @@
 use crate::models::{Error, OrgBlockStatus, OrganizationId};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
+use derive_more::{Display, From, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
@@ -9,58 +9,24 @@ use sqlx::PgPool;
 use totp_rs::{Algorithm, Secret, TOTP};
 use tracing::trace;
 use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[into_params(names("user_id"))]
-pub struct ApiUserId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("user_id"))]
+    ApiUserId
+);
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[into_params(names("totp_id"))]
-pub struct TotpId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("totp_id"))]
+    TotpId
+);
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[into_params(names("pw_reset_id"))]
-pub struct PwResetId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("pw_reset_id"))]
+    PwResetId
+);
 
 #[derive(From, derive_more::Debug, Deserialize, FromStr, ToSchema, Validate)]
 #[debug("*****")]
@@ -114,7 +80,7 @@ impl Role {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
-#[cfg_attr(test, derive(PartialEq, PartialOrd, Ord, Eq))]
+#[cfg_attr(test, derive(PartialEq, PartialOrd))]
 #[serde(rename_all = "snake_case")]
 pub struct OrgRole {
     pub role: Role,

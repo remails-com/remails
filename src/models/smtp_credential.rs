@@ -1,28 +1,11 @@
 use crate::models::{Error, OrganizationId, ProjectId};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-)]
-#[sqlx(transparent)]
-pub struct SmtpCredentialId(Uuid);
+id!(SmtpCredentialId);
 
 #[derive(Serialize, derive_more::Debug, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]

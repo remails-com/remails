@@ -3,39 +3,16 @@ use crate::{
     moneybird::{MoneybirdContactId, SubscriptionStatus},
 };
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    FromStr,
-    sqlx::Type,
-    PartialOrd,
-    Ord,
-    Eq,
-    ToSchema,
-    IntoParams,
-)]
-#[sqlx(transparent)]
-#[into_params(names("org_id"))]
-pub struct OrganizationId(Uuid);
-
-impl OrganizationId {
-    pub fn as_uuid(&self) -> Uuid {
-        self.0
-    }
-}
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("org_id"))]
+    OrganizationId
+);
 
 #[derive(
     Serialize,
@@ -43,7 +20,7 @@ impl OrganizationId {
     Debug,
     Clone,
     Copy,
-    Display,
+    derive_more::Display,
     PartialEq,
     PartialOrd,
     Eq,
