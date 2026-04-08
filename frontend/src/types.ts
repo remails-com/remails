@@ -432,9 +432,9 @@ export type AuditLogEntry = {
   id: string;
   organization_id: string;
   target_id: string;
-  target_type: string;
+  target_type: "project" | "domain" | "message" | "smtp_credential" | "api_key";
   actor_id: string;
-  actor_type: string;
+  actor_type: "api_user" | "api_key" | "system";
   action: string;
   details: unknown;
   occurred_at: string;

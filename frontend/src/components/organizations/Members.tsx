@@ -1,4 +1,4 @@
-import { Alert, Button, Flex, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Alert, Badge, Button, Flex, Group, Table, Text, Title, Tooltip } from "@mantine/core";
 import { IconEdit, IconInfoCircle, IconTrash, IconUserMinus, IconUserPlus } from "@tabler/icons-react";
 import NewInvite from "./NewInvite";
 import { useDisclosure } from "@mantine/hooks";
@@ -211,15 +211,16 @@ export default function Members() {
     <Table.Tr key={member.user_id}>
       <Table.Td><TableId id={member.user_id} /></Table.Td>
       <Table.Td>
-        {member.user_id == user.id ? (
-          <Text size="sm" span fw="bold">
-            {member.name}
-          </Text>
-        ) : (
-          member.name
-        )}
+        <Group style={{ rowGap: "0.2em" }}>
+          {member.name}
+          <Badge variant="light" color="secondary" tt="none" component="a" href={`mailto:${user.email}`} style={{ cursor: "pointer" }}>
+            {member.email}
+          </Badge>
+          {member.user_id == user.id && (<Badge variant="light" color="blue">
+            You
+          </Badge>)}
+        </Group>
       </Table.Td>
-      <Table.Td>{member.email}</Table.Td>
       <Table.Td>
         <Tooltip
           label={"As soon as you choose a subscription, you'll become admin"}
@@ -247,7 +248,7 @@ export default function Members() {
           <Tooltip
             label={
               is_last_remaining_admin
-                ? "The last remaining admin in this organization cannot leave. Perhaps you want to delete this organization instead?"
+                ? "The last remaining admin in this organization cannot leave."
                 : "Leave organization"
             }
           >
@@ -279,7 +280,7 @@ export default function Members() {
         this organization by creating and sharing invite links.
       </InfoAlert>
 
-      <StyledTable headers={["ID", "Name", "Email", "Role", "Updated", ""]}>{member_rows}</StyledTable>
+      <StyledTable headers={["ID", "Name", "Role", "Updated", ""]}>{member_rows}</StyledTable>
 
       {invite_rows && invite_rows.length > 0 && (
         <Title order={3} mb="md" mt="xl">

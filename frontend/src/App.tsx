@@ -3,12 +3,15 @@ import { Pages } from "./Pages";
 import { RemailsContext, useLoadRemails } from "./hooks/useRemails.ts";
 import { NavigationProgress } from "@mantine/nprogress";
 import React from "react";
+import { ModalsProvider } from "@mantine/modals";
 
 const LazyNavBoundary = React.memo(
   function NavBoundary(remails: ReturnType<typeof useLoadRemails>) {
     return (
       <RemailsContext.Provider value={remails}>
-        <Pages />
+        <ModalsProvider>
+          <Pages />
+        </ModalsProvider>
       </RemailsContext.Provider>
     );
   },

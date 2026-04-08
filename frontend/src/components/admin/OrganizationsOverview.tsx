@@ -37,7 +37,7 @@ export default function OrganizationsOverview() {
         <TableId id={organization.id} />
       </Table.Td>
       <Table.Td>
-        <Group>
+        <Group style={{ rowGap: "0.2em" }}>
           {organization.name}
           {config && organization.moneybird_contact_id && (
             <Anchor

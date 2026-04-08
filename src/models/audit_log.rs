@@ -212,6 +212,7 @@ impl AuditLogRepository {
                 occurred_at            
             FROM audit_log
             WHERE organization_id = $1
+            ORDER BY occurred_at DESC
             "#,
             *org_id,
         )
