@@ -48,8 +48,8 @@ axum-extra = { version = "0.12.5", features = ["cookie-private", "typed-header"]
 chrono = { version = "0.4.44", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.11.2", features = ["serde"] }
-mail-send = { version = "0.5.2", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
-mail-auth = "0.7.5"
+mail-send = { version = "0.6.0", default-features = false, features = ["builder", "aws-lc-rs", "parser", "dkim"] }
+mail-auth = "0.8.0"
 mail-builder = "0.4.4"
 password-auth = "1.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -57,7 +57,7 @@ serde_json = { version = "1.0.149", features = ["alloc"] }
 smtp-proto = "0.2.1"
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "chrono", "uuid", "macros", "migrate", "json", "ipnet"] }
 thiserror = "2.0.18"
-tokio = { version = "1.51.0", features = ["full"] }
+tokio = { version = "1.51.1", features = ["full"] }
 tokio-rustls = "0.26.4"
 futures = "0.3.32"
 tokio-tungstenite = "0.29.0"
@@ -75,7 +75,7 @@ cookie = "0.18.1"
 email_address = { version = "0.2.9", git = "https://github.com/pohlm01/rust-email_address.git", features = ["utoipa"] }
 memory-serve = "2.0.0"
 derive_more = { version = "2.1.1", default-features = false, features = ["from", "display", "deref", "debug", "from_str"] }
-rand = "0.10.0"
+rand = "0.10.1"
 hickory-resolver = { version = "0.25.2", features = ["tls-aws-lc-rs", "webpki-roots"] }
 aws-lc-rs = "1.16.2"
 humansize = "2.1.3"
