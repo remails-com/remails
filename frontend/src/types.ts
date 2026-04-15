@@ -113,6 +113,7 @@ export interface State {
   userFetched: boolean;
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
+  members: OrganizationMember[] | null;
   projects: Project[] | null;
   labels: string[] | null;
   emails: EmailMetadata[] | null;
@@ -160,6 +161,10 @@ export type Action =
   | {
     type: "set_organizations";
     organizations: Organization[] | null;
+  }
+  | {
+    type: "set_members";
+    members: OrganizationMember[] | null;
   }
   | {
     type: "add_organization";

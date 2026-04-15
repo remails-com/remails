@@ -8,10 +8,13 @@ import StyledTable from "../StyledTable";
 import { formatDateTime } from "../../util";
 import TableId from "../TableId";
 import { AuditLogEntry } from "../../types";
-import { IconEye, IconKey, IconMail, IconServer, IconServer2, IconUser, IconUserPlus, IconWorldWww } from "@tabler/icons-react";
+import { IconEye, IconKey, IconLinkPlus, IconMail, IconServer, IconServer2, IconUser, IconWorldWww } from "@tabler/icons-react";
 import { Loader } from "../../Loader";
 import { useRemails } from "../../hooks/useRemails";
 import SearchInput from "../SearchInput";
+import { useMemberWithId, useMembers } from "../../hooks/useOrganizations";
+import { useProjectWithId, useProjects } from "../../hooks/useProjects";
+import { useDomainWithId, useDomains } from "../../hooks/useDomains";
 
 const PER_PAGE = 20;
 const SHOW_SEARCH = 10;
@@ -28,22 +31,34 @@ const TARGET_ICONS: Record<NonNullable<AuditLogEntry["target_type"]>, ReactNode>
   message: <IconMail size={20} />,
   project: <IconServer size={20} />,
   smtp_credential: <IconKey size={20} />,
-  invite_link: <IconUserPlus size={20} />,
+  invite_link: <IconLinkPlus size={20} />,
   member: <IconUser size={20} />
 };
 
 function Actor({ entry }: { entry: AuditLogEntry }) {
+  const member = useMemberWithId(entry.actor_type === "api_user" ? entry.actor_id : null);
+
   return (
     <Group gap="xs" wrap="nowrap">
       <Tooltip label={entry.actor_type.replaceAll("_", " ")}>
         {ACTOR_ICONS[entry.actor_type]}
       </Tooltip>
-      {entry.actor_id ? <TableId id={entry.actor_id} /> : null}
+      {(entry.actor_id ? <TableId id={entry.actor_id} name={member?.name} /> : "System")}
     </Group>
   );
 }
 
 function Target({ entry }: { entry: AuditLogEntry }) {
+  const names: Record<NonNullable<AuditLogEntry["target_type"]>, string | undefined> = {
+    member: useMemberWithId(entry.target_type === "member" ? entry.target_id : null)?.name,
+    project: useProjectWithId(entry.target_type === "project" ? entry.target_id : null)?.name,
+    api_key: undefined,
+    domain: useDomainWithId(entry.target_type === "domain" ? entry.target_id : null)?.domain,
+    message: undefined,
+    smtp_credential: undefined,
+    invite_link: undefined
+  }
+
   if (!entry.target_type || !entry.target_id) return;
 
   return (
@@ -51,7 +66,7 @@ function Target({ entry }: { entry: AuditLogEntry }) {
       <Tooltip label={entry.target_type.replaceAll("_", " ")}>
         {TARGET_ICONS[entry.target_type]}
       </Tooltip>
-      <TableId id={entry.target_id} />
+      <TableId id={entry.target_id} name={names[entry.target_type]} />
     </Group>
   );
 }
@@ -63,6 +78,9 @@ function AuditLogTable() {
   } = useRemails();
   const { auditLogEntries } = useAuditLogEntries();
   const [searchQuery, setSearchQuery] = useState(routerState.params.q || "");
+  const { members } = useMembers();
+  const { projects } = useProjects();
+  const { domains } = useDomains();
 
   const openDetailsModal = (entry: AuditLogEntry) => {
     modals.open({
@@ -107,15 +125,18 @@ function AuditLogTable() {
     searchQuery.length == 0
       ? auditLogEntries
       : auditLogEntries.filter((entry) =>
-          [
-            entry.action,
-            entry.actor_type,
-            entry.actor_id ?? "",
-            entry.target_type ?? "",
-            entry.target_id ?? "",
-            JSON.stringify(entry.details),
-          ].some((value) => value.toLowerCase().includes(normalizedSearchQuery))
-        );
+        [
+          entry.action,
+          entry.actor_type,
+          entry.actor_id ?? "",
+          members.find((member) => member.user_id === entry.actor_id)?.name ?? "",
+          entry.target_type ?? "",
+          entry.target_id ?? "",
+          projects.find((project) => project.id === entry.target_id)?.name ?? "",
+          domains.find((domain) => domain.id === entry.target_id)?.domain ?? "",
+          JSON.stringify(entry.details),
+        ].some((value) => value.toLowerCase().includes(normalizedSearchQuery))
+      );
 
   const totalPages = Math.ceil(filteredEntries.length / PER_PAGE);
   const activePage = Math.min(Math.max(parseInt(routerState.params.p) || 1, 1), totalPages || 1);

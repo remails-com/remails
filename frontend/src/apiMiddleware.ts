@@ -99,6 +99,7 @@ export default async function apiMiddleware(
   const projChanged = newProjId !== navState.from.params.proj_id && newProjId !== null;
 
   if (orgChanged) {
+    dispatch({ type: "set_members", members: null });
     dispatch({ type: "set_projects", projects: await get(`/api/organizations/${newOrgId}/projects`) });
     dispatch({
       type: "set_domains",
@@ -108,6 +109,10 @@ export default async function apiMiddleware(
       type: "set_labels",
       labels: await get(`/api/organizations/${newOrgId}/emails/labels`),
     });
+  }
+
+  if (navState.to.name == "organization.members" || (navState.to.name == "organization.Audit log" && navState.state.members === null)) {
+    dispatch({ type: "set_members", members: await get(`/api/organizations/${newOrgId}/members`) });
   }
 
   if (navState.to.name == "statistics") {

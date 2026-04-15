@@ -122,7 +122,7 @@ export default function DomainsOverview() {
         </Text>
       )}
 
-      <StyledTable headers={["Domains", "DNS status", "Usable by", "Updated", ""]}>{rows}</StyledTable>
+      <StyledTable headers={["Domain", "DNS status", "Usable by", "Updated", ""]}>{rows}</StyledTable>
 
       <Flex justify="center" mt="md">
         <Stack>
