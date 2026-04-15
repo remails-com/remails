@@ -54,17 +54,18 @@ pub enum ActorType {
     System,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct AuditLogEntry {
-    id: AuditLogId,
-    organization_id: OrganizationId,
+    pub id: AuditLogId,
+    pub organization_id: OrganizationId,
     pub target_id: Option<Uuid>,
-    target_type: Option<TargetType>,
-    actor_id: Option<Uuid>,
-    actor_type: ActorType,
+    pub target_type: Option<TargetType>,
+    pub actor_id: Option<Uuid>,
+    pub actor_type: ActorType,
     pub action: String,
-    details: Option<Value>,
-    occurred_at: DateTime<Utc>,
+    pub details: Option<Value>,
+    pub occurred_at: DateTime<Utc>,
 }
 
 pub struct Actor(ActorType, Option<Uuid>);
@@ -261,12 +262,21 @@ mod tests {
             .unwrap();
         tx.commit().await.unwrap();
 
-        let logs = repository.list(org_id).await.unwrap();
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].target_id, Some(*project_id));
-        assert_eq!(logs[0].action, "test log");
+        let audit_entries = repository.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].organization_id, org_id);
+        assert_eq!(audit_entries[0].target_type, Some(TargetType::Project));
+        assert_eq!(audit_entries[0].target_id, Some(*project_id));
+        assert_eq!(audit_entries[0].actor_type, ActorType::System);
+        assert_eq!(audit_entries[0].actor_id, None);
+        assert_eq!(audit_entries[0].action, "test log");
         assert_eq!(
-            logs[0].details.as_ref().unwrap().get("key").unwrap(),
+            audit_entries[0]
+                .details
+                .as_ref()
+                .unwrap()
+                .get("key")
+                .unwrap(),
             "value"
         );
     }

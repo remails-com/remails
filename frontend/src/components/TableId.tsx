@@ -10,6 +10,6 @@ export default function TableId({ id, name }: { id: string, name?: string }) {
       <Text span c={name ? "" : "dimmed"} size="sm" onClick={() => clipboard.copy(id)} style={{ cursor: "pointer" }}>
         {name ?? id.substring(0, 8)}
       </Text>
-    </Tooltip >
+    </Tooltip>
   );
 }

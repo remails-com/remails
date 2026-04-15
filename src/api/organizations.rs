@@ -376,7 +376,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
-        models::{OrgRole, Role, RuntimeConfig},
+        models::{ActorType, OrgRole, Role, RuntimeConfig},
         test::TestProjects,
     };
 
@@ -554,6 +554,25 @@ mod tests {
         assert_eq!(stats.monthly.len(), 0);
         assert_eq!(stats.daily.len(), 0);
 
+        // get audit log
+        let response = server
+            .get(format!("/api/organizations/{}/audit-log", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let audit_entries: Vec<AuditLogEntry> = deserialize_body(response.into_body()).await;
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].actor_type, ActorType::ApiUser);
+        assert_eq!(audit_entries[0].actor_id, Some(*user_3));
+        assert_eq!(audit_entries[0].target_type, None);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Updated organization");
+        assert_eq!(audit_entries[1].actor_type, ActorType::ApiUser);
+        assert_eq!(audit_entries[1].actor_id, Some(*user_3));
+        assert_eq!(audit_entries[1].target_type, None);
+        assert_eq!(audit_entries[1].target_id, None);
+        assert_eq!(audit_entries[1].action, "Created organization");
+
         // remove organization
         let response = server
             .delete(format!("/api/organizations/{}", created_org.id()))
@@ -638,6 +657,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
+
+        // can't get organization audit log
+        let response = server
+            .get(format!("/api/organizations/{org_1}/audit-log"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), read_status_code);
 
         // nobody (except super admins) can update the organization's block status
         let response = server
