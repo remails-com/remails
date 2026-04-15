@@ -292,12 +292,13 @@ impl ApiKeyRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::SYSTEM;
+    use crate::models::{AuditLogRepository, SYSTEM};
     use super::*;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn api_key_lifecycle(db: PgPool) {
-        let repo = ApiKeyRepository::new(db);
+        let repo = ApiKeyRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db);
         let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(); // test org 1
 
         // create API key
@@ -309,6 +310,10 @@ mod test {
         assert_eq!(api_key.description, new.description);
         assert_eq!(api_key.organization_id, org_id);
         assert_eq!(api_key.role, new.role);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Created API key");
 
         // list API keys
         let api_keys = repo.list(org_id).await.unwrap();
@@ -329,6 +334,10 @@ mod test {
         assert_eq!(api_key.id, id);
         assert_eq!(api_key.organization_id, org_id);
         assert_eq!(api_key.role, update.role);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Updated API key");
 
         // list API keys
         let api_keys = repo.list(org_id).await.unwrap();
@@ -341,6 +350,10 @@ mod test {
         // remove API key
         let removed_id = repo.remove(org_id, api_key.id, SYSTEM).await.unwrap();
         assert_eq!(removed_id, api_key.id);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Deleted API key");
 
         // verify that key was removed
         let api_keys = repo.list(org_id).await.unwrap();

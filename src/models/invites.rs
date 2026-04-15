@@ -305,13 +305,14 @@ impl InviteRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::SYSTEM;
+    use crate::models::{AuditLogRepository, SYSTEM};
     use super::*;
     use sqlx::PgPool;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn invite_lifecycle(db: PgPool) {
-        let invite_repo = InviteRepository::new(db);
+        let invite_repo = InviteRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db);
         let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(); // test org 1
         let created_by: ApiUserId = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // test user 1
 
@@ -330,6 +331,10 @@ mod test {
         let invites = invite_repo.get_by_org(org_id).await.unwrap();
         assert_eq!(invites.len(), 1);
         assert_eq!(invites[0].id, invite.id);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(**invite.id()));
+        assert_eq!(audit_entries[0].action, "Created invite link");
 
         // add expired invite
         invite_repo
@@ -364,6 +369,10 @@ mod test {
             invite_repo.remove_by_id(invite.id, org_id, SYSTEM).await.unwrap(),
             invite.id,
         );
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(**invite.id()));
+        assert_eq!(audit_entries[0].action, "Deleted invite link");
 
         let invites = invite_repo.get_by_org(org_id).await.unwrap();
         assert_eq!(invites.len(), 0);

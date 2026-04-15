@@ -675,7 +675,7 @@ impl DomainRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::SYSTEM;
+    use crate::models::{AuditLogRepository, SYSTEM};
     use crate::test::TestProjects;
 
     use super::*;
@@ -843,7 +843,8 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let proj_2 = TestProjects::Org1Project2.project_id();
 
@@ -862,6 +863,10 @@ mod test {
         assert_eq!(domain.domain, "test-domain1.com");
         assert_eq!(domain.organization_id, org_1);
         assert_eq!(domain.project_ids, vec![proj_1]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
 
         let domain = repo
             .create(
@@ -878,6 +883,10 @@ mod test {
         assert_eq!(domain.domain, "test-domain2.com");
         assert_eq!(domain.organization_id, org_1);
         assert!(domain.project_ids.is_empty());
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
 
         let domain = repo
             .create(
@@ -894,6 +903,10 @@ mod test {
         assert_eq!(domain.domain, "test-domain3.com");
         assert_eq!(domain.organization_id, org_1);
         assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
     }
 
     #[sqlx::test(fixtures(
@@ -925,7 +938,8 @@ mod test {
         scripts("organizations", "projects", "proj_domains")
     ))]
     async fn update_happy_path(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let proj_2 = TestProjects::Org1Project2.project_id();
         let domain_id = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap();
@@ -936,10 +950,18 @@ mod test {
             .await
             .unwrap();
         assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Updated domain");
 
         // remove attached projects
         let domain = repo.update(org_1, domain_id, &[], SYSTEM).await.unwrap();
         assert!(domain.project_ids.is_empty());
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Updated domain");
     }
 
     #[sqlx::test(fixtures(
@@ -1121,7 +1143,8 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn remove_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
 
         let domain_proj = repo
             .get(
@@ -1144,6 +1167,16 @@ mod test {
         )
         .await
         .unwrap();
+        let audit_entries = audit_log
+            .list("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(
+            audit_entries[0].target_id,
+            Some(*"c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse::<DomainId>().unwrap())
+        );
+        assert_eq!(audit_entries[0].action, "Deleted domain");
 
         let not_found = repo
             .get(
@@ -1163,7 +1196,8 @@ mod test {
         scripts("organizations", "projects", "org_domains")
     ))]
     async fn remove_happy_flow_without_project(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
 
         let domain_org = repo
             .get(
@@ -1186,6 +1220,16 @@ mod test {
         )
         .await
         .unwrap();
+        let audit_entries = audit_log
+            .list("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(
+            audit_entries[0].target_id,
+            Some(*"ed28baa5-57f7-413f-8c77-7797ba6a8780".parse::<DomainId>().unwrap())
+        );
+        assert_eq!(audit_entries[0].action, "Deleted domain");
 
         let not_found = repo
             .get(

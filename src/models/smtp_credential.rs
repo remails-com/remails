@@ -308,7 +308,10 @@ impl SmtpCredentialRepository {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{models::{MessageRepository, SYSTEM}, test::TestProjects};
+    use crate::{
+        models::{AuditLogRepository, MessageRepository, SYSTEM},
+        test::TestProjects,
+    };
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
@@ -324,6 +327,7 @@ mod test {
             description: "Test SMTP credential description".to_string(),
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let audit_log = AuditLogRepository::new(pool.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
@@ -331,6 +335,10 @@ mod test {
             .generate(org_id, project_id, &credential_request, SYSTEM)
             .await
             .unwrap();
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential.id()));
+        assert_eq!(audit_entries[0].action, "Created SMTP credential");
 
         assert_ne!(credential_request.username, credential.username);
         assert!(
@@ -354,6 +362,7 @@ mod test {
     ))]
     async fn remove_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
@@ -363,6 +372,10 @@ mod test {
             .await
             .unwrap();
         assert_eq!(credential_id, rm_cred);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential_id));
+        assert_eq!(audit_entries[0].action, "Deleted SMTP credential");
 
         let not_found = credential_repo.find_by_username("marc").await.unwrap();
         assert!(not_found.is_none())
@@ -460,6 +473,7 @@ mod test {
     ))]
     async fn update_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
@@ -478,6 +492,10 @@ mod test {
             .unwrap();
         assert_eq!(credential_id, update.id);
         assert_eq!("Updated description", update.description);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential_id));
+        assert_eq!(audit_entries[0].action, "Updated SMTP credential");
     }
 
     #[sqlx::test(fixtures(

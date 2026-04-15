@@ -207,7 +207,7 @@ impl ProjectRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::SYSTEM;
+    use crate::models::{AuditLogRepository, SYSTEM};
     use crate::test::TestProjects;
 
     use super::*;
@@ -216,7 +216,8 @@ mod test {
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations")))]
     async fn project_lifecycle(db: PgPool) {
         let org_1 = TestProjects::Org1Project1.org_id();
-        let repo = ProjectRepository::new(db);
+        let repo = ProjectRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db);
 
         // no projects
         assert_eq!(repo.list(org_1).await.unwrap().len(), 0);
@@ -238,6 +239,10 @@ mod test {
         assert_eq!(project.retention_period_days, 1);
         assert_eq!(project.organization_id, org_1);
         assert!(!project.plaintext_fallback);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*project.id()));
+        assert_eq!(audit_entries[0].action, "Created project");
 
         // get project
         let proj = repo.get(project.id).await.unwrap();
@@ -269,12 +274,20 @@ mod test {
         assert_eq!(project.retention_period_days, 3);
         assert_eq!(project.organization_id, org_1);
         assert_eq!(projects[0].id(), project.id());
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*project.id()));
+        assert_eq!(audit_entries[0].action, "Updated project");
 
         // remove project
         assert_eq!(
             repo.remove(project.id(), org_1, SYSTEM).await.unwrap(),
             project.id()
         );
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(*project.id()));
+        assert_eq!(audit_entries[0].action, "Deleted project");
 
         // no projects
         assert_eq!(repo.list(org_1).await.unwrap().len(), 0);

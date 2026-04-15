@@ -529,7 +529,7 @@ impl OrganizationRepository {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::{ApiUserRepository, NewApiUser, SYSTEM};
+    use crate::models::{ApiUserRepository, AuditLogRepository, NewApiUser, SYSTEM};
     use sqlx::PgPool;
 
     impl Organization {
@@ -545,6 +545,7 @@ mod test {
     #[sqlx::test]
     async fn organization_lifecycle(db: PgPool) {
         let repo = OrganizationRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
         let owner = ApiUserRepository::new(db)
             .create(NewApiUser {
                 email: "test.user@example.com".parse().unwrap(),
@@ -565,6 +566,11 @@ mod test {
             .await
             .unwrap();
         assert_eq!(org1.name, "TestOrg1");
+        let audit_entries = audit_log.list(org1.id()).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Created organization");
+
         let org2 = repo
             .create(
                 &NewOrganization {
@@ -575,6 +581,10 @@ mod test {
             .await
             .unwrap();
         assert_eq!(org2.name, "TestOrg2");
+        let audit_entries = audit_log.list(org2.id()).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Created organization");
 
         let orgs = repo.list(None).await.unwrap();
         assert_eq!(orgs, vec![org2.clone(), org1.clone()]);
@@ -650,6 +660,13 @@ mod test {
         repo.update_member_role(org_2, user_3, Role::Maintainer, SYSTEM)
             .await
             .unwrap();
+
+        let audit_entries = audit_log.list(org_2).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*user_3));
+        assert_eq!(audit_entries[0].action, "Updated organization member");
+        assert_eq!(audit_entries[1].target_id, Some(*user_1));
+        assert_eq!(audit_entries[1].action, "Removed organization member");
 
         let members = repo.list_members(org_2).await.unwrap();
         assert_eq!(members.len(), 2);
