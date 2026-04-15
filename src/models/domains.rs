@@ -1,6 +1,6 @@
 use crate::{
     handler::dns::{DnsResolver, DomainVerificationStatus},
-    models::{Error, OrganizationId, ProjectId},
+    models::{Actor, AuditLogRepository, Error, OrganizationId, ProjectId},
 };
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
@@ -10,6 +10,7 @@ use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{PgConnection, query};
 use std::{
     fmt::{Debug, Formatter},
@@ -221,14 +222,24 @@ pub struct NewDomain {
 pub struct DomainRepository {
     pool: sqlx::PgPool,
     resolver: DnsResolver,
+    audit_log: AuditLogRepository,
 }
 
 impl DomainRepository {
     pub fn new(pool: sqlx::PgPool, resolver: DnsResolver) -> Self {
-        Self { pool, resolver }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+            resolver,
+        }
     }
 
-    pub async fn create(&self, new: &NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
+    pub async fn create(
+        &self,
+        new: &NewDomain,
+        org_id: OrganizationId,
+        actor: impl Into<Actor>,
+    ) -> Result<Domain, Error> {
         let (sk_bytes, pk_bytes) = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
                 let key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?;
@@ -261,6 +272,16 @@ impl DomainRepository {
         Self::attach_projects(&mut tx, org_id, id, &new.project_ids).await?;
 
         let domain = Self::get_one(&mut tx, org_id, id).await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (domain.id, org_id),
+                "Created domain",
+                Some(json!(new)),
+            )
+            .await?;
 
         tx.commit().await?;
 
@@ -515,6 +536,7 @@ impl DomainRepository {
         org_id: OrganizationId,
         domain_id: DomainId,
         attached_projects: &[ProjectId],
+        actor: impl Into<Actor>,
     ) -> Result<Domain, Error> {
         let mut tx = self.pool.begin().await?;
 
@@ -530,6 +552,16 @@ impl DomainRepository {
         .await?;
 
         let domain = Self::attach_projects(&mut tx, org_id, domain_id, attached_projects).await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (domain.id, org_id),
+                "Updated domain",
+                Some(json!(attached_projects)),
+            )
+            .await?;
 
         tx.commit().await?;
 
@@ -571,8 +603,11 @@ impl DomainRepository {
         &self,
         org_id: OrganizationId,
         domain_id: DomainId,
+        actor: impl Into<Actor>,
     ) -> Result<DomainId, Error> {
-        let id = sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+
+        let id: DomainId = sqlx::query_scalar!(
             r#"
             DELETE
             FROM domains
@@ -582,10 +617,17 @@ impl DomainRepository {
             *org_id,
             *domain_id
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
 
-        Ok(DomainId(id))
+        self.audit_log
+            .log(&mut tx, actor, (id, org_id), "Deleted domain", None)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(id)
     }
 
     /// Look up a domain name in the database for a specific project, returning a domain that is attached to that project,
@@ -633,6 +675,7 @@ impl DomainRepository {
 
 #[cfg(test)]
 mod test {
+    use crate::models::SYSTEM;
     use crate::test::TestProjects;
 
     use super::*;
@@ -782,6 +825,7 @@ mod test {
                     project_ids: vec![proj_1_org_2],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -811,6 +855,7 @@ mod test {
                     project_ids: vec![proj_1],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -826,6 +871,7 @@ mod test {
                     project_ids: vec![],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -841,6 +887,7 @@ mod test {
                     project_ids: vec![proj_1, proj_2],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -866,6 +913,7 @@ mod test {
                 },
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -884,13 +932,13 @@ mod test {
 
         // attach an extra project
         let domain = repo
-            .update(org_1, domain_id, &[proj_1, proj_2])
+            .update(org_1, domain_id, &[proj_1, proj_2], SYSTEM)
             .await
             .unwrap();
         assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
 
         // remove attached projects
-        let domain = repo.update(org_1, domain_id, &[]).await.unwrap();
+        let domain = repo.update(org_1, domain_id, &[], SYSTEM).await.unwrap();
         assert!(domain.project_ids.is_empty());
     }
 
@@ -907,7 +955,7 @@ mod test {
 
         // can't attach project from other organization
         assert!(matches!(
-            repo.update(org_1, domain_org_1, &[proj_1_org_2])
+            repo.update(org_1, domain_org_1, &[proj_1_org_2], SYSTEM)
                 .await
                 .unwrap_err(),
             Error::BadRequest(_)
@@ -915,7 +963,7 @@ mod test {
 
         // can't attach project to domain from other organization
         assert!(matches!(
-            repo.update(org_1, domain_org_2, &[proj_1])
+            repo.update(org_1, domain_org_2, &[proj_1], SYSTEM)
                 .await
                 .unwrap_err(),
             Error::BadRequest(_)
@@ -923,7 +971,7 @@ mod test {
 
         // can't remove projects from another organization's domain
         assert!(matches!(
-            repo.update(org_1, domain_org_2, &[]).await.unwrap_err(),
+            repo.update(org_1, domain_org_2, &[], SYSTEM).await.unwrap_err(),
             Error::BadRequest(_)
         ));
     }
@@ -1008,6 +1056,7 @@ mod test {
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -1049,6 +1098,7 @@ mod test {
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -1090,6 +1140,7 @@ mod test {
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             // test-org-1-project-1.com
             "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+            SYSTEM,
         )
         .await
         .unwrap();
@@ -1131,6 +1182,7 @@ mod test {
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             // test-org-1.com
             "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            SYSTEM,
         )
         .await
         .unwrap();

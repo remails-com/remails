@@ -1,9 +1,12 @@
 use chrono::{DateTime, Utc};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Serialize;
+use serde_json::json;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::models::{ApiUserId, Error, OrganizationId, Password, Role};
+use crate::models::{
+    Actor, ApiUserId, AuditLogRepository, Error, OrganizationId, Password, Role,
+};
 
 id!(
     #[derive(IntoParams)]
@@ -32,6 +35,7 @@ impl CreatedInviteWithPassword {
         &self.password
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn id(&self) -> &InviteId {
         &self.id
     }
@@ -75,6 +79,7 @@ impl ApiInvite {
         self.role
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn id(&self) -> &InviteId {
         &self.id
     }
@@ -93,11 +98,15 @@ impl ApiInvite {
 #[derive(Debug, Clone)]
 pub struct InviteRepository {
     pool: sqlx::PgPool,
+    audit_log: AuditLogRepository,
 }
 
 impl InviteRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn create(
@@ -106,9 +115,12 @@ impl InviteRepository {
         role: Role,
         created_by: ApiUserId,
         expires: DateTime<Utc>,
+        actor: impl Into<Actor>,
     ) -> Result<CreatedInviteWithPassword, Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
+
+        let mut tx = self.pool.begin().await?;
 
         let invite = sqlx::query!(
             r#"
@@ -122,8 +134,20 @@ impl InviteRepository {
             *created_by,
             expires
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (InviteId(invite.id), org_id),
+                "Created invite link",
+                Some(json!(role)),
+            )
+            .await?;
+
+        tx.commit().await?;
 
         Ok(CreatedInviteWithPassword {
             id: invite.id.into(),
@@ -183,8 +207,10 @@ impl InviteRepository {
         &self,
         invite_id: InviteId,
         org_id: OrganizationId,
+        actor: impl Into<Actor>,
     ) -> Result<InviteId, Error> {
-        let id = sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+        let id: InviteId = sqlx::query_scalar!(
             r#"
             DELETE FROM organization_invites
             WHERE id = $1 AND organization_id = $2
@@ -193,10 +219,67 @@ impl InviteRepository {
             *invite_id,
             *org_id
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
+
+        self.audit_log
+            .log(&mut tx, actor, (id, org_id), "Deleted invite link", None)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(id)
+    }
+
+    pub async fn accept(
+        &self,
+        invite_id: InviteId,
+        org_id: OrganizationId,
+        user_id: ApiUserId,
+        role: Role,
+        actor: impl Into<Actor>,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO api_users_organizations (organization_id, api_user_id, role)
+            VALUES ($1, $2, $3)
+            "#,
+            *org_id,
+            *user_id,
+            role as Role
+        )
+        .execute(&mut *tx)
         .await?;
 
-        Ok(InviteId(id))
+        let _: InviteId = sqlx::query_scalar!(
+            r#"
+            DELETE FROM organization_invites
+            WHERE id = $1 AND organization_id = $2
+            RETURNING id
+            "#,
+            *invite_id,
+            *org_id
+        )
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (invite_id, org_id),
+                "Accepted invite link",
+                Some(json!(role)),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 
     pub async fn remove_expired_before(&self, before: DateTime<Utc>) -> Result<(), Error> {
@@ -222,6 +305,7 @@ impl InviteRepository {
 
 #[cfg(test)]
 mod test {
+    use crate::models::SYSTEM;
     use super::*;
     use sqlx::PgPool;
 
@@ -238,6 +322,7 @@ mod test {
                 Role::Admin,
                 created_by,
                 Utc::now() + chrono::Duration::days(3),
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -248,7 +333,7 @@ mod test {
 
         // add expired invite
         invite_repo
-            .create(org_id, Role::Admin, created_by, Utc::now())
+            .create(org_id, Role::Admin, created_by, Utc::now(), SYSTEM)
             .await
             .unwrap();
         assert_eq!(invite_repo.get_by_org(org_id).await.unwrap().len(), 2);
@@ -272,11 +357,11 @@ mod test {
 
         // remove invite
         assert!(matches!(
-            invite_repo.remove_by_id(invite.id, org_id2).await,
+            invite_repo.remove_by_id(invite.id, org_id2, SYSTEM).await,
             Err(Error::NotFound(_))
         ));
         assert_eq!(
-            invite_repo.remove_by_id(invite.id, org_id).await.unwrap(),
+            invite_repo.remove_by_id(invite.id, org_id, SYSTEM).await.unwrap(),
             invite.id,
         );
 

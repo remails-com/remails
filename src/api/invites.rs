@@ -6,8 +6,8 @@ use crate::{
         validation::ValidatedJson,
     },
     models::{
-        ApiInvite, ApiUser, AuditLogRepository, CreatedInviteWithPassword, InviteId,
-        InviteRepository, Organization, OrganizationId, OrganizationRepository, Password, Role,
+        ApiInvite, ApiUser, CreatedInviteWithPassword, InviteId, InviteRepository, Organization,
+        OrganizationId, OrganizationRepository, Password, Role,
     },
 };
 use axum::{
@@ -17,7 +17,6 @@ use axum::{
 };
 use chrono::{TimeDelta, Utc};
 use http::StatusCode;
-use serde_json::json;
 use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -38,7 +37,6 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub async fn create_invite(
     State(repo): State<InviteRepository>,
-    State(audit_log): State<AuditLogRepository>,
     Path((org_id,)): Path<(OrganizationId,)>,
     user: ApiUser,
     ValidatedJson(role): ValidatedJson<Role>,
@@ -46,16 +44,7 @@ pub async fn create_invite(
     user.has_org_admin_access(&org_id)?;
 
     let expires = Utc::now() + TimeDelta::days(7);
-    let invite = repo.create(org_id, role, *user.id(), expires).await?;
-
-    audit_log
-        .log(
-            &user,
-            (*invite.id(), org_id),
-            "Created invite link",
-            Some(json!(&role)),
-        )
-        .await?;
+    let invite = repo.create(org_id, role, *user.id(), expires, &user).await?;
 
     Ok((StatusCode::CREATED, Json(invite)))
 }
@@ -122,17 +111,12 @@ pub async fn get_invite(
 )]
 pub async fn remove_invite(
     State(repo): State<InviteRepository>,
-    State(audit_log): State<AuditLogRepository>,
     Path((org_id, invite_id)): Path<(OrganizationId, InviteId)>,
     user: ApiUser,
 ) -> ApiResult<InviteId> {
     user.has_org_admin_access(&org_id)?;
 
-    let id = repo.remove_by_id(invite_id, org_id).await?;
-
-    audit_log
-        .log(&user, (id, org_id), "Deleted invite link", None)
-        .await?;
+    let id = repo.remove_by_id(invite_id, org_id, &user).await?;
 
     Ok(Json(id))
 }
@@ -148,7 +132,6 @@ pub async fn remove_invite(
 pub async fn accept_invite(
     State(invites): State<InviteRepository>,
     State(organizations): State<OrganizationRepository>,
-    State(audit_log): State<AuditLogRepository>,
     Path((org_id, invite_id, password)): Path<(OrganizationId, InviteId, Password)>,
     user: ApiUser,
 ) -> Result<impl IntoResponse, AppError> {
@@ -169,25 +152,14 @@ pub async fn accept_invite(
         return Err(AppError::NotFound);
     }
 
-    organizations
-        .add_member(org_id, *user.id(), invite.role())
+    invites
+        .accept(invite_id, org_id, *user.id(), invite.role(), &user)
         .await?;
-
-    invites.remove_by_id(invite_id, org_id).await?;
 
     let Some(organization) = organizations.get_by_id(org_id).await? else {
         tracing::error!("organization not found after accepting invite: {}", org_id);
         return Err(AppError::NotFound); // this shouldn't happen
     };
-
-    audit_log
-        .log(
-            &user,
-            (*invite.id(), org_id),
-            "Accepted invite link",
-            Some(json!(invite.role())),
-        )
-        .await?;
 
     Ok((StatusCode::CREATED, Json(organization)))
 }
@@ -325,7 +297,9 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
 
         // maintainer invite
         let response = server
@@ -351,7 +325,9 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
 
         // read-only invite
         let response = server
@@ -377,7 +353,9 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
     }
 
     async fn test_invites_no_access(

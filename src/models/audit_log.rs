@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx::{Postgres, Transaction};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -57,17 +58,18 @@ pub enum ActorType {
 pub struct AuditLogEntry {
     id: AuditLogId,
     organization_id: OrganizationId,
-    target_id: Option<Uuid>,
+    pub target_id: Option<Uuid>,
     target_type: Option<TargetType>,
     actor_id: Option<Uuid>,
     actor_type: ActorType,
-    action: String,
+    pub action: String,
     details: Option<Value>,
     occurred_at: DateTime<Utc>,
 }
 
 pub struct Actor(ActorType, Option<Uuid>);
 
+#[allow(dead_code)]
 pub const SYSTEM: Actor = Actor(ActorType::System, None);
 
 impl From<&ApiUser> for Actor {
@@ -162,6 +164,7 @@ impl AuditLogRepository {
 
     pub async fn log(
         &self,
+        tx: &mut Transaction<'_, Postgres>,
         actor: impl Into<Actor>,
         target: impl Into<Target>,
         action: &'static str,
@@ -179,16 +182,23 @@ impl AuditLogRepository {
             "{}",
             action
         );
-        self.add(AuditLogEntry::new(
+        self.add(
+            tx,
+            AuditLogEntry::new(
             actor,
             target,
             action.to_owned(),
             details,
-        ))
+            ),
+        )
         .await
     }
 
-    async fn add(&self, event: AuditLogEntry) -> Result<(), Error> {
+    async fn add(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        event: AuditLogEntry,
+    ) -> Result<(), Error> {
         sqlx::query!(
             r#"
             INSERT INTO audit_log (
@@ -214,7 +224,7 @@ impl AuditLogRepository {
             event.details,
             event.occurred_at,
         )
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
@@ -261,9 +271,11 @@ mod tests {
 
         let org_id = TestProjects::Org1Project1.org_id();
         let project_id: ProjectId = "00000000-0000-4321-0000-000000000000".parse().unwrap();
+        let mut tx = pool.begin().await.unwrap();
 
         repository
             .log(
+                &mut tx,
                 SYSTEM,
                 (project_id, org_id),
                 "test log",
@@ -271,6 +283,7 @@ mod tests {
             )
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         let logs = repository.list(org_id).await.unwrap();
         assert_eq!(logs.len(), 1);

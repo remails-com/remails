@@ -7,8 +7,7 @@ use crate::{
     },
     handler::dns::DomainVerificationStatus,
     models::{
-        ApiDomain, AuditLogRepository, DomainId, DomainRepository, NewDomain, OrganizationId,
-        ProjectId,
+        ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId,
     },
 };
 use axum::{
@@ -17,7 +16,6 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use serde_json::json;
 use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -40,18 +38,13 @@ pub fn router() -> OpenApiRouter<ApiState> {
 )]
 pub(crate) async fn create_domain(
     State(repo): State<DomainRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path(org_id): Path<OrganizationId>,
     ValidatedJson(new): ValidatedJson<NewDomain>,
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let domain: ApiDomain = repo.create(&new, org_id).await?.into();
-
-    audit_log
-        .log(&user, &domain, "Created domain", Some(json!(&new)))
-        .await?;
+    let domain: ApiDomain = repo.create(&new, org_id, &user).await?.into();
 
     Ok((StatusCode::CREATED, Json(domain)))
 }
@@ -129,18 +122,13 @@ pub async fn get_domain(
 )]
 pub async fn update_domain(
     State(repo): State<DomainRepository>,
-    State(audit_log): State<AuditLogRepository>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
     user: Box<dyn Authenticated>,
     Json(update): Json<Vec<ProjectId>>,
 ) -> ApiResult<ApiDomain> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.update(org_id, domain_id, &update).await?.into();
-
-    audit_log
-        .log(&user, &domain, "Updated domain", Some(json!(&update)))
-        .await?;
+    let domain = repo.update(org_id, domain_id, &update, &user).await?.into();
 
     Ok(Json(domain))
 }
@@ -156,17 +144,12 @@ pub async fn update_domain(
 )]
 pub async fn delete_domain(
     State(repo): State<DomainRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: Box<dyn Authenticated>,
     Path((org_id, domain_id)): Path<(OrganizationId, DomainId)>,
 ) -> ApiResult<DomainId> {
     user.has_org_write_access(&org_id)?;
 
-    let domain_id = repo.remove(org_id, domain_id).await?;
-
-    audit_log
-        .log(&user, (domain_id, org_id), "Deleted domain", None)
-        .await?;
+    let domain_id = repo.remove(org_id, domain_id, &user).await?;
 
     Ok(Json(domain_id))
 }

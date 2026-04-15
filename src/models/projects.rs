@@ -1,7 +1,8 @@
-use crate::models::{Error, OrganizationId};
+use crate::models::{Actor, AuditLogRepository, Error, OrganizationId};
 use chrono::{DateTime, Utc};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -59,17 +60,22 @@ pub struct NewProject {
 #[derive(Debug, Clone)]
 pub struct ProjectRepository {
     pool: sqlx::PgPool,
+    audit_log: AuditLogRepository,
 }
 
 impl ProjectRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn create(
         &self,
         new: &NewProject,
         organization_id: OrganizationId,
+        actor: impl Into<Actor>,
     ) -> Result<Project, Error> {
         if new.retention_period_days < 1 || new.retention_period_days > 30 {
             return Err(Error::Internal(format!(
@@ -78,7 +84,8 @@ impl ProjectRepository {
             )));
         }
 
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+        let project = sqlx::query_as!(
             Project,
             r#"
             INSERT INTO projects (id, organization_id, name, retention_period_days, plaintext_fallback)
@@ -90,8 +97,15 @@ impl ProjectRepository {
             new.retention_period_days,
             new.plaintext_fallback
         )
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        self.audit_log
+            .log(&mut tx, actor, &project, "Created project", Some(json!(new)))
+            .await?;
+
+        tx.commit().await?;
+        Ok(project)
     }
 
     pub async fn get(&self, project_id: ProjectId) -> Result<Project, Error> {
@@ -123,6 +137,7 @@ impl ProjectRepository {
         organization_id: OrganizationId,
         project_id: ProjectId,
         update: &NewProject,
+        actor: impl Into<Actor>,
     ) -> Result<Project, Error> {
         if update.retention_period_days < 1 || update.retention_period_days > 30 {
             return Err(Error::Internal(format!(
@@ -131,7 +146,8 @@ impl ProjectRepository {
             )));
         }
 
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+        let project = sqlx::query_as!(
             Project,
             r#"
             UPDATE projects 
@@ -148,12 +164,25 @@ impl ProjectRepository {
             update.retention_period_days,
             update.plaintext_fallback,
         )
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        self.audit_log
+            .log(&mut tx, actor, &project, "Updated project", Some(json!(update)))
+            .await?;
+
+        tx.commit().await?;
+        Ok(project)
     }
 
-    pub async fn remove(&self, id: ProjectId, org_id: OrganizationId) -> Result<ProjectId, Error> {
-        Ok(sqlx::query_scalar!(
+    pub async fn remove(
+        &self,
+        id: ProjectId,
+        org_id: OrganizationId,
+        actor: impl Into<Actor>,
+    ) -> Result<ProjectId, Error> {
+        let mut tx = self.pool.begin().await?;
+        let removed_id: ProjectId = sqlx::query_scalar!(
             r#"
             DELETE FROM projects
                    WHERE id = $1
@@ -163,14 +192,22 @@ impl ProjectRepository {
             *id,
             *org_id
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
-        .into())
+        .into();
+
+        self.audit_log
+            .log(&mut tx, actor, (removed_id, org_id), "Deleted project", None)
+            .await?;
+
+        tx.commit().await?;
+        Ok(removed_id)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::models::SYSTEM;
     use crate::test::TestProjects;
 
     use super::*;
@@ -193,6 +230,7 @@ mod test {
                     plaintext_fallback: false,
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -223,6 +261,7 @@ mod test {
                     retention_period_days: 3,
                     plaintext_fallback: false,
                 },
+                SYSTEM,
             )
             .await
             .unwrap();
@@ -233,7 +272,7 @@ mod test {
 
         // remove project
         assert_eq!(
-            repo.remove(project.id(), org_1).await.unwrap(),
+            repo.remove(project.id(), org_1, SYSTEM).await.unwrap(),
             project.id()
         );
 
@@ -260,19 +299,19 @@ mod test {
             }
         };
 
-        let project = repo.create(&new_project(1), org_1).await.unwrap();
+        let project = repo.create(&new_project(1), org_1, SYSTEM).await.unwrap();
         let id = project.id();
 
         // 30 days is the maximum allowed retention period
-        repo.create(&new_project(30), org_1).await.unwrap();
-        repo.update(org_1, id, &new_project(30)).await.unwrap();
+        repo.create(&new_project(30), org_1, SYSTEM).await.unwrap();
+        repo.update(org_1, id, &new_project(30), SYSTEM).await.unwrap();
 
         // >30 days is not allowed because it could cause issues with the statistics tracking message clean up system
-        repo.create(&new_project(31), org_1).await.unwrap_err();
-        repo.update(org_1, id, &new_project(31)).await.unwrap_err();
+        repo.create(&new_project(31), org_1, SYSTEM).await.unwrap_err();
+        repo.update(org_1, id, &new_project(31), SYSTEM).await.unwrap_err();
 
         // 0 days is not allowed because it would risk deleting messages that haven't been attempted to send yet
-        repo.create(&new_project(0), org_1).await.unwrap_err();
-        repo.update(org_1, id, &new_project(0)).await.unwrap_err();
+        repo.create(&new_project(0), org_1, SYSTEM).await.unwrap_err();
+        repo.update(org_1, id, &new_project(0), SYSTEM).await.unwrap_err();
     }
 }

@@ -17,7 +17,6 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use serde_json::json;
 use tracing::{debug, info};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -105,7 +104,6 @@ async fn get_organization(
 pub async fn create_organization(
     State(repo): State<OrganizationRepository>,
     State(config_repo): State<RuntimeConfigRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to create organizations
     ValidatedJson(new): ValidatedJson<NewOrganization>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -113,22 +111,7 @@ pub async fn create_organization(
         return Err(AppError::Forbidden);
     }
 
-    let org = repo.create(&new).await?;
-
-    audit_log
-        .log(&user, org.id(), "Created organization", Some(json!(&new)))
-        .await?;
-
-    let role = Role::ReadOnly;
-    repo.add_member(org.id(), *user.id(), role).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org.id().to_string(),
-        organization_name = org.name,
-        role = role.to_string(),
-        "added initial user to organization"
-    );
+    let org = repo.create(&new, &user).await?;
 
     Ok((StatusCode::CREATED, Json(org)))
 }
@@ -174,17 +157,12 @@ pub async fn remove_organization(
 pub async fn update_organization(
     Path((org_id,)): Path<(OrganizationId,)>,
     State(repo): State<OrganizationRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to update organizations
     ValidatedJson(update): ValidatedJson<NewOrganization>,
 ) -> ApiResult<Organization> {
     user.has_org_admin_access(&org_id)?;
 
-    let organization = repo.update(org_id, &update).await?;
-
-    audit_log
-        .log(&user, org_id, "Updated organization", Some(json!(&update)))
-        .await?;
+    let organization = repo.update(org_id, &update, &user).await?;
 
     Ok(Json(organization))
 }
@@ -278,7 +256,6 @@ async fn prevent_last_remaining_admin(
 pub async fn remove_member(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to remove members
 ) -> ApiResult<()> {
     // admins can remove any member, non-admin users can remove themselves
@@ -303,16 +280,7 @@ pub async fn remove_member(
         prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
     }
 
-    repo.remove_member(org_id, user_id).await?;
-
-    audit_log
-        .log(
-            &user,
-            (user_id, org_id),
-            "Removed organization member",
-            None,
-        )
-        .await?;
+    repo.remove_member(org_id, user_id, &user).await?;
 
     Ok(Json(()))
 }
@@ -330,7 +298,6 @@ pub async fn remove_member(
 pub async fn update_member_role(
     Path((org_id, user_id)): Path<(OrganizationId, ApiUserId)>,
     State(repo): State<OrganizationRepository>,
-    State(audit_log): State<AuditLogRepository>,
     user: ApiUser, // only users are allowed to update member roles
     ValidatedJson(role): ValidatedJson<Role>,
 ) -> ApiResult<()> {
@@ -340,15 +307,7 @@ pub async fn update_member_role(
         prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
     }
 
-    repo.update_member_role(org_id, user_id, role).await?;
-
-    audit_log
-        .log(
-            &user,
-            (user_id, org_id),
-            "Updated organization member",
-            Some(json!(role)),
-        )
+    repo.update_member_role(org_id, user_id, role, &user)
         .await?;
 
     Ok(Json(()))
@@ -925,10 +884,11 @@ mod tests {
         assert_eq!(*members[0].user_id(), user_2);
 
         // put user_1 back in org 2
-        let repo = OrganizationRepository::new(pool);
-        repo.add_member(org_2.parse().unwrap(), user_1, Role::Admin)
+        let mut tx = pool.begin().await.unwrap();
+        OrganizationRepository::add_member(&mut tx, org_2.parse().unwrap(), user_1, Role::Admin)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         // user_1 can make user_2 non-admin in org 2
         server.set_user(Some(user_1));

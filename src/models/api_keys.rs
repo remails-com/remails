@@ -2,10 +2,13 @@ use chrono::{DateTime, Utc};
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::PgPool;
 use utoipa::ToSchema;
 
-use crate::models::{Error, OrgBlockStatus, OrganizationId, Password, Role};
+use crate::models::{
+    Actor, AuditLogRepository, Error, OrgBlockStatus, OrganizationId, Password, Role,
+};
 
 id!(ApiKeyId);
 
@@ -99,17 +102,22 @@ pub struct ApiKeyRequest {
 #[derive(Debug, Clone)]
 pub struct ApiKeyRepository {
     pool: PgPool,
+    audit_log: AuditLogRepository,
 }
 
 impl ApiKeyRepository {
     pub fn new(pool: PgPool) -> Self {
-        ApiKeyRepository { pool }
+        ApiKeyRepository {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn create(
         &self,
         org_id: OrganizationId,
         key: &ApiKeyRequest,
+        actor: impl Into<Actor>,
     ) -> Result<CreatedApiKeyWithPassword, Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
@@ -121,6 +129,7 @@ impl ApiKeyRepository {
             )));
         }
 
+        let mut tx = self.pool.begin().await?;
         let api_key = sqlx::query_as!(
             ApiKey,
             r#"
@@ -141,8 +150,20 @@ impl ApiKeyRepository {
             *org_id,
             key.role as Role
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (api_key.id, org_id),
+                "Created API key",
+                Some(json!(key)),
+            )
+            .await?;
+
+        tx.commit().await?;
 
         Ok(CreatedApiKeyWithPassword {
             id: api_key.id,
@@ -196,6 +217,7 @@ impl ApiKeyRepository {
         org_id: OrganizationId,
         key_id: ApiKeyId,
         changes: &ApiKeyRequest,
+        actor: impl Into<Actor>,
     ) -> Result<ApiKey, Error> {
         if changes.role.is_at_least(Role::Admin) {
             return Err(Error::BadRequest(format!(
@@ -204,7 +226,8 @@ impl ApiKeyRepository {
             )));
         }
 
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+        let api_key = sqlx::query_as!(
             ApiKey,
             r#"
             UPDATE api_keys a
@@ -221,16 +244,31 @@ impl ApiKeyRepository {
             *org_id,
             *key_id
         )
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (api_key.id, org_id),
+                "Updated API key",
+                Some(json!(changes)),
+            )
+            .await?;
+
+        tx.commit().await?;
+        Ok(api_key)
     }
 
     pub async fn remove(
         &self,
         org_id: OrganizationId,
         key_id: ApiKeyId,
+        actor: impl Into<Actor>,
     ) -> Result<ApiKeyId, Error> {
-        let id = sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+        let id: ApiKeyId = sqlx::query_scalar!(
             r#"
             DELETE FROM api_keys
             WHERE organization_id = $1 AND id = $2
@@ -239,15 +277,22 @@ impl ApiKeyRepository {
             *org_id,
             *key_id,
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
 
-        Ok(ApiKeyId(id))
+        self.audit_log
+            .log(&mut tx, actor, (id, org_id), "Deleted API key", None)
+            .await?;
+
+        tx.commit().await?;
+        Ok(id)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::models::SYSTEM;
     use super::*;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -260,7 +305,7 @@ mod test {
             description: "MyKey".to_string(),
             role: Role::Maintainer,
         };
-        let api_key = repo.create(org_id, &new).await.unwrap();
+        let api_key = repo.create(org_id, &new, SYSTEM).await.unwrap();
         assert_eq!(api_key.description, new.description);
         assert_eq!(api_key.organization_id, org_id);
         assert_eq!(api_key.role, new.role);
@@ -279,7 +324,7 @@ mod test {
             role: Role::ReadOnly,
         };
         let id = *api_key.id();
-        let api_key = repo.update(org_id, id, &update).await.unwrap();
+        let api_key = repo.update(org_id, id, &update, SYSTEM).await.unwrap();
         assert_eq!(api_key.description, update.description);
         assert_eq!(api_key.id, id);
         assert_eq!(api_key.organization_id, org_id);
@@ -294,7 +339,7 @@ mod test {
         assert_eq!(api_keys[0].role, update.role);
 
         // remove API key
-        let removed_id = repo.remove(org_id, api_key.id).await.unwrap();
+        let removed_id = repo.remove(org_id, api_key.id, SYSTEM).await.unwrap();
         assert_eq!(removed_id, api_key.id);
 
         // verify that key was removed
@@ -318,6 +363,7 @@ mod test {
                     description: "Admin?".to_string(),
                     role: Role::Admin,
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -333,6 +379,7 @@ mod test {
                     description: "Admin?".to_string(),
                     role: Role::Admin,
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();

@@ -1233,6 +1233,7 @@ mod test {
                     username: "user".to_string(),
                     description: "Test SMTP credential description".to_string(),
                 },
+                crate::models::SYSTEM,
             )
             .await
             .unwrap();
@@ -1330,6 +1331,7 @@ mod test {
                     description: "Test API key".to_string(),
                     role: Role::Maintainer,
                 },
+                crate::models::SYSTEM,
             )
             .await
             .unwrap();
