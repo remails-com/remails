@@ -211,6 +211,7 @@ async fn integration_test(pool: PgPool) {
 
     // John sends some message via SMTP
     let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+        .unwrap()
         .implicit_tls(true)
         .allow_invalid_certs()
         .credentials((
@@ -545,6 +546,7 @@ async fn quotas_count_atomically(pool: PgPool) {
     // Spawn 11 tasks to throw 100 messages each to remails
     for i in 0..11 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((
@@ -642,6 +644,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
     // Spawn 10 tasks to send 15 messages each to remails, only 120 of these should be accepted
     for i in 0..10 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((

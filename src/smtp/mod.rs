@@ -137,6 +137,7 @@ mod test {
             .header("X-remails-LabeL", Text::new("my label"));
 
         SmtpClientBuilder::new("localhost", port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((username.as_str(), pwd.as_str()))
@@ -197,6 +198,7 @@ mod test {
         let message = MessageParser::default().parse(message).unwrap();
 
         SmtpClientBuilder::new("localhost", port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((username.as_str(), pwd.as_str()))
@@ -278,6 +280,7 @@ mod test {
         let message = MessageParser::default().parse(message).unwrap();
 
         SmtpClientBuilder::new("localhost", port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((username.as_str(), pwd.as_str()))
@@ -323,6 +326,7 @@ mod test {
         let (shutdown, server_handle, port, username, _) = setup_server(pool).await;
 
         let result = SmtpClientBuilder::new("localhost", port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((username.as_str(), "wrong"))

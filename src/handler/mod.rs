@@ -517,6 +517,8 @@ impl Handler {
         outbound_ip: IpAddr,
     ) -> Result<(), SendError> {
         let smtp = SmtpClientBuilder::new(&hostname, port)
+            .inspect_err(|e| tracing::error!("SmtpClientBuilder error: {}", e))
+            .map_err(|_| SendError::TemporaryFailure)?
             .implicit_tls(false)
             .local_ip(outbound_ip)
             .say_ehlo(true)
