@@ -137,21 +137,6 @@ impl AuditLogEntry {
     }
 }
 
-// const fn default_limit() -> i64 {
-//     10
-// }
-
-// #[derive(Debug, Deserialize, IntoParams, Validate)]
-// #[serde(default)]
-// pub struct AuditLogFilter {
-//     #[param(minimum = 1, maximum = 100, default = default_limit)]
-//     #[garde(range(min = 1, max = 100))]
-//     limit: i64, // TODO: link default
-//     #[garde(skip)]
-//     actor_id: Option<Vec<Uuid>>,
-//     // TODO: add other filters
-// }
-
 #[derive(Debug, Clone)]
 pub struct AuditLogRepository {
     pool: sqlx::PgPool,
@@ -184,12 +169,7 @@ impl AuditLogRepository {
         );
         self.add(
             tx,
-            AuditLogEntry::new(
-            actor,
-            target,
-            action.to_owned(),
-            details,
-            ),
+            AuditLogEntry::new(actor, target, action.to_owned(), details),
         )
         .await
     }
@@ -230,11 +210,7 @@ impl AuditLogRepository {
         Ok(())
     }
 
-    pub async fn list(
-        &self,
-        org_id: OrganizationId,
-        // filter: AuditLogFilter,
-    ) -> Result<Vec<AuditLogEntry>, Error> {
+    pub async fn list(&self, org_id: OrganizationId) -> Result<Vec<AuditLogEntry>, Error> {
         Ok(sqlx::query_as!(
             AuditLogEntry,
             r#"

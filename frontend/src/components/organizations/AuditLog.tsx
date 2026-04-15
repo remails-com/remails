@@ -1,6 +1,6 @@
-import { Button, Code, Group, Stack, Table, Title, Tooltip } from "@mantine/core";
+import { Button, Code, Flex, Group, Pagination, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import OrganizationHeader from "./OrganizationHeader";
 import InfoAlert from "../InfoAlert";
 import { useAuditLogEntries } from "../../hooks/useAuditLog";
@@ -9,6 +9,12 @@ import { formatDateTime } from "../../util";
 import TableId from "../TableId";
 import { AuditLogEntry } from "../../types";
 import { IconEye, IconKey, IconMail, IconServer, IconServer2, IconUser, IconUserPlus, IconWorldWww } from "@tabler/icons-react";
+import { Loader } from "../../Loader";
+import { useRemails } from "../../hooks/useRemails";
+import SearchInput from "../SearchInput";
+
+const PER_PAGE = 20;
+const SHOW_SEARCH = 10;
 
 const ACTOR_ICONS: Record<AuditLogEntry["actor_type"], ReactNode> = {
   api_key: <IconKey size={20} />,
@@ -50,8 +56,13 @@ function Target({ entry }: { entry: AuditLogEntry }) {
   );
 }
 
-export default function AuditLog() {
+function AuditLogTable() {
+  const {
+    state: { routerState },
+    navigate,
+  } = useRemails();
   const { auditLogEntries } = useAuditLogEntries();
+  const [searchQuery, setSearchQuery] = useState(routerState.params.q || "");
 
   const openDetailsModal = (entry: AuditLogEntry) => {
     modals.open({
@@ -87,7 +98,29 @@ export default function AuditLog() {
     });
   };
 
-  const rows = auditLogEntries?.map((entry) => {
+  if (auditLogEntries === null) {
+    return <Loader />;
+  }
+
+  const normalizedSearchQuery = searchQuery.toLowerCase();
+  const filteredEntries =
+    searchQuery.length == 0
+      ? auditLogEntries
+      : auditLogEntries.filter((entry) =>
+          [
+            entry.action,
+            entry.actor_type,
+            entry.actor_id ?? "",
+            entry.target_type ?? "",
+            entry.target_id ?? "",
+            JSON.stringify(entry.details),
+          ].some((value) => value.toLowerCase().includes(normalizedSearchQuery))
+        );
+
+  const totalPages = Math.ceil(filteredEntries.length / PER_PAGE);
+  const activePage = Math.min(Math.max(parseInt(routerState.params.p) || 1, 1), totalPages || 1);
+
+  const rows = filteredEntries.slice((activePage - 1) * PER_PAGE, activePage * PER_PAGE).map((entry) => {
     return (
       <Table.Tr key={entry.id}>
         <Table.Td>
@@ -104,9 +137,44 @@ export default function AuditLog() {
           </Tooltip>
         </Table.Td>
       </Table.Tr>
-    )
+    );
   });
 
+  return (
+    <>
+      {(auditLogEntries.length > SHOW_SEARCH || searchQuery.length > 0) && (
+        <SearchInput searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+      )}
+
+      {searchQuery.length > 0 && filteredEntries.length == 0 && (
+        <Text fs="italic" c="gray">
+          No audit log entries found...
+        </Text>
+      )}
+
+      <StyledTable headers={["Action", "Target", "Performed by", "Occurred at", ""]}>
+        {rows}
+      </StyledTable>
+
+      <Flex justify="center" mt="md">
+        {filteredEntries.length > PER_PAGE && (
+          <Pagination
+            value={activePage}
+            onChange={(p) => {
+              navigate(routerState.name, {
+                ...routerState.params,
+                p: p.toString(),
+              });
+            }}
+            total={totalPages}
+          />
+        )}
+      </Flex>
+    </>
+  );
+}
+
+export default function AuditLog() {
   return (
     <>
       <OrganizationHeader allowRename />
@@ -116,10 +184,7 @@ export default function AuditLog() {
       <InfoAlert stateName="audit-log">
         The audit log provides a record of important actions and events that have occurred within your organization.
       </InfoAlert>
-
-      <StyledTable headers={["Action", "Target", "Performed by", "Occurred at", ""]}>
-        {rows}
-      </StyledTable>
+      <AuditLogTable />
     </>
   );
 }
