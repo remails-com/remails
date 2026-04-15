@@ -675,8 +675,10 @@ impl DomainRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{AuditLogRepository, SYSTEM};
-    use crate::test::TestProjects;
+    use crate::{
+        models::{AuditLogRepository, SYSTEM},
+        test::TestProjects,
+    };
 
     use super::*;
     use sqlx::PgPool;
@@ -993,7 +995,9 @@ mod test {
 
         // can't remove projects from another organization's domain
         assert!(matches!(
-            repo.update(org_1, domain_org_2, &[], SYSTEM).await.unwrap_err(),
+            repo.update(org_1, domain_org_2, &[], SYSTEM)
+                .await
+                .unwrap_err(),
             Error::BadRequest(_)
         ));
     }
@@ -1174,7 +1178,11 @@ mod test {
         assert_eq!(audit_entries.len(), 1);
         assert_eq!(
             audit_entries[0].target_id,
-            Some(*"c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse::<DomainId>().unwrap())
+            Some(
+                *"c1a4cc6c-a975-4921-a55c-5bfeb31fd25a"
+                    .parse::<DomainId>()
+                    .unwrap()
+            )
         );
         assert_eq!(audit_entries[0].action, "Deleted domain");
 
@@ -1227,7 +1235,11 @@ mod test {
         assert_eq!(audit_entries.len(), 1);
         assert_eq!(
             audit_entries[0].target_id,
-            Some(*"ed28baa5-57f7-413f-8c77-7797ba6a8780".parse::<DomainId>().unwrap())
+            Some(
+                *"ed28baa5-57f7-413f-8c77-7797ba6a8780"
+                    .parse::<DomainId>()
+                    .unwrap()
+            )
         );
         assert_eq!(audit_entries[0].action, "Deleted domain");
 

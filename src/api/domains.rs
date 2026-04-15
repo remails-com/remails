@@ -6,9 +6,7 @@ use crate::{
         validation::ValidatedJson,
     },
     handler::dns::DomainVerificationStatus,
-    models::{
-        ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId,
-    },
+    models::{ApiDomain, DomainId, DomainRepository, NewDomain, OrganizationId, ProjectId},
 };
 use axum::{
     Json,

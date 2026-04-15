@@ -4,9 +4,7 @@ use serde::Serialize;
 use serde_json::json;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::models::{
-    Actor, ApiUserId, AuditLogRepository, Error, OrganizationId, Password, Role,
-};
+use crate::models::{Actor, ApiUserId, AuditLogRepository, Error, OrganizationId, Password, Role};
 
 id!(
     #[derive(IntoParams)]
@@ -305,8 +303,8 @@ impl InviteRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{AuditLogRepository, SYSTEM};
     use super::*;
+    use crate::models::{AuditLogRepository, SYSTEM};
     use sqlx::PgPool;
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
@@ -366,7 +364,10 @@ mod test {
             Err(Error::NotFound(_))
         ));
         assert_eq!(
-            invite_repo.remove_by_id(invite.id, org_id, SYSTEM).await.unwrap(),
+            invite_repo
+                .remove_by_id(invite.id, org_id, SYSTEM)
+                .await
+                .unwrap(),
             invite.id,
         );
         let audit_entries = audit_log.list(org_id).await.unwrap();

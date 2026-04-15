@@ -101,7 +101,13 @@ impl ProjectRepository {
         .await?;
 
         self.audit_log
-            .log(&mut tx, actor, &project, "Created project", Some(json!(new)))
+            .log(
+                &mut tx,
+                actor,
+                &project,
+                "Created project",
+                Some(json!(new)),
+            )
             .await?;
 
         tx.commit().await?;
@@ -168,7 +174,13 @@ impl ProjectRepository {
         .await?;
 
         self.audit_log
-            .log(&mut tx, actor, &project, "Updated project", Some(json!(update)))
+            .log(
+                &mut tx,
+                actor,
+                &project,
+                "Updated project",
+                Some(json!(update)),
+            )
             .await?;
 
         tx.commit().await?;
@@ -197,7 +209,13 @@ impl ProjectRepository {
         .into();
 
         self.audit_log
-            .log(&mut tx, actor, (removed_id, org_id), "Deleted project", None)
+            .log(
+                &mut tx,
+                actor,
+                (removed_id, org_id),
+                "Deleted project",
+                None,
+            )
             .await?;
 
         tx.commit().await?;
@@ -207,8 +225,10 @@ impl ProjectRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{AuditLogRepository, SYSTEM};
-    use crate::test::TestProjects;
+    use crate::{
+        models::{AuditLogRepository, SYSTEM},
+        test::TestProjects,
+    };
 
     use super::*;
     use sqlx::PgPool;
@@ -317,14 +337,24 @@ mod test {
 
         // 30 days is the maximum allowed retention period
         repo.create(&new_project(30), org_1, SYSTEM).await.unwrap();
-        repo.update(org_1, id, &new_project(30), SYSTEM).await.unwrap();
+        repo.update(org_1, id, &new_project(30), SYSTEM)
+            .await
+            .unwrap();
 
         // >30 days is not allowed because it could cause issues with the statistics tracking message clean up system
-        repo.create(&new_project(31), org_1, SYSTEM).await.unwrap_err();
-        repo.update(org_1, id, &new_project(31), SYSTEM).await.unwrap_err();
+        repo.create(&new_project(31), org_1, SYSTEM)
+            .await
+            .unwrap_err();
+        repo.update(org_1, id, &new_project(31), SYSTEM)
+            .await
+            .unwrap_err();
 
         // 0 days is not allowed because it would risk deleting messages that haven't been attempted to send yet
-        repo.create(&new_project(0), org_1, SYSTEM).await.unwrap_err();
-        repo.update(org_1, id, &new_project(0), SYSTEM).await.unwrap_err();
+        repo.create(&new_project(0), org_1, SYSTEM)
+            .await
+            .unwrap_err();
+        repo.update(org_1, id, &new_project(0), SYSTEM)
+            .await
+            .unwrap_err();
     }
 }

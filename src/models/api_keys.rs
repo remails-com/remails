@@ -292,8 +292,8 @@ impl ApiKeyRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::models::{AuditLogRepository, SYSTEM};
     use super::*;
+    use crate::models::{AuditLogRepository, SYSTEM};
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn api_key_lifecycle(db: PgPool) {

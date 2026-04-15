@@ -44,7 +44,9 @@ pub async fn create_invite(
     user.has_org_admin_access(&org_id)?;
 
     let expires = Utc::now() + TimeDelta::days(7);
-    let invite = repo.create(org_id, role, *user.id(), expires, &user).await?;
+    let invite = repo
+        .create(org_id, role, *user.id(), expires, &user)
+        .await?;
 
     Ok((StatusCode::CREATED, Json(invite)))
 }
@@ -297,7 +299,8 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
             .await
             .unwrap();
 
@@ -325,7 +328,8 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
             .await
             .unwrap();
 
@@ -353,7 +357,8 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3, crate::models::SYSTEM)
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
             .await
             .unwrap();
     }

@@ -930,36 +930,35 @@ mod test {
 
         assert_eq!(orgs.len(), 8);
         for org in orgs {
-            let (exp_total, reset, exp_subscription_status) =
-                match org.id().to_string().as_str() {
-                    "44729d9f-a7dc-4226-b412-36a7537f5176" => {
-                        (800, Utc::now().checked_add_months(Months::new(1)), "active")
-                    }
-                    "5d55aec5-136a-407c-952f-5348d4398204" => {
-                        (500, Utc::now().checked_add_months(Months::new(1)), "active")
-                    }
-                    "533d9a19-16e8-4a1b-a824-ff50af8b428c" => (0, None, "none"),
-                    "ee14cdb8-f62e-42ac-a0cd-294d708be994" => (0, None, "none"),
-                    "7b2d91d0-f9d9-4ddd-88ac-6853f736501c" => (
-                        333,
-                        Some(Utc::now().add(chrono::Duration::seconds(60))),
-                        "none",
+            let (exp_total, reset, exp_subscription_status) = match org.id().to_string().as_str() {
+                "44729d9f-a7dc-4226-b412-36a7537f5176" => {
+                    (800, Utc::now().checked_add_months(Months::new(1)), "active")
+                }
+                "5d55aec5-136a-407c-952f-5348d4398204" => {
+                    (500, Utc::now().checked_add_months(Months::new(1)), "active")
+                }
+                "533d9a19-16e8-4a1b-a824-ff50af8b428c" => (0, None, "none"),
+                "ee14cdb8-f62e-42ac-a0cd-294d708be994" => (0, None, "none"),
+                "7b2d91d0-f9d9-4ddd-88ac-6853f736501c" => (
+                    333,
+                    Some(Utc::now().add(chrono::Duration::seconds(60))),
+                    "none",
+                ),
+                "0f83bfee-e7b6-4670-83ec-192afec2b137" => (0, None, "none"),
+                "ad76a517-3ff2-4d84-8299-742847782d4d" => (
+                    ProductIdentifier::RmlsFree.monthly_quota().into(),
+                    Some(
+                        Utc::now()
+                            .checked_add_days(Days::new(9))
+                            .unwrap()
+                            .with_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+                            .unwrap()
+                            .to_utc(),
                     ),
-                    "0f83bfee-e7b6-4670-83ec-192afec2b137" => (0, None, "none"),
-                    "ad76a517-3ff2-4d84-8299-742847782d4d" => (
-                        ProductIdentifier::RmlsFree.monthly_quota().into(),
-                        Some(
-                            Utc::now()
-                                .checked_add_days(Days::new(9))
-                                .unwrap()
-                                .with_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap())
-                                .unwrap()
-                                .to_utc(),
-                        ),
-                        "active",
-                    ),
-                    _ => continue,
-                };
+                    "active",
+                ),
+                _ => continue,
+            };
             assert_eq!(
                 org.total_message_quota(),
                 exp_total,
