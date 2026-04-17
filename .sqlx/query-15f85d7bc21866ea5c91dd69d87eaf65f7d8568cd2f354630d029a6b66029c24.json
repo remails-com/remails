@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                target_id,\n                target_type AS \"target_type: TargetType\",\n                actor_id,\n                actor_type AS \"actor_type: ActorType\",\n                action,\n                details,\n                occurred_at            \n            FROM audit_log\n            WHERE organization_id = $1\n            ORDER BY occurred_at DESC\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                target_id,\n                target_type AS \"target_type: TargetType\",\n                actor_id,\n                actor_type AS \"actor_type: ActorType\",\n                action,\n                details,\n                occurred_at            \n            FROM audit_log\n            WHERE organization_id = $1\n            ORDER BY occurred_at DESC\n            LIMIT 500\n            ",
   "describe": {
     "columns": [
       {
@@ -92,5 +92,5 @@
       false
     ]
   },
-  "hash": "1911e50987f1ef9f9bfd6089da88eeceaf0c9d3fac50388d045f3e439c201f17"
+  "hash": "15f85d7bc21866ea5c91dd69d87eaf65f7d8568cd2f354630d029a6b66029c24"
 }

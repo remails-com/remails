@@ -228,6 +228,7 @@ impl AuditLogRepository {
             FROM audit_log
             WHERE organization_id = $1
             ORDER BY occurred_at DESC
+            LIMIT 500
             "#,
             *org_id,
         )
