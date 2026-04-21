@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
@@ -11,22 +11,7 @@ use crate::models::{
     OrganizationId, Project, ProjectId, SmtpCredentialId,
 };
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-)]
-#[sqlx(transparent)]
-pub struct AuditLogId(Uuid);
+id!(AuditLogId);
 
 #[derive(
     Debug, Display, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, sqlx::Type, ToSchema,
