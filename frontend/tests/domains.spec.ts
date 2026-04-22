@@ -91,12 +91,12 @@ test("attach project afterward", async ({ page }) => {
     .click();
 
   // Click dropdown
-  await page.getByRole("textbox", { name: "Usable by" }).click();
-  await expect(page.getByRole("listbox", { name: "Usable by" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Usable by" }).click();
+  await expect(page.getByRole("combobox", { name: "Usable by" })).toBeVisible();
 
   // select project
   await page.getByRole("option", { name: project }).click();
-  await page.getByRole("textbox", { name: "Usable by" }).blur();
+  await page.getByRole("combobox", { name: "Usable by" }).blur();
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page.getByText("Domain updated")).toBeVisible();
@@ -126,11 +126,11 @@ test("create domain with project", async ({ page }) => {
   await page.getByRole("textbox", { name: "Domain name" }).fill(domain);
 
   // select project
-  await page.getByRole("textbox", { name: "Usable by" }).click();
-  await expect(page.getByRole("listbox", { name: "Usable by" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Usable by" }).click();
+  await expect(page.getByRole("combobox", { name: "Usable by" })).toBeVisible();
   await page.getByRole("option", { name: project }).click();
 
-  await page.getByRole("textbox", { name: "Usable by" }).blur();
+  await page.getByRole("combobox", { name: "Usable by" }).blur();
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Configure later" }).click();
 
