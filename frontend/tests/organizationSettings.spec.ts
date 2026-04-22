@@ -38,8 +38,8 @@ test("manage organization invite", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Create new invite link" })).toBeVisible();
 
   // Fill in invite details
-  await page.getByRole("textbox", { name: "Organization role" }).click();
-  await expect(page.getByRole("listbox", { name: "Organization role" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Organization role" }).click();
+  await expect(page.getByRole("combobox", { name: "Organization role" })).toBeVisible();
 
   await page.getByRole("option", { name: "Maintainer" }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
@@ -80,7 +80,7 @@ baseTest("accept organization invite", async ({ browser }) => {
   await toOrganizationMembers(page1);
   await page1.getByRole("button", { name: "New invite link" }).click();
   await expect(page1.getByRole("dialog", { name: "Create new invite link" })).toBeVisible();
-  await page1.getByRole("textbox", { name: "Organization role" }).click();
+  await page1.getByRole("combobox", { name: "Organization role" }).click();
 
   await page1.getByRole("option", { name: "Read-only" }).click();
   await page1.getByRole("button", { name: "Create", exact: true }).click();
@@ -119,8 +119,8 @@ test("organization API key", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Create new API key" })).toBeVisible();
 
   // Configure access level
-  await page.getByRole("textbox", { name: "Access level" }).click();
-  await expect(page.getByRole("listbox", { name: "Access level" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Access level" }).click();
+  await expect(page.getByRole("combobox", { name: "Access level" })).toBeVisible();
   await page.getByRole("option", { name: "Read-only" }).click();
 
   // Fill in description
@@ -159,7 +159,7 @@ test("organization API key", async ({ page }) => {
 
   // Confirm details are correct
   await expect(page.getByLabel("Description")).toContainText("Playwright test API key");
-  await expect(page.getByRole("textbox", { name: "Access level" })).toHaveValue("Read-only");
+  await expect(page.getByRole("combobox", { name: "Access level" })).toHaveValue("Read-only");
 
   // Delete the API key
   await page.getByRole("button", { name: "Delete" }).click();

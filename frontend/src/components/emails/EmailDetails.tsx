@@ -2,7 +2,7 @@ import { useEmails } from "../../hooks/useEmails.ts";
 import { Badge, Group, Paper, SegmentedControl, Table, Text, Tooltip } from "@mantine/core";
 import { useState } from "react";
 import { Loader } from "../../Loader.tsx";
-import { Email, EmailMetadata } from "../../types.ts";
+import { EmailMetadata, isFullEmail } from "../../types.ts";
 import { formatDateTime, is_in_the_future } from "../../util.ts";
 import { IconHelp, IconMail, IconPaperclip } from "@tabler/icons-react";
 import EmailRetryButton from "./EmailRetryButton.tsx";
@@ -41,15 +41,13 @@ export default function EmailDetails() {
   const { currentEmail, updateEmail } = useEmails();
   const [displayMode, setDisplayMode] = useState("text");
 
-  if (!currentEmail || !("message_data" in currentEmail && "truncated_raw_data" in currentEmail)) {
+  if (!isFullEmail(currentEmail)) {
     return <Loader />;
   }
 
-  const fullEmail = currentEmail as unknown as Email;
-
-  const subject = fullEmail.message_data.subject;
-  const text_body = fullEmail.message_data.text_body;
-  const raw = fullEmail.truncated_raw_data;
+  const subject = currentEmail.message_data.subject;
+  const text_body = currentEmail.message_data.text_body;
+  const raw = currentEmail.truncated_raw_data;
 
   const table_data = [
     {
@@ -60,23 +58,23 @@ export default function EmailDetails() {
         </Text>
       ),
     },
-    { header: "From", value: fullEmail.from_email },
-    { header: "Project", value: <ProjectLink project_id={fullEmail.project_id} size="sm" /> },
+    { header: "From", value: currentEmail.from_email },
+    { header: "Project", value: <ProjectLink project_id={currentEmail.project_id} size="sm" /> },
     {
       header: "Recipients",
       info: 'The recipients who will receive this email based on the "RCPT TO" SMTP header',
-      value: <Recipients email={fullEmail} mr="sm" />,
+      value: <Recipients email={currentEmail} mr="sm" />,
     },
     {
       header: "Message ID",
       info: "The Message-ID email header is used to identify emails (e.g. used to send replies)",
-      value: fullEmail.message_id_header,
+      value: currentEmail.message_id_header,
     },
     {
       header: "Date",
       info: "The time mentioned in the Date header of the email",
-      value: fullEmail.message_data.date ? (
-        formatDateTime(fullEmail.message_data.date)
+      value: currentEmail.message_data.date ? (
+        formatDateTime(currentEmail.message_data.date)
       ) : (
         <Text c="dimmed" fs="italic" fz="sm">
           Message does not contain a Date header
@@ -86,26 +84,26 @@ export default function EmailDetails() {
     {
       header: "Created",
       info: "The time that remails received this email",
-      value: formatDateTime(fullEmail.created_at),
+      value: formatDateTime(currentEmail.created_at),
     },
     {
       header: "Total size",
       info: "The size of the whole email",
-      value: fullEmail.raw_size,
+      value: currentEmail.raw_size,
     },
     {
       header: "Status",
-      value: getFullStatusDescription(fullEmail),
+      value: getFullStatusDescription(currentEmail),
     },
     {
       header: "Attachments",
       value:
-        fullEmail.message_data.attachments.length === 0 ? (
+        currentEmail.message_data.attachments.length === 0 ? (
           <Text c="dimmed" fs="italic" fz="sm">
             Email has no attachments
           </Text>
         ) : (
-          fullEmail.message_data.attachments.map((attachment, index) => (
+          currentEmail.message_data.attachments.map((attachment, index) => (
             <Badge
               key={`${attachment.filename}-${index}`}
               radius="xs"
@@ -182,7 +180,7 @@ export default function EmailDetails() {
               <Text ff="monospace" fz="sm" style={{ whiteSpace: "pre-wrap" }}>
                 {raw}
               </Text>
-              {fullEmail.is_truncated && (
+              {currentEmail.is_truncated && (
                 <Text c="dimmed" fs="italic">
                   Email truncated
                 </Text>

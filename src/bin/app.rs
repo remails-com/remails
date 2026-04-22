@@ -1,6 +1,6 @@
 use anyhow::Context;
 use remails::{
-    HandlerConfig, Kubernetes, SmtpConfig,
+    HandlerConfig, SmtpConfig,
     bus::{client::BusClient, server::Bus},
     handler::dns::DnsResolver,
     periodically::Periodically,
@@ -18,6 +18,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// This is the main function used for local testing
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
@@ -84,8 +85,6 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
-    let kubernetes = Kubernetes::new(pool.clone()).await.unwrap();
-
     // Run retry service
     let periodically = Periodically::new(pool.clone(), bus_client, DnsResolver::default())
         .await
@@ -100,9 +99,6 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = periodically.clean_up().await {
                 error!("Error during clean up: {e}")
             }
-            if let Err(e) = kubernetes.check_node_health().await {
-                error!("Error during k8s node check: {e}")
-            };
         }
     });
 

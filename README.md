@@ -24,4 +24,6 @@ docker compose up -d
 cargo sqlx migrate run
 ````
 
+Run `cargo run` to run Remails locally. This runs the `src/bin/app.rs` binary, which starts the MTA, the API server, and the periodic checks from a single binary.
+
 Run `cargo test` to run the tests.
