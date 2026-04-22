@@ -9,6 +9,7 @@ import { useDisclosure, useScrollIntoView } from "@mantine/hooks";
 import { IconEdit } from "@tabler/icons-react";
 import ManageApiUser from "./ManageApiUser.tsx";
 import { User } from "../../types.ts";
+import { useSelector } from "../../hooks/useSelector.ts";
 
 const PER_PAGE = 20;
 
@@ -17,6 +18,8 @@ export default function ApiUserOverview() {
   const [managingUser, setManagingUser] = useState<User | null>(null);
   const [activePage, setPage] = useState(1);
   const { apiUsers } = useApiUsers();
+  const you = useSelector((state) => state.user);
+
 
   const { scrollIntoView, targetRef } = useScrollIntoView<HTMLTableSectionElement>({
     duration: 500,
@@ -29,7 +32,7 @@ export default function ApiUserOverview() {
         <TableId id={user.id} />
       </Table.Td>
       <Table.Td>
-        <Group>
+        <Group style={{ rowGap: "0.2em" }}>
           {user.name}
           <Badge variant="light" color="secondary" tt="none" component="a" href={`mailto:${user.email}`} style={{ cursor: "pointer" }}>
             {user.email}
@@ -44,6 +47,9 @@ export default function ApiUserOverview() {
               Blocked
             </Badge>
           )}
+          {user.id == you.id && (<Badge variant="light" color="blue">
+            You
+          </Badge>)}
         </Group>
       </Table.Td>
       <Table.Td w={80}>

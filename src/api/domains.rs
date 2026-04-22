@@ -14,7 +14,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -42,14 +42,7 @@ pub(crate) async fn create_domain(
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let domain: ApiDomain = repo.create(new, org_id).await?.into();
-
-    info!(
-        user_id = user.log_id(),
-        domain_id = domain.id().to_string(),
-        organization_id = ?domain.organization_id(),
-        domain = domain.domain(),
-        "created domain");
+    let domain: ApiDomain = repo.create(&new, org_id, &user).await?.into();
 
     Ok((StatusCode::CREATED, Json(domain)))
 }
@@ -133,15 +126,7 @@ pub async fn update_domain(
 ) -> ApiResult<ApiDomain> {
     user.has_org_write_access(&org_id)?;
 
-    let domain = repo.update(org_id, domain_id, &update).await?.into();
-
-    debug!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        domain_id = domain_id.to_string(),
-        project_ids_len = update.len(),
-        "updated domain",
-    );
+    let domain = repo.update(org_id, domain_id, &update, &user).await?.into();
 
     Ok(Json(domain))
 }
@@ -162,14 +147,7 @@ pub async fn delete_domain(
 ) -> ApiResult<DomainId> {
     user.has_org_write_access(&org_id)?;
 
-    let domain_id = repo.remove(org_id, domain_id).await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        domain_id = domain_id.to_string(),
-        "deleted domain",
-    );
+    let domain_id = repo.remove(org_id, domain_id, &user).await?;
 
     Ok(Json(domain_id))
 }
@@ -244,7 +222,7 @@ mod tests {
         assert_eq!(domains.len(), 1);
         assert_eq!(domains[0].id(), created_domain.id());
         assert_eq!(domains[0].domain(), "remails.com");
-        assert_eq!(domains[0].organization_id(), org_1.parse().unwrap());
+        assert_eq!(domains[0].org_id(), org_1.parse().unwrap());
         assert_eq!(domains[0].project_ids(), project_ids);
 
         // update domain with new project ID

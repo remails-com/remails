@@ -6,9 +6,9 @@ use crate::{
         validation::ValidatedJson,
     },
     models::{
-        ApiUser, ApiUserId, NewOrganization, OrgBlockStatus, Organization, OrganizationId,
-        OrganizationMember, OrganizationRepository, Role, RuntimeConfigRepository, Statistics,
-        StatisticsRepository,
+        ApiUser, ApiUserId, AuditLogEntry, AuditLogRepository, NewOrganization, OrgBlockStatus,
+        Organization, OrganizationId, OrganizationMember, OrganizationRepository, Role,
+        RuntimeConfigRepository, Statistics, StatisticsRepository,
     },
 };
 use axum::{
@@ -32,6 +32,7 @@ pub fn router() -> OpenApiRouter<ApiState> {
         .routes(routes!(list_members))
         .routes(routes!(remove_member, update_member_role))
         .routes(routes!(update_block_status))
+        .routes(routes!(get_audit_log))
 }
 
 /// List organizations
@@ -110,25 +111,7 @@ pub async fn create_organization(
         return Err(AppError::Forbidden);
     }
 
-    let org = repo.create(new).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org.id().to_string(),
-        organization_name = org.name,
-        "created organization"
-    );
-
-    let role = Role::ReadOnly;
-    repo.add_member(org.id(), *user.id(), role).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org.id().to_string(),
-        organization_name = org.name,
-        role = role.to_string(),
-        "added user to organization"
-    );
+    let org = repo.create(&new, &user).await?;
 
     Ok((StatusCode::CREATED, Json(org)))
 }
@@ -151,6 +134,7 @@ pub async fn remove_organization(
 
     let organization_id = repo.remove(org_id).await?;
 
+    // TODO: if this becomes a "soft delete" before full deletion, make this an audit log
     info!(
         user_id = user.id().to_string(),
         organization_id = organization_id.to_string(),
@@ -178,13 +162,7 @@ pub async fn update_organization(
 ) -> ApiResult<Organization> {
     user.has_org_admin_access(&org_id)?;
 
-    let organization = repo.update(org_id, update).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = organization.id().to_string(),
-        "updated organization",
-    );
+    let organization = repo.update(org_id, &update, &user).await?;
 
     Ok(Json(organization))
 }
@@ -302,14 +280,7 @@ pub async fn remove_member(
         prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
     }
 
-    repo.remove_member(org_id, user_id).await?;
-
-    info!(
-        removed_user_id = user_id.to_string(),
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "removed user from organization",
-    );
+    repo.remove_member(org_id, user_id, &user).await?;
 
     Ok(Json(()))
 }
@@ -336,16 +307,30 @@ pub async fn update_member_role(
         prevent_last_remaining_admin(&repo, &org_id, &user_id).await?;
     }
 
-    repo.update_member_role(org_id, user_id, role).await?;
-
-    info!(
-        updated_user_id = user_id.to_string(),
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "updated organization member",
-    );
+    repo.update_member_role(org_id, user_id, role, &user)
+        .await?;
 
     Ok(Json(()))
+}
+
+/// Get organization audit log entries
+#[utoipa::path(get, path = "/organizations/{org_id}/audit-log",
+    tags = ["Organizations"],
+    responses(
+        (status = 200, description = "Successfully fetched audit log entries", body = [AuditLogEntry]),
+        AppError,
+    )
+)]
+pub async fn get_audit_log(
+    Path((org_id,)): Path<(OrganizationId,)>,
+    State(repo): State<AuditLogRepository>,
+    user: Box<dyn Authenticated>,
+) -> ApiResult<Vec<AuditLogEntry>> {
+    user.has_org_read_access(&org_id)?;
+
+    let audit_log = repo.list(org_id).await?;
+
+    Ok(Json(audit_log))
 }
 
 /// Update organization admin details
@@ -391,7 +376,7 @@ mod tests {
             tests::{TestServer, deserialize_body, serialize_body},
             whoami::WhoamiResponse,
         },
-        models::{OrgRole, Role, RuntimeConfig},
+        models::{ActorType, OrgRole, Role, RuntimeConfig},
         test::TestProjects,
     };
 
@@ -569,6 +554,25 @@ mod tests {
         assert_eq!(stats.monthly.len(), 0);
         assert_eq!(stats.daily.len(), 0);
 
+        // get audit log
+        let response = server
+            .get(format!("/api/organizations/{}/audit-log", created_org.id()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let audit_entries: Vec<AuditLogEntry> = deserialize_body(response.into_body()).await;
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].actor_type, ActorType::ApiUser);
+        assert_eq!(audit_entries[0].actor_id, Some(*user_3));
+        assert_eq!(audit_entries[0].target_type, None);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Updated organization");
+        assert_eq!(audit_entries[1].actor_type, ActorType::ApiUser);
+        assert_eq!(audit_entries[1].actor_id, Some(*user_3));
+        assert_eq!(audit_entries[1].target_type, None);
+        assert_eq!(audit_entries[1].target_id, None);
+        assert_eq!(audit_entries[1].action, "Created organization");
+
         // remove organization
         let response = server
             .delete(format!("/api/organizations/{}", created_org.id()))
@@ -653,6 +657,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), write_status_code);
+
+        // can't get organization audit log
+        let response = server
+            .get(format!("/api/organizations/{org_1}/audit-log"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), read_status_code);
 
         // nobody (except super admins) can update the organization's block status
         let response = server
@@ -899,10 +910,11 @@ mod tests {
         assert_eq!(*members[0].user_id(), user_2);
 
         // put user_1 back in org 2
-        let repo = OrganizationRepository::new(pool);
-        repo.add_member(org_2.parse().unwrap(), user_1, Role::Admin)
+        let mut tx = pool.begin().await.unwrap();
+        OrganizationRepository::add_member(&mut tx, org_2.parse().unwrap(), user_1, Role::Admin)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         // user_1 can make user_2 non-admin in org 2
         server.set_user(Some(user_1));

@@ -12,7 +12,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -38,15 +38,7 @@ pub async fn create_api_key(
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let new_api_key = repo.create(org_id, &request).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        api_key_id = new_api_key.id().to_string(),
-        description = new_api_key.description(),
-        "created API key"
-    );
+    let new_api_key = repo.create(org_id, &request, &user).await?;
 
     Ok((StatusCode::CREATED, Json(new_api_key)))
 }
@@ -68,15 +60,7 @@ pub async fn update_api_key(
 ) -> ApiResult<ApiKey> {
     user.has_org_write_access(&org_id)?;
 
-    let update = repo.update(org_id, api_key_id, &request).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        api_key_id = update.id().to_string(),
-        api_key_description = update.description(),
-        "updated API key"
-    );
+    let update = repo.update(org_id, api_key_id, &request, &user).await?;
 
     Ok(Json(update))
 }
@@ -123,14 +107,7 @@ pub async fn remove_api_key(
 ) -> ApiResult<ApiKeyId> {
     user.has_org_write_access(&org_id)?;
 
-    let api_key_id = repo.remove(org_id, api_key_id).await?;
-
-    info!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        credential_id = api_key_id.to_string(),
-        "deleted API key",
-    );
+    let api_key_id = repo.remove(org_id, api_key_id, &user).await?;
 
     Ok(Json(api_key_id))
 }

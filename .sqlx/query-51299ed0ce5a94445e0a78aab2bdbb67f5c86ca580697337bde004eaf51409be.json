@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO audit_log (\n                id,\n                organization_id,\n                target_id,\n                target_type,\n                actor_id,\n                actor_type,\n                action,\n                details,\n                occurred_at\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "audit_log_target_type",
+            "kind": {
+              "Enum": [
+                "project",
+                "domain",
+                "message",
+                "smtp_credential",
+                "api_key",
+                "invite_link",
+                "member"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        {
+          "Custom": {
+            "name": "audit_log_actor_type",
+            "kind": {
+              "Enum": [
+                "api_user",
+                "api_key",
+                "system"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "51299ed0ce5a94445e0a78aab2bdbb67f5c86ca580697337bde004eaf51409be"
+}

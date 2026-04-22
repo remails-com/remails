@@ -6,6 +6,9 @@ const actionHandler: {
   set_organizations: function (state, action) {
     return { ...state, organizations: action.organizations };
   },
+  set_members: function (state, action) {
+    return { ...state, members: action.members };
+  },
   set_api_users: function (state, action) {
     return { ...state, apiUsers: action.users };
   },

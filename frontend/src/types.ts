@@ -113,6 +113,7 @@ export interface State {
   userFetched: boolean;
   totpCodes: TotpCode[] | null;
   organizations: Organization[] | null;
+  members: OrganizationMember[] | null;
   projects: Project[] | null;
   labels: string[] | null;
   emails: EmailMetadata[] | null;
@@ -160,6 +161,10 @@ export type Action =
   | {
     type: "set_organizations";
     organizations: Organization[] | null;
+  }
+  | {
+    type: "set_members";
+    members: OrganizationMember[] | null;
   }
   | {
     type: "add_organization";
@@ -427,3 +432,15 @@ export type Suppressed = {
   email_address: string;
   retry_after: string;
 }
+
+export type AuditLogEntry = {
+  id: string;
+  organization_id: string;
+  target_id: string | null;
+  target_type: "project" | "domain" | "message" | "smtp_credential" | "api_key" | "invite_link" | "member" | null;
+  actor_id: string | null;
+  actor_type: "api_user" | "api_key" | "system";
+  action: string;
+  details: unknown;
+  occurred_at: string;
+};

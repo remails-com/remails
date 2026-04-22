@@ -80,7 +80,12 @@ mod test {
 
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
         let credential = credential_repo
-            .generate(org_id, project_id, &credential_request)
+            .generate(
+                org_id,
+                project_id,
+                &credential_request,
+                crate::models::SYSTEM,
+            )
             .await
             .unwrap();
 

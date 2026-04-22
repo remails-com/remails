@@ -44,14 +44,9 @@ pub async fn create_invite(
     user.has_org_admin_access(&org_id)?;
 
     let expires = Utc::now() + TimeDelta::days(7);
-    let invite = repo.create(org_id, role, *user.id(), expires).await?;
-
-    debug!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        role = role.to_string(),
-        "created invite"
-    );
+    let invite = repo
+        .create(org_id, role, *user.id(), expires, &user)
+        .await?;
 
     Ok((StatusCode::CREATED, Json(invite)))
 }
@@ -123,13 +118,7 @@ pub async fn remove_invite(
 ) -> ApiResult<InviteId> {
     user.has_org_admin_access(&org_id)?;
 
-    debug!(
-        user_id = user.id().to_string(),
-        organization_id = org_id.to_string(),
-        "remove invite"
-    );
-
-    let id = repo.remove_by_id(invite_id, org_id).await?;
+    let id = repo.remove_by_id(invite_id, org_id, &user).await?;
 
     Ok(Json(id))
 }
@@ -165,11 +154,9 @@ pub async fn accept_invite(
         return Err(AppError::NotFound);
     }
 
-    organizations
-        .add_member(org_id, *user.id(), invite.role())
+    invites
+        .accept(invite_id, org_id, *user.id(), invite.role(), &user)
         .await?;
-
-    invites.remove_by_id(invite_id, org_id).await?;
 
     let Some(organization) = organizations.get_by_id(org_id).await? else {
         tracing::error!("organization not found after accepting invite: {}", org_id);
@@ -312,7 +299,10 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
 
         // maintainer invite
         let response = server
@@ -338,7 +328,10 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
 
         // read-only invite
         let response = server
@@ -364,7 +357,10 @@ mod tests {
             org_block_status: OrgBlockStatus::NotBlocked,
         }));
 
-        org_repo.remove_member(org_1, user_3).await.unwrap();
+        org_repo
+            .remove_member(org_1, user_3, crate::models::SYSTEM)
+            .await
+            .unwrap();
     }
 
     async fn test_invites_no_access(
