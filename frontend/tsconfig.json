@@ -4,7 +4,6 @@
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["node"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -21,5 +20,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src", "./tests", "/playwright"]
+  "include": ["./src", "./tests"]
 }

@@ -1,8 +1,8 @@
 // based on https://playwright.dev/docs/auth#moderate-one-account-per-parallel-worker
 
 import { test as baseTest } from "@playwright/test";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { createAccount } from "./util.ts";
 
 export * from "@playwright/test";
