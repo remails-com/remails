@@ -1,7 +1,7 @@
 use crate::{
     api::{ApiState, error::AppError, validation::ValidatedJson, whoami::WhoamiResponse},
     models::{
-        ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
+        Actor, ApiKey, ApiKeyRepository, ApiUser, ApiUserId, ApiUserRepository, NewApiUser,
         OrgBlockStatus, OrganizationId, OrganizationRepository, Password, Role,
         RuntimeConfigRepository, TotpCode,
     },
@@ -30,8 +30,8 @@ use tracing::error;
 use tracing::{debug, trace, warn};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
-// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
 
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes
 #[cfg(not(debug_assertions))]
 pub static SESSION_COOKIE_NAME: &str = "__Host-SESSION";
 #[cfg(debug_assertions)]
@@ -82,6 +82,14 @@ pub trait Authenticated: Send + Sync {
     /// Get a string with an ID for logging, also include some information about the type of
     /// Authenticated object that is used
     fn log_id(&self) -> String;
+
+    fn actor(&self) -> Actor;
+}
+
+impl From<&Box<dyn Authenticated>> for Actor {
+    fn from(user: &Box<dyn Authenticated>) -> Self {
+        user.actor()
+    }
 }
 
 impl ApiUser {
@@ -125,6 +133,10 @@ impl Authenticated for ApiUser {
     fn log_id(&self) -> String {
         format!("ApiUser {}", self.id())
     }
+
+    fn actor(&self) -> Actor {
+        self.into()
+    }
 }
 
 impl Authenticated for ApiKey {
@@ -141,6 +153,10 @@ impl Authenticated for ApiKey {
 
     fn log_id(&self) -> String {
         format!("ApiKey {}", self.id())
+    }
+
+    fn actor(&self) -> Actor {
+        self.into()
     }
 }
 

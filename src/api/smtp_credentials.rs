@@ -12,7 +12,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -38,16 +38,7 @@ pub async fn create_smtp_credential(
 ) -> Result<impl IntoResponse, AppError> {
     user.has_org_write_access(&org_id)?;
 
-    let new_credential = repo.generate(org_id, proj_id, &request).await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = new_credential.id().to_string(),
-        credential_username = new_credential.username(),
-        "created SMTP credential"
-    );
+    let new_credential = repo.generate(org_id, proj_id, &request, &user).await?;
 
     Ok((StatusCode::CREATED, Json(new_credential)))
 }
@@ -70,17 +61,8 @@ pub async fn update_smtp_credential(
     user.has_org_write_access(&org_id)?;
 
     let update = repo
-        .update(org_id, proj_id, credential_id, &request)
+        .update(org_id, proj_id, credential_id, &request, &user)
         .await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = update.id().to_string(),
-        credential_username = update.username(),
-        "updated SMTP credential"
-    );
 
     Ok(Json(update))
 }
@@ -128,15 +110,7 @@ pub async fn remove_smtp_credential(
 ) -> ApiResult<SmtpCredentialId> {
     user.has_org_write_access(&org_id)?;
 
-    let credential_id = repo.remove(org_id, proj_id, credential_id).await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        credential_id = credential_id.to_string(),
-        "deleted SMTP credential",
-    );
+    let credential_id = repo.remove(org_id, proj_id, credential_id, &user).await?;
 
     Ok(Json(credential_id))
 }

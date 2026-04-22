@@ -12,3 +12,9 @@ export function useDomains() {
 
   return { domains, currentDomain };
 }
+
+export function useDomainWithId(domain_id: string | null) {
+  const domains = useSelector((state) => state.domains || []);
+
+  return domain_id ? (domains.find((domain) => domain.id === domain_id) ?? null) : null;
+}

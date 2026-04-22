@@ -1,16 +1,16 @@
 use crate::{
     handler::dns::{DnsResolver, DomainVerificationStatus},
-    models::{Error, OrganizationId, ProjectId},
+    models::{Actor, AuditLogRepository, Error, OrganizationId, ProjectId},
 };
 use aws_lc_rs::{encoding::AsDer, rsa::KeySize, signature::KeyPair};
 use base64ct::{Base64, Encoding};
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use futures::StreamExt;
 use garde::Validate;
 use mail_auth::common::{crypto::Algorithm, headers::Writable};
 use mail_send::mail_auth::common::crypto as mail_auth_crypto;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{PgConnection, query};
 use std::{
     fmt::{Debug, Formatter},
@@ -21,26 +21,13 @@ use tracing::{error, info, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-    IntoParams,
-)]
-#[sqlx(transparent)]
-#[into_params(names("domain_id"))]
-pub struct DomainId(Uuid);
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("domain_id"))]
+    DomainId
+);
 
-#[derive(sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
+#[derive(Clone, Copy, sqlx::Type, Serialize, Deserialize, Debug, ToSchema)]
 #[sqlx(type_name = "dkim_key_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum DkimKeyType {
@@ -143,7 +130,7 @@ impl ApiDomain {
         self.id
     }
 
-    pub fn organization_id(&self) -> OrganizationId {
+    pub fn org_id(&self) -> OrganizationId {
         self.organization_id
     }
 
@@ -220,8 +207,7 @@ impl From<Domain> for ApiDomain {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct NewDomain {
     #[garde(length(min = 3, max = 253))]
     #[schema(min_length = 3, max_length = 253)]
@@ -236,14 +222,24 @@ pub struct NewDomain {
 pub struct DomainRepository {
     pool: sqlx::PgPool,
     resolver: DnsResolver,
+    audit_log: AuditLogRepository,
 }
 
 impl DomainRepository {
     pub fn new(pool: sqlx::PgPool, resolver: DnsResolver) -> Self {
-        Self { pool, resolver }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+            resolver,
+        }
     }
 
-    pub async fn create(&self, new: NewDomain, org_id: OrganizationId) -> Result<Domain, Error> {
+    pub async fn create(
+        &self,
+        new: &NewDomain,
+        org_id: OrganizationId,
+        actor: impl Into<Actor>,
+    ) -> Result<Domain, Error> {
         let (sk_bytes, pk_bytes) = match new.dkim_key_type {
             DkimKeyType::RsaSha256 => {
                 let key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048)?;
@@ -276,6 +272,16 @@ impl DomainRepository {
         Self::attach_projects(&mut tx, org_id, id, &new.project_ids).await?;
 
         let domain = Self::get_one(&mut tx, org_id, id).await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (domain.id, org_id),
+                "Created domain",
+                Some(json!(new)),
+            )
+            .await?;
 
         tx.commit().await?;
 
@@ -530,6 +536,7 @@ impl DomainRepository {
         org_id: OrganizationId,
         domain_id: DomainId,
         attached_projects: &[ProjectId],
+        actor: impl Into<Actor>,
     ) -> Result<Domain, Error> {
         let mut tx = self.pool.begin().await?;
 
@@ -545,6 +552,16 @@ impl DomainRepository {
         .await?;
 
         let domain = Self::attach_projects(&mut tx, org_id, domain_id, attached_projects).await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (domain.id, org_id),
+                "Updated domain",
+                Some(json!(attached_projects)),
+            )
+            .await?;
 
         tx.commit().await?;
 
@@ -586,8 +603,11 @@ impl DomainRepository {
         &self,
         org_id: OrganizationId,
         domain_id: DomainId,
+        actor: impl Into<Actor>,
     ) -> Result<DomainId, Error> {
-        let id = sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+
+        let id: DomainId = sqlx::query_scalar!(
             r#"
             DELETE
             FROM domains
@@ -597,10 +617,17 @@ impl DomainRepository {
             *org_id,
             *domain_id
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
 
-        Ok(DomainId(id))
+        self.audit_log
+            .log(&mut tx, actor, (id, org_id), "Deleted domain", None)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(id)
     }
 
     /// Look up a domain name in the database for a specific project, returning a domain that is attached to that project,
@@ -648,7 +675,10 @@ impl DomainRepository {
 
 #[cfg(test)]
 mod test {
-    use crate::test::TestProjects;
+    use crate::{
+        models::{AuditLogRepository, SYSTEM},
+        test::TestProjects,
+    };
 
     use super::*;
     use sqlx::PgPool;
@@ -791,12 +821,13 @@ mod test {
 
         let bad_request = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1_org_2],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -814,54 +845,70 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn create_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let proj_2 = TestProjects::Org1Project2.project_id();
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
         assert_eq!(domain.domain, "test-domain1.com");
         assert_eq!(domain.organization_id, org_1);
         assert_eq!(domain.project_ids, vec![proj_1]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain2.com".to_string(),
                     dkim_key_type: DkimKeyType::Ed25519,
                     project_ids: vec![],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
         assert_eq!(domain.domain, "test-domain2.com");
         assert_eq!(domain.organization_id, org_1);
         assert!(domain.project_ids.is_empty());
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
 
         let domain = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-domain3.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     project_ids: vec![proj_1, proj_2],
                 },
                 org_1,
+                SYSTEM,
             )
             .await
             .unwrap();
         assert_eq!(domain.domain, "test-domain3.com");
         assert_eq!(domain.organization_id, org_1);
         assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Created domain");
     }
 
     #[sqlx::test(fixtures(
@@ -873,7 +920,7 @@ mod test {
 
         let conflict = repo
             .create(
-                NewDomain {
+                &NewDomain {
                     domain: "test-org-2-project-1.com".to_string(),
                     dkim_key_type: DkimKeyType::RsaSha256,
                     // Project 1 Organization 1
@@ -881,6 +928,7 @@ mod test {
                 },
                 // test org 1
                 "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -892,21 +940,30 @@ mod test {
         scripts("organizations", "projects", "proj_domains")
     ))]
     async fn update_happy_path(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
         let (org_1, proj_1) = TestProjects::Org1Project1.get_ids();
         let proj_2 = TestProjects::Org1Project2.project_id();
         let domain_id = "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap();
 
         // attach an extra project
         let domain = repo
-            .update(org_1, domain_id, &[proj_1, proj_2])
+            .update(org_1, domain_id, &[proj_1, proj_2], SYSTEM)
             .await
             .unwrap();
         assert_eq!(domain.project_ids, vec![proj_1, proj_2]);
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Updated domain");
 
         // remove attached projects
-        let domain = repo.update(org_1, domain_id, &[]).await.unwrap();
+        let domain = repo.update(org_1, domain_id, &[], SYSTEM).await.unwrap();
         assert!(domain.project_ids.is_empty());
+        let audit_entries = audit_log.list(org_1).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*domain.id));
+        assert_eq!(audit_entries[0].action, "Updated domain");
     }
 
     #[sqlx::test(fixtures(
@@ -922,7 +979,7 @@ mod test {
 
         // can't attach project from other organization
         assert!(matches!(
-            repo.update(org_1, domain_org_1, &[proj_1_org_2])
+            repo.update(org_1, domain_org_1, &[proj_1_org_2], SYSTEM)
                 .await
                 .unwrap_err(),
             Error::BadRequest(_)
@@ -930,7 +987,7 @@ mod test {
 
         // can't attach project to domain from other organization
         assert!(matches!(
-            repo.update(org_1, domain_org_2, &[proj_1])
+            repo.update(org_1, domain_org_2, &[proj_1], SYSTEM)
                 .await
                 .unwrap_err(),
             Error::BadRequest(_)
@@ -938,7 +995,9 @@ mod test {
 
         // can't remove projects from another organization's domain
         assert!(matches!(
-            repo.update(org_1, domain_org_2, &[]).await.unwrap_err(),
+            repo.update(org_1, domain_org_2, &[], SYSTEM)
+                .await
+                .unwrap_err(),
             Error::BadRequest(_)
         ));
     }
@@ -1023,6 +1082,7 @@ mod test {
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
                 // test-org-1-project-1.com
                 "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -1064,6 +1124,7 @@ mod test {
                 "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap(),
                 // test-org-1.com
                 "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -1086,7 +1147,8 @@ mod test {
         scripts("organizations", "projects", "org_domains", "proj_domains")
     ))]
     async fn remove_happy_flow(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
 
         let domain_proj = repo
             .get(
@@ -1105,9 +1167,24 @@ mod test {
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             // test-org-1-project-1.com
             "c1a4cc6c-a975-4921-a55c-5bfeb31fd25a".parse().unwrap(),
+            SYSTEM,
         )
         .await
         .unwrap();
+        let audit_entries = audit_log
+            .list("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(
+            audit_entries[0].target_id,
+            Some(
+                *"c1a4cc6c-a975-4921-a55c-5bfeb31fd25a"
+                    .parse::<DomainId>()
+                    .unwrap()
+            )
+        );
+        assert_eq!(audit_entries[0].action, "Deleted domain");
 
         let not_found = repo
             .get(
@@ -1127,7 +1204,8 @@ mod test {
         scripts("organizations", "projects", "org_domains")
     ))]
     async fn remove_happy_flow_without_project(db: PgPool) {
-        let repo = DomainRepository::new(db, DnsResolver::mock("localhost", 1025));
+        let repo = DomainRepository::new(db.clone(), DnsResolver::mock("localhost", 1025));
+        let audit_log = AuditLogRepository::new(db);
 
         let domain_org = repo
             .get(
@@ -1146,9 +1224,24 @@ mod test {
             "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(),
             // test-org-1.com
             "ed28baa5-57f7-413f-8c77-7797ba6a8780".parse().unwrap(),
+            SYSTEM,
         )
         .await
         .unwrap();
+        let audit_entries = audit_log
+            .list("44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(
+            audit_entries[0].target_id,
+            Some(
+                *"ed28baa5-57f7-413f-8c77-7797ba6a8780"
+                    .parse::<DomainId>()
+                    .unwrap()
+            )
+        );
+        assert_eq!(audit_entries[0].action, "Deleted domain");
 
         let not_found = repo
             .get(

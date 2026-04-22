@@ -1,28 +1,12 @@
-use crate::models::{Error, OrganizationId, ProjectId};
-use derive_more::{Deref, Display, From, FromStr};
+use crate::models::{Actor, AuditLogRepository, Error, OrganizationId, ProjectId};
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::chrono::{DateTime, Utc};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    sqlx::Type,
-    FromStr,
-    ToSchema,
-)]
-#[sqlx(transparent)]
-pub struct SmtpCredentialId(Uuid);
+id!(SmtpCredentialId);
 
 #[derive(Serialize, derive_more::Debug, ToSchema)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -38,8 +22,7 @@ pub struct SmtpCredential {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct SmtpCredentialRequest {
     #[serde(default)]
     #[garde(length(max = 500))]
@@ -50,8 +33,7 @@ pub struct SmtpCredentialRequest {
     pub(crate) username: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct SmtpCredentialUpdateRequest {
     #[serde(default)]
     #[garde(length(max = 500))]
@@ -75,10 +57,12 @@ pub struct SmtpCredentialResponse {
 }
 
 impl SmtpCredentialResponse {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn id(&self) -> SmtpCredentialId {
         self.id
     }
 
+    #[cfg(test)]
     pub fn username(&self) -> String {
         self.username.clone()
     }
@@ -102,10 +86,6 @@ impl SmtpCredential {
         self.project_id
     }
 
-    pub fn username(&self) -> &str {
-        &self.username
-    }
-
     #[cfg(test)]
     pub fn description(&self) -> &str {
         &self.description
@@ -115,11 +95,15 @@ impl SmtpCredential {
 #[derive(Debug, Clone)]
 pub struct SmtpCredentialRepository {
     pool: sqlx::PgPool,
+    audit_log: AuditLogRepository,
 }
 
 impl SmtpCredentialRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn generate(
@@ -127,6 +111,7 @@ impl SmtpCredentialRepository {
         org_id: OrganizationId,
         project_id: ProjectId,
         new_credential: &SmtpCredentialRequest,
+        actor: impl Into<Actor>,
     ) -> Result<SmtpCredentialResponse, Error> {
         sqlx::query_scalar!(
             r#"
@@ -150,6 +135,8 @@ impl SmtpCredentialRepository {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 20);
         let password_hash = password_auth::generate_hash(password.as_bytes());
 
+        let mut tx = self.pool.begin().await?;
+
         let generated = sqlx::query_as!(
             SmtpCredential,
             r#"
@@ -162,8 +149,20 @@ impl SmtpCredentialRepository {
             password_hash,
             *project_id
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (generated.id, org_id),
+                "Created SMTP credential",
+                Some(json!({ "request": new_credential, "project_id": project_id })),
+            )
+            .await?;
+
+        tx.commit().await?;
 
         Ok(SmtpCredentialResponse {
             id: generated.id,
@@ -219,8 +218,10 @@ impl SmtpCredentialRepository {
         project_id: ProjectId,
         credential_id: SmtpCredentialId,
         update: &SmtpCredentialUpdateRequest,
+        actor: impl Into<Actor>,
     ) -> Result<SmtpCredential, Error> {
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+        let credential = sqlx::query_as!(
             SmtpCredential,
             r#"
             UPDATE smtp_credentials cred
@@ -244,8 +245,22 @@ impl SmtpCredentialRepository {
             *project_id,
             *org_id,
         )
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (credential.id, org_id),
+                "Updated SMTP credential",
+                Some(json!({ "request": update, "project_id": project_id })),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(credential)
     }
 
     pub async fn remove(
@@ -253,8 +268,10 @@ impl SmtpCredentialRepository {
         org_id: OrganizationId,
         project_id: ProjectId,
         credential_id: SmtpCredentialId,
+        actor: impl Into<Actor>,
     ) -> Result<SmtpCredentialId, Error> {
-        Ok(sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+        let id: SmtpCredentialId = sqlx::query_scalar!(
             r#"
             DELETE FROM smtp_credentials c
                    USING projects p
@@ -268,16 +285,33 @@ impl SmtpCredentialRepository {
             *project_id,
             *credential_id,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
-        .into())
+        .into();
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (id, org_id),
+                "Deleted SMTP credential",
+                Some(json!({ "project_id": project_id })),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(id)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{models::MessageRepository, test::TestProjects};
+    use crate::{
+        models::{AuditLogRepository, MessageRepository, SYSTEM},
+        test::TestProjects,
+    };
     use sqlx::PgPool;
 
     impl SmtpCredentialResponse {
@@ -293,13 +327,18 @@ mod test {
             description: "Test SMTP credential description".to_string(),
         };
         let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let audit_log = AuditLogRepository::new(pool.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
 
         let credential = credential_repo
-            .generate(org_id, project_id, &credential_request)
+            .generate(org_id, project_id, &credential_request, SYSTEM)
             .await
             .unwrap();
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential.id()));
+        assert_eq!(audit_entries[0].action, "Created SMTP credential");
 
         assert_ne!(credential_request.username, credential.username);
         assert!(
@@ -323,15 +362,20 @@ mod test {
     ))]
     async fn remove_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let rm_cred = credential_repo
-            .remove(org_id, project_id, credential_id)
+            .remove(org_id, project_id, credential_id, SYSTEM)
             .await
             .unwrap();
         assert_eq!(credential_id, rm_cred);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential_id));
+        assert_eq!(audit_entries[0].action, "Deleted SMTP credential");
 
         let not_found = credential_repo.find_by_username("marc").await.unwrap();
         assert!(not_found.is_none())
@@ -349,7 +393,7 @@ mod test {
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
-            .remove(org_id, project_id, credential_id)
+            .remove(org_id, project_id, credential_id, SYSTEM)
             .await
             .unwrap_err();
         assert!(matches!(not_found, Error::NotFound(_)));
@@ -370,7 +414,7 @@ mod test {
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
 
         let not_found = credential_repo
-            .remove(org_id, project_id, credential_id)
+            .remove(org_id, project_id, credential_id, SYSTEM)
             .await
             .unwrap_err();
         assert!(matches!(not_found, Error::NotFound(_)));
@@ -378,7 +422,7 @@ mod test {
         let org_id = "5d55aec5-136a-407c-952f-5348d4398204".parse().unwrap();
 
         let not_found = credential_repo
-            .remove(org_id, project_id, credential_id)
+            .remove(org_id, project_id, credential_id, SYSTEM)
             .await
             .unwrap_err();
         assert!(matches!(not_found, Error::NotFound(_)));
@@ -407,7 +451,7 @@ mod test {
 
         // Deleting the credential
         let rm_cred = credential_repo
-            .remove(org_id, project_id, credential_id)
+            .remove(org_id, project_id, credential_id, SYSTEM)
             .await
             .unwrap();
         assert_eq!(credential_id, rm_cred);
@@ -429,6 +473,7 @@ mod test {
     ))]
     async fn update_happy_flow(db: PgPool) {
         let credential_repo = SmtpCredentialRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
 
         let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
         let credential_id = "9442cbbf-9897-4af7-9766-4ac9c1bf49cf".parse().unwrap();
@@ -441,11 +486,16 @@ mod test {
                 &SmtpCredentialUpdateRequest {
                     description: "Updated description".to_string(),
                 },
+                SYSTEM,
             )
             .await
             .unwrap();
         assert_eq!(credential_id, update.id);
         assert_eq!("Updated description", update.description);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*credential_id));
+        assert_eq!(audit_entries[0].action, "Updated SMTP credential");
     }
 
     #[sqlx::test(fixtures(
@@ -467,6 +517,7 @@ mod test {
                 &SmtpCredentialUpdateRequest {
                     description: "Should not work".to_string(),
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -492,6 +543,7 @@ mod test {
                 &SmtpCredentialUpdateRequest {
                     description: "Should not work".to_string(),
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();

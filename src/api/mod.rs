@@ -9,9 +9,10 @@ use crate::{
     bus::client::BusClient,
     handler::{RetryConfig, dns::DnsResolver},
     models::{
-        ApiKeyRepository, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        OrganizationRepository, ProjectRepository, RuntimeConfigRepository,
-        SmtpCredentialRepository, StatisticsRepository, SuppressedRepository,
+        ApiKeyRepository, ApiUserRepository, AuditLogRepository, DomainRepository,
+        InviteRepository, MessageRepository, OrganizationRepository, ProjectRepository,
+        RuntimeConfigRepository, SmtpCredentialRepository, StatisticsRepository,
+        SuppressedRepository,
     },
     moneybird::MoneyBird,
 };
@@ -217,6 +218,12 @@ impl FromRef<ApiState> for RuntimeConfigRepository {
 impl FromRef<ApiState> for SuppressedRepository {
     fn from_ref(state: &ApiState) -> Self {
         SuppressedRepository::new(state.pool.clone())
+    }
+}
+
+impl FromRef<ApiState> for AuditLogRepository {
+    fn from_ref(state: &ApiState) -> Self {
+        AuditLogRepository::new(state.pool.clone())
     }
 }
 

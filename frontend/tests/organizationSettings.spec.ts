@@ -51,7 +51,7 @@ test("manage organization invite", async ({ page }) => {
   // Confirm the new invite is listed and has the correct role
   await expect(page.getByRole("cell", { name: "Maintainer" })).toBeVisible();
   // And correct 'created by' user
-  const count = await page.getByRole("cell", { name: "Playwright", exact: true }).count();
+  const count = await page.getByRole("cell", { name: "Playwright" }).count();
   expect(count).toBe(2);
 
   // Delete the invite
@@ -82,7 +82,7 @@ baseTest("accept organization invite", async ({ browser }) => {
   await expect(page1.getByRole("dialog", { name: "Create new invite link" })).toBeVisible();
   await page1.getByRole("textbox", { name: "Organization role" }).click();
 
-  await page1.getByRole("option", { name: "Maintainer" }).click();
+  await page1.getByRole("option", { name: "Read-only" }).click();
   await page1.getByRole("button", { name: "Create", exact: true }).click();
 
   const inviteLink = await page1.getByText("/invite/").textContent();
@@ -100,8 +100,8 @@ baseTest("accept organization invite", async ({ browser }) => {
   await expect(page2).toHaveURL((url) => url.toString().startsWith(projectPage));
   await expect(page2.getByRole("button", { name: "New project" })).toBeVisible();
 
-  // Check that it is allowed to create new projects
-  await expect(page2.getByRole("button", { name: "New project" })).not.toBeDisabled();
+  // Check that it is not allowed to create new projects because it is read-only
+  await expect(page2.getByRole("button", { name: "New project" })).toBeDisabled();
 });
 
 test("organization API key", async ({ page }) => {
@@ -144,7 +144,7 @@ test("organization API key", async ({ page }) => {
   }
 
   // Confirm the new API key is listed with correct details
-  const row = page.getByRole("row").filter({ hasText: key_id });
+  const row = page.getByRole("row").filter({ hasText: key_id.split("-")[0] });
   await expect(row.getByRole("cell", { name: "Read-only" })).toBeVisible();
   await expect(row.getByRole("cell", { name: "Playwright test API key", exact: true })).toBeVisible();
 

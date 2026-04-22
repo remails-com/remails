@@ -7,7 +7,6 @@ import "@mantine/notifications/styles.css";
 import "@mantine/nprogress/styles.css";
 import { createTheme, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
-import { ModalsProvider } from "@mantine/modals";
 
 const element = document.getElementById("root")!;
 const root = createRoot(element);
@@ -33,9 +32,7 @@ const theme = createTheme({
 
 root.render(
   <MantineProvider theme={theme}>
-    <ModalsProvider>
-      <Notifications />
-      <App />
-    </ModalsProvider>
+    <Notifications />
+    <App />
   </MantineProvider>
 );

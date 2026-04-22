@@ -15,7 +15,7 @@ use axum::{
     response::IntoResponse,
 };
 use http::StatusCode;
-use tracing::{debug, info};
+use tracing::debug;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 pub fn router() -> OpenApiRouter<ApiState> {
@@ -80,14 +80,7 @@ pub async fn update_project(
         )));
     }
 
-    let project = repo.update(org_id, proj_id, update).await?;
-
-    debug!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = proj_id.to_string(),
-        "updated project",
-    );
+    let project = repo.update(org_id, proj_id, &update, &user).await?;
 
     Ok(Json(project))
 }
@@ -125,15 +118,7 @@ pub async fn create_project(
         )));
     }
 
-    let project = repo.create(new, org_id).await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = project.id().to_string(),
-        project_name = project.name,
-        "created project"
-    );
+    let project = repo.create(&new, org_id, &user).await?;
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -153,14 +138,7 @@ pub async fn remove_project(
 ) -> ApiResult<ProjectId> {
     user.has_org_write_access(&org_id)?;
 
-    let project_id = repo.remove(proj_id, org_id).await?;
-
-    info!(
-        user_id = user.log_id(),
-        organization_id = org_id.to_string(),
-        project_id = project_id.to_string(),
-        "deleted project",
-    );
+    let project_id = repo.remove(proj_id, org_id, &user).await?;
 
     Ok(Json(project_id))
 }

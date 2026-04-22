@@ -16,7 +16,7 @@ pub struct RuntimeConfig {
 }
 
 #[derive(Serialize, ToSchema, Debug)]
-#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
+#[cfg_attr(test, derive(Deserialize, PartialEq))]
 pub struct RuntimeConfigResponse {
     system_email_project: Option<ProjectId>,
     system_email_project_name: Option<String>,
@@ -71,7 +71,7 @@ impl RuntimeConfigRepository {
                 rc.enable_account_creation;
             "#,
             config.system_email_address,
-            config.system_email_project.map(|c| c.as_uuid()),
+            config.system_email_project.map(|c| *c),
             config.enable_account_creation
         )
         .fetch_one(&self.pool)

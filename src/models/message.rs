@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
+use derive_more::{Display, FromStr};
 use email_address::EmailAddress;
 use garde::Validate;
 use mail_builder::MessageBuilder;
@@ -22,10 +22,7 @@ use uuid::Uuid;
 
 const API_RAW_TRUNCATE_LENGTH: i32 = 10_000;
 
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
-)]
-pub struct MessageId(Uuid);
+id!(MessageId);
 
 impl MessageId {
     pub fn new_v4() -> Self {
@@ -1236,6 +1233,7 @@ mod test {
                     username: "user".to_string(),
                     description: "Test SMTP credential description".to_string(),
                 },
+                crate::models::SYSTEM,
             )
             .await
             .unwrap();
@@ -1333,6 +1331,7 @@ mod test {
                     description: "Test API key".to_string(),
                     role: Role::Maintainer,
                 },
+                crate::models::SYSTEM,
             )
             .await
             .unwrap();

@@ -1,41 +1,19 @@
 use crate::{
-    models::{ApiUserId, Error, Role},
+    models::{Actor, ApiUser, ApiUserId, AuditLogRepository, Error, Role},
     moneybird::{MoneybirdContactId, SubscriptionStatus},
 };
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    From,
-    Display,
-    Deref,
-    FromStr,
-    sqlx::Type,
-    PartialOrd,
-    Ord,
-    Eq,
-    ToSchema,
-    IntoParams,
-)]
-#[sqlx(transparent)]
-#[into_params(names("org_id"))]
-pub struct OrganizationId(Uuid);
-
-impl OrganizationId {
-    pub fn as_uuid(&self) -> Uuid {
-        self.0
-    }
-}
+id!(
+    #[derive(IntoParams)]
+    #[into_params(names("org_id"))]
+    OrganizationId
+);
 
 #[derive(
     Serialize,
@@ -43,7 +21,7 @@ impl OrganizationId {
     Debug,
     Clone,
     Copy,
-    Display,
+    derive_more::Display,
     PartialEq,
     PartialOrd,
     Eq,
@@ -160,6 +138,7 @@ impl TryFrom<PgOrganization> for Organization {
 #[derive(Clone)]
 pub struct OrganizationRepository {
     pool: sqlx::PgPool,
+    audit_log: AuditLogRepository,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -170,7 +149,10 @@ pub enum QuotaStatus {
 
 impl OrganizationRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        Self {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn reduce_quota(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
@@ -193,8 +175,14 @@ impl OrganizationRepository {
         }
     }
 
-    pub async fn create(&self, organization: NewOrganization) -> Result<Organization, Error> {
-        Ok(sqlx::query_as!(
+    pub async fn create(
+        &self,
+        organization: &NewOrganization,
+        owner: &ApiUser,
+    ) -> Result<Organization, Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let org: Organization = sqlx::query_as!(
             PgOrganization,
             r#"
             INSERT INTO organizations (id, name, total_message_quota, used_message_quota, quota_reset, rate_limit_tokens, rate_limit_last_used)
@@ -214,17 +202,36 @@ impl OrganizationRepository {
             "#,
             organization.name.trim(),
         )
-            .fetch_one(&self.pool)
-            .await?
-            .try_into()?)
+        .fetch_one(&mut *tx)
+        .await?
+        .try_into()?;
+
+        Self::add_member(&mut tx, org.id(), *owner.id(), Role::ReadOnly).await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                owner,
+                org.id(),
+                "Created organization",
+                Some(json!(organization)),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(org)
     }
 
     pub async fn update(
         &self,
         id: OrganizationId,
-        organization: NewOrganization,
+        organization: &NewOrganization,
+        actor: impl Into<Actor>,
     ) -> Result<Organization, Error> {
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+
+        let updated: Organization = sqlx::query_as!(
             PgOrganization,
             r#"
             UPDATE organizations
@@ -247,9 +254,23 @@ impl OrganizationRepository {
             *id,
             organization.name.trim(),
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
-        .try_into()?)
+        .try_into()?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                id,
+                "Updated organization",
+                Some(json!(organization)),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(updated)
     }
 
     pub async fn list(&self, filter: Option<Vec<Uuid>>) -> Result<Vec<Organization>, Error> {
@@ -358,7 +379,7 @@ impl OrganizationRepository {
     }
 
     pub async fn add_member(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         org_id: OrganizationId,
         user_id: ApiUserId,
         role: Role,
@@ -372,8 +393,9 @@ impl OrganizationRepository {
             *user_id,
             role as Role
         )
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
+
         Ok(())
     }
 
@@ -399,8 +421,11 @@ impl OrganizationRepository {
         &self,
         org_id: OrganizationId,
         user_id: ApiUserId,
+        actor: impl Into<Actor>,
     ) -> Result<ApiUserId, Error> {
-        Ok(sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+
+        let removed_user_id: ApiUserId = sqlx::query_scalar!(
             r#"
             DELETE FROM api_users_organizations
             WHERE organization_id = $1 AND api_user_id = $2
@@ -409,9 +434,23 @@ impl OrganizationRepository {
             *org_id,
             *user_id,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
-        .into())
+        .into();
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (removed_user_id, org_id),
+                "Removed organization member",
+                None,
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(removed_user_id)
     }
 
     pub async fn update_member_role(
@@ -419,8 +458,11 @@ impl OrganizationRepository {
         org_id: OrganizationId,
         user_id: ApiUserId,
         role: Role,
+        actor: impl Into<Actor>,
     ) -> Result<ApiUserId, Error> {
-        Ok(sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+
+        let updated_user_id: ApiUserId = sqlx::query_scalar!(
             r#"
             UPDATE api_users_organizations
             SET role = $3
@@ -431,9 +473,23 @@ impl OrganizationRepository {
             *user_id,
             role as Role,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
-        .into())
+        .into();
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (updated_user_id, org_id),
+                "Updated organization member",
+                Some(json!(role)),
+            )
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(updated_user_id)
     }
 
     pub async fn update_block_status(
@@ -473,6 +529,7 @@ impl OrganizationRepository {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::models::{ApiUserRepository, AuditLogRepository, NewApiUser, SYSTEM};
     use sqlx::PgPool;
 
     impl Organization {
@@ -487,22 +544,47 @@ mod test {
 
     #[sqlx::test]
     async fn organization_lifecycle(db: PgPool) {
-        let repo = OrganizationRepository::new(db);
+        let repo = OrganizationRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db.clone());
+        let owner = ApiUserRepository::new(db)
+            .create(NewApiUser {
+                email: "test.user@example.com".parse().unwrap(),
+                name: "Test user".to_string(),
+                password: None,
+                github_user_id: None,
+            })
+            .await
+            .unwrap();
 
         let org1 = repo
-            .create(NewOrganization {
-                name: "TestOrg1".to_string(),
-            })
+            .create(
+                &NewOrganization {
+                    name: "TestOrg1".to_string(),
+                },
+                &owner,
+            )
             .await
             .unwrap();
         assert_eq!(org1.name, "TestOrg1");
+        let audit_entries = audit_log.list(org1.id()).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Created organization");
+
         let org2 = repo
-            .create(NewOrganization {
-                name: "TestOrg2".to_string(),
-            })
+            .create(
+                &NewOrganization {
+                    name: "TestOrg2".to_string(),
+                },
+                &owner,
+            )
             .await
             .unwrap();
         assert_eq!(org2.name, "TestOrg2");
+        let audit_entries = audit_log.list(org2.id()).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, None);
+        assert_eq!(audit_entries[0].action, "Created organization");
 
         let orgs = repo.list(None).await.unwrap();
         assert_eq!(orgs, vec![org2.clone(), org1.clone()]);
@@ -522,7 +604,8 @@ mod test {
         let user_2 = "94a98d6f-1ec0-49d2-a951-92dc0ff3042a".parse().unwrap(); // is admin of org 2
         let user_3 = "54432300-128a-46a0-8a83-fe39ce3ce5ef".parse().unwrap(); // not in any organization
 
-        let repo = OrganizationRepository::new(db);
+        let repo = OrganizationRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db);
 
         // org 2 contains two members: user_1 and user_2
         let members = repo.list_members(org_2).await.unwrap();
@@ -539,8 +622,13 @@ mod test {
         );
 
         // remove user_1 from org 2
-        let removed_user = repo.remove_member(org_2, user_1).await.unwrap();
+        let removed_user = repo.remove_member(org_2, user_1, SYSTEM).await.unwrap();
         assert_eq!(removed_user, user_1);
+
+        let audit_entries = audit_log.list(org_2).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(*user_1));
+        assert_eq!(audit_entries[0].action, "Removed organization member");
 
         // now org 2 should only contain 1 member: user_2
         let members = repo.list_members(org_2).await.unwrap();
@@ -549,9 +637,11 @@ mod test {
         assert_eq!(members[0].role, Role::Admin);
 
         // add user_3 to org 2 as read-only
-        repo.add_member(org_2, user_3, Role::ReadOnly)
+        let mut tx = repo.pool.begin().await.unwrap();
+        OrganizationRepository::add_member(&mut tx, org_2, user_3, Role::ReadOnly)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         let members = repo.list_members(org_2).await.unwrap();
         assert_eq!(members.len(), 2);
@@ -567,9 +657,16 @@ mod test {
         );
 
         // make user_3 maintainer
-        repo.update_member_role(org_2, user_3, Role::Maintainer)
+        repo.update_member_role(org_2, user_3, Role::Maintainer, SYSTEM)
             .await
             .unwrap();
+
+        let audit_entries = audit_log.list(org_2).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(*user_3));
+        assert_eq!(audit_entries[0].action, "Updated organization member");
+        assert_eq!(audit_entries[1].target_id, Some(*user_1));
+        assert_eq!(audit_entries[1].action, "Removed organization member");
 
         let members = repo.list_members(org_2).await.unwrap();
         assert_eq!(members.len(), 2);

@@ -2,6 +2,7 @@ import { useSelector } from "./useSelector";
 import { Invite, OrganizationMember } from "../types.ts";
 import { useEffect, useState } from "react";
 import { errorNotification } from "../notify.tsx";
+import { useRemails } from "./useRemails.ts";
 
 export function useOrganizations() {
   const organizations = useSelector((state) => state.organizations || []);
@@ -35,26 +36,21 @@ export function useInvites() {
 }
 
 export function useMembers() {
-  const { currentOrganization } = useOrganizations();
-  const [members, setMembers] = useState<OrganizationMember[] | null>(null);
+  const members = useSelector((state) => state.members || []);
+  const { dispatch } = useRemails();
 
-  useEffect(() => {
-    if (currentOrganization) {
-      fetch(`/api/organizations/${currentOrganization.id}/members`)
-        .then((res) => {
-          if (res.status === 200) {
-            return res.json();
-          } else {
-            errorNotification("Failed to load the organization's members");
-            console.error(res);
-            return null;
-          }
-        })
-        .then(setMembers);
-    }
-  }, [currentOrganization]);
+  const setMembers = (update: OrganizationMember[] | null | ((members: OrganizationMember[]) => OrganizationMember[] | null)) => {
+    const nextMembers = typeof update === "function" ? update(members) : update;
+    dispatch({ type: "set_members", members: nextMembers });
+  };
 
   return { members, setMembers };
+}
+
+export function useMemberWithId(user_id: string | null) {
+  const members = useSelector((state) => state.members || []);
+
+  return user_id ? (members.find((member) => member.user_id === user_id) ?? null) : null;
 }
 
 export function useStatistics() {

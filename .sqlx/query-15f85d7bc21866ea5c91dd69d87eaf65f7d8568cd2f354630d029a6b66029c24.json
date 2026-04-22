@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                target_id,\n                target_type AS \"target_type: TargetType\",\n                actor_id,\n                actor_type AS \"actor_type: ActorType\",\n                action,\n                details,\n                occurred_at            \n            FROM audit_log\n            WHERE organization_id = $1\n            ORDER BY occurred_at DESC\n            LIMIT 500\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "target_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "target_type: TargetType",
+        "type_info": {
+          "Custom": {
+            "name": "audit_log_target_type",
+            "kind": {
+              "Enum": [
+                "project",
+                "domain",
+                "message",
+                "smtp_credential",
+                "api_key",
+                "invite_link",
+                "member"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "actor_type: ActorType",
+        "type_info": {
+          "Custom": {
+            "name": "audit_log_actor_type",
+            "kind": {
+              "Enum": [
+                "api_user",
+                "api_key",
+                "system"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "action",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "details",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "15f85d7bc21866ea5c91dd69d87eaf65f7d8568cd2f354630d029a6b66029c24"
+}

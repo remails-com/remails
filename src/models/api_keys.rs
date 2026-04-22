@@ -1,18 +1,16 @@
 use chrono::{DateTime, Utc};
-use derive_more::{Deref, Display, From, FromStr};
 use garde::Validate;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::PgPool;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-use crate::models::{Error, OrgBlockStatus, OrganizationId, Password, Role};
+use crate::models::{
+    Actor, AuditLogRepository, Error, OrgBlockStatus, OrganizationId, Password, Role,
+};
 
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, From, Display, Deref, FromStr, ToSchema,
-)]
-pub struct ApiKeyId(Uuid);
+id!(ApiKeyId);
 
 #[derive(Serialize, ToSchema)]
 #[cfg_attr(test, derive(Deserialize, Debug))]
@@ -91,8 +89,7 @@ impl CreatedApiKeyWithPassword {
     }
 }
 
-#[derive(Deserialize, ToSchema, Validate)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Serialize, Deserialize, ToSchema, Validate)]
 pub struct ApiKeyRequest {
     #[serde(default)]
     #[schema(max_length = 500)]
@@ -105,17 +102,22 @@ pub struct ApiKeyRequest {
 #[derive(Debug, Clone)]
 pub struct ApiKeyRepository {
     pool: PgPool,
+    audit_log: AuditLogRepository,
 }
 
 impl ApiKeyRepository {
     pub fn new(pool: PgPool) -> Self {
-        ApiKeyRepository { pool }
+        ApiKeyRepository {
+            audit_log: AuditLogRepository::new(pool.clone()),
+            pool,
+        }
     }
 
     pub async fn create(
         &self,
         org_id: OrganizationId,
         key: &ApiKeyRequest,
+        actor: impl Into<Actor>,
     ) -> Result<CreatedApiKeyWithPassword, Error> {
         let password = Alphanumeric.sample_string(&mut rand::rng(), 32);
         let password_hash = password_auth::generate_hash(password.as_bytes());
@@ -127,6 +129,7 @@ impl ApiKeyRepository {
             )));
         }
 
+        let mut tx = self.pool.begin().await?;
         let api_key = sqlx::query_as!(
             ApiKey,
             r#"
@@ -147,8 +150,20 @@ impl ApiKeyRepository {
             *org_id,
             key.role as Role
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (api_key.id, org_id),
+                "Created API key",
+                Some(json!(key)),
+            )
+            .await?;
+
+        tx.commit().await?;
 
         Ok(CreatedApiKeyWithPassword {
             id: api_key.id,
@@ -202,6 +217,7 @@ impl ApiKeyRepository {
         org_id: OrganizationId,
         key_id: ApiKeyId,
         changes: &ApiKeyRequest,
+        actor: impl Into<Actor>,
     ) -> Result<ApiKey, Error> {
         if changes.role.is_at_least(Role::Admin) {
             return Err(Error::BadRequest(format!(
@@ -210,7 +226,8 @@ impl ApiKeyRepository {
             )));
         }
 
-        Ok(sqlx::query_as!(
+        let mut tx = self.pool.begin().await?;
+        let api_key = sqlx::query_as!(
             ApiKey,
             r#"
             UPDATE api_keys a
@@ -227,16 +244,31 @@ impl ApiKeyRepository {
             *org_id,
             *key_id
         )
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        self.audit_log
+            .log(
+                &mut tx,
+                actor,
+                (api_key.id, org_id),
+                "Updated API key",
+                Some(json!(changes)),
+            )
+            .await?;
+
+        tx.commit().await?;
+        Ok(api_key)
     }
 
     pub async fn remove(
         &self,
         org_id: OrganizationId,
         key_id: ApiKeyId,
+        actor: impl Into<Actor>,
     ) -> Result<ApiKeyId, Error> {
-        let id = sqlx::query_scalar!(
+        let mut tx = self.pool.begin().await?;
+        let id: ApiKeyId = sqlx::query_scalar!(
             r#"
             DELETE FROM api_keys
             WHERE organization_id = $1 AND id = $2
@@ -245,20 +277,28 @@ impl ApiKeyRepository {
             *org_id,
             *key_id,
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?
+        .into();
 
-        Ok(ApiKeyId(id))
+        self.audit_log
+            .log(&mut tx, actor, (id, org_id), "Deleted API key", None)
+            .await?;
+
+        tx.commit().await?;
+        Ok(id)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::models::{AuditLogRepository, SYSTEM};
 
     #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
     async fn api_key_lifecycle(db: PgPool) {
-        let repo = ApiKeyRepository::new(db);
+        let repo = ApiKeyRepository::new(db.clone());
+        let audit_log = AuditLogRepository::new(db);
         let org_id: OrganizationId = "44729d9f-a7dc-4226-b412-36a7537f5176".parse().unwrap(); // test org 1
 
         // create API key
@@ -266,10 +306,14 @@ mod test {
             description: "MyKey".to_string(),
             role: Role::Maintainer,
         };
-        let api_key = repo.create(org_id, &new).await.unwrap();
+        let api_key = repo.create(org_id, &new, SYSTEM).await.unwrap();
         assert_eq!(api_key.description, new.description);
         assert_eq!(api_key.organization_id, org_id);
         assert_eq!(api_key.role, new.role);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 1);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Created API key");
 
         // list API keys
         let api_keys = repo.list(org_id).await.unwrap();
@@ -285,11 +329,15 @@ mod test {
             role: Role::ReadOnly,
         };
         let id = *api_key.id();
-        let api_key = repo.update(org_id, id, &update).await.unwrap();
+        let api_key = repo.update(org_id, id, &update, SYSTEM).await.unwrap();
         assert_eq!(api_key.description, update.description);
         assert_eq!(api_key.id, id);
         assert_eq!(api_key.organization_id, org_id);
         assert_eq!(api_key.role, update.role);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 2);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Updated API key");
 
         // list API keys
         let api_keys = repo.list(org_id).await.unwrap();
@@ -300,8 +348,12 @@ mod test {
         assert_eq!(api_keys[0].role, update.role);
 
         // remove API key
-        let removed_id = repo.remove(org_id, api_key.id).await.unwrap();
+        let removed_id = repo.remove(org_id, api_key.id, SYSTEM).await.unwrap();
         assert_eq!(removed_id, api_key.id);
+        let audit_entries = audit_log.list(org_id).await.unwrap();
+        assert_eq!(audit_entries.len(), 3);
+        assert_eq!(audit_entries[0].target_id, Some(**api_key.id()));
+        assert_eq!(audit_entries[0].action, "Deleted API key");
 
         // verify that key was removed
         let api_keys = repo.list(org_id).await.unwrap();
@@ -324,6 +376,7 @@ mod test {
                     description: "Admin?".to_string(),
                     role: Role::Admin,
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();
@@ -339,6 +392,7 @@ mod test {
                     description: "Admin?".to_string(),
                     role: Role::Admin,
                 },
+                SYSTEM,
             )
             .await
             .unwrap_err();
