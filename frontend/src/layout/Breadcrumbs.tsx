@@ -6,6 +6,7 @@ import { useOrganizations } from "../hooks/useOrganizations.ts";
 import { useProjects } from "../hooks/useProjects.ts";
 import { useRemails } from "../hooks/useRemails.ts";
 import { RouteName } from "../routes.ts";
+import { isFullEmail } from "../types.ts";
 import { JSX } from "react";
 import { Link } from "../Link.tsx";
 
@@ -63,10 +64,7 @@ export function Breadcrumbs() {
     if (route == "projects.project") {
       title = currentProject?.name;
     } else if (route == "projects.project.emails.email") {
-      let subject: string | null = null;
-      if (currentEmail && "message_data" in currentEmail) {
-        subject = currentEmail?.message_data?.subject;
-      }
+      const subject = isFullEmail(currentEmail) ? currentEmail.message_data.subject : null;
       title = subject ?? "No subject";
     } else if (route == "projects.project.credentials.credential") {
       title = currentCredential?.username;

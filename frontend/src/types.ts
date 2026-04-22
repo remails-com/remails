@@ -89,6 +89,10 @@ export interface Email extends EmailMetadata {
   is_truncated: boolean;
 }
 
+export function isFullEmail(email: Email | EmailMetadata | null): email is Email {
+  return email !== null && "message_data" in email && "truncated_raw_data" in email;
+}
+
 export interface RemailsConfig {
   version: string;
   environment: string;
@@ -116,7 +120,7 @@ export interface State {
   members: OrganizationMember[] | null;
   projects: Project[] | null;
   labels: string[] | null;
-  emails: EmailMetadata[] | null;
+  emails: (Email | EmailMetadata)[] | null;
   domains: Domain[] | null;
   credentials: SmtpCredential[] | null;
   apiKeys: ApiKey[] | null;
