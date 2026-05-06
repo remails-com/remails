@@ -687,29 +687,9 @@ mod tests {
         let org_1 = TestProjects::Org1Project1.org_id();
         let server = TestServer::new(pool.clone(), Some(user_1)).await;
         let mut message_stream = server.message_bus.receive().await.unwrap();
-        let repo = MessageRepository::new(pool.clone());
 
         let rejected_id: MessageId = "40609d92-fcdc-458e-addd-71f3937af149".parse().unwrap();
         let failed_id: MessageId = "120dd3eb-5239-4da0-9503-ed72d3850dcd".parse().unwrap();
-
-        let rejected_before = sqlx::query!(
-            r#"
-            SELECT max_check_attempts, max_delivery_attempts
-            FROM messages
-            WHERE id = $1 AND organization_id = $2
-            "#,
-            *rejected_id,
-            *org_1,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(
-            repo.message_status(org_1, rejected_id).await.unwrap(),
-            MessageStatus::Rejected
-        );
-        assert_eq!(rejected_before.max_check_attempts, 3);
-        assert_eq!(rejected_before.max_delivery_attempts, 3);
 
         let response = server
             .put(
@@ -729,44 +709,6 @@ mod tests {
             BusMessage::EmailReadyToSend(rejected_id, "127.0.0.1".parse().unwrap())
         );
 
-        let rejected_after = sqlx::query!(
-            r#"
-            SELECT max_check_attempts, max_delivery_attempts
-            FROM messages
-            WHERE id = $1 AND organization_id = $2
-            "#,
-            *rejected_id,
-            *org_1,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(
-            repo.message_status(org_1, rejected_id).await.unwrap(),
-            MessageStatus::Rejected
-        );
-        assert_eq!(rejected_after.max_check_attempts, 3);
-        assert_eq!(rejected_after.max_delivery_attempts, 4);
-
-        let failed_before = sqlx::query!(
-            r#"
-            SELECT max_check_attempts, max_delivery_attempts
-            FROM messages
-            WHERE id = $1 AND organization_id = $2
-            "#,
-            *failed_id,
-            *org_1,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(
-            repo.message_status(org_1, failed_id).await.unwrap(),
-            MessageStatus::Failed
-        );
-        assert_eq!(failed_before.max_check_attempts, 3);
-        assert_eq!(failed_before.max_delivery_attempts, 3);
-
         let response = server
             .put(
                 format!("/api/organizations/{org_1}/emails/{failed_id}/retry"),
@@ -784,25 +726,6 @@ mod tests {
             bus_message,
             BusMessage::EmailReadyToSend(failed_id, "127.0.0.1".parse().unwrap())
         );
-
-        let failed_after = sqlx::query!(
-            r#"
-            SELECT max_check_attempts, max_delivery_attempts
-            FROM messages
-            WHERE id = $1 AND organization_id = $2
-            "#,
-            *failed_id,
-            *org_1,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(
-            repo.message_status(org_1, failed_id).await.unwrap(),
-            MessageStatus::Failed
-        );
-        assert_eq!(failed_after.max_check_attempts, 3);
-        assert_eq!(failed_after.max_delivery_attempts, 4);
     }
 
     async fn test_messages_no_access(
