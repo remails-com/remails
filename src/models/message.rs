@@ -265,6 +265,14 @@ pub struct NewApiMessage {
     pub raw_data: Vec<u8>,
 }
 
+pub struct InternalEmail {
+    pub to: EmailAddress,
+    pub subject: String,
+    pub text: String,
+    pub html: String,
+    pub label: Label,
+}
+
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
     pool: sqlx::PgPool,
@@ -643,11 +651,7 @@ impl MessageRepository {
 
     pub async fn create_system_email(
         &self,
-        to: EmailAddress,
-        subject: String,
-        text: String,
-        html: String,
-        label: Label,
+        email: InternalEmail,
         max_check_attempts: i32,
         max_delivery_attempts: i32,
     ) -> Result<MessageId, Error> {
@@ -658,18 +662,18 @@ impl MessageRepository {
 
         let mut raw_message = MessageBuilder::new()
             .from(from_email.as_str())
-            .to(to.as_str())
-            .subject(subject)
+            .to(email.to.as_str())
+            .subject(email.subject)
             .message_id(message_id_header.as_str())
-            .html_body(html.as_str())
-            .text_body(text.as_str())
+            .html_body(email.html.as_str())
+            .text_body(email.text.as_str())
             .write_to_vec()
             .map_err(|err| Error::Internal(format!("Failed to create internal email: {err}")))?;
 
         let (message_data, message_id_header, _) =
             self.parse_message(&mut raw_message, &message_id, &from_email)?;
 
-        let to = [to.to_string()];
+        let to = [email.to.to_string()];
         sqlx::query!(
             r#"
             INSERT INTO messages AS m (
@@ -691,7 +695,7 @@ impl MessageRepository {
             max_delivery_attempts,
             message_data,
             message_id_header,
-            label.as_str()
+            email.label.as_str()
         )
         .execute(&self.pool)
         .await?;

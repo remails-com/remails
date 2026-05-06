@@ -8,17 +8,12 @@ use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tracing::{debug, error, trace};
 
 use crate::{
-    bus::client::BusClient,
-    models::{Error, MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
+    models::{Error, NewMessage, SmtpCredential},
+    smtp::connection::HandleContext,
 };
 
 pub struct SmtpSession {
-    bus_client: BusClient,
-    smtp_credentials: SmtpCredentialRepository,
-    message_repository: MessageRepository,
-    max_check_retries: i32,
-    max_delivery_retries: i32,
-
+    context: HandleContext,
     peer_addr: SocketAddr,
     peer_name: Option<String>,
     authenticated_credential: Option<SmtpCredential>,
@@ -107,20 +102,9 @@ enum AttemptedAuthError {
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
 
-    pub fn new(
-        peer_addr: SocketAddr,
-        bus_client: BusClient,
-        smtp_credentials: SmtpCredentialRepository,
-        message_repository: MessageRepository,
-        max_check_retries: i32,
-        max_delivery_retries: i32,
-    ) -> Self {
+    pub fn new(peer_addr: SocketAddr, context: HandleContext) -> Self {
         Self {
-            bus_client,
-            smtp_credentials,
-            message_repository,
-            max_check_retries,
-            max_delivery_retries,
+            context,
             peer_addr,
             peer_name: None,
             current_message: None,
@@ -235,6 +219,7 @@ impl SmtpSession {
                 }
 
                 match self
+                    .context
                     .message_repository
                     .ensure_project_may_receive_messages(credential.project_id())
                     .await
@@ -354,7 +339,12 @@ impl SmtpSession {
             password.len()
         );
 
-        let Ok(Some(credential)) = self.smtp_credentials.find_by_username(username).await else {
+        let Ok(Some(credential)) = self
+            .context
+            .smtp_credentials
+            .find_by_username(username)
+            .await
+        else {
             return SmtpResponse::AUTH_ERROR.into();
         };
 
@@ -423,8 +413,13 @@ impl SmtpSession {
 
             // Store message in database
             let message_id = match self
+                .context
                 .message_repository
-                .create(message, self.max_check_retries, self.max_delivery_retries)
+                .create(
+                    message,
+                    self.context.max_check_retries,
+                    self.context.max_delivery_retries,
+                )
                 .await
             {
                 Ok(m) => m,
@@ -434,9 +429,14 @@ impl SmtpSession {
                 }
             };
 
-            match self.message_repository.get_ready_to_send(message_id).await {
+            match self
+                .context
+                .message_repository
+                .get_ready_to_send(message_id)
+                .await
+            {
                 Ok(bus_message) => {
-                    self.bus_client.try_send(&bus_message).await;
+                    self.context.bus_client.try_send(&bus_message).await;
                 }
                 Err(e) => {
                     error!(message_id = message_id.to_string(), "{e:?}");

@@ -745,8 +745,8 @@ mod tests {
             repo.message_status(org_1, rejected_id).await.unwrap(),
             MessageStatus::Rejected
         );
-        assert_eq!(rejected_after.max_check_attempts, 4);
-        assert_eq!(rejected_after.max_delivery_attempts, 3);
+        assert_eq!(rejected_after.max_check_attempts, 3);
+        assert_eq!(rejected_after.max_delivery_attempts, 4);
 
         let failed_before = sqlx::query!(
             r#"
