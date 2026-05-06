@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND o.block_status = 'not_blocked'\n              AND octet_length(raw_data) > 0\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                -- Only return the first API_RAW_TRUNCATE_LENGTH bytes/ASCII-characters of the raw data.\n                substring(m.raw_data FOR $3) as \"raw_data!\",\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\",\n                m.quota_charged\n            FROM messages m\n            WHERE m.id = $1\n              AND m.organization_id = $2\n              AND octet_length(m.raw_data) > 0 -- don't show deleted messages\n            ",
   "describe": {
     "columns": [
       {
@@ -70,7 +70,7 @@
       },
       {
         "ordinal": 10,
-        "name": "raw_data",
+        "name": "raw_data!",
         "type_info": "Bytea"
       },
       {
@@ -117,11 +117,18 @@
         "ordinal": 19,
         "name": "label:Label",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "quota_charged",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -135,7 +142,7 @@
       false,
       false,
       false,
-      false,
+      null,
       null,
       true,
       false,
@@ -144,8 +151,9 @@
       true,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "8e6fdab1b1f2271cb21bb5d85c2543566786e978ac5b5398074b8ca7b9bde7e8"
+  "hash": "2b0bf6d63976fafbb678f2bcaf26476486c77dbd0e216ae33f54ebdebf20863c"
 }

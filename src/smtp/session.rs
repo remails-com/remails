@@ -77,7 +77,6 @@ impl SmtpResponse {
     const MUST_USE_ESMTP: ConstResponse = (502, "5.5.1 Must use EHLO");
     const NO_VRFY: ConstResponse = (502, "5.5.1 VRFY command is disabled");
     const INGEST_AUTH: ConstResponse = (334, "Tell me your secret.");
-    const RATE_LIMIT: ConstResponse = (450, "4.3.2 Sent too many messages, try again later");
     const INTERNAL_ERROR: ConstResponse = (455, "4.0.0 Internal server error, try again later");
 }
 
@@ -234,13 +233,10 @@ impl SmtpSession {
 
                 match self
                     .message_repository
-                    .email_creation_rate_limit(credential.project_id())
+                    .ensure_project_may_receive_messages(credential.project_id())
                     .await
                 {
                     Ok(()) => {}
-                    Err(Error::TooManyRequests) => {
-                        return SessionReply::ReplyAndStop(SmtpResponse::RATE_LIMIT.into());
-                    }
                     Err(Error::OrgBlocked) => {
                         return SessionReply::ReplyAndStop(SmtpResponse::MESSAGE_REJECTED.into());
                     }

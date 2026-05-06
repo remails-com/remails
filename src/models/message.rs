@@ -15,8 +15,9 @@ use mail_builder::MessageBuilder;
 use mail_parser::{HeaderName, MessageParser, MimeHeaders};
 use rand::RngExt;
 use serde::{Deserialize, Deserializer, Serialize};
+use sqlx::Row;
 use std::{cmp::min, collections::HashMap, mem, str::FromStr};
-use tracing::{debug, error, span, trace};
+use tracing::{error, span, trace};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -80,6 +81,7 @@ pub struct Message {
     pub retry_after: Option<DateTime<Utc>>,
     pub attempts: i32,
     pub max_attempts: i32,
+    pub(crate) quota_charged: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -329,6 +331,7 @@ struct PgMessage {
     label: Option<Label>,
     attempts: i32,
     max_attempts: i32,
+    quota_charged: bool,
 }
 
 impl TryFrom<PgMessage> for Message {
@@ -359,6 +362,7 @@ impl TryFrom<PgMessage> for Message {
             retry_after: m.retry_after,
             attempts: m.attempts,
             max_attempts: m.max_attempts,
+            quota_charged: m.quota_charged,
         })
     }
 }
@@ -714,7 +718,8 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts,
                 m.max_attempts,
-                m.label AS "label:Label"
+                m.label AS "label:Label",
+                m.quota_charged
             "#,
             *message.message_id,
             *message.project_id,
@@ -748,7 +753,8 @@ impl MessageRepository {
                 delivery_details = $4,
                 retry_after = $5,
                 attempts = $6,
-                max_attempts = $7
+                max_attempts = $7,
+                quota_charged = $8
             WHERE id = $1
             "#,
             *message.id,
@@ -758,6 +764,7 @@ impl MessageRepository {
             message.retry_after,
             message.attempts,
             message.max_attempts,
+            message.quota_charged,
         )
         .execute(&self.pool)
         .await?;
@@ -793,7 +800,8 @@ impl MessageRepository {
                 retry_after,
                 attempts,
                 max_attempts,
-                label AS "label:Label"
+                label AS "label:Label",
+                quota_charged
             FROM messages m
             WHERE organization_id = $1
                 AND ($2::uuid IS NULL OR project_id = $2)
@@ -845,7 +853,8 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts,
                 m.max_attempts,
-                m.label AS "label:Label"
+                m.label AS "label:Label",
+                m.quota_charged
             FROM messages m
             JOIN organizations o ON o.id = m.organization_id
             WHERE m.id = $1
@@ -888,7 +897,8 @@ impl MessageRepository {
                 m.retry_after,
                 m.attempts,
                 m.max_attempts,
-                m.label AS "label:Label"
+                m.label AS "label:Label",
+                m.quota_charged
             FROM messages m
             WHERE m.id = $1
               AND m.organization_id = $2
@@ -1009,12 +1019,55 @@ impl MessageRepository {
         .await?)
     }
 
-    /// Returns true if the project has reached it's rate limit, false if it may still send emails
+    async fn ensure_project_may_receive_messages_query(
+        &self,
+        org_id: Option<OrganizationId>,
+        id: ProjectId,
+    ) -> Result<(), Error> {
+        let block_status = sqlx::query(
+            r#"
+            SELECT o.block_status
+            FROM organizations o
+            JOIN projects p ON o.id = p.organization_id
+            WHERE p.id = $1
+              AND ($2::uuid IS NULL OR o.id = $2)
+            "#,
+        )
+        .bind(*id)
+        .bind(org_id.map(|org_id| *org_id))
+        .fetch_one(&self.pool)
+        .await?
+        .try_get::<OrgBlockStatus, _>("block_status")?;
+
+        if block_status >= OrgBlockStatus::NoSendingOrReceiving {
+            trace!(project_id = id.to_string(), "organization blocked");
+            return Err(Error::OrgBlocked);
+        }
+
+        Ok(())
+    }
+
+    /// Checks if the given project belongs to the organization and is allowed to receive new emails.
+    pub async fn ensure_org_may_receive_messages(
+        &self,
+        org_id: OrganizationId,
+        id: ProjectId,
+    ) -> Result<(), Error> {
+        self.ensure_project_may_receive_messages_query(Some(org_id), id)
+            .await
+    }
+
+    /// Checks if the organization owning this project is allowed to receive new emails.
+    pub async fn ensure_project_may_receive_messages(&self, id: ProjectId) -> Result<(), Error> {
+        self.ensure_project_may_receive_messages_query(None, id)
+            .await
+    }
+
+    /// Checks whether a send attempt may proceed.
     ///
-    /// Automatically resets when the time span has expired, if so, it starts a new time span
-    ///
-    /// Also checks if the organization is allowed to receive new emails (is not blocked)
-    pub async fn email_creation_rate_limit(&self, id: ProjectId) -> Result<(), Error> {
+    /// This atomically applies the outbound rate limit on every attempt and charges quota at most
+    /// once per message.
+    pub async fn acquire_send_allowance(&self, message: &mut Message) -> Result<(), Error> {
         let mut tx = self
             .pool
             .begin()
@@ -1023,39 +1076,52 @@ impl MessageRepository {
 
         let now = Utc::now();
 
+        let message_state = sqlx::query!(
+            r#"
+            SELECT quota_charged
+            FROM messages
+            WHERE id = $1
+            FOR UPDATE
+            "#,
+            *message.id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        message.quota_charged = message_state.quota_charged;
+
         let org = sqlx::query!(
-                r#"
-                SELECT o.id, current_subscription, rate_limit_tokens, rate_limit_last_used, block_status AS "block_status:OrgBlockStatus"
-                FROM organizations o
-                         JOIN projects p ON o.id = p.organization_id
-                WHERE p.id = $1
-                FOR UPDATE
-                "#,
-                *id,
-            )
-                .fetch_one(&mut *tx)
-                .await?;
+            r#"
+            SELECT id, current_subscription, rate_limit_tokens, rate_limit_last_used,
+                   block_status AS "block_status:OrgBlockStatus"
+            FROM organizations
+            WHERE id = $1
+            FOR UPDATE
+            "#,
+            *message.organization_id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
 
         let span = span!(tracing::Level::DEBUG, "rate_limit_tokens",
             organization_id = %org.id,
-            project_id = %id,
+            project_id = %message.project_id,
             %org.rate_limit_tokens,
             %org.rate_limit_last_used,
             %org.block_status
         );
         let _span = span.enter();
 
-        trace!("checking rate limit");
-
-        if org.block_status >= OrgBlockStatus::NoSendingOrReceiving {
-            trace!(project_id = id.to_string(), "organization blocked");
+        if org.block_status >= OrgBlockStatus::NoSending {
+            trace!("organization blocked");
             return Err(Error::OrgBlocked);
         }
 
+        trace!("checking rate limit");
         let subscription: SubscriptionStatus = serde_json::from_value(org.current_subscription)?;
         let product = subscription.active_product();
 
-        let time_delta_size_last_use = now - org.rate_limit_last_used;
+        let time_delta_size_last_use = now.signed_duration_since(org.rate_limit_last_used);
         let tokens_to_add = time_delta_size_last_use.num_milliseconds()
             / product.token_refill_time().num_milliseconds();
 
@@ -1079,7 +1145,7 @@ impl MessageRepository {
         trace!(
             time_delta_size_last_use = time_delta_size_last_use.to_string(),
             tokens_to_add,
-            project_id = id.to_string(),
+            project_id = message.project_id.to_string(),
             available_tokens = available_tokens,
             new_rate_limit_timestamp = new_timestamp.to_string(),
             "updated rate limit"
@@ -1099,14 +1165,43 @@ impl MessageRepository {
         .execute(&mut *tx)
         .await?;
 
+        if !message_state.quota_charged {
+            let remaining_quota = sqlx::query_scalar!(
+                r#"
+                UPDATE organizations
+                SET used_message_quota = LEAST(used_message_quota + 1, total_message_quota)
+                WHERE id = $1
+                RETURNING (total_message_quota - used_message_quota) as "remaining!"
+                "#,
+                org.id
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if remaining_quota <= 0 {
+                tx.commit()
+                    .await
+                    .inspect_err(|err| error!("Failed to commit transaction: {err}"))?;
+                return Err(Error::OutOfQuota);
+            }
+
+            sqlx::query!(
+                r#"
+                UPDATE messages
+                SET quota_charged = true
+                WHERE id = $1
+                "#,
+                *message.id,
+            )
+            .execute(&mut *tx)
+            .await?;
+            message.quota_charged = true;
+        }
+
         tx.commit()
             .await
             .inspect_err(|err| error!("Failed to commit transaction: {err}"))?;
 
-        debug!(
-            "organization has still {} rate limit tokens",
-            available_tokens
-        );
         Ok(())
     }
 
@@ -1431,7 +1526,10 @@ mod test {
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
+        messages
+            .ensure_org_may_receive_messages(org_id, proj_id)
+            .await
+            .unwrap(); // can receive
 
         // set org 1 to No Sending
         organizations
@@ -1442,7 +1540,10 @@ mod test {
         let err = messages.get_if_org_may_send(message_id).await.unwrap_err(); // can't send
         assert!(matches!(err, Error::NotFound(_)));
 
-        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive
+        messages
+            .ensure_org_may_receive_messages(org_id, proj_id)
+            .await
+            .unwrap(); // can receive
 
         // set org 1 to No Sending Or Receiving
         organizations
@@ -1454,7 +1555,7 @@ mod test {
         assert!(matches!(err, Error::NotFound(_)));
 
         let err = messages
-            .email_creation_rate_limit(proj_id)
+            .ensure_org_may_receive_messages(org_id, proj_id)
             .await
             .unwrap_err();
         assert!(matches!(err, Error::OrgBlocked)); // can't receive
@@ -1469,7 +1570,7 @@ mod test {
         assert!(matches!(err, Error::NotFound(_)));
 
         let err = messages
-            .email_creation_rate_limit(proj_id)
+            .ensure_org_may_receive_messages(org_id, proj_id)
             .await
             .unwrap_err();
         assert!(matches!(err, Error::OrgBlocked)); // can't receive
@@ -1483,6 +1584,9 @@ mod test {
         let message = messages.get_if_org_may_send(message_id).await.unwrap(); // can send again
         assert_eq!(message.id(), message_id);
 
-        messages.email_creation_rate_limit(proj_id).await.unwrap(); // can receive again
+        messages
+            .ensure_org_may_receive_messages(org_id, proj_id)
+            .await
+            .unwrap(); // can receive again
     }
 }
