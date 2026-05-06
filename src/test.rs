@@ -94,7 +94,8 @@ async fn setup(
 
     let retry_config = RetryConfig {
         delay: chrono::Duration::minutes(5),
-        max_automatic_retries: 2,
+        max_check_retries: 2,
+        max_delivery_retries: 2,
     };
 
     let smtp_config = SmtpConfig {

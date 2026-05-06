@@ -119,7 +119,8 @@ impl SmtpServer {
         let bus_client = self.bus_client.clone();
         let user_repository = self.user_repository.clone();
         let message_repository = self.message_repository.clone();
-        let max_automatic_retries = self.config.retry.max_automatic_retries;
+        let max_check_retries = self.config.retry.max_check_retries;
+        let max_delivery_retries = self.config.retry.max_delivery_retries;
         let shutdown = self.shutdown.clone();
 
         let acceptor_clone = acceptor.clone();
@@ -192,7 +193,8 @@ impl SmtpServer {
                                 bus_client,
                                 user_repository,
                                 message_repository,
-                                max_automatic_retries,
+                                max_check_retries,
+                                max_delivery_retries,
                             )
                             .await?;
                             tls_stream.shutdown().await.map_err(ConnectionError::Write)

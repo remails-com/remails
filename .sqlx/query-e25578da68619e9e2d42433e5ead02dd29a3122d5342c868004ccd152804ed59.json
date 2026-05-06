@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                attempts,\n                max_attempts,\n                label AS \"label:Label\",\n                quota_charged\n            FROM messages m\n            WHERE organization_id = $1\n                AND ($2::uuid IS NULL OR project_id = $2)\n                AND ($3::message_status[] IS NULL OR status = ANY($3))\n                AND ($4::timestamptz IS NULL OR created_at <= $4)\n                AND ($5::text[] IS NULL OR label = ANY($5))\n                AND octet_length(raw_data) > 0 -- don't show deleted messages\n            ORDER BY created_at DESC\n            LIMIT $6\n            ",
+  "query": "\n            SELECT\n                id,\n                organization_id,\n                project_id,\n                smtp_credential_id,\n                api_key_id,\n                status AS \"status: _\",\n                reason,\n                delivery_details,\n                from_email,\n                recipients,\n                ''::bytea AS \"raw_data!\",\n                NULL::jsonb AS \"message_data\",\n                octet_length(raw_data) AS \"raw_size!\",\n                message_id_header,\n                created_at,\n                updated_at,\n                retry_after,\n                check_attempts,\n                delivery_attempts,\n                max_check_attempts,\n                max_delivery_attempts,\n                label AS \"label:Label\",\n                quota_charged\n            FROM messages m\n            WHERE organization_id = $1\n                AND ($2::uuid IS NULL OR project_id = $2)\n                AND ($3::message_status[] IS NULL OR status = ANY($3))\n                AND ($4::timestamptz IS NULL OR created_at <= $4)\n                AND ($5::text[] IS NULL OR label = ANY($5))\n                AND octet_length(raw_data) > 0 -- don't show deleted messages\n            ORDER BY created_at DESC\n            LIMIT $6\n            ",
   "describe": {
     "columns": [
       {
@@ -105,21 +105,31 @@
       },
       {
         "ordinal": 17,
-        "name": "attempts",
+        "name": "check_attempts",
         "type_info": "Int4"
       },
       {
         "ordinal": 18,
-        "name": "max_attempts",
+        "name": "delivery_attempts",
         "type_info": "Int4"
       },
       {
         "ordinal": 19,
+        "name": "max_check_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 20,
+        "name": "max_delivery_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
         "name": "label:Label",
         "type_info": "Text"
       },
       {
-        "ordinal": 20,
+        "ordinal": 22,
         "name": "quota_charged",
         "type_info": "Bool"
       }
@@ -176,9 +186,11 @@
       true,
       false,
       false,
+      false,
+      false,
       true,
       false
     ]
   },
-  "hash": "b39a4172de2c4610d48303e978e4258fc043f8aabe485ec360a973cee3dd3226"
+  "hash": "e25578da68619e9e2d42433e5ead02dd29a3122d5342c868004ccd152804ed59"
 }

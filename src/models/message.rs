@@ -79,8 +79,10 @@ pub struct Message {
     pub created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     pub retry_after: Option<DateTime<Utc>>,
-    pub attempts: i32,
-    pub max_attempts: i32,
+    pub check_attempts: i32,
+    pub delivery_attempts: i32,
+    pub max_check_attempts: i32,
+    pub max_delivery_attempts: i32,
     pub(crate) quota_charged: bool,
 }
 
@@ -117,9 +119,13 @@ pub struct ApiMessageMetadata {
     retry_after: Option<DateTime<Utc>>,
     pub label: Option<Label>,
     #[schema(minimum = 0)]
-    attempts: i32,
+    check_attempts: i32,
     #[schema(minimum = 0)]
-    max_attempts: i32,
+    delivery_attempts: i32,
+    #[schema(minimum = 0)]
+    max_check_attempts: i32,
+    #[schema(minimum = 0)]
+    max_delivery_attempts: i32,
 }
 
 #[derive(Serialize, Default, ToSchema)]
@@ -187,8 +193,11 @@ impl Message {
     }
 
     pub fn set_next_retry(&mut self, config: &RetryConfig) {
-        if self.max_attempts < self.attempts {
-            self.max_attempts = self.attempts;
+        if self.max_check_attempts < self.check_attempts {
+            self.max_check_attempts = self.check_attempts;
+        }
+        if self.max_delivery_attempts < self.delivery_attempts {
+            self.max_delivery_attempts = self.delivery_attempts;
         }
 
         if !self.status.should_retry() {
@@ -196,10 +205,16 @@ impl Message {
             return;
         }
 
-        if self.attempts < config.max_automatic_retries {
+        let (current_attempts, max_attempts) = match self.status {
+            MessageStatus::Held => (self.check_attempts, self.max_check_attempts),
+            MessageStatus::Reattempt => (self.delivery_attempts, self.max_delivery_attempts),
+            _ => return,
+        };
+
+        if current_attempts < max_attempts {
             let timeout = config
                 .delay
-                .checked_mul(self.attempts)
+                .checked_mul(current_attempts)
                 .unwrap_or(chrono::TimeDelta::days(1))
                 .checked_add(&chrono::TimeDelta::seconds(
                     rand::rng().random_range(0..300),
@@ -329,8 +344,10 @@ struct PgMessage {
     updated_at: DateTime<Utc>,
     retry_after: Option<DateTime<Utc>>,
     label: Option<Label>,
-    attempts: i32,
-    max_attempts: i32,
+    check_attempts: i32,
+    delivery_attempts: i32,
+    max_check_attempts: i32,
+    max_delivery_attempts: i32,
     quota_charged: bool,
 }
 
@@ -360,8 +377,10 @@ impl TryFrom<PgMessage> for Message {
             created_at: m.created_at,
             updated_at: m.updated_at,
             retry_after: m.retry_after,
-            attempts: m.attempts,
-            max_attempts: m.max_attempts,
+            check_attempts: m.check_attempts,
+            delivery_attempts: m.delivery_attempts,
+            max_check_attempts: m.max_check_attempts,
+            max_delivery_attempts: m.max_delivery_attempts,
             quota_charged: m.quota_charged,
         })
     }
@@ -442,8 +461,10 @@ impl TryFrom<PgMessage> for ApiMessageMetadata {
             updated_at: m.updated_at,
             retry_after: m.retry_after,
             label: m.label,
-            attempts: m.attempts,
-            max_attempts: m.max_attempts,
+            check_attempts: m.check_attempts,
+            delivery_attempts: m.delivery_attempts,
+            max_check_attempts: m.max_check_attempts,
+            max_delivery_attempts: m.max_delivery_attempts,
         })
     }
 }
@@ -557,7 +578,8 @@ impl MessageRepository {
     pub async fn create(
         &self,
         mut message: NewMessage,
-        max_attempts: i32,
+        max_check_attempts: i32,
+        max_delivery_attempts: i32,
     ) -> Result<MessageId, Error> {
         let (message_data, message_id_header, label) = self.parse_message(
             &mut message.raw_data,
@@ -569,10 +591,10 @@ impl MessageRepository {
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, smtp_credential_id,
-                from_email, recipients, raw_data, max_attempts,
+                from_email, recipients, raw_data, max_check_attempts, max_delivery_attempts,
                 message_data, message_id_header, label
             )
-            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8, $9
+            SELECT $1, o.id, p.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
             FROM smtp_credentials s
                 JOIN projects p ON p.id = s.project_id
                 JOIN organizations o ON o.id = p.organization_id
@@ -589,7 +611,8 @@ impl MessageRepository {
                 .map(|r| r.email())
                 .collect::<Vec<_>>(),
             message.raw_data,
-            max_attempts,
+            max_check_attempts,
+            max_delivery_attempts,
             message_data,
             message_id_header,
             label.as_deref(),
@@ -625,7 +648,8 @@ impl MessageRepository {
         text: String,
         html: String,
         label: Label,
-        max_attempts: i32,
+        max_check_attempts: i32,
+        max_delivery_attempts: i32,
     ) -> Result<MessageId, Error> {
         let (from_email, project_id) = self.internal_email_config().await?;
         let message_id = MessageId::new_v4();
@@ -650,10 +674,10 @@ impl MessageRepository {
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id,
-                from_email, recipients, raw_data, max_attempts,
+                from_email, recipients, raw_data, max_check_attempts, max_delivery_attempts,
                 message_data, message_id_header, label
             )
-            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
             FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
             WHERE p.id = $2
@@ -663,7 +687,8 @@ impl MessageRepository {
             from_email.as_str(),
             to.as_slice(),
             raw_message,
-            max_attempts,
+            max_check_attempts,
+            max_delivery_attempts,
             message_data,
             message_id_header,
             label.as_str()
@@ -677,7 +702,8 @@ impl MessageRepository {
     pub async fn create_from_api(
         &self,
         mut message: NewApiMessage,
-        max_attempts: i32,
+        max_check_attempts: i32,
+        max_delivery_attempts: i32,
     ) -> Result<ApiMessageMetadata, Error> {
         // the REST API provides its own message label and does not use the X-REMAILS-LABEL header
         let (message_data, message_id_header, _) = self.parse_message(
@@ -691,10 +717,10 @@ impl MessageRepository {
             r#"
             INSERT INTO messages AS m (
                 id, organization_id, project_id, api_key_id,
-                from_email, recipients, raw_data, max_attempts,
+                from_email, recipients, raw_data, max_check_attempts, max_delivery_attempts,
                 message_data, message_id_header, label
             )
-            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
+            SELECT $1, o.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
             FROM projects p
                 JOIN organizations o ON o.id = p.organization_id
             WHERE p.id = $2
@@ -716,8 +742,10 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts,
-                m.max_attempts,
+                m.check_attempts,
+                m.delivery_attempts,
+                m.max_check_attempts,
+                m.max_delivery_attempts,
                 m.label AS "label:Label",
                 m.quota_charged
             "#,
@@ -731,7 +759,8 @@ impl MessageRepository {
                 .map(|r| r.email())
                 .collect::<Vec<_>>(),
             message.raw_data,
-            max_attempts,
+            max_check_attempts,
+            max_delivery_attempts,
             message_data,
             message_id_header,
             message.label.as_deref()
@@ -752,9 +781,11 @@ impl MessageRepository {
                 reason = $3,
                 delivery_details = $4,
                 retry_after = $5,
-                attempts = $6,
-                max_attempts = $7,
-                quota_charged = $8
+                check_attempts = $6,
+                delivery_attempts = $7,
+                max_check_attempts = $8,
+                max_delivery_attempts = $9,
+                quota_charged = $10
             WHERE id = $1
             "#,
             *message.id,
@@ -762,8 +793,10 @@ impl MessageRepository {
             message.reason,
             delivery_details_serialized,
             message.retry_after,
-            message.attempts,
-            message.max_attempts,
+            message.check_attempts,
+            message.delivery_attempts,
+            message.max_check_attempts,
+            message.max_delivery_attempts,
             message.quota_charged,
         )
         .execute(&self.pool)
@@ -798,8 +831,10 @@ impl MessageRepository {
                 created_at,
                 updated_at,
                 retry_after,
-                attempts,
-                max_attempts,
+                check_attempts,
+                delivery_attempts,
+                max_check_attempts,
+                max_delivery_attempts,
                 label AS "label:Label",
                 quota_charged
             FROM messages m
@@ -851,8 +886,10 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts,
-                m.max_attempts,
+                m.check_attempts,
+                m.delivery_attempts,
+                m.max_check_attempts,
+                m.max_delivery_attempts,
                 m.label AS "label:Label",
                 m.quota_charged
             FROM messages m
@@ -895,8 +932,10 @@ impl MessageRepository {
                 m.created_at,
                 m.updated_at,
                 m.retry_after,
-                m.attempts,
-                m.max_attempts,
+                m.check_attempts,
+                m.delivery_attempts,
+                m.max_check_attempts,
+                m.max_delivery_attempts,
                 m.label AS "label:Label",
                 m.quota_charged
             FROM messages m
@@ -986,11 +1025,9 @@ impl MessageRepository {
             WHERE o.block_status = 'not_blocked'
               AND octet_length(m.raw_data) > 0
               AND (
-                (m.status = 'held' OR m.status = 'reattempt')
-                AND now() > m.retry_after AND m.attempts < m.max_attempts
-              ) OR (
-                (m.status = 'accepted' OR m.status = 'processing')
-                AND now() > m.updated_at + '5 minutes'
+                (m.status = 'held' AND now() > m.retry_after AND m.check_attempts < m.max_check_attempts)
+                OR (m.status = 'reattempt' AND now() > m.retry_after AND m.delivery_attempts < m.max_delivery_attempts)
+                OR ((m.status = 'accepted' OR m.status = 'processing') AND now() > m.updated_at + '5 minutes')
               )
             "#,
         )
@@ -1335,7 +1372,7 @@ mod test {
 
         // create message
         let new_message = NewMessage::from_builder_message(message, credential.id());
-        let message_id = repository.create(new_message, 5).await.unwrap();
+        let message_id = repository.create(new_message, 5, 5).await.unwrap();
 
         // get message
         let mut fetched_message = repository.find_by_id(org_id, message_id).await.unwrap();
@@ -1444,7 +1481,7 @@ mod test {
             ],
             raw_data: message.into_message().unwrap().body.to_vec(),
         };
-        let message = repository.create_from_api(new_message, 5).await.unwrap();
+        let message = repository.create_from_api(new_message, 5, 5).await.unwrap();
         assert_eq!(message.message_id_header, message_id_header);
         assert_eq!(message.label, Some(Label::new("up-date")));
 

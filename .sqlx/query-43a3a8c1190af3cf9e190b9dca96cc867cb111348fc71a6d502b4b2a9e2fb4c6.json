@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE o.block_status = 'not_blocked'\n              AND octet_length(m.raw_data) > 0\n              AND (\n                (m.status = 'held' AND now() > m.retry_after AND m.check_attempts < m.max_check_attempts)\n                OR (m.status = 'reattempt' AND now() > m.retry_after AND m.delivery_attempts < m.max_delivery_attempts)\n                OR ((m.status = 'accepted' OR m.status = 'processing') AND now() > m.updated_at + '5 minutes')\n              )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "43a3a8c1190af3cf9e190b9dca96cc867cb111348fc71a6d502b4b2a9e2fb4c6"
+}

@@ -94,7 +94,8 @@ async fn send_internal_email(api_state: &ApiState, email: InternalEmail) -> Resu
             email.text,
             email.html,
             email.label,
-            api_state.retry_config.max_automatic_retries,
+            api_state.retry_config.max_check_retries,
+            api_state.retry_config.max_delivery_retries,
         )
         .await?;
 

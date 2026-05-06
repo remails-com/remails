@@ -71,14 +71,16 @@ enum Protection {
 #[derive(Clone)]
 pub struct RetryConfig {
     pub(crate) delay: Duration,
-    pub(crate) max_automatic_retries: i32,
+    pub(crate) max_check_retries: i32,
+    pub(crate) max_delivery_retries: i32,
 }
 
 impl RetryConfig {
     pub fn new() -> Self {
         Self {
             delay: Duration::minutes(5),
-            max_automatic_retries: 5,
+            max_check_retries: 20,
+            max_delivery_retries: 5,
         }
     }
 }
@@ -662,7 +664,7 @@ impl Handler {
                         format!(
                             "attempting to send email to {} (attempt {})",
                             recipient.email(),
-                            message.attempts
+                            message.delivery_attempts
                         ),
                     );
                 }
@@ -671,7 +673,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as message was already successfully delivered (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     continue;
@@ -681,7 +683,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as remote reported a permanent failure (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     failures += 1;
@@ -692,7 +694,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as the email address has been suppressed due to repeated delivery failures (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     failures += 1;
@@ -886,7 +888,12 @@ impl Handler {
                 }
             };
 
-            message.attempts += 1;
+            if matches!(
+                message.status,
+                MessageStatus::Processing | MessageStatus::Held | MessageStatus::Rejected
+            ) {
+                message.check_attempts += 1
+            }
 
             let message_id = message.id().to_string();
             if let Err(e) = self_clone.handle_message(&mut message).await {
@@ -897,6 +904,8 @@ impl Handler {
                 }
                 return;
             };
+
+            message.delivery_attempts += 1;
 
             if let Err(e) = self_clone.send_message(message, outbound_ip).await {
                 error!(message_id, "failed to send message: {e:?}");
@@ -938,7 +947,8 @@ mod test {
                 environment: Environment::Development,
                 retry: RetryConfig {
                     delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
+                    max_check_retries: 1,
+                    max_delivery_retries: 1,
                 },
             };
             Handler::new(
@@ -1000,7 +1010,11 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -1076,7 +1090,11 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), 1, Some(dns_records)).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1140,7 +1158,11 @@ mod test {
                 NewMessage::from_builder_message_custom_from(message, credential.id(), from_email);
             let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1208,7 +1230,11 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1273,7 +1299,11 @@ mod test {
         );
         let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -1337,7 +1367,11 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -1345,7 +1379,7 @@ mod test {
             .unwrap();
 
         // First-time processing should consume both one rate-limit token and one unit of quota.
-        message.attempts = 1;
+        message.check_attempts = 1;
         handler.handle_message(&mut message).await.unwrap();
 
         let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
@@ -1354,7 +1388,7 @@ mod test {
 
         // A retry should check the rate limit again, but must not deduct quota a second time.
         message.status = MessageStatus::Reattempt;
-        message.attempts = 2;
+        message.delivery_attempts = 1;
         assert!(matches!(
             handler.handle_message(&mut message).await,
             Err(HandlerError::MessageNotAccepted(MessageStatus::Held, reason))
@@ -1378,7 +1412,7 @@ mod test {
         .await
         .unwrap();
 
-        message.attempts = 3;
+        message.delivery_attempts = 2;
         handler.handle_message(&mut message).await.unwrap();
 
         let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
@@ -1430,7 +1464,11 @@ mod test {
         .await;
         let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -1438,7 +1476,7 @@ mod test {
             .unwrap();
 
         // The first attempt is held before the quota step because DNS validation fails.
-        message.attempts = 1;
+        message.check_attempts = 1;
         assert!(matches!(
             handler_with_invalid_dns.handle_message(&mut message).await,
             Err(HandlerError::MessageNotAccepted(MessageStatus::Held, _))
@@ -1448,7 +1486,7 @@ mod test {
         assert_eq!(org.used_message_quota(), 0);
 
         // Once the message reaches the quota step on a later retry, quota is charged exactly once.
-        message.attempts = 2;
+        message.check_attempts = 2;
         handler.handle_message(&mut message).await.unwrap();
 
         let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();

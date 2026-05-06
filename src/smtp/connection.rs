@@ -37,7 +37,8 @@ pub async fn handle(
     bus_client: BusClient,
     user_repository: SmtpCredentialRepository,
     message_repository: MessageRepository,
-    max_automatic_retries: i32,
+    max_check_retries: i32,
+    max_delivery_retries: i32,
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);
 
@@ -48,7 +49,8 @@ pub async fn handle(
         bus_client,
         user_repository,
         message_repository,
-        max_automatic_retries,
+        max_check_retries,
+        max_delivery_retries,
     );
 
     let mut reader = BufReader::new(source);

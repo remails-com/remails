@@ -167,7 +167,8 @@ mod test {
             environment: Environment::Development,
             retry: RetryConfig {
                 delay: Duration::minutes(60),
-                max_automatic_retries: 3,
+                max_check_retries: 3,
+                max_delivery_retries: 3,
             },
         };
         let handler = Handler::new(
@@ -309,7 +310,8 @@ mod test {
             resolver: DnsResolver::mock("localhost", mailcrab_port),
             retry: RetryConfig {
                 delay: Duration::minutes(60),
-                max_automatic_retries: 3,
+                max_check_retries: 3,
+                max_delivery_retries: 3,
             },
             environment: Environment::Development,
         };

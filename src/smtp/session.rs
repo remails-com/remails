@@ -16,7 +16,8 @@ pub struct SmtpSession {
     bus_client: BusClient,
     smtp_credentials: SmtpCredentialRepository,
     message_repository: MessageRepository,
-    max_automatic_retries: i32,
+    max_check_retries: i32,
+    max_delivery_retries: i32,
 
     peer_addr: SocketAddr,
     peer_name: Option<String>,
@@ -111,13 +112,15 @@ impl SmtpSession {
         bus_client: BusClient,
         smtp_credentials: SmtpCredentialRepository,
         message_repository: MessageRepository,
-        max_automatic_retries: i32,
+        max_check_retries: i32,
+        max_delivery_retries: i32,
     ) -> Self {
         Self {
             bus_client,
             smtp_credentials,
             message_repository,
-            max_automatic_retries,
+            max_check_retries,
+            max_delivery_retries,
             peer_addr,
             peer_name: None,
             current_message: None,
@@ -421,7 +424,7 @@ impl SmtpSession {
             // Store message in database
             let message_id = match self
                 .message_repository
-                .create(message, self.max_automatic_retries)
+                .create(message, self.max_check_retries, self.max_delivery_retries)
                 .await
             {
                 Ok(m) => m,
