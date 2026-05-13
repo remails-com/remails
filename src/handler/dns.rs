@@ -3,13 +3,13 @@ use crate::handler::mock;
 use crate::models::Error;
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
+use hickory_resolver::proto::rr::RData;
 #[cfg(not(test))]
 use hickory_resolver::{
     TokioResolver,
     config::{LookupIpStrategy::Ipv4Only, NameServerConfig, ResolverConfig, ResolverOpts},
     net::runtime::TokioRuntimeProvider,
 };
-use hickory_resolver::proto::rr::RData;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 use tracing::{debug, trace};
@@ -205,7 +205,13 @@ impl DnsResolver {
         let Some(destination) = lookup
             .answers()
             .iter()
-            .filter_map(|r| if let RData::MX(mx) = &r.data { Some(mx) } else { None })
+            .filter_map(|r| {
+                if let RData::MX(mx) = &r.data {
+                    Some(mx)
+                } else {
+                    None
+                }
+            })
             .filter(|mx| prio.contains(&u32::from(mx.preference)))
             .min_by_key(|mx| mx.preference)
         else {
@@ -240,7 +246,13 @@ impl DnsResolver {
         let mut record = record
             .answers()
             .iter()
-            .filter_map(|r| if let RData::TXT(txt) = &r.data { Some(txt) } else { None })
+            .filter_map(|r| {
+                if let RData::TXT(txt) = &r.data {
+                    Some(txt)
+                } else {
+                    None
+                }
+            })
             .filter(|txt| {
                 txt.txt_data
                     .iter()

@@ -5,7 +5,10 @@ use hickory_resolver::{
     net::NetError,
     proto::{
         op::Query,
-        rr::{Name, RData, Record, RecordType, rdata::{MX as MxRdata, TXT as TxtRdata}},
+        rr::{
+            Name, RData, Record, RecordType,
+            rdata::{MX as MxRdata, TXT as TxtRdata},
+        },
     },
 };
 

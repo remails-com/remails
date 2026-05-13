@@ -27,7 +27,10 @@ use tokio::{
     sync::Semaphore,
     task::JoinHandle,
 };
-use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
+use tokio_rustls::{
+    TlsConnector,
+    rustls::{crypto, crypto::CryptoProvider},
+};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
@@ -59,9 +62,12 @@ enum SendError {
     PermanentFailure,
     #[error("no MX server accepted the message")]
     TemporaryFailure,
+    /// Server does not support STARTTLS at all; no point retrying with relaxed cert verification.
+    #[error("server does not support STARTTLS")]
+    StartTlsNotSupported,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Protection {
     Plaintext,
     TlsAllowInvalidCerts,
@@ -132,6 +138,7 @@ pub struct Handler {
     outbound_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
+    tls_connector: TlsConnector,
 }
 
 impl Handler {
@@ -165,6 +172,8 @@ impl Handler {
             outbound_ips: Default::default(),
             shutdown,
             config,
+            tls_connector: mail_send::smtp::tls::build_tls_connector(false)
+                .expect("failed to build TLS connector"),
         }
     }
 
@@ -455,6 +464,7 @@ impl Handler {
         let mut priority = 0..65536;
 
         let mut is_temporary_failure = false;
+        let mut no_start_tls = false;
 
         loop {
             match self
@@ -479,6 +489,7 @@ impl Handler {
                         Ok(_) => return Ok(()),
                         Err(SendError::PermanentFailure) => {} // continue to try the next server
                         Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                        Err(SendError::StartTlsNotSupported) => no_start_tls = true,
                     }
                 }
                 Err(ResolveError::AllServersExhausted) => {
@@ -503,6 +514,8 @@ impl Handler {
 
         if is_temporary_failure {
             Err(SendError::TemporaryFailure)
+        } else if no_start_tls {
+            Err(SendError::StartTlsNotSupported)
         } else {
             Err(SendError::PermanentFailure)
         }
@@ -519,12 +532,18 @@ impl Handler {
         port: u16,
         outbound_ip: IpAddr,
     ) -> Result<(), SendError> {
-        let smtp = SmtpClientBuilder::new(&hostname, port)
-            .implicit_tls(false)
-            .local_ip(outbound_ip)
-            .say_ehlo(true)
-            .helo_host(&self.config.domain)
-            .timeout(std::time::Duration::from_secs(30));
+        let smtp = SmtpClientBuilder {
+            addr: format!("{hostname}:{port}"),
+            timeout: std::time::Duration::from_secs(30),
+            tls_connector: self.tls_connector.clone(),
+            tls_hostname: hostname.clone(),
+            tls_implicit: false,
+            is_lmtp: false,
+            local_host: self.config.domain.clone(),
+            credentials: None,
+            say_ehlo: true,
+            local_ip: Some(outbound_ip),
+        };
 
         let result = match security {
             Protection::Tls => match smtp.connect().await {
@@ -610,7 +629,7 @@ impl Handler {
             mail_send::Error::MissingRcptTo => SendError::PermanentFailure,
             mail_send::Error::UnsupportedAuthMechanism => SendError::PermanentFailure,
             mail_send::Error::Timeout => SendError::TemporaryFailure,
-            mail_send::Error::MissingStartTls => SendError::PermanentFailure,
+            mail_send::Error::MissingStartTls => SendError::StartTlsNotSupported,
         })
     }
 
@@ -703,8 +722,15 @@ impl Handler {
             }
 
             let mut is_temporary_failure = false;
+            let mut no_start_tls = false;
 
             for &protection in order {
+                // If STARTTLS is unsupported, skip the TlsAllowInvalidCerts level — invalid
+                // certs can't be the problem when the server doesn't offer STARTTLS at all.
+                if no_start_tls && protection == Protection::TlsAllowInvalidCerts {
+                    continue;
+                }
+
                 // restrict the recipients; this object is cheap to clone
                 let smtp_message = smtp::message::Message {
                     mail_from: message.from_email.as_str().into(),
@@ -732,6 +758,7 @@ impl Handler {
                     }
                     Err(SendError::TemporaryFailure) => is_temporary_failure = true,
                     Err(SendError::PermanentFailure) => {}
+                    Err(SendError::StartTlsNotSupported) => no_start_tls = true,
                 }
             }
             failures += 1;
