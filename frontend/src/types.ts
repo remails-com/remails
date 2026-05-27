@@ -68,8 +68,10 @@ export interface EmailMetadata {
   message_id_header: string;
   delivery_details: { [receiver: string]: DeliveryDetails };
   retry_after: string | undefined;
-  attempts: number;
-  max_attempts: number;
+  check_attempts: number;
+  delivery_attempts: number;
+  max_check_attempts: number;
+  max_delivery_attempts: number;
   label: string | undefined;
 }
 
@@ -199,7 +201,7 @@ export type Action =
     emailMetadata: EmailMetadata[] | null;
   }
   | {
-    type: "update_email";
+    type: "upsert_email";
     emailId: string;
     update: Partial<Email>;
   }

@@ -3,12 +3,12 @@ use crate::handler::mock;
 use crate::models::Error;
 use base64ct::{Base64Unpadded, Encoding};
 use chrono::{DateTime, Utc};
+use hickory_resolver::proto::rr::RData;
 #[cfg(not(test))]
 use hickory_resolver::{
-    Resolver,
+    TokioResolver,
     config::{LookupIpStrategy::Ipv4Only, NameServerConfig, ResolverConfig, ResolverOpts},
-    name_server::TokioConnectionProvider,
-    proto::xfer::Protocol,
+    net::runtime::TokioRuntimeProvider,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -18,14 +18,14 @@ use utoipa::ToSchema;
 //TODO: do we want to do anything with DNS errors?
 pub enum ResolveError {
     #[allow(dead_code)]
-    Dns(hickory_resolver::ResolveError),
+    Dns(hickory_resolver::net::NetError),
     AllServersExhausted,
 }
 
 #[derive(Clone)]
 pub struct DnsResolver {
     #[cfg(not(test))]
-    pub(crate) resolver: Resolver<TokioConnectionProvider>,
+    pub(crate) resolver: TokioResolver,
     #[cfg(test)]
     pub(crate) resolver: mock::Resolver,
     pub dkim_selector: String,
@@ -121,50 +121,35 @@ impl DnsResolver {
         resolver_options.negative_max_ttl = Some(std::time::Duration::from_secs(20));
         resolver_options.attempts = 4;
 
-        let mut resolver_config = ResolverConfig::new();
+        let mut resolver_config = ResolverConfig::from_parts(None, vec![], vec![]);
         // protective (DNS4EU)
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr: "86.54.11.1:853".parse().unwrap(),
-            protocol: Protocol::Tls,
-            tls_dns_name: Some("protective.joindns4.eu".to_string()),
-            http_endpoint: None,
-            trust_negative_responses: false,
-            bind_addr: None,
-        });
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr: "86.54.11.201:853".parse().unwrap(),
-            protocol: Protocol::Tls,
-            tls_dns_name: Some("protective.joindns4.eu".to_string()),
-            http_endpoint: None,
-            trust_negative_responses: false,
-            bind_addr: None,
-        });
+        resolver_config.add_name_server(NameServerConfig::tls(
+            "86.54.11.1".parse().unwrap(),
+            "protective.joindns4.eu".into(),
+        ));
+        resolver_config.add_name_server(NameServerConfig::tls(
+            "86.54.11.201".parse().unwrap(),
+            "protective.joindns4.eu".into(),
+        ));
 
         // Malware Blocking, DNSSEC Validation (Quad9)
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr: "9.9.9.9:853".parse().unwrap(),
-            protocol: Protocol::Tls,
-            tls_dns_name: Some("dns.quad9.net".to_string()),
-            http_endpoint: None,
-            trust_negative_responses: false,
-            bind_addr: None,
-        });
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr: "149.112.112.112:853".parse().unwrap(),
-            protocol: Protocol::Tls,
-            tls_dns_name: Some("dns.quad9.net".to_string()),
-            http_endpoint: None,
-            trust_negative_responses: false,
-            bind_addr: None,
-        });
+        resolver_config.add_name_server(NameServerConfig::tls(
+            "9.9.9.9".parse().unwrap(),
+            "dns.quad9.net".into(),
+        ));
+        resolver_config.add_name_server(NameServerConfig::tls(
+            "149.112.112.112".parse().unwrap(),
+            "dns.quad9.net".into(),
+        ));
 
         Self {
-            resolver: Resolver::builder_with_config(
+            resolver: TokioResolver::builder_with_config(
                 resolver_config,
-                TokioConnectionProvider::default(),
+                TokioRuntimeProvider::default(),
             )
             .with_options(resolver_options)
-            .build(),
+            .build()
+            .expect("failed to build DNS resolver"),
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .expect("DKIM_SELECTOR environment variable not set"),
             spf_include: std::env::var("SPF_INCLUDE")
@@ -218,9 +203,17 @@ impl DnsResolver {
             .map_err(ResolveError::Dns)?;
 
         let Some(destination) = lookup
+            .answers()
             .iter()
-            .filter(|mx| prio.contains(&u32::from(mx.preference())))
-            .min_by_key(|mx| mx.preference())
+            .filter_map(|r| {
+                if let RData::MX(mx) = &r.data {
+                    Some(mx)
+                } else {
+                    None
+                }
+            })
+            .filter(|mx| prio.contains(&u32::from(mx.preference)))
+            .min_by_key(|mx| mx.preference)
         else {
             return if prio.contains(&0) {
                 prio.start = u32::MAX;
@@ -231,13 +224,13 @@ impl DnsResolver {
         };
 
         #[cfg(test)]
-        let smtp_port = destination.port();
+        let smtp_port = self.resolver.host.1;
 
         // make sure we don't accept this SMTP server again if it fails us
-        prio.start = u32::from(destination.preference()) + 1;
+        prio.start = u32::from(destination.preference) + 1;
 
         debug!("trying mail server: {destination:?}");
-        Ok((destination.exchange().to_utf8(), smtp_port))
+        Ok((destination.exchange.to_utf8(), smtp_port))
     }
 
     async fn get_singular_dns_record(
@@ -250,13 +243,23 @@ impl DnsResolver {
             return Err("could not retrieve DNS record");
         };
 
-        let mut record = record.into_iter().filter(|r| {
-            r.txt_data()
-                .iter()
-                .flatten()
-                .take(starting_with.len())
-                .eq(starting_with.as_bytes())
-        });
+        let mut record = record
+            .answers()
+            .iter()
+            .filter_map(|r| {
+                if let RData::TXT(txt) = &r.data {
+                    Some(txt)
+                } else {
+                    None
+                }
+            })
+            .filter(|txt| {
+                txt.txt_data
+                    .iter()
+                    .flatten()
+                    .take(starting_with.len())
+                    .eq(starting_with.as_bytes())
+            });
         let Some(first_record) = record.next() else {
             return Err("record unavailable");
         };
@@ -266,7 +269,7 @@ impl DnsResolver {
         }
 
         let data = first_record
-            .txt_data()
+            .txt_data
             .iter()
             .flatten()
             .copied()

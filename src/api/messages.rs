@@ -164,8 +164,8 @@ pub async fn create_message(
 ) -> Result<impl IntoResponse, AppError> {
     key.has_org_write_access(&org_id)?;
 
-    // check email rate limit
-    repo.email_creation_rate_limit(project_id).await?;
+    repo.ensure_org_may_receive_messages(org_id, project_id)
+        .await?;
 
     // parse from email
     let from_email = message.from.get_mail_address();
@@ -256,7 +256,11 @@ pub async fn create_message(
     );
 
     let message = repo
-        .create_from_api(message, retry_config.max_automatic_retries)
+        .create_from_api(
+            message,
+            retry_config.max_check_retries,
+            retry_config.max_delivery_retries,
+        )
         .await?;
 
     match repo.get_ready_to_send(message.id).await {
@@ -667,6 +671,63 @@ mod tests {
         assert_eq!(stats, new_stats);
     }
 
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "api_users",
+            "projects",
+            "smtp_credentials",
+            "messages",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_retry_failed_and_rejected_messages(pool: PgPool) {
+        let user_1 = "9244a050-7d72-451a-9248-4b43d5108235".parse().unwrap(); // is admin of org 1 and 2
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let server = TestServer::new(pool.clone(), Some(user_1)).await;
+        let mut message_stream = server.message_bus.receive().await.unwrap();
+
+        let rejected_id: MessageId = "40609d92-fcdc-458e-addd-71f3937af149".parse().unwrap();
+        let failed_id: MessageId = "120dd3eb-5239-4da0-9503-ed72d3850dcd".parse().unwrap();
+
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/emails/{rejected_id}/retry"),
+                Body::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let bus_message = tokio::time::timeout(Duration::from_secs(10), message_stream.next())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            bus_message,
+            BusMessage::EmailReadyToSend(rejected_id, "127.0.0.1".parse().unwrap())
+        );
+
+        let response = server
+            .put(
+                format!("/api/organizations/{org_1}/emails/{failed_id}/retry"),
+                Body::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let bus_message = tokio::time::timeout(Duration::from_secs(10), message_stream.next())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            bus_message,
+            BusMessage::EmailReadyToSend(failed_id, "127.0.0.1".parse().unwrap())
+        );
+    }
+
     async fn test_messages_no_access(
         server: TestServer,
         read_status_code: StatusCode,
@@ -1051,6 +1112,32 @@ mod tests {
         assert_eq!(stats.monthly[0].statistics, json!({"processing": 3}));
         assert_eq!(stats.daily.len(), 1);
         assert_eq!(stats.daily[0].statistics, json!({"processing": 3}));
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts("organizations", "api_users", "projects", "smtp_credentials")
+    ))]
+    async fn test_create_message_project_must_belong_to_org(pool: PgPool) {
+        let org_1 = TestProjects::Org1Project1.org_id();
+        let proj_2_org_2 = TestProjects::Org2Project1.project_id();
+        let user_4 = "c33dbd88-43ed-404b-9367-1659a73c8f3a".parse().unwrap(); // is maintainer of org 1
+        let mut server = TestServer::new(pool.clone(), Some(user_4)).await;
+        server.use_api_key(org_1, Role::Maintainer).await;
+
+        let response = server
+            .post(
+                format!("/api/organizations/{org_1}/projects/{proj_2_org_2}/emails"),
+                serialize_body(json!({
+                    "from": "test@example.com",
+                    "to": "recipient@example.com",
+                    "subject": "subject",
+                    "text_body": "text body",
+                })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[sqlx::test(fixtures(

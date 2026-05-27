@@ -32,6 +32,8 @@ pub enum Error {
     Totp(#[from] totp_rs::TotpUrlError),
     #[error("too many requests, try again later")]
     TooManyRequests,
+    #[error("organization is out of quota")]
+    OutOfQuota,
     #[error("organization has been blocked")]
     OrgBlocked,
     #[error("Template could not be rendered")]

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.attempts,\n                m.max_attempts,\n                m.label AS \"label:Label\"\n            FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND o.block_status = 'not_blocked'\n              AND octet_length(raw_data) > 0\n            ",
+  "query": "\n            SELECT\n                m.id,\n                m.organization_id,\n                m.project_id,\n                m.smtp_credential_id,\n                m.api_key_id,\n                m.status as \"status: _\",\n                m.reason,\n                m.delivery_details,\n                m.from_email,\n                m.recipients,\n                m.raw_data,\n                octet_length(m.raw_data) as \"raw_size!\",\n                m.message_data,\n                m.message_id_header,\n                m.created_at,\n                m.updated_at,\n                m.retry_after,\n                m.check_attempts,\n                m.delivery_attempts,\n                m.max_check_attempts,\n                m.max_delivery_attempts,\n                m.label AS \"label:Label\",\n                m.quota_charged\n            FROM messages m\n            JOIN organizations o ON o.id = m.organization_id\n            WHERE m.id = $1\n              AND o.block_status = 'not_blocked'\n              AND octet_length(raw_data) > 0\n            ",
   "describe": {
     "columns": [
       {
@@ -105,18 +105,33 @@
       },
       {
         "ordinal": 17,
-        "name": "attempts",
+        "name": "check_attempts",
         "type_info": "Int4"
       },
       {
         "ordinal": 18,
-        "name": "max_attempts",
+        "name": "delivery_attempts",
         "type_info": "Int4"
       },
       {
         "ordinal": 19,
+        "name": "max_check_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 20,
+        "name": "max_delivery_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
         "name": "label:Label",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "quota_charged",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -144,8 +159,11 @@
       true,
       false,
       false,
-      true
+      false,
+      false,
+      true,
+      false
     ]
   },
-  "hash": "8e6fdab1b1f2271cb21bb5d85c2543566786e978ac5b5398074b8ca7b9bde7e8"
+  "hash": "a658004879fac478819635f9e2a087cf93ef45a8680a7e4b760c0f1cf0861651"
 }

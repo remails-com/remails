@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(*) as \"count!\"\n        FROM messages\n        WHERE organization_id = $1\n          AND status = 'held'\n          AND reason = 'Rate limit exceeded'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "273b1882f64fa666fd1f47e0e0f50891a55079412c8524dddb8c9e83c27ad973"
+}

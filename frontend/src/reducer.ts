@@ -1,4 +1,4 @@
-import { Action, State } from "./types";
+import { Action, Email, State } from "./types";
 
 const actionHandler: {
   [action in Action["type"]]: (state: State, action: Extract<Action, { type: action }>) => State;
@@ -39,10 +39,13 @@ const actionHandler: {
   set_emails: function (state, action) {
     return { ...state, emails: action.emailMetadata };
   },
-  update_email: function (state, action) {
+  upsert_email: function (state, action) {
+    const emails = state.emails ?? [];
     return {
       ...state,
-      emails: state.emails?.map((m) => (m.id == action.emailId ? { ...m, ...action.update } : m)) ?? null,
+      emails: emails.some((m) => m.id == action.emailId)
+        ? emails.map((m) => (m.id == action.emailId ? { ...m, ...action.update } : m))
+        : [...emails, action.update as Email],
     };
   },
   remove_email: function (state, action) {

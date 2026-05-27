@@ -1,7 +1,7 @@
 use crate::{
     api::ApiState,
     bus::client::BusClient,
-    models::{ApiUserRepository, Error, Label, MessageRepository},
+    models::{ApiUserRepository, Error, InternalEmail, MessageRepository},
 };
 use askama::Template;
 use axum::extract::FromRef;
@@ -21,14 +21,6 @@ struct HtmlTemplate<'a> {
 struct TxtTemplate<'a> {
     password_reset_link: &'a str,
     name: &'a str,
-}
-
-struct InternalEmail {
-    to: EmailAddress,
-    subject: String,
-    text: String,
-    html: String,
-    label: Label,
 }
 
 pub async fn send_password_reset_email(
@@ -89,12 +81,9 @@ async fn send_internal_email(api_state: &ApiState, email: InternalEmail) -> Resu
 
     let message_id = message_repo
         .create_system_email(
-            email.to,
-            email.subject,
-            email.text,
-            email.html,
-            email.label,
-            api_state.retry_config.max_automatic_retries,
+            email,
+            api_state.retry_config.max_check_retries,
+            api_state.retry_config.max_delivery_retries,
         )
         .await?;
 
