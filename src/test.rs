@@ -17,10 +17,6 @@ use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
     time::{Duration, Instant},
 };
 use tokio::{select, task::JoinSet};
@@ -98,7 +94,8 @@ async fn setup(
 
     let retry_config = RetryConfig {
         delay: chrono::Duration::minutes(5),
-        max_automatic_retries: 2,
+        max_check_retries: 2,
+        max_delivery_retries: 2,
     };
 
     let smtp_config = SmtpConfig {
@@ -211,6 +208,7 @@ async fn integration_test(pool: PgPool) {
 
     // John sends some message via SMTP
     let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+        .unwrap()
         .implicit_tls(true)
         .allow_invalid_certs()
         .credentials((
@@ -545,6 +543,7 @@ async fn quotas_count_atomically(pool: PgPool) {
     // Spawn 11 tasks to throw 100 messages each to remails
     for i in 0..11 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((
@@ -589,7 +588,7 @@ async fn rate_limit_count_atomically(pool: PgPool) {
         .await
         .unwrap();
 
-    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool).await;
+    let (_drop_guard, client, http_port, mut mailcrab_rx, smtp_port) = setup(pool.clone()).await;
 
     let (org_id, project_id) = TestProjects::Org2Project1.get_stringified_ids();
 
@@ -637,11 +636,11 @@ async fn rate_limit_count_atomically(pool: PgPool) {
         }
     });
 
-    let count_rate_limits = Arc::new(AtomicUsize::new(0));
-
-    // Spawn 10 tasks to send 15 messages each to remails, only 120 of these should be accepted
+    // Spawn 10 tasks to send 15 messages each to remails. SMTP intake should accept them,
+    // while outbound delivery is rate-limited and holds excess messages.
     for i in 0..10 {
         let mut john_smtp_client = SmtpClientBuilder::new("localhost", smtp_port)
+            .unwrap()
             .implicit_tls(true)
             .allow_invalid_certs()
             .credentials((
@@ -652,7 +651,6 @@ async fn rate_limit_count_atomically(pool: PgPool) {
             .await
             .unwrap();
 
-        let count_rate_limits = count_rate_limits.clone();
         join_set.spawn(async move {
             tokio::time::sleep(Duration::from_secs(i)).await;
             for j in 1..=15 {
@@ -667,13 +665,6 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
                 match john_smtp_client.send(message).await {
                     Ok(_) => (),
-                    Err(mail_send::Error::UnexpectedReply(response)) => {
-                        assert_eq!(response.code, 450);
-                        assert_eq!(response.esc, [4, 3, 2]);
-                        assert_eq!(response.message, "Sent too many messages, try again later");
-                        count_rate_limits.fetch_add(1, Ordering::Relaxed);
-                        break;
-                    }
                     Err(e) => panic!("Error sending mail {e}"),
                 }
             }
@@ -683,8 +674,23 @@ async fn rate_limit_count_atomically(pool: PgPool) {
 
     join_set.join_all().await;
 
+    let org_id = TestProjects::Org2Project1.org_id();
+    let rate_limited_messages = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*) as "count!"
+        FROM messages
+        WHERE organization_id = $1
+          AND status = 'held'
+          AND reason = 'Rate limit exceeded'
+        "#,
+        *org_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
     assert!(
-        count_rate_limits.load(Ordering::Relaxed) > 0,
-        "Expected at least one rate limit error, got none"
+        rate_limited_messages > 0,
+        "Expected at least one message to be held by the outbound rate limit, got none"
     );
 }

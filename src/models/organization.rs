@@ -141,37 +141,11 @@ pub struct OrganizationRepository {
     audit_log: AuditLogRepository,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum QuotaStatus {
-    Exceeded,
-    Below(u64),
-}
-
 impl OrganizationRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self {
             audit_log: AuditLogRepository::new(pool.clone()),
             pool,
-        }
-    }
-
-    pub async fn reduce_quota(&self, id: OrganizationId) -> Result<QuotaStatus, Error> {
-        let quota = sqlx::query_scalar!(
-            r#"
-            UPDATE organizations
-            SET used_message_quota = LEAST(used_message_quota + 1, total_message_quota)
-            WHERE id = $1
-            RETURNING (total_message_quota - used_message_quota) as "remaining!"
-            "#,
-            *id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        if quota <= 0 {
-            Ok(QuotaStatus::Exceeded)
-        } else {
-            Ok(QuotaStatus::Below(quota as u64))
         }
     }
 
@@ -539,6 +513,14 @@ mod test {
 
         pub fn total_message_quota(&self) -> i64 {
             self.total_message_quota
+        }
+
+        pub fn used_message_quota(&self) -> i64 {
+            self.used_message_quota
+        }
+
+        pub fn rate_limit_tokens(&self) -> i64 {
+            self.rate_limit_tokens
         }
     }
 

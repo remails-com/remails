@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT o.id, current_subscription, rate_limit_tokens, rate_limit_last_used, block_status AS \"block_status:OrgBlockStatus\"\n                FROM organizations o\n                         JOIN projects p ON o.id = p.organization_id\n                WHERE p.id = $1\n                FOR UPDATE\n                ",
+  "query": "\n            SELECT id, current_subscription, rate_limit_tokens, rate_limit_last_used,\n                   block_status AS \"block_status:OrgBlockStatus\"\n            FROM organizations\n            WHERE id = $1\n            FOR UPDATE\n            ",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       false
     ]
   },
-  "hash": "5368e6c5acf2766086c18a97af530da1d300b116f874692f0d37db009b85d568"
+  "hash": "5e96ae9bdbd5a15f0c47fc20e72b54aa642f962619ba37ab4ad8c94dc282698e"
 }

@@ -46,7 +46,7 @@ export default function EmailRetryButton({
       icon: <IconReload size={20} />,
     });
 
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 5000));
 
     const update = await fetch(email_endpoint);
     if (update.status !== 200) {

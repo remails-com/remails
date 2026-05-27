@@ -1,5 +1,5 @@
 INSERT INTO messages (id, message_id_header, organization_id, project_id, status, from_email, recipients,
-                      raw_data, message_data, attempts, max_attempts, created_at)
+                      raw_data, message_data, check_attempts, delivery_attempts, max_check_attempts, max_delivery_attempts, created_at)
 VALUES ('525f7d40-cb6d-402b-9078-0275c22808d7', 'REMAILS-525f7d40-cb6d-402b-9078-0275c22808d7@remails.net',
         '44729d9f-a7dc-4226-b412-36a7537f5176',
         '3ba14adf-4de1-4fb6-8c20-50cc2ded5462',
@@ -8,7 +8,7 @@ VALUES ('525f7d40-cb6d-402b-9078-0275c22808d7', 'REMAILS-525f7d40-cb6d-402b-9078
         '{"info@recipient1.com", "info@recipient2.com"}',
         (repeat('x', 9_999) || 'Y')::bytea,
         'null'::jsonb,
-        0, 3,
+        0, 0, 3, 3,
         now()),
        ('c1d2c3d6-1521-4f77-804a-2034d121c9b0', 'REMAILS-c1d2c3d6-1521-4f77-804a-2034d121c9b0@remails.net',
         '44729d9f-a7dc-4226-b412-36a7537f5176',
@@ -18,5 +18,5 @@ VALUES ('525f7d40-cb6d-402b-9078-0275c22808d7', 'REMAILS-525f7d40-cb6d-402b-9078
         '{"info@recipient1.com", "info@recipient2.com"}',
         (repeat('x', 10_000) || 'Y')::bytea,
         'null'::jsonb,
-        1, 3,
+        1, 0, 3, 3,
         now())

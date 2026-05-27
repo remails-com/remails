@@ -30,26 +30,26 @@ pub enum ConnectionError {
 const BUFFER_SIZE: usize = 1024;
 const CODE_READY: u16 = 220;
 
+#[derive(Clone)]
+pub struct HandleContext {
+    pub bus_client: BusClient,
+    pub smtp_credentials: SmtpCredentialRepository,
+    pub message_repository: MessageRepository,
+    pub max_check_retries: i32,
+    pub max_delivery_retries: i32,
+}
+
 pub async fn handle(
     stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
-    server_name: String,
+    context: HandleContext,
     peer_addr: SocketAddr,
-    bus_client: BusClient,
-    user_repository: SmtpCredentialRepository,
-    message_repository: MessageRepository,
-    max_automatic_retries: i32,
+    server_name: String,
 ) -> Result<(), ConnectionError> {
     let (source, mut sink) = tokio::io::split(stream);
 
     // NOTE: we re-use this Vec<u8> to avoid re-allocating buffer
     let mut buffer = Vec::with_capacity(BUFFER_SIZE);
-    let mut session = SmtpSession::new(
-        peer_addr,
-        bus_client,
-        user_repository,
-        message_repository,
-        max_automatic_retries,
-    );
+    let mut session = SmtpSession::new(peer_addr, context);
 
     let mut reader = BufReader::new(source);
 

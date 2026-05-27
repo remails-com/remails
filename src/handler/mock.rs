@@ -1,5 +1,17 @@
 //! A minimal mock-up for hickory_resolver
 
+use hickory_resolver::{
+    lookup::Lookup,
+    net::NetError,
+    proto::{
+        op::Query,
+        rr::{
+            Name, RData, Record, RecordType,
+            rdata::{MX as MxRdata, TXT as TxtRdata},
+        },
+    },
+};
+
 #[derive(Clone, Debug)]
 pub struct Resolver {
     pub host: (&'static str, u16),
@@ -7,58 +19,30 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    pub async fn mx_lookup(
-        &self,
-        _: impl AsRef<str>,
-    ) -> Result<[MX; 1], hickory_resolver::ResolveError> {
-        Ok([MX(self.host.0, self.host.1)])
+    pub async fn mx_lookup(&self, _: impl AsRef<str>) -> Result<Lookup, NetError> {
+        let name = Name::from_ascii(self.host.0).unwrap_or(Name::root());
+        let exchange = name.clone();
+        let record = Record::from_rdata(name.clone(), 0, RData::MX(MxRdata::new(5, exchange)));
+        let query = Query::query(name, RecordType::MX);
+        Ok(Lookup::new_with_max_ttl(query, vec![record]))
     }
 
-    pub async fn lookup_ip(
-        &self,
-        _: impl AsRef<str>,
-    ) -> Result<[(); 1], hickory_resolver::ResolveError> {
+    pub async fn lookup_ip(&self, _: impl AsRef<str>) -> Result<[(); 1], NetError> {
         Ok([()])
     }
 
-    pub async fn txt_lookup(
-        &self,
-        _: impl AsRef<str>,
-    ) -> Result<impl Iterator<Item = Txt>, hickory_resolver::ResolveError> {
-        Ok(self.txt.iter().map(|txt| Txt(txt)))
-    }
-}
-
-#[derive(Debug)]
-pub struct Txt(pub &'static str);
-
-impl Txt {
-    pub fn txt_data(&self) -> [Vec<u8>; 1] {
-        [self.0.as_bytes().to_vec()]
-    }
-}
-
-#[derive(Debug)]
-pub struct MX(&'static str, u16);
-
-impl MX {
-    pub fn preference(&self) -> u16 {
-        5
-    }
-
-    pub fn exchange(&self) -> ToStr {
-        ToStr(self.0)
-    }
-
-    pub fn port(&self) -> u16 {
-        self.1
-    }
-}
-
-pub struct ToStr(&'static str);
-
-impl ToStr {
-    pub fn to_utf8(&self) -> String {
-        self.0.into()
+    pub async fn txt_lookup(&self, _: impl AsRef<str>) -> Result<Lookup, NetError> {
+        let name = Name::root();
+        let records: Vec<Record> = self
+            .txt
+            .iter()
+            .filter(|txt| !txt.is_empty())
+            .map(|txt| {
+                let txt_data = TxtRdata::from_bytes(vec![txt.as_bytes()]);
+                Record::from_rdata(name.clone(), 0, RData::TXT(txt_data))
+            })
+            .collect();
+        let query = Query::query(name, RecordType::TXT);
+        Ok(Lookup::new_with_max_ttl(query, records))
     }
 }

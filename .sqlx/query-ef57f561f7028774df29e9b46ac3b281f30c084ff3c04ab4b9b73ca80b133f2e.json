@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE messages\n            SET status = $2,\n                reason = $3,\n                delivery_details = $4,\n                retry_after = $5,\n                attempts = $6,\n                max_attempts = $7\n            WHERE id = $1\n            ",
+  "query": "\n            UPDATE messages\n            SET status = $2,\n                reason = $3,\n                delivery_details = $4,\n                retry_after = $5,\n                check_attempts = $6,\n                delivery_attempts = $7,\n                max_check_attempts = $8,\n                max_delivery_attempts = $9,\n                quota_charged = $10\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -26,10 +26,13 @@
         "Jsonb",
         "Timestamptz",
         "Int4",
-        "Int4"
+        "Int4",
+        "Int4",
+        "Int4",
+        "Bool"
       ]
     },
     "nullable": []
   },
-  "hash": "575c2be03b7ed29791a2eae7313dc32eae4e439c6c4f80c56882343b1f9b333e"
+  "hash": "ef57f561f7028774df29e9b46ac3b281f30c084ff3c04ab4b9b73ca80b133f2e"
 }
