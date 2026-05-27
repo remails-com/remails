@@ -4,7 +4,7 @@ use crate::{
     models::{MessageRepository, SmtpCredentialRepository},
     smtp::{
         SmtpConfig,
-        connection::{self, ConnectionError},
+        connection::{self, ConnectionError, HandleContext},
         proxy_protocol::{self, Error, handle_proxy_protocol},
     },
 };
@@ -116,10 +116,13 @@ impl SmtpServer {
         );
 
         let server_name = self.config.server_name.clone();
-        let bus_client = self.bus_client.clone();
-        let user_repository = self.user_repository.clone();
-        let message_repository = self.message_repository.clone();
-        let max_automatic_retries = self.config.retry.max_automatic_retries;
+        let handle_context = HandleContext {
+            bus_client: self.bus_client.clone(),
+            smtp_credentials: self.user_repository.clone(),
+            message_repository: self.message_repository.clone(),
+            max_check_retries: self.config.retry.max_check_retries,
+            max_delivery_retries: self.config.retry.max_delivery_retries,
+        };
         let shutdown = self.shutdown.clone();
 
         let acceptor_clone = acceptor.clone();
@@ -174,10 +177,8 @@ impl SmtpServer {
                         };
                         trace!("new TCP connection");
                         let acceptor = acceptor.clone();
+                        let handle_context = handle_context.clone();
                         let server_name = server_name.clone();
-                        let bus_client = bus_client.clone();
-                        let user_repository = user_repository.clone();
-                        let message_repository = message_repository.clone();
 
                         let task = async move || {
                             let mut tls_stream = acceptor.read().await
@@ -185,16 +186,8 @@ impl SmtpServer {
                                 .await
                                 .map_err(ConnectionError::Accept)?;
 
-                            connection::handle(
-                                &mut tls_stream,
-                                server_name,
-                                peer_addr,
-                                bus_client,
-                                user_repository,
-                                message_repository,
-                                max_automatic_retries,
-                            )
-                            .await?;
+                            connection::handle(&mut tls_stream, handle_context.clone(), peer_addr, server_name)
+                                .await?;
                             tls_stream.shutdown().await.map_err(ConnectionError::Write)
                         };
 

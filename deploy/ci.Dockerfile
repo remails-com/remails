@@ -1,5 +1,5 @@
 FROM ubuntu:24.04 AS final-base
-RUN apt-get update && apt-get install libssl3 adduser -y && apt-get upgrade -y
+RUN apt-get update && apt-get install libssl3 ca-certificates adduser -y && apt-get upgrade -y
 
 # create a non root user to run the binary
 ARG user=nonroot

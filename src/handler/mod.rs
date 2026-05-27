@@ -10,7 +10,7 @@ use crate::{
     kubernetes::Kubernetes,
     models::{
         DeliveryStatus, DomainRepository, Message, MessageId, MessageRepository, MessageStatus,
-        OrganizationRepository, ProjectRepository, QuotaStatus, SuppressedRepository,
+        ProjectRepository, SuppressedRepository,
     },
 };
 use base64ct::{Base64, Encoding};
@@ -27,7 +27,10 @@ use tokio::{
     sync::Semaphore,
     task::JoinHandle,
 };
-use tokio_rustls::rustls::{crypto, crypto::CryptoProvider};
+use tokio_rustls::{
+    TlsConnector,
+    rustls::{crypto, crypto::CryptoProvider},
+};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
@@ -59,9 +62,12 @@ enum SendError {
     PermanentFailure,
     #[error("no MX server accepted the message")]
     TemporaryFailure,
+    /// Server does not support STARTTLS at all; no point retrying with relaxed cert verification.
+    #[error("server does not support STARTTLS")]
+    StartTlsNotSupported,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Protection {
     Plaintext,
     TlsAllowInvalidCerts,
@@ -71,14 +77,16 @@ enum Protection {
 #[derive(Clone)]
 pub struct RetryConfig {
     pub(crate) delay: Duration,
-    pub(crate) max_automatic_retries: i32,
+    pub(crate) max_check_retries: i32,
+    pub(crate) max_delivery_retries: i32,
 }
 
 impl RetryConfig {
     pub fn new() -> Self {
         Self {
             delay: Duration::minutes(5),
-            max_automatic_retries: 5,
+            max_check_retries: 20,
+            max_delivery_retries: 5,
         }
     }
 }
@@ -121,7 +129,6 @@ impl Default for HandlerConfig {
 pub struct Handler {
     message_repository: MessageRepository,
     domain_repository: DomainRepository,
-    organization_repository: OrganizationRepository,
     project_repository: ProjectRepository,
     suppressed_repository: SuppressedRepository,
     message_parser: MessageParser,
@@ -131,6 +138,7 @@ pub struct Handler {
     outbound_ips: BTreeSet<IpAddr>,
     shutdown: CancellationToken,
     config: Arc<HandlerConfig>,
+    tls_connector: TlsConnector,
 }
 
 impl Handler {
@@ -153,7 +161,6 @@ impl Handler {
         Self {
             message_repository: MessageRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone(), resolver),
-            organization_repository: OrganizationRepository::new(pool.clone()),
             project_repository: ProjectRepository::new(pool.clone()),
             suppressed_repository: SuppressedRepository::new(pool.clone()),
             message_parser: MessageParser::default(),
@@ -165,6 +172,8 @@ impl Handler {
             outbound_ips: Default::default(),
             shutdown,
             config,
+            tls_connector: mail_send::smtp::tls::build_tls_connector(false)
+                .expect("failed to build TLS connector"),
         }
     }
 
@@ -198,7 +207,7 @@ impl Handler {
     /// * `Err(handler_error)` on critical internal server errors (mostly related to the database)
     async fn check_and_sign_message(
         &self,
-        message: &Message,
+        message: &mut Message,
     ) -> Result<Result<String, (MessageStatus, String)>, HandlerError> {
         let sender_domain = message.from_email.domain();
 
@@ -350,25 +359,28 @@ impl Handler {
             }
         };
 
-        // The quota check needs to be the very last check,
-        // as otherwise we might count messages that are held towards the quota.
-        // Additionally,
-        // we should only deduce the quota for messages
-        // that are new and have not been counted to the quota before,
-        // i.e., only messages in "Processing" and "Held" state.
-        #[allow(clippy::collapsible_if)]
-        if matches!(
-            message.status,
-            MessageStatus::Processing | MessageStatus::Held
-        ) {
-            if QuotaStatus::Exceeded
-                == self
-                    .organization_repository
-                    .reduce_quota(message.organization_id)
-                    .await?
-            {
+        match self
+            .message_repository
+            .acquire_send_allowance(message)
+            .await
+        {
+            Ok(()) => {}
+            Err(crate::models::Error::OutOfQuota) => {
                 return Ok(Err((MessageStatus::Held, "Quota exceeded".to_string())));
             }
+            Err(crate::models::Error::TooManyRequests) => {
+                return Ok(Err((
+                    MessageStatus::Held,
+                    "Rate limit exceeded".to_string(),
+                )));
+            }
+            Err(crate::models::Error::OrgBlocked) => {
+                return Ok(Err((
+                    MessageStatus::Held,
+                    "Organization is blocked".to_string(),
+                )));
+            }
+            Err(err) => return Err(HandlerError::RepositoryError(err)),
         }
 
         Ok(Ok(dkim_header))
@@ -452,6 +464,7 @@ impl Handler {
         let mut priority = 0..65536;
 
         let mut is_temporary_failure = false;
+        let mut no_start_tls = false;
 
         loop {
             match self
@@ -476,6 +489,7 @@ impl Handler {
                         Ok(_) => return Ok(()),
                         Err(SendError::PermanentFailure) => {} // continue to try the next server
                         Err(SendError::TemporaryFailure) => is_temporary_failure = true,
+                        Err(SendError::StartTlsNotSupported) => no_start_tls = true,
                     }
                 }
                 Err(ResolveError::AllServersExhausted) => {
@@ -500,6 +514,8 @@ impl Handler {
 
         if is_temporary_failure {
             Err(SendError::TemporaryFailure)
+        } else if no_start_tls {
+            Err(SendError::StartTlsNotSupported)
         } else {
             Err(SendError::PermanentFailure)
         }
@@ -516,12 +532,18 @@ impl Handler {
         port: u16,
         outbound_ip: IpAddr,
     ) -> Result<(), SendError> {
-        let smtp = SmtpClientBuilder::new(&hostname, port)
-            .implicit_tls(false)
-            .local_ip(outbound_ip)
-            .say_ehlo(true)
-            .helo_host(&self.config.domain)
-            .timeout(std::time::Duration::from_secs(30));
+        let smtp = SmtpClientBuilder {
+            addr: format!("{hostname}:{port}"),
+            timeout: std::time::Duration::from_secs(30),
+            tls_connector: self.tls_connector.clone(),
+            tls_hostname: hostname.clone(),
+            tls_implicit: false,
+            is_lmtp: false,
+            local_host: self.config.domain.clone(),
+            credentials: None,
+            say_ehlo: true,
+            local_ip: Some(outbound_ip),
+        };
 
         let result = match security {
             Protection::Tls => match smtp.connect().await {
@@ -607,7 +629,7 @@ impl Handler {
             mail_send::Error::MissingRcptTo => SendError::PermanentFailure,
             mail_send::Error::UnsupportedAuthMechanism => SendError::PermanentFailure,
             mail_send::Error::Timeout => SendError::TemporaryFailure,
-            mail_send::Error::MissingStartTls => SendError::PermanentFailure,
+            mail_send::Error::MissingStartTls => SendError::StartTlsNotSupported,
         })
     }
 
@@ -661,7 +683,7 @@ impl Handler {
                         format!(
                             "attempting to send email to {} (attempt {})",
                             recipient.email(),
-                            message.attempts
+                            message.delivery_attempts
                         ),
                     );
                 }
@@ -670,7 +692,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as message was already successfully delivered (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     continue;
@@ -680,7 +702,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as remote reported a permanent failure (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     failures += 1;
@@ -691,7 +713,7 @@ impl Handler {
                         LogLevel::Info,
                         format!(
                             "skipping recipient {} as the email address has been suppressed due to repeated delivery failures (attempt {})",
-                            recipient.email(), message.attempts
+                            recipient.email(), message.delivery_attempts
                         ),
                     );
                     failures += 1;
@@ -700,8 +722,15 @@ impl Handler {
             }
 
             let mut is_temporary_failure = false;
+            let mut no_start_tls = false;
 
             for &protection in order {
+                // If STARTTLS is unsupported, skip the TlsAllowInvalidCerts level — invalid
+                // certs can't be the problem when the server doesn't offer STARTTLS at all.
+                if no_start_tls && protection == Protection::TlsAllowInvalidCerts {
+                    continue;
+                }
+
                 // restrict the recipients; this object is cheap to clone
                 let smtp_message = smtp::message::Message {
                     mail_from: message.from_email.as_str().into(),
@@ -729,6 +758,7 @@ impl Handler {
                     }
                     Err(SendError::TemporaryFailure) => is_temporary_failure = true,
                     Err(SendError::PermanentFailure) => {}
+                    Err(SendError::StartTlsNotSupported) => no_start_tls = true,
                 }
             }
             failures += 1;
@@ -885,7 +915,12 @@ impl Handler {
                 }
             };
 
-            message.attempts += 1;
+            if matches!(
+                message.status,
+                MessageStatus::Processing | MessageStatus::Held | MessageStatus::Rejected
+            ) {
+                message.check_attempts += 1
+            }
 
             let message_id = message.id().to_string();
             if let Err(e) = self_clone.handle_message(&mut message).await {
@@ -896,6 +931,8 @@ impl Handler {
                 }
                 return;
             };
+
+            message.delivery_attempts += 1;
 
             if let Err(e) = self_clone.send_message(message, outbound_ip).await {
                 error!(message_id, "failed to send message: {e:?}");
@@ -912,7 +949,9 @@ mod test {
     use super::*;
     use crate::{
         handler::dns::DnsResolver,
-        models::{NewMessage, SmtpCredentialRepository, SmtpCredentialRequest},
+        models::{
+            NewMessage, OrganizationRepository, SmtpCredentialRepository, SmtpCredentialRequest,
+        },
         test::{TestProjects, random_port},
     };
     use mail_send::{mail_builder::MessageBuilder, smtp::message::IntoMessage};
@@ -935,7 +974,8 @@ mod test {
                 environment: Environment::Development,
                 retry: RetryConfig {
                     delay: Duration::minutes(5),
-                    max_automatic_retries: 1,
+                    max_check_retries: 1,
+                    max_delivery_retries: 1,
                 },
             };
             Handler::new(
@@ -997,7 +1037,11 @@ mod test {
         let message = NewMessage::from_builder_message(message, credential.id());
         let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
@@ -1073,7 +1117,11 @@ mod test {
             let message = NewMessage::from_builder_message(message, credential.id());
             let handler = Handler::test_handler(pool.clone(), 1, Some(dns_records)).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1137,7 +1185,11 @@ mod test {
                 NewMessage::from_builder_message_custom_from(message, credential.id(), from_email);
             let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1205,7 +1257,11 @@ mod test {
             );
             let handler = Handler::test_handler(pool.clone(), 1, None).await;
 
-            let message_id = handler.message_repository.create(message, 1).await.unwrap();
+            let message_id = handler
+                .message_repository
+                .create(message, 1, 1)
+                .await
+                .unwrap();
             let mut message = handler
                 .message_repository
                 .get_if_org_may_send(message_id)
@@ -1270,12 +1326,197 @@ mod test {
         );
         let handler = Handler::test_handler(pool.clone(), mailcrab_port, None).await;
 
-        let message_id = handler.message_repository.create(message, 1).await.unwrap();
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
         let mut message = handler
             .message_repository
             .get_if_org_may_send(message_id)
             .await
             .unwrap();
         handler.handle_message(&mut message).await.unwrap();
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_handle_message_rate_limit_checked_on_every_attempt_but_quota_once(pool: PgPool) {
+        let org_repo = OrganizationRepository::new(pool.clone());
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(
+                org_id,
+                project_id,
+                &credential_request,
+                crate::models::SYSTEM,
+            )
+            .await
+            .unwrap();
+
+        // Seed exactly one available rate-limit token so the first send attempt succeeds
+        // and a retry can prove that rate limiting is checked again on every attempt.
+        sqlx::query(
+            r#"
+            UPDATE organizations
+            SET rate_limit_tokens = 1,
+                rate_limit_last_used = now(),
+                used_message_quota = 0
+            WHERE id = $1
+            "#,
+        )
+        .bind(*org_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let message = MessageBuilder::new()
+            .from(("John Doe", "john@test-org-1-project-1.com"))
+            .to(vec![("Jane Doe", "jane@test-org-1-project-1.com")])
+            .subject("Hi!")
+            .text_body("Hello world!")
+            .into_message()
+            .unwrap();
+
+        let message = NewMessage::from_builder_message(message, credential.id());
+        let handler = Handler::test_handler(pool.clone(), 1, None).await;
+
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
+        let mut message = handler
+            .message_repository
+            .get_if_org_may_send(message_id)
+            .await
+            .unwrap();
+
+        // First-time processing should consume both one rate-limit token and one unit of quota.
+        message.check_attempts = 1;
+        handler.handle_message(&mut message).await.unwrap();
+
+        let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
+        assert_eq!(org.used_message_quota(), 1);
+        assert_eq!(org.rate_limit_tokens(), 0);
+
+        // A retry should check the rate limit again, but must not deduct quota a second time.
+        message.status = MessageStatus::Reattempt;
+        message.delivery_attempts = 1;
+        assert!(matches!(
+            handler.handle_message(&mut message).await,
+            Err(HandlerError::MessageNotAccepted(MessageStatus::Held, reason))
+                if reason == "Rate limit exceeded"
+        ));
+
+        let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
+        assert_eq!(org.used_message_quota(), 1);
+        assert_eq!(org.rate_limit_tokens(), 0);
+
+        // Once a token refills, the message may be processed again, still without charging quota twice.
+        sqlx::query(
+            r#"
+            UPDATE organizations
+            SET rate_limit_last_used = now() - interval '1 day'
+            WHERE id = $1
+            "#,
+        )
+        .bind(*org_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        message.delivery_attempts = 2;
+        handler.handle_message(&mut message).await.unwrap();
+
+        let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
+        assert_eq!(org.used_message_quota(), 1);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "../fixtures",
+        scripts(
+            "organizations",
+            "projects",
+            "org_domains",
+            "proj_domains",
+            "k8s_nodes"
+        )
+    ))]
+    async fn test_quota_only_charged_after_message_reaches_quota_step(pool: PgPool) {
+        let org_repo = OrganizationRepository::new(pool.clone());
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        let credential_request = SmtpCredentialRequest {
+            username: "user".to_string(),
+            description: "Test SMTP credential description".to_string(),
+        };
+        let credential_repo = SmtpCredentialRepository::new(pool.clone());
+        let credential = credential_repo
+            .generate(
+                org_id,
+                project_id,
+                &credential_request,
+                crate::models::SYSTEM,
+            )
+            .await
+            .unwrap();
+
+        let outbound_message: mail_send::smtp::message::Message = MessageBuilder::new()
+            .from(("John Doe", "john@test-org-1-project-1.com"))
+            .to(vec![("Jane Doe", "jane@test-org-1-project-1.com")])
+            .subject("Hi!")
+            .text_body("Hello world!")
+            .into_message()
+            .unwrap();
+
+        let message = NewMessage::from_builder_message(outbound_message, credential.id());
+        let handler_with_invalid_dns = Handler::test_handler(
+            pool.clone(),
+            1,
+            Some(vec!["v=spf1 include:spf.remails.net -all"]),
+        )
+        .await;
+        let handler = Handler::test_handler(pool.clone(), 1, None).await;
+
+        let message_id = handler
+            .message_repository
+            .create(message, 1, 1)
+            .await
+            .unwrap();
+        let mut message = handler
+            .message_repository
+            .get_if_org_may_send(message_id)
+            .await
+            .unwrap();
+
+        // The first attempt is held before the quota step because DNS validation fails.
+        message.check_attempts = 1;
+        assert!(matches!(
+            handler_with_invalid_dns.handle_message(&mut message).await,
+            Err(HandlerError::MessageNotAccepted(MessageStatus::Held, _))
+        ));
+
+        let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
+        assert_eq!(org.used_message_quota(), 0);
+
+        // Once the message reaches the quota step on a later retry, quota is charged exactly once.
+        message.check_attempts = 2;
+        handler.handle_message(&mut message).await.unwrap();
+
+        let org = org_repo.get_by_id(org_id).await.unwrap().unwrap();
+        assert_eq!(org.used_message_quota(), 1);
     }
 }

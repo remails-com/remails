@@ -8,16 +8,12 @@ use std::{borrow::Cow, fmt::Display, net::SocketAddr};
 use tracing::{debug, error, trace};
 
 use crate::{
-    bus::client::BusClient,
-    models::{Error, MessageRepository, NewMessage, SmtpCredential, SmtpCredentialRepository},
+    models::{Error, NewMessage, SmtpCredential},
+    smtp::connection::HandleContext,
 };
 
 pub struct SmtpSession {
-    bus_client: BusClient,
-    smtp_credentials: SmtpCredentialRepository,
-    message_repository: MessageRepository,
-    max_automatic_retries: i32,
-
+    context: HandleContext,
     peer_addr: SocketAddr,
     peer_name: Option<String>,
     authenticated_credential: Option<SmtpCredential>,
@@ -77,7 +73,6 @@ impl SmtpResponse {
     const MUST_USE_ESMTP: ConstResponse = (502, "5.5.1 Must use EHLO");
     const NO_VRFY: ConstResponse = (502, "5.5.1 VRFY command is disabled");
     const INGEST_AUTH: ConstResponse = (334, "Tell me your secret.");
-    const RATE_LIMIT: ConstResponse = (450, "4.3.2 Sent too many messages, try again later");
     const INTERNAL_ERROR: ConstResponse = (455, "4.0.0 Internal server error, try again later");
 }
 
@@ -107,18 +102,9 @@ enum AttemptedAuthError {
 impl SmtpSession {
     const MAX_BODY_SIZE: u64 = 20 * 1024 * 1024;
 
-    pub fn new(
-        peer_addr: SocketAddr,
-        bus_client: BusClient,
-        smtp_credentials: SmtpCredentialRepository,
-        message_repository: MessageRepository,
-        max_automatic_retries: i32,
-    ) -> Self {
+    pub fn new(peer_addr: SocketAddr, context: HandleContext) -> Self {
         Self {
-            bus_client,
-            smtp_credentials,
-            message_repository,
-            max_automatic_retries,
+            context,
             peer_addr,
             peer_name: None,
             current_message: None,
@@ -233,14 +219,12 @@ impl SmtpSession {
                 }
 
                 match self
+                    .context
                     .message_repository
-                    .email_creation_rate_limit(credential.project_id())
+                    .ensure_project_may_receive_messages(credential.project_id())
                     .await
                 {
                     Ok(()) => {}
-                    Err(Error::TooManyRequests) => {
-                        return SessionReply::ReplyAndStop(SmtpResponse::RATE_LIMIT.into());
-                    }
                     Err(Error::OrgBlocked) => {
                         return SessionReply::ReplyAndStop(SmtpResponse::MESSAGE_REJECTED.into());
                     }
@@ -355,7 +339,12 @@ impl SmtpSession {
             password.len()
         );
 
-        let Ok(Some(credential)) = self.smtp_credentials.find_by_username(username).await else {
+        let Ok(Some(credential)) = self
+            .context
+            .smtp_credentials
+            .find_by_username(username)
+            .await
+        else {
             return SmtpResponse::AUTH_ERROR.into();
         };
 
@@ -424,8 +413,13 @@ impl SmtpSession {
 
             // Store message in database
             let message_id = match self
+                .context
                 .message_repository
-                .create(message, self.max_automatic_retries)
+                .create(
+                    message,
+                    self.context.max_check_retries,
+                    self.context.max_delivery_retries,
+                )
                 .await
             {
                 Ok(m) => m,
@@ -435,9 +429,14 @@ impl SmtpSession {
                 }
             };
 
-            match self.message_repository.get_ready_to_send(message_id).await {
+            match self
+                .context
+                .message_repository
+                .get_ready_to_send(message_id)
+                .await
+            {
                 Ok(bus_message) => {
-                    self.bus_client.try_send(&bus_message).await;
+                    self.context.bus_client.try_send(&bus_message).await;
                 }
                 Err(e) => {
                     error!(message_id = message_id.to_string(), "{e:?}");

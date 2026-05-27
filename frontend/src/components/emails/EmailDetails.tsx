@@ -29,8 +29,17 @@ export function getFullStatusDescription(email: EmailMetadata) {
       s += `, retrying ${retry_after_formatted}`;
     }
 
-    if (email.attempts > 1) {
-      s += ` (attempt ${email.attempts} of ${email.max_attempts})`;
+    const attemptInfo =
+      email.status === "processing" || email.status === "held" || email.status === "rejected"
+        ? email.check_attempts > 1
+          ? `check attempt ${email.check_attempts} of ${email.max_check_attempts}`
+          : null
+        : email.delivery_attempts > 1
+          ? `delivery attempt ${email.delivery_attempts} of ${email.max_delivery_attempts}`
+          : null;
+
+    if (attemptInfo) {
+      s += ` (${attemptInfo})`;
     }
 
     return s;
