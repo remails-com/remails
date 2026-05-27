@@ -201,7 +201,7 @@ export type Action =
     emailMetadata: EmailMetadata[] | null;
   }
   | {
-    type: "update_email";
+    type: "upsert_email";
     emailId: string;
     update: Partial<Email>;
   }

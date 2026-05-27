@@ -39,12 +39,12 @@ export function useEmails() {
         }
       })
       .then((email) => {
-        dispatch({ type: "update_email", emailId: email.id, update: email });
+        dispatch({ type: "upsert_email", emailId: email.id, update: email });
       });
   }, [currentEmail, currentEmailId, currentOrganization, dispatch]);
 
   function updateEmail(email_id: string, update: Partial<Email>) {
-    dispatch({ type: "update_email", emailId: email_id, update: update });
+    dispatch({ type: "upsert_email", emailId: email_id, update: update });
   }
 
   return { emails, currentEmail, updateEmail, labels };
