@@ -66,7 +66,7 @@ tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6.11", features = ["trace", "timeout", "limit", "compression-br", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-uuid = { version = "1.23.1", features = ["v4", "serde"] }
+uuid = { version = "1.23.2", features = ["v4", "serde"] }
 oauth2 = { version = "5.0.0" }
 http = "1.4.1"
 base64ct = "1.8.3"
