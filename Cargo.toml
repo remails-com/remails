@@ -45,7 +45,7 @@ internal-api-docs = []
 anyhow = "1.0.102"
 axum = { version = "0.8.8", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.5", features = ["cookie-private", "typed-header"] }
-chrono = { version = "0.4.44", features = ["serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 dotenvy = "0.15.7"
 mail-parser = { version = "0.11.3", features = ["serde"] }
 mail-send = { version = "0.6.0", default-features = false, features = ["builder", "aws-lc-rs", "parser"] }
@@ -66,9 +66,9 @@ tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6.11", features = ["trace", "timeout", "limit", "compression-br", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-uuid = { version = "1.23.1", features = ["v4", "serde"] }
+uuid = { version = "1.23.2", features = ["v4", "serde"] }
 oauth2 = { version = "5.0.0" }
-http = "1.4.1"
+http = "1.4.2"
 base64ct = "1.8.3"
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls", "cookies", "charset"] }
 cookie = "0.18.1"
