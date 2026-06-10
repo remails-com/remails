@@ -3,7 +3,9 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     groups:
       ci-dependencies:
@@ -13,7 +15,9 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     groups:
       cargo-dependencies:
@@ -23,7 +27,9 @@ updates:
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     groups:
       npm-dependencies:
