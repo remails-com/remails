@@ -181,7 +181,7 @@ impl ApiKeyRepository {
             ApiKey,
             r#"
             SELECT a.id, description, password_hash, organization_id,
-                o.block_status as "org_block_status: OrgBlockStatus",
+                o.block_status as "org_block_status!: OrgBlockStatus",
                 role as "role: Role",
                 a.created_at, a.updated_at
             FROM api_keys a
@@ -199,7 +199,7 @@ impl ApiKeyRepository {
             ApiKey,
             r#"
             SELECT a.id, description, password_hash, organization_id,
-                o.block_status as "org_block_status: OrgBlockStatus",
+                o.block_status as "org_block_status!: OrgBlockStatus",
                 role as "role: Role",
                 a.created_at, a.updated_at
             FROM api_keys a
@@ -235,7 +235,7 @@ impl ApiKeyRepository {
             FROM organizations o
             WHERE a.organization_id = $3 AND a.id = $4 AND o.id = a.organization_id
             RETURNING a.id, description, password_hash, organization_id,
-                o.block_status as "org_block_status: OrgBlockStatus",
+                o.block_status as "org_block_status!: OrgBlockStatus",
                 role as "role: Role",
                 a.created_at, a.updated_at
             "#,

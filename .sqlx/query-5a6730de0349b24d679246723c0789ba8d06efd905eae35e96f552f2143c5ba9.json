@@ -6,57 +6,123 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "total_message_quota",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "total_message_quota"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "used_message_quota",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "used_message_quota"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "quota_reset",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "quota_reset"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "created_at"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "updated_at"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "moneybird_contact_id: MoneybirdContactId",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "moneybird_contact_id"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "rate_limit_tokens",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "rate_limit_tokens"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "rate_limit_last_used",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "rate_limit_last_used"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "current_subscription",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "current_subscription"
+          }
+        }
       },
       {
         "ordinal": 11,
@@ -72,6 +138,12 @@
                 "full_freeze"
               ]
             }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "block_status"
           }
         }
       }
