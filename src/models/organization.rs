@@ -135,6 +135,11 @@ impl TryFrom<PgOrganization> for Organization {
     }
 }
 
+pub struct BlockedOrg {
+    pub id: OrganizationId,
+    pub name: String,
+}
+
 #[derive(Clone)]
 pub struct OrganizationRepository {
     pool: sqlx::PgPool,
@@ -466,6 +471,39 @@ impl OrganizationRepository {
         Ok(updated_user_id)
     }
 
+    /// Blocks organizations that sent at least `min_attempts` messages in the past 24 hours (with
+    /// status delivered, failed, or reattempt) but have an overall delivery success rate below
+    /// `max_delivery_rate`. Sets their block status to `no_sending` and returns the blocked orgs.
+    pub async fn block_organizations_with_low_delivery_rate(
+        &self,
+        min_attempts: i64,
+        max_delivery_rate: f64,
+    ) -> Result<Vec<BlockedOrg>, Error> {
+        Ok(sqlx::query_as!(
+            BlockedOrg,
+            r#"
+            WITH flagged AS (
+                SELECT m.organization_id
+                FROM messages m
+                JOIN organizations o ON o.id = m.organization_id
+                WHERE m.created_at > now() - interval '24 hours'
+                  AND o.block_status = 'not_blocked'
+                GROUP BY m.organization_id
+                HAVING count(*) FILTER (WHERE m.status IN ('delivered', 'failed', 'reattempt')) >= $1
+                   AND count(*) FILTER (WHERE m.status = 'delivered') < count(*)::float8 * $2
+            )
+            UPDATE organizations
+            SET block_status = 'no_sending'
+            WHERE id IN (SELECT organization_id FROM flagged)
+            RETURNING id AS "id!: OrganizationId", name
+            "#,
+            min_attempts,
+            max_delivery_rate,
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn update_block_status(
         &self,
         org_id: OrganizationId,
@@ -503,8 +541,32 @@ impl OrganizationRepository {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::{ApiUserRepository, AuditLogRepository, NewApiUser, SYSTEM};
+    use crate::{
+        models::{ApiUserRepository, AuditLogRepository, NewApiUser, SYSTEM},
+        test::TestProjects,
+    };
     use sqlx::PgPool;
+
+    async fn insert_messages(db: &PgPool, status: &str, n: i32) {
+        insert_messages_aged(db, status, n, 0).await;
+    }
+
+    async fn insert_messages_aged(db: &PgPool, status: &str, n: i32, hours_ago: i32) {
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        sqlx::query(
+            "INSERT INTO messages (id, message_id_header, organization_id, project_id, status, from_email, recipients, raw_data, created_at)
+             SELECT gen_random_uuid(), 'hdr-' || gs, $1, $2, $3::message_status, 'x@example.com', ARRAY['r@example.com'], ''::bytea, now() - make_interval(hours => $4)
+             FROM generate_series(1, $5) gs",
+        )
+        .bind(*org_id)
+        .bind(*project_id)
+        .bind(status)
+        .bind(hours_ago)
+        .bind(n)
+        .execute(db)
+        .await
+        .unwrap();
+    }
 
     impl Organization {
         pub fn quota_reset(&self) -> Option<DateTime<Utc>> {
@@ -662,5 +724,79 @@ mod test {
                 .iter()
                 .any(|m| m.user_id == user_3 && m.role == Role::Maintainer)
         );
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn blocks_org_with_low_delivery_rate(db: PgPool) {
+        let repo = OrganizationRepository::new(db.clone());
+        insert_messages(&db, "failed", 8).await;
+        insert_messages(&db, "reattempt", 2).await; // 10 attempts total, 0 delivered
+
+        let blocked = repo
+            .block_organizations_with_low_delivery_rate(10, 0.1)
+            .await
+            .unwrap();
+
+        assert_eq!(blocked.len(), 1);
+        let blocked_org = &blocked[0];
+        assert_eq!(blocked_org.id, TestProjects::Org1Project1.org_id());
+        assert_eq!(blocked_org.name, "test org 1");
+
+        let org = repo.get_by_id(blocked_org.id).await.unwrap().unwrap();
+        assert_eq!(org.block_status, OrgBlockStatus::NoSending);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn does_not_block_below_min_attempts(db: PgPool) {
+        insert_messages(&db, "failed", 9).await; // one short of the threshold
+
+        let blocked = OrganizationRepository::new(db)
+            .block_organizations_with_low_delivery_rate(10, 0.5)
+            .await
+            .unwrap();
+
+        assert!(blocked.is_empty());
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn does_not_block_at_delivery_rate_threshold(db: PgPool) {
+        insert_messages(&db, "failed", 4).await;
+        insert_messages(&db, "delivered", 6).await; // exactly 60% delivered, not below threshold
+
+        let blocked = OrganizationRepository::new(db)
+            .block_organizations_with_low_delivery_rate(10, 0.4)
+            .await
+            .unwrap();
+
+        assert!(blocked.is_empty());
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn does_not_block_already_blocked_org(db: PgPool) {
+        let repo = OrganizationRepository::new(db.clone());
+        let org_id = TestProjects::Org1Project1.org_id();
+        repo.update_block_status(org_id, OrgBlockStatus::NoSendingOrReceiving)
+            .await
+            .unwrap();
+        insert_messages(&db, "failed", 10).await;
+
+        let blocked = repo
+            .block_organizations_with_low_delivery_rate(10, 0.5)
+            .await
+            .unwrap();
+
+        assert!(blocked.is_empty());
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "projects")))]
+    async fn ignores_messages_older_than_24h(db: PgPool) {
+        insert_messages_aged(&db, "failed", 10, 25).await; // 25 hours ago
+
+        let blocked = OrganizationRepository::new(db)
+            .block_organizations_with_low_delivery_rate(10, 0.5)
+            .await
+            .unwrap();
+
+        assert!(blocked.is_empty());
     }
 }

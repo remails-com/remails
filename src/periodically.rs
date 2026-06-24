@@ -4,26 +4,29 @@ use crate::{
     handler::dns::DnsResolver,
     models::{
         self, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        StatisticsRepository, SuppressedRepository,
+        OrganizationRepository, StatisticsRepository, SuppressedRepository,
     },
     moneybird,
+    system_emails::send_blocked_orgs_email,
 };
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
 use std::error::Error;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub struct Periodically {
     message_repository: MessageRepository,
     invite_repository: InviteRepository,
     user_repository: ApiUserRepository,
+    organization_repository: OrganizationRepository,
     statistics_repository: StatisticsRepository,
     domain_repository: DomainRepository,
     suppressed_repository: SuppressedRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
+    api_server_name: String,
 }
 
 pub fn run_periodically<F, E, Fut>(task: F, period: Duration, cancel: CancellationToken)
@@ -52,16 +55,19 @@ impl Periodically {
         pool: PgPool,
         bus_client: BusClient,
         resolver: DnsResolver,
+        api_server_name: String,
     ) -> Result<Self, moneybird::Error> {
         Ok(Self {
             message_repository: MessageRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
             user_repository: ApiUserRepository::new(pool.clone()),
+            organization_repository: OrganizationRepository::new(pool.clone()),
             statistics_repository: StatisticsRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone(), resolver),
             suppressed_repository: SuppressedRepository::new(pool.clone()),
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
+            api_server_name,
         })
     }
 
@@ -120,6 +126,42 @@ impl Periodically {
     /// Reset quotas for all organizations where the quota is ready to be reset
     pub async fn reset_all_quotas(&self) -> Result<(), moneybird::Error> {
         self.moneybird.reset_all_quotas().await
+    }
+
+    /// Block organizations with a low mail delivery rate in the past 24 hours.
+    /// An organization is blocked when it attempted at least 100 mails and fewer than 40% were
+    /// delivered successfully.
+    pub async fn block_suspicious_orgs(&self) -> Result<(), models::Error> {
+        let orgs = self
+            .organization_repository
+            .block_organizations_with_low_delivery_rate(100, 0.4)
+            .await?;
+
+        if orgs.is_empty() {
+            return Ok(());
+        }
+
+        for org in &orgs {
+            warn!(
+                organization_id = %org.id,
+                organization_name = org.name,
+                "Organization blocked due to low mail delivery rate in the past 24 hours"
+            );
+        }
+
+        if let Err(err) = send_blocked_orgs_email(
+            &self.user_repository,
+            &self.message_repository,
+            &self.bus_client,
+            &self.api_server_name,
+            &orgs,
+        )
+        .await
+        {
+            error!("Failed to send blocked organizations notification email: {err}");
+        }
+
+        Ok(())
     }
 }
 
@@ -184,6 +226,7 @@ mod test {
             pool.clone(),
             bus_client.clone(),
             DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
         )
         .await
         .unwrap();
@@ -330,6 +373,7 @@ mod test {
             pool.clone(),
             bus_client,
             DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
         )
         .await
         .unwrap();

@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<p>Dear admins,</p>
+<p>
+  The following {{ orgs.len()|pluralize("organizations were", "organization was") }}
+  automatically blocked due to a low mail delivery rate in the past 24 hours:
+</p>
+<ul>
+  {% for org in orgs %}
+  <li><a href="https://{{ api_server_name }}/{{ org.id }}/projects">{{ org.name }}</a></li>
+  {% endfor %}
+</ul>
+{% endblock %}

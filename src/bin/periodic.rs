@@ -33,24 +33,34 @@ async fn main() -> anyhow::Result<()> {
         .context("failed to connect to database")?;
 
     let bus_client = BusClient::new_from_env_var()?;
-    let periodically = Periodically::new(pool.clone(), bus_client, DnsResolver::default()).await?;
+    let api_server_name =
+        std::env::var("API_SERVER_NAME").context("API_SERVER_NAME must be set")?;
+    let periodically = Periodically::new(
+        pool.clone(),
+        bus_client,
+        DnsResolver::default(),
+        api_server_name,
+    )
+    .await?;
     let kubernetes = Kubernetes::new(pool.clone()).await?;
 
     let shutdown = CancellationToken::new();
-    let mut check_nodes_interval = time::interval(Duration::from_secs(10)); // Every 10 seconds
-    let mut message_retry_interval = time::interval(Duration::from_secs(10)); // Every 10 seconds
-    let mut domain_verification_interval = time::interval(Duration::from_secs(5 * 60)); // Every 5 minutes
-    let mut reset_all_quotas_interval = time::interval(Duration::from_secs(10 * 60)); // Every 10 minutes
-    let mut clean_up_interval = time::interval(Duration::from_secs(4 * 60 * 60)); // Every 4 hours
-    check_nodes_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    message_retry_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    domain_verification_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    reset_all_quotas_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    clean_up_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-
     let shutdown_clone = shutdown.clone();
 
     let join_handle = tokio::spawn(async move {
+        let get_interval = |duration: Duration| {
+            let mut interval = time::interval(duration);
+            interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+            interval
+        };
+
+        let mut check_nodes_interval = get_interval(Duration::from_secs(10)); // Every 10 seconds
+        let mut message_retry_interval = get_interval(Duration::from_secs(10)); // Every 10 seconds
+        let mut domain_verification_interval = get_interval(Duration::from_mins(5)); // Every 5 minutes
+        let mut reset_all_quotas_interval = get_interval(Duration::from_mins(10)); // Every 10 minutes
+        let mut block_suspicious_orgs_interval = get_interval(Duration::from_mins(15)); // Every 15 minutes
+        let mut clean_up_interval = get_interval(Duration::from_hours(2)); // Every 2 hours
+
         loop {
             tokio::select! {
                 _ = check_nodes_interval.tick() => {
@@ -81,6 +91,13 @@ async fn main() -> anyhow::Result<()> {
                         error!("Failed to reset all quotas: {}", err);
                     } else {
                         update_healthcheck("reset_all_quotas")
+                    }
+                },
+                _ = block_suspicious_orgs_interval.tick() => {
+                    if let Err(err) = periodically.block_suspicious_orgs().await {
+                        error!("Failed to check delivery rates: {}", err);
+                    } else {
+                        update_healthcheck("block_suspicious_orgs")
                     }
                 },
                 _ = clean_up_interval.tick() =>  {
