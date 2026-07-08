@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "old_subscription_json",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "current_subscription"
+          }
+        }
       }
     ],
     "parameters": {

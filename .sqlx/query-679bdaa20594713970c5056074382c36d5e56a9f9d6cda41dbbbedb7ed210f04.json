@@ -17,6 +17,12 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "api_users_organizations",
+            "name": "role"
+          }
         }
       }
     ],

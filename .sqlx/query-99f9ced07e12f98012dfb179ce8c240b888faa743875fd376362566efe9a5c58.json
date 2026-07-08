@@ -21,6 +21,12 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "status"
+          }
         }
       }
     ],

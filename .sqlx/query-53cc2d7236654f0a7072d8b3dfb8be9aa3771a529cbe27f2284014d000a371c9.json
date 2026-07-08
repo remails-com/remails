@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "hostname",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "k8s_nodes",
+            "name": "hostname"
+          }
+        }
       }
     ],
     "parameters": {
