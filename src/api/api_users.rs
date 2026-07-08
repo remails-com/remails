@@ -394,7 +394,7 @@ pub struct CurrentPassword {
 
 /// Delete user password
 ///
-/// This is only allowed if the user has an alternative login method, e.g., via OAuth
+/// This is only allowed if the user has an alternative login method (OAuth)
 #[utoipa::path(delete, path = "/api_user/{user_id}/password",
     request_body = CurrentPassword,
     tags = ["internal", "API users"],

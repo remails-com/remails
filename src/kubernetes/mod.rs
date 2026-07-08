@@ -219,8 +219,8 @@ impl Kubernetes {
         let ips = ips.into_iter().map(Into::into).collect::<Vec<IpNet>>();
 
         // De-assign IPs that are no longer available
-        // They should only be deleted if we are actually not in control over them anymore, e.g.,
-        // if we deleted the FloatingIP in UpCloud
+        // They should only be deleted if we are actually not in control over them anymore,
+        // e.g. if we deleted the FloatingIP in UpCloud
         sqlx::query!(
             r#"
             UPDATE outbound_ips
