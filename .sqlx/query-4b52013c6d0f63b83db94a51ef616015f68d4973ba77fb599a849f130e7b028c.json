@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "outbound_ip",
-        "type_info": "Inet"
+        "type_info": "Inet",
+        "origin": {
+          "Table": {
+            "table": "outbound_ips",
+            "name": "ip"
+          }
+        }
       }
     ],
     "parameters": {
