@@ -87,11 +87,21 @@ async fn main() -> anyhow::Result<()> {
 
     // Run retry service
     let api_server_name = std::env::var("API_SERVER_NAME").expect("API_SERVER_NAME must be set");
+    let block_min_attempts: i64 = std::env::var("BLOCK_MIN_ATTEMPTS")
+        .expect("BLOCK_MIN_ATTEMPTS must be set")
+        .parse()
+        .expect("BLOCK_MIN_ATTEMPTS must be a valid integer");
+    let block_delivery_rate_threshold: f64 = std::env::var("BLOCK_DELIVERY_RATE_THRESHOLD")
+        .expect("BLOCK_DELIVERY_RATE_THRESHOLD must be set")
+        .parse()
+        .expect("BLOCK_DELIVERY_RATE_THRESHOLD must be a valid float");
     let periodically = Periodically::new(
         pool.clone(),
         bus_client,
         DnsResolver::default(),
         api_server_name,
+        block_min_attempts,
+        block_delivery_rate_threshold,
     )
     .await
     .unwrap();

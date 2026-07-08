@@ -27,6 +27,8 @@ pub struct Periodically {
     moneybird: MoneyBird,
     bus_client: BusClient,
     api_server_name: String,
+    block_min_attempts: i64,
+    block_delivery_rate_threshold: f64,
 }
 
 pub fn run_periodically<F, E, Fut>(task: F, period: Duration, cancel: CancellationToken)
@@ -56,6 +58,8 @@ impl Periodically {
         bus_client: BusClient,
         resolver: DnsResolver,
         api_server_name: String,
+        block_min_attempts: i64,
+        block_delivery_rate_threshold: f64,
     ) -> Result<Self, moneybird::Error> {
         Ok(Self {
             message_repository: MessageRepository::new(pool.clone()),
@@ -68,6 +72,8 @@ impl Periodically {
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
             api_server_name,
+            block_min_attempts,
+            block_delivery_rate_threshold,
         })
     }
 
@@ -134,7 +140,10 @@ impl Periodically {
     pub async fn block_suspicious_orgs(&self) -> Result<(), models::Error> {
         let orgs = self
             .organization_repository
-            .block_organizations_with_low_delivery_rate(100, 0.4)
+            .block_organizations_with_low_delivery_rate(
+                self.block_min_attempts,
+                self.block_delivery_rate_threshold,
+            )
             .await?;
 
         if orgs.is_empty() {
@@ -227,6 +236,8 @@ mod test {
             bus_client.clone(),
             DnsResolver::mock("localhost", 1025),
             "localhost".to_string(),
+            100,
+            0.4,
         )
         .await
         .unwrap();
@@ -374,6 +385,8 @@ mod test {
             bus_client,
             DnsResolver::mock("localhost", 1025),
             "localhost".to_string(),
+            100,
+            0.4,
         )
         .await
         .unwrap();

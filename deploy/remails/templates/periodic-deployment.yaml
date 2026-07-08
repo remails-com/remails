@@ -88,6 +88,10 @@ spec:
               value: {{ .Values.smtp.dkim_selector | quote }}
             - name: SPF_INCLUDE
               value: {{ .Values.smtp.spf_include }}
+            - name: BLOCK_MIN_ATTEMPTS
+              value: {{ .Values.block_min_attempts | quote }}
+            - name: BLOCK_DELIVERY_RATE_THRESHOLD
+              value: {{ .Values.block_delivery_rate_threshold | quote }}
       volumes:
         - name: tmp-volume
           emptyDir: { }

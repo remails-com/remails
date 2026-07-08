@@ -473,11 +473,14 @@ impl OrganizationRepository {
 
     /// Blocks organizations that sent at least `min_attempts` messages in the past 24 hours (with
     /// status delivered, failed, or reattempt) but have an overall delivery success rate below
-    /// `max_delivery_rate`. Sets their block status to `no_sending` and returns the blocked orgs.
+    /// `delivery_rate_threshold` (e.g. 0.4 to block organizations for which less than 40% of messages
+    /// are successfully delivered).
+    ///
+    /// Sets their block status to `no_sending` and returns the blocked orgs.
     pub async fn block_organizations_with_low_delivery_rate(
         &self,
         min_attempts: i64,
-        max_delivery_rate: f64,
+        delivery_rate_threshold: f64,
     ) -> Result<Vec<BlockedOrg>, Error> {
         Ok(sqlx::query_as!(
             BlockedOrg,
@@ -498,7 +501,7 @@ impl OrganizationRepository {
             RETURNING id AS "id!: OrganizationId", name
             "#,
             min_attempts,
-            max_delivery_rate,
+            delivery_rate_threshold,
         )
         .fetch_all(&self.pool)
         .await?)
