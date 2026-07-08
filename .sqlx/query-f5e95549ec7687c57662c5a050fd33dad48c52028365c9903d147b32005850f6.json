@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            WITH inserted AS (\n                INSERT INTO api_keys (id, description, password_hash, organization_id, role)\n                VALUES (gen_random_uuid(), $1, $2, $3, $4)\n                RETURNING *\n            )\n            SELECT i.id, i.description, i.password_hash, i.organization_id,\n                o.block_status as \"org_block_status!: OrgBlockStatus\",\n                i.role as \"role: Role\",\n                i.created_at, i.updated_at\n            FROM inserted i\n                LEFT JOIN organizations o ON o.id = i.organization_id\n            ",
+  "query": "\n            SELECT a.id, description, password_hash, organization_id,\n                o.block_status as \"org_block_status!: OrgBlockStatus\",\n                role as \"role: Role\",\n                a.created_at, a.updated_at\n            FROM api_keys a\n                LEFT JOIN organizations o ON o.id = a.organization_id\n            WHERE a.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -117,21 +117,7 @@
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Uuid",
-        {
-          "Custom": {
-            "name": "role",
-            "kind": {
-              "Enum": [
-                "admin",
-                "maintainer",
-                "read_only"
-              ]
-            }
-          }
-        }
+        "Uuid"
       ]
     },
     "nullable": [
@@ -145,5 +131,5 @@
       false
     ]
   },
-  "hash": "05f1c611cec5c652dce8c78dd3791301948c0c326bb7abc46b4e65ee553c6060"
+  "hash": "f5e95549ec7687c57662c5a050fd33dad48c52028365c9903d147b32005850f6"
 }

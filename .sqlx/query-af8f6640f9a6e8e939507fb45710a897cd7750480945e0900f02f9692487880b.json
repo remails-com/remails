@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "token_hash",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "moneybird_webhook",
+            "name": "token_hash"
+          }
+        }
       }
     ],
     "parameters": {

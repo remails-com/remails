@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "email_address",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "suppressed_email_addresses",
+            "name": "email_address"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "retry_after",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "suppressed_email_addresses",
+            "name": "retry_after"
+          }
+        }
       }
     ],
     "parameters": {

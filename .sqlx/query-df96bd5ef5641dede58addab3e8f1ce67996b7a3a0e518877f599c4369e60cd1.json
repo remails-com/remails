@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "attempts_left",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "suppressed_email_addresses",
+            "name": "attempts_left"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "retry_after",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "suppressed_email_addresses",
+            "name": "retry_after"
+          }
+        }
       }
     ],
     "parameters": {

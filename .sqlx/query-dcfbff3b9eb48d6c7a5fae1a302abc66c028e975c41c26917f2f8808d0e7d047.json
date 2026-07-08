@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "domain",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "domains",
+            "name": "domain"
+          }
+        }
       },
       {
         "ordinal": 1,
@@ -21,12 +27,24 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "domains",
+            "name": "dkim_key_type"
+          }
         }
       },
       {
         "ordinal": 2,
         "name": "dkim_pkcs8_der",
-        "type_info": "Bytea"
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "domains",
+            "name": "dkim_pkcs8_der"
+          }
+        }
       }
     ],
     "parameters": {

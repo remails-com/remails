@@ -6,37 +6,79 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "organization_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "organization_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "created_at"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "updated_at"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "retention_period_days",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "retention_period_days"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "plaintext_fallback",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "plaintext_fallback"
+          }
+        }
       }
     ],
     "parameters": {

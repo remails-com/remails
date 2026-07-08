@@ -6,12 +6,19 @@
       {
         "ordinal": 0,
         "name": "current_subscription",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "current_subscription"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "project_count!",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
