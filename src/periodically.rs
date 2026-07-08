@@ -420,4 +420,57 @@ mod test {
 
         assert_eq!(remaining, 799);
     }
+
+    #[sqlx::test(fixtures(
+        path = "./fixtures",
+        scripts("organizations", "projects", "api_users", "runtime_config")
+    ))]
+    async fn block_suspicious_orgs_sends_mail_to_super_admins(pool: PgPool) {
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+
+        // insert 10 failed messages
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        sqlx::query(
+            "INSERT INTO messages (id, message_id_header, organization_id, project_id, status, from_email, recipients, raw_data, created_at)
+             SELECT gen_random_uuid(), 'hdr-' || gs, $1, $2, 'failed'::message_status, 'x@example.com', ARRAY['r@example.com'], ''::bytea, now()
+             FROM generate_series(1, 10) gs",
+        )
+        .bind(*org_id)
+        .bind(*project_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client,
+            DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
+            10,
+            0.4,
+        )
+        .await
+        .unwrap();
+        periodically.block_suspicious_orgs().await.unwrap();
+
+        // check if system email was created
+        let raw_data: Vec<u8> = sqlx::query_scalar(
+            r#"SELECT raw_data FROM messages WHERE recipients = '{"sudo@remails"}'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let message = mail_parser::MessageParser::default()
+            .parse(&raw_data)
+            .unwrap();
+        assert_eq!(
+            message.subject().unwrap(),
+            "Remails organizations automatically blocked"
+        );
+        let body = message.body_text(0).unwrap();
+        assert!(body.contains("test org 1"));
+        assert!(body.contains(&org_id.to_string()));
+    }
 }

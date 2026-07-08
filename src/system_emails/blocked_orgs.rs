@@ -53,7 +53,7 @@ pub async fn send_blocked_orgs_email(
                 subject: "Remails organizations automatically blocked".to_string(),
                 text: text.clone(),
                 html: html.clone(),
-                label: "blocked-orgs".parse().unwrap(),
+                label: "admin".parse().unwrap(),
             },
         )
         .await?;

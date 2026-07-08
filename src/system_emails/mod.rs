@@ -10,7 +10,7 @@ use crate::{
 };
 use tracing::error;
 
-pub(super) async fn send_internal_email(
+async fn send_internal_email(
     message_repo: &MessageRepository,
     bus: &BusClient,
     max_check_retries: i32,

@@ -73,7 +73,7 @@ pub async fn send_password_reset_email(
             subject: "Remails password reset".to_string(),
             text,
             html,
-            label: "password-reset".parse().unwrap(),
+            label: "pw-reset".parse().unwrap(),
         },
     )
     .await
