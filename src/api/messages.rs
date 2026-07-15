@@ -1293,6 +1293,9 @@ mod tests {
             pool.clone(),
             bus_client,
             DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
+            100,
+            0.4,
         )
         .await
         .unwrap();

@@ -4,26 +4,31 @@ use crate::{
     handler::dns::DnsResolver,
     models::{
         self, ApiUserRepository, DomainRepository, InviteRepository, MessageRepository,
-        StatisticsRepository, SuppressedRepository,
+        OrganizationRepository, StatisticsRepository, SuppressedRepository,
     },
     moneybird,
+    system_emails::send_blocked_orgs_email,
 };
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
 use std::error::Error;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub struct Periodically {
     message_repository: MessageRepository,
     invite_repository: InviteRepository,
     user_repository: ApiUserRepository,
+    organization_repository: OrganizationRepository,
     statistics_repository: StatisticsRepository,
     domain_repository: DomainRepository,
     suppressed_repository: SuppressedRepository,
     moneybird: MoneyBird,
     bus_client: BusClient,
+    api_server_name: String,
+    block_min_attempts: i64,
+    block_delivery_rate_threshold: f64,
 }
 
 pub fn run_periodically<F, E, Fut>(task: F, period: Duration, cancel: CancellationToken)
@@ -52,16 +57,23 @@ impl Periodically {
         pool: PgPool,
         bus_client: BusClient,
         resolver: DnsResolver,
+        api_server_name: String,
+        block_min_attempts: i64,
+        block_delivery_rate_threshold: f64,
     ) -> Result<Self, moneybird::Error> {
         Ok(Self {
             message_repository: MessageRepository::new(pool.clone()),
             invite_repository: InviteRepository::new(pool.clone()),
             user_repository: ApiUserRepository::new(pool.clone()),
+            organization_repository: OrganizationRepository::new(pool.clone()),
             statistics_repository: StatisticsRepository::new(pool.clone()),
             domain_repository: DomainRepository::new(pool.clone(), resolver),
             suppressed_repository: SuppressedRepository::new(pool.clone()),
             moneybird: MoneyBird::new(pool).await?,
             bus_client,
+            api_server_name,
+            block_min_attempts,
+            block_delivery_rate_threshold,
         })
     }
 
@@ -120,6 +132,45 @@ impl Periodically {
     /// Reset quotas for all organizations where the quota is ready to be reset
     pub async fn reset_all_quotas(&self) -> Result<(), moneybird::Error> {
         self.moneybird.reset_all_quotas().await
+    }
+
+    /// Block organizations with a low mail delivery rate in the past 24 hours.
+    /// An organization is blocked when it attempted at least 100 mails and fewer than 40% were
+    /// delivered successfully.
+    pub async fn block_suspicious_orgs(&self) -> Result<(), models::Error> {
+        let orgs = self
+            .organization_repository
+            .block_organizations_with_low_delivery_rate(
+                self.block_min_attempts,
+                self.block_delivery_rate_threshold,
+            )
+            .await?;
+
+        if orgs.is_empty() {
+            return Ok(());
+        }
+
+        for org in &orgs {
+            warn!(
+                organization_id = %org.id,
+                organization_name = org.name,
+                "Organization blocked due to low mail delivery rate in the past 24 hours"
+            );
+        }
+
+        if let Err(err) = send_blocked_orgs_email(
+            &self.user_repository,
+            &self.message_repository,
+            &self.bus_client,
+            &self.api_server_name,
+            &orgs,
+        )
+        .await
+        {
+            error!("Failed to send blocked organizations notification email: {err}");
+        }
+
+        Ok(())
     }
 }
 
@@ -184,6 +235,9 @@ mod test {
             pool.clone(),
             bus_client.clone(),
             DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
+            100,
+            0.4,
         )
         .await
         .unwrap();
@@ -330,6 +384,9 @@ mod test {
             pool.clone(),
             bus_client,
             DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
+            100,
+            0.4,
         )
         .await
         .unwrap();
@@ -362,5 +419,58 @@ mod test {
             .unwrap();
 
         assert_eq!(remaining, 799);
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./fixtures",
+        scripts("organizations", "projects", "api_users", "runtime_config")
+    ))]
+    async fn block_suspicious_orgs_sends_mail_to_super_admins(pool: PgPool) {
+        let bus_port = Bus::spawn_random_port().await;
+        let bus_client = BusClient::new(bus_port, "localhost".to_owned()).unwrap();
+
+        // insert 10 failed messages
+        let (org_id, project_id) = TestProjects::Org1Project1.get_ids();
+        sqlx::query(
+            "INSERT INTO messages (id, message_id_header, organization_id, project_id, status, from_email, recipients, raw_data, created_at)
+             SELECT gen_random_uuid(), 'hdr-' || gs, $1, $2, 'failed'::message_status, 'x@example.com', ARRAY['r@example.com'], ''::bytea, now()
+             FROM generate_series(1, 10) gs",
+        )
+        .bind(*org_id)
+        .bind(*project_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let periodically = Periodically::new(
+            pool.clone(),
+            bus_client,
+            DnsResolver::mock("localhost", 1025),
+            "localhost".to_string(),
+            10,
+            0.4,
+        )
+        .await
+        .unwrap();
+        periodically.block_suspicious_orgs().await.unwrap();
+
+        // check if system email was created
+        let raw_data: Vec<u8> = sqlx::query_scalar(
+            r#"SELECT raw_data FROM messages WHERE recipients = '{"sudo@remails"}'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let message = mail_parser::MessageParser::default()
+            .parse(&raw_data)
+            .unwrap();
+        assert_eq!(
+            message.subject().unwrap(),
+            "Remails organizations automatically blocked"
+        );
+        let body = message.body_text(0).unwrap();
+        assert!(body.contains("test org 1"));
+        assert!(body.contains(&org_id.to_string()));
     }
 }

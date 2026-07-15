@@ -15,7 +15,7 @@ use std::{
     time::Duration,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// This is the main function used for local testing
@@ -86,18 +86,67 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     // Run retry service
-    let periodically = Periodically::new(pool.clone(), bus_client, DnsResolver::default())
-        .await
-        .unwrap();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
+    let api_server_name = std::env::var("API_SERVER_NAME").expect("API_SERVER_NAME must be set");
+    let block_min_attempts: i64 = std::env::var("BLOCK_MIN_ATTEMPTS")
+        .expect("BLOCK_MIN_ATTEMPTS must be set")
+        .parse()
+        .expect("BLOCK_MIN_ATTEMPTS must be a valid integer");
+    let block_delivery_rate_threshold: f64 = std::env::var("BLOCK_DELIVERY_RATE_THRESHOLD")
+        .expect("BLOCK_DELIVERY_RATE_THRESHOLD must be set")
+        .parse()
+        .expect("BLOCK_DELIVERY_RATE_THRESHOLD must be a valid float");
+    let periodically = Periodically::new(
+        pool.clone(),
+        bus_client,
+        DnsResolver::default(),
+        api_server_name,
+        block_min_attempts,
+        block_delivery_rate_threshold,
+    )
+    .await
+    .unwrap();
+
+    let shutdown_clone = shutdown.clone();
+    let join_handle = tokio::spawn(async move {
+        let get_interval = |secs: u64| {
+            let mut interval = tokio::time::interval(Duration::from_secs(secs));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            interval
+        };
+        let mut retry_interval = get_interval(10); // Every 10 seconds
+        let mut verify_domains_interval = get_interval(60); // Every minute
+        let mut reset_quotas_interval = get_interval(120); // Every 2 minutes
+        let mut block_orgs_interval = get_interval(120); // Every 2 minutes
+        let mut clean_up_interval = get_interval(300); // Every 5 minutes
+
         loop {
-            interval.tick().await;
-            if let Err(e) = periodically.retry_messages().await {
-                error!("Error retrying: {e}")
-            };
-            if let Err(e) = periodically.clean_up().await {
-                error!("Error during clean up: {e}")
+            tokio::select! {
+                _ = retry_interval.tick() => {
+                    if let Err(e) = periodically.retry_messages().await {
+                        error!("Error retrying messages: {e}")
+                    }
+                },
+                _ = verify_domains_interval.tick() => {
+                    if let Err(e) = periodically.verify_domains().await {
+                        error!("Error verifying domains: {e}")
+                    }
+                },
+                _ = reset_quotas_interval.tick() => {
+                    if let Err(e) = periodically.reset_all_quotas().await {
+                        error!("Error resetting quotas: {e}")
+                    }
+                },
+                _ = block_orgs_interval.tick() => {
+                    if let Err(e) = periodically.block_suspicious_orgs().await {
+                        error!("Error blocking suspicious orgs: {e}")
+                    }
+                },
+                _ = clean_up_interval.tick() => {
+                    if let Err(e) = periodically.clean_up().await {
+                        error!("Error during clean up: {e}")
+                    }
+                },
+                _ = shutdown_clone.cancelled() => break,
             }
         }
     });
@@ -106,8 +155,14 @@ async fn main() -> anyhow::Result<()> {
     info!("received shutdown signal, stopping services");
     shutdown.cancel();
 
-    // give services the opportunity to shut down
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::select! {
+        _ = join_handle => {
+            info!("Shut down");
+        }
+        _ = tokio::time::sleep(Duration::from_secs(2)) => {
+            warn!("stopping services takes too long, hard shutdown");
+        }
+    }
 
     Ok(())
 }

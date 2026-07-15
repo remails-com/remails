@@ -94,7 +94,7 @@ export default function RuntimeConfig() {
             }
             key={configForm.key("system_email_address")}
             value={configForm.values.system_email_address || ""}
-            placeholder="e.g., noreply@remails.com"
+            placeholder="e.g. noreply@remails.com"
             type="email"
             error={configForm.errors.system_email_address}
             onChange={(event) => {

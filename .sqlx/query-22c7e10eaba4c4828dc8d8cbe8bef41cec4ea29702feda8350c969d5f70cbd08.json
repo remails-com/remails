@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH flagged AS (\n                SELECT m.organization_id\n                FROM messages m\n                JOIN organizations o ON o.id = m.organization_id\n                WHERE m.created_at > now() - interval '24 hours'\n                  AND o.block_status = 'not_blocked'\n                GROUP BY m.organization_id\n                HAVING count(*) FILTER (WHERE m.status IN ('delivered', 'failed', 'reattempt')) >= $1\n                   AND count(*) FILTER (WHERE m.status = 'delivered') < count(*)::float8 * $2\n            )\n            UPDATE organizations\n            SET block_status = 'no_sending'\n            WHERE id IN (SELECT organization_id FROM flagged)\n            RETURNING id AS \"id!: OrganizationId\", name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: OrganizationId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "22c7e10eaba4c4828dc8d8cbe8bef41cec4ea29702feda8350c969d5f70cbd08"
+}

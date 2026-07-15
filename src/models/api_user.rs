@@ -961,6 +961,21 @@ impl ApiUserRepository {
         }
         Err(Error::NotFound("User not found or wrong password"))
     }
+
+    pub async fn get_super_admin_emails(&self) -> Result<Vec<EmailAddress>, Error> {
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT email AS "email!: String"
+            FROM api_users
+            WHERE global_role = 'admin' AND blocked = false AND email IS NOT NULL
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .filter_map(|e| e.parse().ok())
+        .collect())
+    }
 }
 
 #[cfg(test)]
@@ -1018,5 +1033,18 @@ mod test {
         let created = repo.create(user.clone()).await.unwrap();
         assert_eq!(created, user);
         assert_eq!(repo.get_all().await.unwrap().len(), users + 1);
+    }
+
+    #[sqlx::test(fixtures(path = "../fixtures", scripts("organizations", "api_users")))]
+    async fn get_super_admin_emails_returns_only_active_super_admins(db: PgPool) {
+        let emails = ApiUserRepository::new(db)
+            .get_super_admin_emails()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            emails,
+            vec!["sudo@remails".parse::<EmailAddress>().unwrap()]
+        );
     }
 }

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT email AS \"email!: String\"\n            FROM api_users\n            WHERE global_role = 'admin' AND blocked = false AND email IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email!: String",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "api_users",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "80211b1b83e2f23ff558db94802d5d0f2ea50a789f668eb0cce24fb680b92813"
+}

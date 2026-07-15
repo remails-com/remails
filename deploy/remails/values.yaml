@@ -31,6 +31,9 @@ rust_log: "remails=debug,tower_http=debug,axum=debug,info"
 
 message_bus_port: 4000
 
+block_min_attempts: 100
+block_delivery_rate_threshold: "0.4"
+
 smtp:
   replicas: 3
   server_name: "smtp.remails.net"

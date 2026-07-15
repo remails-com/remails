@@ -1,0 +1,10 @@
+Dear admins,
+
+The following {{ orgs.len() | pluralize("organizations were", "organization was") }} automatically blocked due to a low mail delivery rate in the past 24 hours:
+
+{% for org in orgs %}
+- {{ org.name }}: https://{{ api_server_name }}/{{ org.id }}/projects
+{% endfor %}
+
+Best,
+Your Remails Team
