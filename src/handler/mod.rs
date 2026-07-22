@@ -29,7 +29,9 @@ use tokio::{
 };
 use tokio_rustls::{
     TlsConnector,
-    rustls::{ClientConfig, RootCertStore, crypto, crypto::CryptoProvider},
+    rustls::{
+        ClientConfig, RootCertStore, crypto, crypto::CryptoProvider, pki_types::CertificateDer,
+    },
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
@@ -178,6 +180,14 @@ impl Handler {
                 for cert in rustls_native_certs::load_native_certs().certs {
                     root_store.add(cert).ok();
                 }
+                // DigiCert Global Root CA was removed from Mozilla's trust store and is absent
+                // from webpki-roots and Ubuntu 24.04's ca-certificates, but Microsoft's SMTP
+                // servers still use intermediates that chain to it.
+                root_store
+                    .add(CertificateDer::from(
+                        include_bytes!("../certs/DigiCert_Global_Root_CA.der").as_slice(),
+                    ))
+                    .expect("bundled DigiCert Global Root CA cert is valid");
                 TlsConnector::from(Arc::new(
                     ClientConfig::builder()
                         .with_root_certificates(root_store)
