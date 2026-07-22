@@ -3305,6 +3305,7 @@ dependencies = [
  "rand 0.10.2",
  "regex",
  "reqwest",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "smtp-proto",

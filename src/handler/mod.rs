@@ -175,6 +175,9 @@ impl Handler {
             tls_connector: {
                 let mut root_store = RootCertStore::empty();
                 root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                for cert in rustls_native_certs::load_native_certs().certs {
+                    root_store.add(cert).ok();
+                }
                 TlsConnector::from(Arc::new(
                     ClientConfig::builder()
                         .with_root_certificates(root_store)
