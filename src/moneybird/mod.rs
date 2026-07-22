@@ -167,13 +167,7 @@ impl MoneyBird {
 
         let webhook_url = env::var("MONEYBIRD_WEBHOOK_URL")
             .ok()
-            .and_then(|url| {
-                if url.trim().is_empty() {
-                    None
-                } else {
-                    Some(url)
-                }
-            })
+            .filter(|url| !url.trim().is_empty())
             .map(|url| {
                 url.parse()
                     .expect("MONEYBIRD_WEBHOOK_URL env var must be a valid URL")
