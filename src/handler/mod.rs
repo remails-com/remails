@@ -29,7 +29,7 @@ use tokio::{
 };
 use tokio_rustls::{
     TlsConnector,
-    rustls::{crypto, crypto::CryptoProvider},
+    rustls::{ClientConfig, RootCertStore, crypto, crypto::CryptoProvider},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
@@ -172,8 +172,15 @@ impl Handler {
             outbound_ips: Default::default(),
             shutdown,
             config,
-            tls_connector: mail_send::smtp::tls::build_tls_connector(false)
-                .expect("failed to build TLS connector"),
+            tls_connector: {
+                let mut root_store = RootCertStore::empty();
+                root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                TlsConnector::from(Arc::new(
+                    ClientConfig::builder()
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth(),
+                ))
+            },
         }
     }
 
