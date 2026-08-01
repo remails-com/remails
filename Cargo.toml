@@ -60,7 +60,7 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["full"] }
 tokio-rustls = "0.26.4"
 futures = "0.3.32"
-tokio-tungstenite = "0.29.0"
+tokio-tungstenite = "0.30.0"
 tokio-util = { version = "0.7.18", features = ["io"] }
 tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.7.0", features = ["trace", "timeout", "limit", "compression-br", "cors"] }
