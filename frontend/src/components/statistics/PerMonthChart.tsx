@@ -96,7 +96,7 @@ export default function PerMonthChart() {
             tickFormatter: (ts) => formatMonth(ts),
           }}
           tooltipProps={{
-            labelFormatter: (ts) => formatMonth(ts),
+            labelFormatter: (ts) => formatMonth(ts as number),
           }}
           series={STATUS_SERIES.filter((series) => sorted_data.some((dataPoint) => dataPoint[series.name] > 0))}
           withLegend
