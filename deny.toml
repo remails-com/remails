@@ -29,4 +29,5 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
     { id = "RUSTSEC-2026-0368", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
     { id = "RUSTSEC-2026-0369", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained; only used by askama_derive at compile time, not in the running server. Drop once askama replaces it" },
 ]
