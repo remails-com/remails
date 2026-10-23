@@ -26,4 +26,8 @@ multiple-versions = "allow"
 [advisories]
 ignore = [
     { id = "RUSTSEC-2024-0436", reason = "utoipa-axum did not provide an updated version yet. Please take a look at https://github.com/juhaku/utoipa/pull/1483" },
+    { id = "RUSTSEC-2026-0367", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
+    { id = "RUSTSEC-2026-0368", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
+    { id = "RUSTSEC-2026-0369", reason = "zip: only reached via mail-auth, which reads DMARC/TLS-RPT zips in memory and never calls extract(); goes away with mail-auth 0.13" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained; only used by askama_derive at compile time, not in the running server. Drop once askama replaces it" },
 ]

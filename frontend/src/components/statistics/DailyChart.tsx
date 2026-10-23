@@ -122,7 +122,7 @@ export default function DailyChart() {
             tickFormatter: (ts) => formatDate(ts),
           }}
           tooltipProps={{
-            labelFormatter: (ts) => formatDate(ts),
+            labelFormatter: (ts) => formatDate(ts as number),
           }}
           series={STATUS_SERIES.filter((series) => sorted_data.some((dataPoint) => dataPoint[series.name] > 0))}
           withLegend
